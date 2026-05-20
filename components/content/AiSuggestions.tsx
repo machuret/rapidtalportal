@@ -3,7 +3,7 @@
 import { memo, useCallback, useState } from "react";
 import { RefreshCw, Wand2, Lightbulb, SquareCheckBig, Square, BookText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { AiSuggestion, ContentType } from "@/types/content";
+import type { AiSuggestion } from "@/types/content";
 import { TYPE_ICON_COLORS, TYPE_ICONS } from "@/types/content";
 
 interface AiSuggestionsProps {

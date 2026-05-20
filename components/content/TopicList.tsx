@@ -9,7 +9,7 @@ import {
   ArrowRight,
   Sparkles,
 } from "lucide-react";
-import type { ContentTopic, ContentType } from "@/types/content";
+import type { ContentTopic } from "@/types/content";
 import { TYPE_ICON_COLORS, STATUS_STYLES, TYPE_ICONS } from "@/types/content";
 
 interface TopicListProps {

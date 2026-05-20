@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
-import type { ContentPiece, ContentType, ContentStatus } from "@/types/content";
+import type { ContentPiece, ContentStatus } from "@/types/content";
 import { TYPE_ICON_COLORS, TYPE_ICONS, CONTENT_STATUS_STYLES } from "@/types/content";
 
 /* ── Full piece with body (returned by detail endpoint) ─────────── */
