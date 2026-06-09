@@ -5,25 +5,16 @@ import {
   Pencil,
   Save,
   X,
-  UserPlus,
   Trash2,
   Search,
   RefreshCw,
   LogIn,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { useUsers, type AdminUserRow } from "@/hooks/useUsers";
 import { ROLES, ROLE_OPTIONS, type UserRole } from "@/lib/taxonomy/roles";
+import { CreateUserDialog } from "./users/CreateUserDialog";
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type UserRow = AdminUserRow;
@@ -64,14 +55,6 @@ export function UsersTable({
     role: UserRole;
     client_id: string | null;
   }>({ email: "", full_name: "", role: "va", client_id: null });
-
-  // Add user dialog
-  const [addOpen, setAddOpen] = useState(false);
-  const [newEmail, setNewEmail] = useState("");
-  const [newName, setNewName] = useState("");
-  const [newRole, setNewRole] = useState<UserRole>("va");
-  const [newClientId, setNewClientId] = useState<string>("");
-  const [newPassword, setNewPassword] = useState("");
 
   const clientMap: Record<string, string> = {};
   for (const c of clients) clientMap[c.id] = c.name;
@@ -182,31 +165,6 @@ export function UsersTable({
     }
   }, []);
 
-  /* ── Create user ───────────────────────────────────────────── */
-  const handleCreate = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      try {
-        await createUser({
-          email: newEmail.trim(),
-          full_name: newName.trim(),
-          role: newRole,
-          client_id: newClientId || null,
-          ...(newPassword.trim() ? { password: newPassword.trim() } : {}),
-        });
-        setAddOpen(false);
-        setNewEmail("");
-        setNewName("");
-        setNewRole("va");
-        setNewClientId("");
-        setNewPassword("");
-      } catch {
-        // error toast handled by the mutation
-      }
-    },
-    [createUser, newEmail, newName, newRole, newClientId, newPassword]
-  );
-
   /* ── Filter ────────────────────────────────────────────────── */
   const filtered = search.trim()
     ? users.filter(
@@ -231,104 +189,7 @@ export function UsersTable({
             className="pl-9 h-9 text-sm bg-zinc-900 border-zinc-700"
           />
         </div>
-        <Dialog open={addOpen} onOpenChange={setAddOpen}>
-          <DialogTrigger
-            className="inline-flex items-center justify-center gap-1.5 rounded-md text-sm font-medium h-9 px-4 bg-white text-zinc-900 hover:bg-zinc-200 transition-colors"
-          >
-            <UserPlus className="w-4 h-4" />
-            New User
-          </DialogTrigger>
-          <DialogContent className="bg-zinc-900 border-zinc-700">
-            <DialogHeader>
-              <DialogTitle>Create User</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreate} className="flex flex-col gap-4 mt-2">
-              <div className="flex flex-col gap-1.5">
-                <Label>Full Name</Label>
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Jane Doe"
-                  required
-                  className="bg-zinc-800 border-zinc-700"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="jane@example.com"
-                  required
-                  className="bg-zinc-800 border-zinc-700"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>
-                  Password{" "}
-                  <span className="text-zinc-600">(leave blank to auto-generate)</span>
-                </Label>
-                <Input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Min 8 characters"
-                  className="bg-zinc-800 border-zinc-700"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label>Role</Label>
-                  <select
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value as UserRole)}
-                    className="bg-zinc-800 border border-zinc-700 rounded-md px-3 h-9 text-sm text-zinc-300"
-                  >
-                    {ROLE_OPTIONS.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Client</Label>
-                  <select
-                    value={newClientId}
-                    onChange={(e) => setNewClientId(e.target.value)}
-                    className="bg-zinc-800 border border-zinc-700 rounded-md px-3 h-9 text-sm text-zinc-300"
-                  >
-                    <option value="">No client</option>
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setAddOpen(false)}
-                  className="border-zinc-700"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={addSaving || !newEmail.trim() || !newName.trim()}
-                >
-                  {addSaving ? "Creating…" : "Create User"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <CreateUserDialog clients={clients} isCreating={addSaving} onCreate={createUser} />
       </div>
 
       {/* Table */}

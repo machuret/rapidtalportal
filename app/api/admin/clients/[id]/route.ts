@@ -1,30 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiAuth } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { withSuperAdmin } from "@/lib/api/with-auth";
 
 const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with dashes").optional(),
 });
 
-function requireSuperAdmin(role: string) {
-  if (role !== "super_admin") {
-    return NextResponse.json({ error: "Super admin only." }, { status: 403 });
-  }
-  return null;
-}
-
 // PATCH /api/admin/clients/[id] — update client name/slug
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const result = await requireApiAuth();
-  if ("error" in result) return result.error;
-  const denied = requireSuperAdmin(result.user.role);
-  if (denied) return denied;
-
+export const PATCH = withSuperAdmin<{ id: string }>(async (req, { params }) => {
   let body: unknown;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
@@ -55,18 +40,10 @@ export async function PATCH(
   }
 
   return NextResponse.json(data);
-}
+});
 
 // DELETE /api/admin/clients/[id] — delete client (cascades users)
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const result = await requireApiAuth();
-  if ("error" in result) return result.error;
-  const denied = requireSuperAdmin(result.user.role);
-  if (denied) return denied;
-
+export const DELETE = withSuperAdmin<{ id: string }>(async (_req, { params }) => {
   const admin = createAdminClient();
 
   // Collect this client's users BEFORE deleting the client. The FK cascade will
@@ -99,4 +76,4 @@ export async function DELETE(
   }
 
   return NextResponse.json({ success: true, authDeleted });
-}
+});
