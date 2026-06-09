@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { api } from "@/lib/api-client";
-import { toast } from "sonner";
+import { ROUTES } from "@/lib/api/routes";
 import type { DbVaultItem } from "@/types/database";
 
 const VAULT_KEY = "vault";
@@ -56,14 +56,14 @@ async function fetchVaultItems(
 // ── Mutations (JSON endpoints via api client) ───────────────────────────────
 
 async function deleteVaultItems(input: DeleteVaultInput): Promise<DeleteResponse> {
-  return api.post<DeleteResponse>("/vault/delete", {
+  return api.post<DeleteResponse>(ROUTES.vault.delete(), {
     itemIds: input.itemIds,
     clientId: input.clientId,
   });
 }
 
 async function reprocessVaultItem(input: ReprocessVaultInput): Promise<unknown> {
-  return api.post(`/vault/${input.id}/reprocess`, { clientId: input.clientId });
+  return api.post(ROUTES.vault.reprocess(input.id), { clientId: input.clientId });
 }
 
 /**

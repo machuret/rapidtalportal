@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Brain, Send, Loader2, FileText, Sparkles } from "lucide-react";
@@ -50,7 +51,7 @@ export function AskVaultClient({ clientId, companyName }: { clientId: string; co
     setQuestion("");
     setLoading(true);
     try {
-      const res = await api.post<AskResponse>("/vault/ask", { clientId, question: trimmed });
+      const res = await api.post<AskResponse>(ROUTES.vault.ask(), { clientId, question: trimmed });
       setTurns((prev) => [...prev, { question: trimmed, answer: res.answer, sources: res.sources ?? [] }]);
     } catch {
       // api-client already surfaces a toast on failure.

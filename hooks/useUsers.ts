@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import { toast } from "sonner";
 import type { UserRole } from "@/types/database";
 
@@ -55,17 +56,17 @@ export const userKeys = {
 
 // Create user
 function createUser<T>(input: CreateUserInput): Promise<T> {
-  return api.post<T>("/api/admin/users", input);
+  return api.post<T>(ROUTES.admin.users(), input);
 }
 
 // Update user
 function updateUser<T>(input: UpdateUserInput): Promise<T> {
-  return api.patch<T>("/api/admin/users", input);
+  return api.patch<T>(ROUTES.admin.users(), input);
 }
 
 // Delete user
 function deleteUser(input: DeleteUserInput): Promise<void> {
-  return api.delete("/api/admin/users", input);
+  return api.delete(ROUTES.admin.users(), input);
 }
 
 /**
@@ -78,7 +79,7 @@ export function useUsers(initialUsers: AdminUserRow[]) {
 
   const usersQuery = useQuery({
     queryKey: key,
-    queryFn: () => api.get<AdminUserRow[]>("/api/admin/users"),
+    queryFn: () => api.get<AdminUserRow[]>(ROUTES.admin.users()),
     initialData: initialUsers,
     placeholderData: initialUsers,
   });
