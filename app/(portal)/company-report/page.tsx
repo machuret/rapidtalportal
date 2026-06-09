@@ -32,7 +32,7 @@ export default async function CompanyReportPage() {
   const admin = createAdminClient();
   const clientId = user.client_id;
 
-  const [{ data: dnaData }, { data: items }, { count: kbCount }] = await Promise.all([
+  const [{ data: dnaData }, { data: items }, { count: kbCount }, queriesRes] = await Promise.all([
     admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
     admin
       .from("vault_items")
@@ -41,10 +41,31 @@ export default async function CompanyReportPage() {
       .eq("status", "ready")
       .order("updated_at", { ascending: false }),
     admin.from("kb_entries").select("*", { count: "exact", head: true }).eq("client_id", clientId),
+    admin
+      .from("vault_queries")
+      .select("question, answered, created_at")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false })
+      .limit(300),
   ]);
 
   const dna = (dnaData ?? null) as DbCompanyDna | null;
   const vaultItems = (items ?? []) as VaultItem[];
+
+  // ── Knowledge gaps — questions the brain couldn't answer (from vault_queries) ──
+  const queries = (queriesRes.error ? [] : (queriesRes.data ?? [])) as { question: string; answered: boolean }[];
+  const askedTotal = queries.length;
+  const answeredTotal = queries.filter((q) => q.answered).length;
+  const knowledgeGaps: string[] = [];
+  const seenGap = new Set<string>();
+  for (const q of queries) {
+    if (q.answered) continue;
+    const key = q.question.trim().toLowerCase();
+    if (!key || seenGap.has(key)) continue;
+    seenGap.add(key);
+    knowledgeGaps.push(q.question.trim());
+    if (knowledgeGaps.length >= 8) break;
+  }
 
   // Group ready items by (normalised) category
   const byCat: Record<string, VaultItem[]> = {};
@@ -162,6 +183,31 @@ export default async function CompanyReportPage() {
           </p>
         )}
       </section>
+
+      {/* Knowledge gaps — what the team asked that the brain couldn't answer */}
+      {askedTotal > 0 && (
+        <section className="surface-card p-6 mb-8">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-lg font-semibold text-white">Knowledge gaps</h2>
+            <span className="text-sm text-zinc-400">{answeredTotal}/{askedTotal} questions answered</span>
+          </div>
+          <p className="text-xs text-zinc-500 mb-4">
+            Questions your team asked that the brain couldn&apos;t answer — add docs covering these to close the gaps.
+          </p>
+          {knowledgeGaps.length === 0 ? (
+            <p className="text-sm text-green-400">No gaps — every recent question was answered. 🎉</p>
+          ) : (
+            <ul className="space-y-2">
+              {knowledgeGaps.map((q, i) => (
+                <li key={i} className="flex items-start gap-2.5">
+                  <Circle className="w-4 h-4 text-amber-500/70 mt-0.5 shrink-0" />
+                  <span className="text-sm text-zinc-200">{q}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       {/* Identity */}
       <section className="mb-8">

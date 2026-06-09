@@ -97,6 +97,13 @@ Deno.serve(async (req: Request) => {
     const deep = body.mode === "deep";
     const matchCount: number = deep ? 10 : 5;
 
+    // Conversation memory: recent turns make follow-ups ("what about pricing?")
+    // work. We use the last couple of questions to broaden retrieval, and replay
+    // the turns to the model so it understands the thread.
+    const history: { question?: string; answer?: string }[] = Array.isArray(body.history) ? body.history.slice(-4) : [];
+    const recentQs = history.map((h) => (h?.question ?? "").toString()).filter(Boolean).slice(-2);
+    const retrievalQuery = [...recentQs, question].join(" ").trim();
+
     if (!clientId || !question) return json({ error: "Missing clientId or question." }, 400);
     if (question.length < 3) return json({ error: "Question too short." }, 422);
     if (role !== "super_admin" && userClientId !== clientId) return json({ error: "Forbidden." }, 403);
@@ -122,7 +129,7 @@ Deno.serve(async (req: Request) => {
     try {
       // deno-lint-ignore no-explicit-any
       const session = new (globalThis as any).Supabase.ai.Session("gte-small");
-      queryEmbedding = (await session.run(question, { mean_pool: true, normalize: true })) as number[];
+      queryEmbedding = (await session.run(retrievalQuery, { mean_pool: true, normalize: true })) as number[];
     } catch (e) {
       console.warn("vault-ask: question embedding failed, continuing without vector search:", e);
     }
@@ -132,11 +139,11 @@ Deno.serve(async (req: Request) => {
       admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
       admin.from("kb_entries").select("question, answer")
         .eq("client_id", clientId)
-        .textSearch("fts", question, { type: "websearch", config: "english" })
+        .textSearch("fts", retrievalQuery, { type: "websearch", config: "english" })
         .limit(3),
       admin.from("sops").select("title, body")
         .eq("client_id", clientId)
-        .textSearch("fts", question, { type: "websearch", config: "english" })
+        .textSearch("fts", retrievalQuery, { type: "websearch", config: "english" })
         .limit(2),
       queryEmbedding.length
         ? admin.rpc("match_vault_chunks", { p_client_id: clientId, p_query_embedding: queryEmbedding, p_match_count: matchCount })
@@ -218,6 +225,11 @@ Deno.serve(async (req: Request) => {
         temperature: 0.4,
         messages: [
           { role: "system", content: deep ? DEEP_PROMPT : ANSWER_PROMPT },
+          ...history.flatMap((h) => {
+            const q = (h?.question ?? "").toString().trim();
+            const a = (h?.answer ?? "").toString().trim().slice(0, 600);
+            return q && a ? [{ role: "user", content: q }, { role: "assistant", content: a }] : [];
+          }),
           { role: "user", content: `CONTEXT:\n${context}\n\nQUESTION: ${question}` },
         ],
       }),

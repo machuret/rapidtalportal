@@ -29,6 +29,8 @@ interface Turn {
   sources: Source[];
 }
 
+type HistoryItem = { question: string; answer: string };
+
 const SUGGESTIONS = [
   "What services do we offer?",
   "How do I onboard a new client?",
@@ -51,8 +53,9 @@ export function AskVaultClient({ clientId, companyName }: { clientId: string; co
     if (trimmed.length < 3 || loading) return;
     setQuestion("");
     setLoading(true);
+    const history: HistoryItem[] = turns.slice(-4).map((t) => ({ question: t.question, answer: t.answer }));
     try {
-      const res = await api.post<AskResponse>(ROUTES.vault.ask(), { clientId, question: trimmed });
+      const res = await api.post<AskResponse>(ROUTES.vault.ask(), { clientId, question: trimmed, history });
       setTurns((prev) => [...prev, { question: trimmed, answer: res.answer, sources: res.sources ?? [] }]);
     } catch {
       // api-client already surfaces a toast on failure.
@@ -105,7 +108,12 @@ export function AskVaultClient({ clientId, companyName }: { clientId: string; co
         )}
 
         {turns.map((t, i) => (
-          <ChatTurn key={i} turn={t} clientId={clientId} />
+          <ChatTurn
+            key={i}
+            turn={t}
+            clientId={clientId}
+            history={turns.slice(Math.max(0, i - 4), i).map((p) => ({ question: p.question, answer: p.answer }))}
+          />
         ))}
 
         {loading && (
@@ -138,7 +146,7 @@ export function AskVaultClient({ clientId, companyName }: { clientId: string; co
 }
 
 /** One Q&A exchange — clean answer by default, with optional "Go deeper" + sources. */
-function ChatTurn({ turn, clientId }: { turn: Turn; clientId: string }) {
+function ChatTurn({ turn, clientId, history }: { turn: Turn; clientId: string; history: HistoryItem[] }) {
   const [showSources, setShowSources] = useState(false);
   const [deepAnswer, setDeepAnswer] = useState<string | null>(null);
   const [deepLoading, setDeepLoading] = useState(false);
@@ -151,6 +159,7 @@ function ChatTurn({ turn, clientId }: { turn: Turn; clientId: string }) {
         clientId,
         question: turn.question,
         mode: "deep",
+        history,
       });
       setDeepAnswer(res.answer);
     } catch {
