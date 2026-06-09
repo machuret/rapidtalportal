@@ -1,7 +1,8 @@
 /**
- * GET /api/vault/unindexed?clientId=... — list ready items that have NO embeddings
- * yet (no rows in vault_chunks). Used by the "Index for AI search" backfill button
- * so Ask the Vault has something to search.
+ * GET /api/vault/unindexed?clientId=... — list ready/error items that have NO
+ * embeddings yet (no rows in vault_chunks). Used by the "Index for AI search"
+ * backfill button so Ask the Vault has something to search. 'error' items are
+ * included so a previously-failed run can be retried in one click.
  */
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -22,7 +23,9 @@ export const GET = withAuth(async (req, { user }) => {
     .from("vault_items")
     .select("id")
     .eq("client_id", clientId)
-    .eq("status", "ready");
+    // include 'error' too: items left in error by a previously-misconfigured
+    // run still need indexing, and reprocessing clears the error.
+    .in("status", ["ready", "error"]);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const allIds = (items ?? []).map((i) => (i as { id: string }).id);
