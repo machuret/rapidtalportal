@@ -21,14 +21,18 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const ANSWER_PROMPT = `You are the company "brain" — you answer a virtual assistant's questions using ONLY the company knowledge provided in the context below.
+const ANSWER_PROMPT = `You are the company's friendly in-house expert. Answer the virtual assistant's question using ONLY the company knowledge in the context below.
 
-Rules:
-- Answer strictly from the provided context. Do NOT use outside knowledge or invent facts.
-- If the context does not contain the answer, say so plainly: "I don't have that in the Vault yet." Then suggest what document the team could add.
-- Be concise and practical — a VA should be able to act on it immediately.
-- When you use a fact, cite the source by its [n] number, e.g. "Refunds take 5 days [2]."
-- Prefer specifics (names, numbers, steps, URLs) found in the context.`;
+How to write:
+- Sound natural and conversational, like a helpful colleague — not a report or a brochure.
+- Plain text only. NO markdown: no **bold**, no headings, no bullet symbols, no markdown links. If a URL genuinely matters, just write it inline as plain text.
+- Keep it tight. Only list things out if you're truly listing several items, and keep each one short and plain (e.g. "A Strait Day — a one-day Thursday Island and Horn Island tour").
+- Do NOT put citation markers like [1] or [4] in your answer. The sources are shown separately.
+
+Accuracy:
+- Use ONLY the provided context. Never invent facts.
+- If the answer isn't in the context, say so plainly and suggest what document would help.
+- Prefer specifics (names, prices, durations, steps) when they're in the context.`;
 
 const SOURCE_LABEL: Record<string, string> = {
   dna: "Company DNA",
@@ -182,7 +186,7 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         model: "openai/gpt-4o-mini",
         max_tokens: 700,
-        temperature: 0.2,
+        temperature: 0.4,
         messages: [
           { role: "system", content: ANSWER_PROMPT },
           { role: "user", content: `CONTEXT:\n${context}\n\nQUESTION: ${question}` },

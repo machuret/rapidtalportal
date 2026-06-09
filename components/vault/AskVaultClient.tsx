@@ -124,9 +124,8 @@ export function AskVaultClient({ clientId, companyName }: { clientId: string; co
                         className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-300"
                         title={s.kindLabel}
                       >
-                        <span className="text-zinc-500 font-mono">[{s.n}]</span>
                         <span className="text-[10px] uppercase tracking-wide text-zinc-500">{s.kindLabel}</span>
-                        <span className="truncate max-w-[12rem] text-zinc-300">{s.title}</span>
+                        <span className="truncate max-w-[14rem] text-zinc-300">{s.title}</span>
                       </span>
                     ))}
                   </div>
