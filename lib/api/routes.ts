@@ -18,6 +18,7 @@ export const ROUTES = {
   },
   vault: {
     items: () => "/api/vault/items",
+    unindexed: () => "/api/vault/unindexed",
     text: () => "/api/vault/text",
     url: () => "/api/vault/url",
     crawl: () => "/api/vault/crawl",

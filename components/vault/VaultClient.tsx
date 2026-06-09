@@ -4,11 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import type { DbVaultItem, VaultCategory } from "@/types/database";
 import { toast } from "sonner";
 import {
-  FileText, Trash2, Search, Loader2, CheckSquare, Square, X,
+  FileText, Trash2, Search, Loader2, CheckSquare, Square, X, Sparkles,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import { VaultItemDrawer } from "./VaultItemDrawer";
 import { AddVaultItem } from "./AddVaultItem";
 import { VaultItemRow } from "./VaultItemRow";
@@ -70,8 +72,41 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
   const [editItem, setEditItem] = useState<DbVaultItem | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reprocessing, setReprocessing] = useState<string | null>(null);
+  const [indexing, setIndexing] = useState<{ done: number; total: number } | null>(null);
 
   const hasFilters = debouncedSearch !== "" || typeFilter !== "all" || categoryFilter !== "all";
+  const canReprocess = canWrite || role === "va";
+
+  // ── Backfill embeddings — index items so "Ask the Vault" can search them ────
+  const handleIndexAll = useCallback(async () => {
+    try {
+      const { itemIds } = await api.get<{ itemIds: string[] }>(
+        `${ROUTES.vault.unindexed()}?clientId=${clientId}`,
+      );
+      if (!itemIds.length) {
+        toast.success("All items are already indexed for AI search.");
+        return;
+      }
+      setIndexing({ done: 0, total: itemIds.length });
+      let done = 0;
+      const CONCURRENCY = 3;
+      const worker = async () => {
+        while (done < itemIds.length) {
+          const id = itemIds[done++ ];
+          if (!id) break;
+          try { await api.post(ROUTES.vault.reprocess(id), { clientId }, { showErrorToast: false }); }
+          catch { /* keep going; partial backfill is fine */ }
+          setIndexing({ done: Math.min(done, itemIds.length), total: itemIds.length });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, itemIds.length) }, worker));
+      toast.success(`Indexed ${itemIds.length} item${itemIds.length !== 1 ? "s" : ""} for AI search.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Indexing failed.");
+    } finally {
+      setIndexing(null);
+    }
+  }, [clientId]);
 
   // ── Delete (single) ─────────────────────────────────────────────────────────
   const handleDelete = useCallback(async (id: string, title: string) => {
@@ -147,12 +182,28 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
             Document and content store — the source of truth for AI-generated knowledge.
           </p>
         </div>
-        {counts.total > 0 && (
-          <div className="hidden md:flex items-center gap-1.5 text-xs text-zinc-500">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            Live
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {canReprocess && counts.total > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleIndexAll}
+              disabled={indexing !== null}
+              className="gap-1.5 border-zinc-700 h-8 text-xs"
+              title="Build the AI search index so Ask the Vault can answer from these documents"
+            >
+              {indexing !== null
+                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Indexing {indexing.done}/{indexing.total}</>
+                : <><Sparkles className="w-3.5 h-3.5" /> Index for AI search</>}
+            </Button>
+          )}
+          {counts.total > 0 && (
+            <div className="hidden md:flex items-center gap-1.5 text-xs text-zinc-500">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              Live
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Stats strip */}
