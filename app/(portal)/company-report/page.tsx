@@ -1,0 +1,292 @@
+import { redirect } from "next/navigation";
+import { getCurrentUserAndClient } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { DbCompanyDna } from "@/types/database";
+import {
+  Brain, Package, Contact, Workflow, ShieldCheck, BookOpen, FileText,
+  CheckCircle2, Circle, Building2, Phone, Mail, Globe, MapPin, Target, Users,
+  Archive, Sparkles,
+} from "lucide-react";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Company Report — RapidTal" };
+
+type VaultItem = {
+  id: string;
+  title: string;
+  category: string | null;
+  ai_summary: string | null;
+  tags: string[];
+  source_type: string;
+  updated_at: string | null;
+};
+
+/** Display metadata + ordering for each vault category. */
+const CATEGORY_META: Record<
+  string,
+  { label: string; blurb: string; icon: typeof Package }
+> = {
+  service:   { label: "Services & Products", blurb: "What the company offers",          icon: Package },
+  contact:   { label: "Contacts",            blurb: "People, suppliers, clients",        icon: Contact },
+  process:   { label: "Processes & Flows",   blurb: "How things get done",               icon: Workflow },
+  policy:    { label: "Policies",            blurb: "Rules, guidelines, compliance",     icon: ShieldCheck },
+  reference: { label: "Reference",           blurb: "Background knowledge & FAQs",        icon: BookOpen },
+  general:   { label: "General",             blurb: "Everything else",                   icon: FileText },
+};
+const CATEGORY_ORDER = ["service", "contact", "process", "policy", "reference", "general"] as const;
+
+export default async function CompanyReportPage() {
+  const ctx = await getCurrentUserAndClient();
+  if (!ctx) redirect("/login");
+  const { user, client } = ctx;
+  if (!user.client_id) redirect("/dashboard");
+
+  const admin = createAdminClient();
+  const clientId = user.client_id;
+
+  const [{ data: dnaData }, { data: items }, { count: kbCount }] = await Promise.all([
+    admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
+    admin
+      .from("vault_items")
+      .select("id, title, category, ai_summary, tags, source_type, updated_at")
+      .eq("client_id", clientId)
+      .eq("status", "ready")
+      .order("updated_at", { ascending: false }),
+    admin.from("kb_entries").select("*", { count: "exact", head: true }).eq("client_id", clientId),
+  ]);
+
+  const dna = (dnaData ?? null) as DbCompanyDna | null;
+  const vaultItems = (items ?? []) as VaultItem[];
+
+  // Group ready items by (normalised) category
+  const byCat: Record<string, VaultItem[]> = {};
+  for (const it of vaultItems) {
+    const c = it.category && CATEGORY_META[it.category] ? it.category : "general";
+    (byCat[c] ??= []).push(it);
+  }
+  const indexedCount = vaultItems.filter((i) => i.ai_summary).length;
+
+  const has = (v?: string | null) => !!(v && v.trim());
+
+  // ── Coverage model — what does the brain know about the company? ──
+  const areas = [
+    {
+      label: "Company identity",
+      present: has(dna?.company_name) && (has(dna?.values) || has(dna?.target_demographic)),
+      hint: "Complete Company DNA — name, values, target audience.",
+    },
+    {
+      label: "Services & products",
+      present: has(dna?.services) || (byCat.service?.length ?? 0) > 0,
+      hint: "Add a services document to the Vault, or fill in DNA → Services.",
+    },
+    {
+      label: "Contacts",
+      present: has(dna?.phone) || has(dna?.email) || (byCat.contact?.length ?? 0) > 0,
+      hint: "Add contact details to DNA, or a contacts/suppliers document.",
+    },
+    {
+      label: "Processes & flows",
+      present: (byCat.process?.length ?? 0) > 0,
+      hint: "Add SOPs / how-to documents so the brain learns your workflows.",
+    },
+    {
+      label: "Policies",
+      present: (byCat.policy?.length ?? 0) > 0,
+      hint: "Add policy / guideline documents to the Vault.",
+    },
+    {
+      label: "Reference knowledge",
+      present: (byCat.reference?.length ?? 0) > 0 || (byCat.general?.length ?? 0) > 0,
+      hint: "Add background material, FAQs, or glossaries.",
+    },
+  ];
+  const covered = areas.filter((a) => a.present).length;
+  const pct = Math.round((covered / areas.length) * 100);
+  const gaps = areas.filter((a) => !a.present);
+
+  // Identity fields (from Company DNA)
+  const identity: { icon: typeof Building2; label: string; value: string | null }[] = [
+    { icon: Building2, label: "Company",        value: dna?.company_name ?? null },
+    { icon: Users,     label: "Founders",       value: dna?.founders ?? null },
+    { icon: MapPin,    label: "Location",       value: dna?.location ?? null },
+    { icon: Phone,     label: "Phone",          value: dna?.phone ?? null },
+    { icon: Mail,      label: "Email",          value: dna?.email ?? null },
+    { icon: Globe,     label: "Website",        value: dna?.website ?? null },
+    { icon: Target,    label: "Target audience",value: dna?.target_demographic ?? null },
+    { icon: Sparkles,  label: "Client type",    value: dna?.client_type ?? null },
+  ];
+  const identityKnown = identity.filter((f) => has(f.value));
+
+  return (
+    <div className="max-w-5xl">
+      {/* Header */}
+      <div className="flex items-center gap-4 mb-8">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+          <Brain className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Company Report</h1>
+          <p className="text-zinc-400 text-sm mt-1">
+            What the Vault knows about {client?.name ?? "your company"} — the more you add, the more complete it gets.
+          </p>
+        </div>
+      </div>
+
+      {/* Stats strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        <StatCard icon={Archive} tint="text-blue-400" label="Vault items" value={String(vaultItems.length)} />
+        <StatCard icon={Sparkles} tint="text-purple-400" label="AI-indexed" value={`${indexedCount}/${vaultItems.length}`} />
+        <StatCard icon={BookOpen} tint="text-green-400" label="KB answers" value={String(kbCount ?? 0)} />
+        <StatCard icon={Brain} tint="text-amber-400" label="Coverage" value={`${pct}%`} />
+      </div>
+
+      {/* Coverage meter */}
+      <section className="surface-card p-6 mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-white">Knowledge coverage</h2>
+          <span className="text-sm text-zinc-400">{covered} of {areas.length} areas</span>
+        </div>
+        <div className="h-2.5 w-full rounded-full bg-zinc-800 overflow-hidden mb-5">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2.5">
+          {areas.map((a) => (
+            <div key={a.label} className="flex items-start gap-2.5">
+              {a.present ? (
+                <CheckCircle2 className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+              ) : (
+                <Circle className="w-4 h-4 text-zinc-600 mt-0.5 shrink-0" />
+              )}
+              <div className="min-w-0">
+                <p className={a.present ? "text-sm text-zinc-200" : "text-sm text-zinc-400"}>{a.label}</p>
+                {!a.present && <p className="text-xs text-zinc-500 mt-0.5">{a.hint}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+        {gaps.length > 0 && (
+          <p className="text-xs text-zinc-500 mt-5">
+            💡 Add the {gaps.length} missing area{gaps.length !== 1 ? "s" : ""} above to make the brain more useful to your VAs.
+          </p>
+        )}
+      </section>
+
+      {/* Identity */}
+      <section className="mb-8">
+        <SectionHeader icon={Building2} title="Identity" subtitle="Who the company is" count={identityKnown.length} />
+        {identityKnown.length === 0 ? (
+          <EmptyHint text="No Company DNA captured yet. Fill in Company DNA to establish the basics." />
+        ) : (
+          <div className="surface-card p-6 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+            {identityKnown.map((f) => (
+              <div key={f.label} className="flex items-start gap-3">
+                <f.icon className="w-4 h-4 text-zinc-500 mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="label-section">{f.label}</p>
+                  <p className="text-sm text-zinc-200 break-words">{f.value}</p>
+                </div>
+              </div>
+            ))}
+            {has(dna?.values) && <WideField label="Values" value={dna!.values!} />}
+            {has(dna?.services) && <WideField label="Services (summary)" value={dna!.services!} />}
+          </div>
+        )}
+      </section>
+
+      {/* Category sections */}
+      {CATEGORY_ORDER.map((cat) => {
+        const list = byCat[cat] ?? [];
+        const meta = CATEGORY_META[cat];
+        if (list.length === 0) return null;
+        return (
+          <section key={cat} className="mb-8">
+            <SectionHeader icon={meta.icon} title={meta.label} subtitle={meta.blurb} count={list.length} />
+            <div className="grid grid-cols-1 gap-3">
+              {list.map((item) => (
+                <div key={item.id} className="surface-card p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <meta.icon className="w-4 h-4 text-zinc-500 shrink-0" />
+                    <p className="font-medium text-zinc-100 truncate">{item.title}</p>
+                    <span className="text-[10px] uppercase tracking-wide text-zinc-600 ml-auto shrink-0">
+                      {item.source_type}
+                    </span>
+                  </div>
+                  {item.ai_summary ? (
+                    <p className="text-sm text-zinc-400 leading-relaxed">{item.ai_summary}</p>
+                  ) : (
+                    <p className="text-xs text-amber-500/80 italic">
+                      Awaiting AI summary — reprocess this item in the Vault to add it to the brain.
+                    </p>
+                  )}
+                  {item.tags?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {item.tags.slice(0, 8).map((t) => (
+                        <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+
+      {vaultItems.length === 0 && (
+        <EmptyHint text="The Vault is empty. Add documents, paste text, or import a URL — each item makes this report richer." />
+      )}
+    </div>
+  );
+}
+
+/* ── Small presentational helpers ────────────────────────────────────── */
+
+function StatCard({ icon: Icon, tint, label, value }: { icon: typeof Brain; tint: string; label: string; value: string }) {
+  return (
+    <div className="surface-card px-5 py-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className={`w-4 h-4 shrink-0 ${tint}`} />
+        <span className="label-section">{label}</span>
+      </div>
+      <p className="stat-value text-white">{value}</p>
+    </div>
+  );
+}
+
+function SectionHeader({ icon: Icon, title, subtitle, count }: { icon: typeof Brain; title: string; subtitle: string; count: number }) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <div className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
+        <Icon className="w-4 h-4 text-zinc-300" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <h2 className="text-lg font-semibold text-white leading-tight">{title}</h2>
+        <p className="text-xs text-zinc-500">{subtitle}</p>
+      </div>
+      <span className="text-sm font-semibold text-zinc-400 shrink-0">{count}</span>
+    </div>
+  );
+}
+
+function WideField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="sm:col-span-2">
+      <p className="label-section">{label}</p>
+      <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words">{value}</p>
+    </div>
+  );
+}
+
+function EmptyHint({ text }: { text: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-8 text-center">
+      <p className="text-sm text-zinc-500">{text}</p>
+    </div>
+  );
+}
