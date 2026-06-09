@@ -3,6 +3,7 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileSidebarTrigger } from "@/components/layout/MobileSidebarTrigger";
 import { createClient } from "@/lib/supabase/server";
+import { QueryProvider } from "@/components/providers/QueryProvider";
 
 export default async function PortalLayout({
   children,
@@ -52,7 +53,7 @@ export default async function PortalLayout({
       {/* Main content — pt accounts for mobile menu button */}
       <main className="flex-1 overflow-auto pt-14 md:pt-0 px-4 py-6 md:p-8">
         <div className="max-w-6xl mx-auto">
-          {children}
+          <QueryProvider>{children}</QueryProvider>
         </div>
       </main>
     </div>
