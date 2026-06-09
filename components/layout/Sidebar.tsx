@@ -37,7 +37,11 @@ const vaLinks = [
   { href: "/daily-log",      label: "Daily Log",      icon: NotebookPen },
   { href: "/messages",       label: "Messages",       icon: MessageSquare },
   { href: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
+  { href: "/crm",            label: "CRM",            icon: ContactRound },
+  { href: "/content",        label: "Content",        icon: PenLine },
   { href: "/sops",           label: "SOPs",           icon: ListChecks },
+  { href: "/company-dna",    label: "Company DNA",    icon: Dna },
+  { href: "/vault",          label: "Vault",          icon: Archive },
   { href: "/profile",        label: "My Profile",     icon: UserCircle },
 ];
 

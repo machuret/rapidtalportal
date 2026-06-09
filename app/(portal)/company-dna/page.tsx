@@ -20,7 +20,9 @@ export default async function CompanyDnaPage() {
     .eq("client_id", user.client_id)
     .maybeSingle();
 
-  const canEdit = user.role === "client_admin" || user.role === "super_admin";
+  // Any member of the client (client_admin or va) can edit Company DNA.
+  const canEdit =
+    user.role === "client_admin" || user.role === "super_admin" || user.role === "va";
 
   return (
     <div className="max-w-2xl">
