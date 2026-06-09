@@ -113,7 +113,10 @@ async function embedAndStoreChunks(admin: any, openaiKey: string, itemId: string
     client_id: clientId,
     chunk_index: i,
     content: chunks[i],
-    embedding: d.embedding,
+    // pgvector expects the text form "[1,2,3]". Passing a raw JS array makes
+    // PostgREST serialise it as a Postgres array "{1,2,3}", which pgvector
+    // rejects — so the insert silently fails. Stringify to the vector literal.
+    embedding: JSON.stringify(d.embedding),
   }));
   if (!rows.length) return 0;
 
