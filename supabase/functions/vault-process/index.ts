@@ -50,6 +50,81 @@ Requirements:
 - tags must be lowercase single words or short phrases, no punctuation
 - category must be exactly one of the six options listed`;
 
+/**
+ * Split text into ~maxLen-char chunks, preferring paragraph/sentence boundaries,
+ * with a small overlap so context isn't lost across chunk edges. Capped at
+ * maxChunks to bound embedding cost/latency on very large documents.
+ */
+function chunkText(text: string, maxLen = 1200, overlap = 150, maxChunks = 60): string[] {
+  const clean = text.replace(/\r\n/g, "\n").trim();
+  if (!clean) return [];
+  if (clean.length <= maxLen) return [clean];
+
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < clean.length && chunks.length < maxChunks) {
+    let end = Math.min(start + maxLen, clean.length);
+    if (end < clean.length) {
+      // Try to end on a natural boundary in the back half of the window.
+      const slice = clean.slice(start, end);
+      const para = slice.lastIndexOf("\n\n");
+      const sent = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("\n"));
+      const bp = para > maxLen * 0.5 ? para : sent > maxLen * 0.5 ? sent : -1;
+      if (bp > 0) end = start + bp + 1;
+    }
+    const piece = clean.slice(start, end).trim();
+    if (piece) chunks.push(piece);
+    if (end >= clean.length) break;
+    start = Math.max(0, end - overlap);
+  }
+  return chunks;
+}
+
+/**
+ * Chunk + embed the full document and (re)write its vault_chunks rows. Best-effort:
+ * existing chunks are cleared first so reprocess/edits never leave stale vectors.
+ * Returns the number of chunks stored. Failures are logged, not thrown — the
+ * AI summary/category are the primary result and must not be blocked by this.
+ */
+// deno-lint-ignore no-explicit-any
+async function embedAndStoreChunks(admin: any, openaiKey: string, itemId: string, clientId: string, rawContent: string): Promise<number> {
+  // Clear stale chunks regardless of outcome below.
+  await admin.from("vault_chunks").delete().eq("item_id", itemId);
+
+  const chunks = chunkText(rawContent);
+  if (!chunks.length) return 0;
+
+  const res = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
+    body: JSON.stringify({ model: "text-embedding-3-small", input: chunks }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "unknown");
+    console.warn(`⚠️ vault-process: embeddings failed for ${itemId}: ${res.status} ${errText}`);
+    return 0;
+  }
+
+  const json = await res.json();
+  const data: { embedding: number[] }[] = json.data ?? [];
+  const rows = data.map((d, i) => ({
+    item_id: itemId,
+    client_id: clientId,
+    chunk_index: i,
+    content: chunks[i],
+    embedding: d.embedding,
+  }));
+  if (!rows.length) return 0;
+
+  const { error } = await admin.from("vault_chunks").insert(rows);
+  if (error) {
+    console.warn(`⚠️ vault-process: chunk insert failed for ${itemId}: ${error.message}`);
+    return 0;
+  }
+  return rows.length;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -265,12 +340,24 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    console.log(`✅ vault-process complete: ${itemId} → category=${category}, tokens=${tokensUsed}`);
+    // ── Embed for semantic search ─────────────────────────────────────────────
+    // Best-effort: chunks power "Ask the Vault" (RAG). A failure here must not
+    // fail the request — the summary/category are already saved above.
+    let chunksStored = 0;
+    try {
+      chunksStored = await embedAndStoreChunks(admin, openaiKey, itemId, clientId, rawContent);
+      console.log(`🧠 vault-process: stored ${chunksStored} embedding chunks for ${itemId}`);
+    } catch (embErr) {
+      console.warn(`⚠️ vault-process: embedding step errored for ${itemId}:`, embErr);
+    }
+
+    console.log(`✅ vault-process complete: ${itemId} → category=${category}, tokens=${tokensUsed}, chunks=${chunksStored}`);
 
     return new Response(JSON.stringify({
       success: true,
       data: updated,
       tokensUsed,
+      chunksStored,
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

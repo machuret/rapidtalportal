@@ -23,6 +23,7 @@ import {
   UsersRound,
   MessageSquare,
   Brain,
+  Sparkles,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ interface SidebarProps {
 const vaLinks = [
   { href: "/dashboard",      label: "Dashboard",      icon: LayoutDashboard },
   { href: "/company-report", label: "Company Report", icon: Brain },
+  { href: "/ask",            label: "Ask the Vault",  icon: Sparkles },
   { href: "/daily-log",      label: "Daily Log",      icon: NotebookPen },
   { href: "/messages",       label: "Messages",       icon: MessageSquare },
   { href: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
@@ -50,6 +52,7 @@ const vaLinks = [
 const clientAdminLinks = [
   { href: "/dashboard",      label: "Dashboard",      icon: LayoutDashboard },
   { href: "/company-report", label: "Company Report", icon: Brain },
+  { href: "/ask",            label: "Ask the Vault",  icon: Sparkles },
   { href: "/team",           label: "My Team",        icon: UsersRound },
   { href: "/messages",       label: "Messages",       icon: MessageSquare },
   { href: "/daily-log",      label: "Daily Log",      icon: NotebookPen },
