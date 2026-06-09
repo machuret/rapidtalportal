@@ -90,8 +90,8 @@ Deno.serve(async (req: Request) => {
     //       model used to embed chunks in vault-process) ─────────────────────────
     let queryEmbedding: number[] = [];
     try {
-      // @ts-expect-error Supabase.ai is provided by the Supabase Edge Runtime
-      const session = new Supabase.ai.Session("gte-small");
+      // deno-lint-ignore no-explicit-any
+      const session = new (globalThis as any).Supabase.ai.Session("gte-small");
       queryEmbedding = (await session.run(question, { mean_pool: true, normalize: true })) as number[];
     } catch (e) {
       return json({ error: `Embedding failed: ${e instanceof Error ? e.message : e}` }, 500);

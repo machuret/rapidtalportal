@@ -96,9 +96,10 @@ async function embedAndStoreChunks(admin: any, itemId: string, clientId: string,
   if (!chunks.length) return 0;
 
   // Supabase's built-in gte-small model (384-dim) — runs in the Edge Runtime
-  // with no API key. Embeds one chunk at a time.
-  // @ts-expect-error Supabase.ai is provided by the Supabase Edge Runtime
-  const session = new Supabase.ai.Session("gte-small");
+  // with no API key. Accessed via globalThis so it compiles whether or not the
+  // Supabase global is typed. Embeds one chunk at a time.
+  // deno-lint-ignore no-explicit-any
+  const session = new (globalThis as any).Supabase.ai.Session("gte-small");
 
   const rows: Record<string, unknown>[] = [];
   for (let i = 0; i < chunks.length; i++) {
