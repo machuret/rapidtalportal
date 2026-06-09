@@ -66,3 +66,52 @@ export async function proxyToEdgeFunction(
     );
   }
 }
+
+/**
+ * Like proxyToEdgeFunction but pipes a streaming (SSE) response straight through
+ * to the browser instead of buffering JSON. Forwards the X-Vault-Sources header.
+ * Returns a non-OK JSON response on failure so the client can fall back.
+ */
+export async function streamEdgeFunction(
+  functionName: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const cookieStore = cookies();
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    cookies: { getAll() { return cookieStore.getAll(); }, setAll() {} },
+  });
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok || !res.body) {
+      return NextResponse.json({ error: "stream unavailable" }, { status: res.status || 502 });
+    }
+
+    return new Response(res.body, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Vault-Sources": res.headers.get("X-Vault-Sources") ?? "",
+      },
+    });
+  } catch (err) {
+    console.error(`Edge stream proxy error [${functionName}]:`, err);
+    return NextResponse.json({ error: "Failed to reach edge function." }, { status: 502 });
+  }
+}

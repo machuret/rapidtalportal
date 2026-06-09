@@ -60,6 +60,26 @@ function json(body: unknown, status = 200) {
   });
 }
 
+/** Base64(UTF-8) so source titles with non-Latin chars survive the header. */
+function encodeSources(s: unknown): string {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(s))));
+}
+
+/** A one-shot SSE response (OpenAI delta format) for the no-context case. */
+function sseOnce(content: string): Response {
+  const enc = new TextEncoder();
+  const stream = new ReadableStream({
+    start(c) {
+      c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`));
+      c.enqueue(enc.encode("data: [DONE]\n\n"));
+      c.close();
+    },
+  });
+  return new Response(stream, {
+    headers: { ...corsHeaders, "Content-Type": "text/event-stream", "X-Vault-Sources": encodeSources([]) },
+  });
+}
+
 interface Block { kind: "dna" | "vault" | "kb" | "sop"; title: string; text: string; itemId?: string }
 
 Deno.serve(async (req: Request) => {
@@ -67,6 +87,22 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
   try {
+    // deno-lint-ignore no-explicit-any
+    let body: any = {};
+    try { body = await req.json(); } catch { /* no/invalid body */ }
+
+    // ── Keep-warm ping ─────────────────────────────────────────────────────────
+    // Boots the isolate AND loads the gte-small model so real questions are fast.
+    // No auth/DB — safe to call from a scheduled job.
+    if (body?.ping) {
+      try {
+        // deno-lint-ignore no-explicit-any
+        const s = new (globalThis as any).Supabase.ai.Session("gte-small");
+        await s.run("warm", { mean_pool: true, normalize: true });
+      } catch (_e) { /* ignore */ }
+      return json({ ok: true });
+    }
+
     // ── Auth ──────────────────────────────────────────────────────────────────
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized." }, 401);
@@ -91,7 +127,6 @@ Deno.serve(async (req: Request) => {
     const userClientId = (userRow as { client_id: string | null }).client_id;
 
     // ── Input ─────────────────────────────────────────────────────────────────
-    const body = await req.json();
     const clientId: string = body.clientId;
     const question: string = (body.question ?? "").toString().trim();
     const deep = body.mode === "deep";
@@ -197,19 +232,27 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const stream = body.stream === true;
+
     if (!blocks.length) {
       await logQuery(0);
-      return json({
-        answer: "I don't have anything in the Vault that answers this yet. Add a relevant document (or fill in Company DNA), then it'll show up here.",
-        sources: [], chunksUsed: 0,
-      });
+      const msg = "I don't have anything in the Vault that answers this yet. Add a relevant document (or fill in Company DNA), then it'll show up here.";
+      if (stream) return sseOnce(msg);
+      return json({ answer: msg, sources: [], chunksUsed: 0 });
     }
 
-    // ── Build grounded context + answer ─────────────────────────────────────────
+    // ── Build grounded context + sources ────────────────────────────────────────
     let context = "";
     blocks.forEach((b, i) => {
       context += `[${i + 1}] (${SOURCE_LABEL[b.kind]}) ${b.title}\n${b.text}\n\n`;
     });
+    const sources = blocks.map((b, i) => ({
+      n: i + 1,
+      kind: b.kind,
+      kindLabel: SOURCE_LABEL[b.kind],
+      title: b.title,
+      itemId: b.itemId ?? null,
+    }));
 
     const chatRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -223,6 +266,7 @@ Deno.serve(async (req: Request) => {
         model: "openai/gpt-4o-mini",
         max_tokens: deep ? 1100 : 550,
         temperature: 0.4,
+        stream,
         messages: [
           { role: "system", content: deep ? DEEP_PROMPT : ANSWER_PROMPT },
           ...history.flatMap((h) => {
@@ -235,6 +279,23 @@ Deno.serve(async (req: Request) => {
       }),
     });
 
+    // ── Streaming: pipe OpenRouter's SSE straight through, sources in a header ────
+    if (stream) {
+      await logQuery(blocks.length);
+      if (!chatRes.ok || !chatRes.body) {
+        return json({ error: "stream failed" }, 502); // client falls back to non-stream
+      }
+      return new Response(chatRes.body, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          "X-Vault-Sources": encodeSources(sources),
+        },
+      });
+    }
+
+    // ── Non-streaming ───────────────────────────────────────────────────────────
     const chatJson = await chatRes.json();
     if (!chatRes.ok) {
       return json({ error: `Answer generation failed: ${chatJson?.error?.message ?? "unknown"}` }, 500);
@@ -242,14 +303,6 @@ Deno.serve(async (req: Request) => {
 
     const answer: string = chatJson.choices?.[0]?.message?.content?.trim() ?? "No answer generated.";
     const tokensUsed: number = chatJson.usage?.total_tokens ?? 0;
-
-    const sources = blocks.map((b, i) => ({
-      n: i + 1,
-      kind: b.kind,
-      kindLabel: SOURCE_LABEL[b.kind],
-      title: b.title,
-      itemId: b.itemId ?? null,
-    }));
 
     await logQuery(blocks.length);
     return json({ answer, sources, chunksUsed: blocks.length, tokensUsed });

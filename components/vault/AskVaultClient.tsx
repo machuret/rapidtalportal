@@ -39,6 +39,58 @@ const SUGGESTIONS = [
   "Who do I contact about billing?",
 ];
 
+/**
+ * Stream an answer from /api/vault/ask-stream (SSE). Calls onProgress with the
+ * growing answer. Returns { ok:false } on any failure so the caller can fall
+ * back to the non-streaming endpoint — streaming is pure upside, never a break.
+ */
+async function askStream(
+  clientId: string,
+  question: string,
+  history: HistoryItem[],
+  onProgress: (answer: string, sources: Source[]) => void,
+): Promise<{ ok: boolean; answer: string; sources: Source[] }> {
+  let answer = "";
+  let sources: Source[] = [];
+  try {
+    const res = await fetch("/api/vault/ask-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, question, history }),
+    });
+    if (!res.ok || !res.body) return { ok: false, answer: "", sources: [] };
+
+    const sh = res.headers.get("X-Vault-Sources");
+    if (sh) {
+      try { sources = JSON.parse(decodeURIComponent(escape(atob(sh)))); } catch { /* ignore */ }
+    }
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) {
+        const l = line.trim();
+        if (!l.startsWith("data:")) continue;
+        const d = l.slice(5).trim();
+        if (d === "[DONE]") continue;
+        try {
+          const delta = JSON.parse(d)?.choices?.[0]?.delta?.content;
+          if (delta) { answer += delta; onProgress(answer, sources); }
+        } catch { /* partial JSON line; ignore */ }
+      }
+    }
+    return { ok: answer.length > 0, answer, sources };
+  } catch {
+    return { ok: false, answer: "", sources: [] };
+  }
+}
+
 export function AskVaultClient({
   clientId,
   companyName,
@@ -51,11 +103,12 @@ export function AskVaultClient({
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [loading, setLoading] = useState(false);
+  const [interim, setInterim] = useState<Turn | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [turns, loading]);
+  }, [turns, interim]);
 
   async function ask(q: string) {
     const trimmed = q.trim();
@@ -63,14 +116,24 @@ export function AskVaultClient({
     setQuestion("");
     setLoading(true);
     const history: HistoryItem[] = turns.slice(-4).map((t) => ({ question: t.question, answer: t.answer }));
-    try {
-      const res = await api.post<AskResponse>(ROUTES.vault.ask(), { clientId, question: trimmed, history });
-      setTurns((prev) => [...prev, { question: trimmed, answer: res.answer, sources: res.sources ?? [] }]);
-    } catch {
-      // api-client already surfaces a toast on failure.
-    } finally {
-      setLoading(false);
+    setInterim({ question: trimmed, answer: "", sources: [] });
+
+    // Stream first; fall back to the non-streaming endpoint if anything fails.
+    const r = await askStream(clientId, trimmed, history, (answer, sources) =>
+      setInterim({ question: trimmed, answer, sources }),
+    );
+    if (r.ok) {
+      setTurns((prev) => [...prev, { question: trimmed, answer: r.answer, sources: r.sources }]);
+    } else {
+      try {
+        const res = await api.post<AskResponse>(ROUTES.vault.ask(), { clientId, question: trimmed, history });
+        setTurns((prev) => [...prev, { question: trimmed, answer: res.answer, sources: res.sources ?? [] }]);
+      } catch {
+        // api-client already surfaces a toast on failure.
+      }
     }
+    setInterim(null);
+    setLoading(false);
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -95,7 +158,7 @@ export function AskVaultClient({
 
       {/* Conversation / empty state */}
       <div className="flex-1 space-y-6 mb-4">
-        {turns.length === 0 && !loading && (
+        {turns.length === 0 && !interim && (
           <div className="surface-card p-8 text-center">
             <Sparkles className="w-7 h-7 text-purple-400 mx-auto mb-3" />
             <p className="text-zinc-300 font-medium mb-1">What would you like to know?</p>
@@ -126,10 +189,26 @@ export function AskVaultClient({
           />
         ))}
 
-        {loading && (
-          <div className="surface-card p-4 flex items-center gap-2 text-zinc-400 text-sm">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Searching the Vault…
+        {interim && (
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-blue-600 text-white px-4 py-2.5 text-sm">
+                {interim.question}
+              </div>
+            </div>
+            <div className="surface-card p-4">
+              {interim.answer ? (
+                <p className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                  {interim.answer}
+                  <span className="ml-0.5 animate-pulse">▍</span>
+                </p>
+              ) : (
+                <div className="flex items-center gap-2 text-zinc-400 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Searching the brain…
+                </div>
+              )}
+            </div>
           </div>
         )}
         <div ref={endRef} />
