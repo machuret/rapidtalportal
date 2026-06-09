@@ -35,8 +35,17 @@ describe('URL Validation', () => {
       expect(result.error).toBe('File type not allowed for scraping');
     });
 
-    test('should sanitize dangerous query parameters', () => {
+    test('should reject path-traversal-style query parameters', () => {
+      // A sensitive param whose value contains a path separator is treated as a
+      // traversal attempt and rejected outright (more secure than silent stripping).
       const result = validateScrapingUrl('https://example.com?file=/etc/passwd&path=admin');
+      expect(result.isValid).toBe(false);
+      expect(result.error).toBe('Suspicious URL parameters detected');
+    });
+
+    test('should strip dangerous query parameters from the sanitized URL', () => {
+      // A benign-valued sensitive param is allowed but removed from the result.
+      const result = validateScrapingUrl('https://example.com?file=report');
       expect(result.isValid).toBe(true);
       expect(result.sanitizedUrl).toBe('https://example.com/');
     });

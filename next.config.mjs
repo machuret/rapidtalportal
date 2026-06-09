@@ -21,11 +21,14 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // API responses are per-user and authenticated. Default to no shared
+        // caching so a CDN/proxy can never serve one user's data to another.
+        // Opt specific non-personalized endpoints into caching at the route level.
         source: '/api/(.*)',
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=300, stale-while-revalidate=600',
+            value: 'private, no-store',
           },
         ],
       },
