@@ -34,6 +34,18 @@ Accuracy:
 - If the answer isn't in the context, say so plainly and suggest what document would help.
 - Prefer specifics (names, prices, durations, steps) when they're in the context.`;
 
+const DEEP_PROMPT = `You are the company's friendly in-house expert. Answer the virtual assistant's question THOROUGHLY using ONLY the company knowledge in the context below.
+
+How to write:
+- Natural and conversational, like a knowledgeable colleague taking the time to explain it properly.
+- Give the full picture: relevant details, options, steps, prices/durations, and any useful URLs written inline as plain text.
+- Plain text only. NO markdown: no **bold**, no headings, no markdown links. Short plain lists are fine when you're listing several things.
+- Do NOT put citation markers like [1] in your answer. Sources are shown separately.
+
+Accuracy:
+- Use ONLY the provided context. Never invent facts.
+- If something isn't covered, say so plainly and suggest what document would fill the gap.`;
+
 const SOURCE_LABEL: Record<string, string> = {
   dna: "Company DNA",
   vault: "Vault document",
@@ -82,11 +94,27 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const clientId: string = body.clientId;
     const question: string = (body.question ?? "").toString().trim();
-    const matchCount: number = Math.min(Math.max(Number(body.matchCount) || 5, 1), 12);
+    const deep = body.mode === "deep";
+    const matchCount: number = deep ? 10 : 5;
 
     if (!clientId || !question) return json({ error: "Missing clientId or question." }, 400);
     if (question.length < 3) return json({ error: "Question too short." }, 422);
     if (role !== "super_admin" && userClientId !== clientId) return json({ error: "Forbidden." }, 403);
+
+    // Best-effort question log (powers gap detection / analytics). Never throws.
+    // deno-lint-ignore no-explicit-any
+    const logQuery = async (sourcesCount: number) => {
+      try {
+        await admin.from("vault_queries").insert({
+          client_id: clientId,
+          user_id: authUser.id,
+          question,
+          mode: deep ? "deep" : "concise",
+          sources_count: sourcesCount,
+          answered: sourcesCount > 0,
+        });
+      } catch (_e) { /* table may not exist yet; ignore */ }
+    };
 
     // ── Embed the question (gte-small) — non-fatal: if it fails we still answer
     //    from DNA/KB/SOPs. ─────────────────────────────────────────────────────
@@ -163,6 +191,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!blocks.length) {
+      await logQuery(0);
       return json({
         answer: "I don't have anything in the Vault that answers this yet. Add a relevant document (or fill in Company DNA), then it'll show up here.",
         sources: [], chunksUsed: 0,
@@ -185,10 +214,10 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: "openai/gpt-4o-mini",
-        max_tokens: 700,
+        max_tokens: deep ? 1100 : 550,
         temperature: 0.4,
         messages: [
-          { role: "system", content: ANSWER_PROMPT },
+          { role: "system", content: deep ? DEEP_PROMPT : ANSWER_PROMPT },
           { role: "user", content: `CONTEXT:\n${context}\n\nQUESTION: ${question}` },
         ],
       }),
@@ -210,6 +239,7 @@ Deno.serve(async (req: Request) => {
       itemId: b.itemId ?? null,
     }));
 
+    await logQuery(blocks.length);
     return json({ answer, sources, chunksUsed: blocks.length, tokensUsed });
   } catch (error) {
     console.error("❌ vault-ask error:", error);
