@@ -1,17 +1,15 @@
 /**
- * vault-ask — Retrieval-augmented Q&A over a client's Vault ("Ask the Vault")
+ * vault-ask — Retrieval-augmented Q&A over the WHOLE company brain ("Ask the Vault")
  *
- * Flow:
- *   1. Embed the user's question (Supabase gte-small, 384-dim).
- *   2. Retrieve the most similar vault_chunks for the client (match_vault_chunks RPC).
- *   3. Answer via OpenRouter (openai/gpt-4o-mini), grounded ONLY in retrieved chunks, with citations.
+ * Unified retrieval — answers draw from every knowledge source, not just docs:
+ *   - Company DNA      → always included (the authoritative company profile)
+ *   - Vault documents  → semantic search over vault_chunks (gte-small, 384-dim)
+ *   - Knowledge Base   → full-text search over kb_entries (023_knowledge_fts.sql)
+ *   - SOPs             → full-text search over sops
+ * Each is resilient: if one source errors (or embeddings fail), the rest still answer.
  *
- * Called by: /api/vault/ask (proxied with the end-user's JWT).
+ * Answer via OpenRouter (openai/gpt-4o-mini), grounded ONLY in retrieved context, cited.
  *
- * DB Reads:  vault_chunks (via RPC), vault_items (titles for citations)
- * DB Writes: none
- *
- * Auth:    Bearer JWT → getUser() → DB user row → client membership check
  * Secrets: OPENROUTER_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
  */
 
@@ -29,8 +27,15 @@ Rules:
 - Answer strictly from the provided context. Do NOT use outside knowledge or invent facts.
 - If the context does not contain the answer, say so plainly: "I don't have that in the Vault yet." Then suggest what document the team could add.
 - Be concise and practical — a VA should be able to act on it immediately.
-- When you use a fact, cite the source document by its [n] number, e.g. "Refunds take 5 days [2]."
+- When you use a fact, cite the source by its [n] number, e.g. "Refunds take 5 days [2]."
 - Prefer specifics (names, numbers, steps, URLs) found in the context.`;
+
+const SOURCE_LABEL: Record<string, string> = {
+  dna: "Company DNA",
+  vault: "Vault document",
+  kb: "Knowledge Base",
+  sop: "SOP",
+};
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -38,6 +43,8 @@ function json(body: unknown, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
+interface Block { kind: "dna" | "vault" | "kb" | "sop"; title: string; text: string; itemId?: string }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -56,20 +63,14 @@ Deno.serve(async (req: Request) => {
     if (!openrouterKey) return json({ error: "OpenRouter not configured." }, 500);
 
     const admin = createClient(supabaseUrl, serviceKey);
-
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${jwt}` } },
     });
     const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
     if (authError || !authUser) return json({ error: "Unauthorized." }, 401);
 
-    const { data: userRow } = await admin
-      .from("users")
-      .select("role, client_id")
-      .eq("id", authUser.id)
-      .single();
+    const { data: userRow } = await admin.from("users").select("role, client_id").eq("id", authUser.id).single();
     if (!userRow) return json({ error: "User record not found." }, 403);
-
     const role = (userRow as { role: string }).role;
     const userClientId = (userRow as { client_id: string | null }).client_id;
 
@@ -77,74 +78,98 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const clientId: string = body.clientId;
     const question: string = (body.question ?? "").toString().trim();
-    const matchCount: number = Math.min(Math.max(Number(body.matchCount) || 8, 1), 15);
+    const matchCount: number = Math.min(Math.max(Number(body.matchCount) || 5, 1), 12);
 
     if (!clientId || !question) return json({ error: "Missing clientId or question." }, 400);
     if (question.length < 3) return json({ error: "Question too short." }, 422);
+    if (role !== "super_admin" && userClientId !== clientId) return json({ error: "Forbidden." }, 403);
 
-    if (role !== "super_admin" && userClientId !== clientId) {
-      return json({ error: "Forbidden." }, 403);
-    }
-
-    // ── 1. Embed the question (Supabase gte-small, 384-dim — must match the
-    //       model used to embed chunks in vault-process) ─────────────────────────
+    // ── Embed the question (gte-small) — non-fatal: if it fails we still answer
+    //    from DNA/KB/SOPs. ─────────────────────────────────────────────────────
     let queryEmbedding: number[] = [];
     try {
       // deno-lint-ignore no-explicit-any
       const session = new (globalThis as any).Supabase.ai.Session("gte-small");
       queryEmbedding = (await session.run(question, { mean_pool: true, normalize: true })) as number[];
     } catch (e) {
-      return json({ error: `Embedding failed: ${e instanceof Error ? e.message : e}` }, 500);
-    }
-    if (!queryEmbedding.length) return json({ error: "Could not embed question." }, 500);
-
-    // ── 2. Retrieve similar chunks ──────────────────────────────────────────────
-    const { data: matches, error: matchErr } = await admin.rpc("match_vault_chunks", {
-      p_client_id: clientId,
-      p_query_embedding: queryEmbedding,
-      p_match_count: matchCount,
-    });
-
-    if (matchErr) {
-      console.error("match_vault_chunks error:", matchErr);
-      return json({ error: "Search failed. Has the Vault been indexed yet?" }, 500);
+      console.warn("vault-ask: question embedding failed, continuing without vector search:", e);
     }
 
+    // ── Retrieve from all sources in parallel ───────────────────────────────────
+    const [dnaRes, kbRes, sopRes, vaultRes] = await Promise.all([
+      admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
+      admin.from("kb_entries").select("question, answer")
+        .eq("client_id", clientId)
+        .textSearch("fts", question, { type: "websearch", config: "english" })
+        .limit(3),
+      admin.from("sops").select("title, body")
+        .eq("client_id", clientId)
+        .textSearch("fts", question, { type: "websearch", config: "english" })
+        .limit(2),
+      queryEmbedding.length
+        ? admin.rpc("match_vault_chunks", { p_client_id: clientId, p_query_embedding: queryEmbedding, p_match_count: matchCount })
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    const blocks: Block[] = [];
+
+    // 1. Company DNA — always, the authoritative profile.
+    const dna = dnaRes.data as Record<string, unknown> | null;
+    if (dna) {
+      const lines: string[] = [];
+      const add = (label: string, v: unknown) => { if (v && String(v).trim()) lines.push(`${label}: ${String(v).trim()}`); };
+      add("Company name", dna.company_name); add("Founders", dna.founders); add("Location", dna.location);
+      add("Phone", dna.phone); add("Email", dna.email); add("Website", dna.website);
+      add("Services", dna.services); add("Values", dna.values);
+      add("Target audience", dna.target_demographic); add("Client type", dna.client_type);
+      if (dna.extra && typeof dna.extra === "object") {
+        for (const [k, v] of Object.entries(dna.extra as Record<string, unknown>)) add(k, v);
+      }
+      if (lines.length) blocks.push({ kind: "dna", title: "Company DNA", text: lines.join("\n") });
+    }
+
+    // 2. Vault docs — semantic matches, grouped one block per document.
     type Match = { id: string; item_id: string; content: string; chunk_index: number; similarity: number };
-    const chunks = (matches ?? []) as Match[];
+    const matches = (vaultRes.error ? [] : (vaultRes.data ?? [])) as Match[];
+    if (matches.length) {
+      const itemIds = [...new Set(matches.map((c) => c.item_id))];
+      const { data: itemRows } = await admin.from("vault_items").select("id, title").in("id", itemIds);
+      const titleById = new Map<string, string>();
+      for (const r of (itemRows ?? []) as { id: string; title: string }[]) titleById.set(r.id, r.title);
+      const orderedIds: string[] = [];
+      for (const c of matches) if (!orderedIds.includes(c.item_id)) orderedIds.push(c.item_id);
+      for (const id of orderedIds) {
+        const text = matches.filter((c) => c.item_id === id).map((c) => c.content.trim()).join("\n…\n");
+        blocks.push({ kind: "vault", title: titleById.get(id) ?? "Untitled", text, itemId: id });
+      }
+    }
 
-    if (!chunks.length) {
+    // 3. Knowledge Base — keyword matches.
+    if (!kbRes.error) {
+      for (const e of (kbRes.data ?? []) as { question: string; answer: string }[]) {
+        blocks.push({ kind: "kb", title: e.question, text: `Q: ${e.question}\nA: ${e.answer}` });
+      }
+    }
+
+    // 4. SOPs — keyword matches.
+    if (!sopRes.error) {
+      for (const s of (sopRes.data ?? []) as { title: string; body: string }[]) {
+        blocks.push({ kind: "sop", title: s.title, text: (s.body ?? "").slice(0, 1500) });
+      }
+    }
+
+    if (!blocks.length) {
       return json({
-        answer: "I don't have anything in the Vault that answers this yet. Add a relevant document, then reprocess it so I can learn from it.",
-        sources: [],
-        chunksUsed: 0,
+        answer: "I don't have anything in the Vault that answers this yet. Add a relevant document (or fill in Company DNA), then it'll show up here.",
+        sources: [], chunksUsed: 0,
       });
     }
 
-    // ── Map chunks → source documents (for citations) ───────────────────────────
-    const itemIds = [...new Set(chunks.map((c) => c.item_id))];
-    const { data: itemRows } = await admin
-      .from("vault_items")
-      .select("id, title, category")
-      .in("id", itemIds);
-    const titleById = new Map<string, { title: string; category: string | null }>();
-    for (const r of (itemRows ?? []) as { id: string; title: string; category: string | null }[]) {
-      titleById.set(r.id, { title: r.title, category: r.category });
-    }
-
-    // Stable citation numbering: one [n] per source document, ordered by best match.
-    const orderedItemIds: string[] = [];
-    for (const c of chunks) if (!orderedItemIds.includes(c.item_id)) orderedItemIds.push(c.item_id);
-    const citationNum = new Map<string, number>();
-    orderedItemIds.forEach((id, i) => citationNum.set(id, i + 1));
-
-    // ── 3. Build grounded context + answer ──────────────────────────────────────
+    // ── Build grounded context + answer ─────────────────────────────────────────
     let context = "";
-    for (const c of chunks) {
-      const n = citationNum.get(c.item_id)!;
-      const title = titleById.get(c.item_id)?.title ?? "Untitled";
-      context += `[${n}] ${title}\n${c.content.trim()}\n\n`;
-    }
+    blocks.forEach((b, i) => {
+      context += `[${i + 1}] (${SOURCE_LABEL[b.kind]}) ${b.title}\n${b.text}\n\n`;
+    });
 
     const chatRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -173,15 +198,15 @@ Deno.serve(async (req: Request) => {
     const answer: string = chatJson.choices?.[0]?.message?.content?.trim() ?? "No answer generated.";
     const tokensUsed: number = chatJson.usage?.total_tokens ?? 0;
 
-    const sources = orderedItemIds.map((id) => ({
-      n: citationNum.get(id)!,
-      itemId: id,
-      title: titleById.get(id)?.title ?? "Untitled",
-      category: titleById.get(id)?.category ?? null,
-      similarity: Math.max(...chunks.filter((c) => c.item_id === id).map((c) => c.similarity)),
+    const sources = blocks.map((b, i) => ({
+      n: i + 1,
+      kind: b.kind,
+      kindLabel: SOURCE_LABEL[b.kind],
+      title: b.title,
+      itemId: b.itemId ?? null,
     }));
 
-    return json({ answer, sources, chunksUsed: chunks.length, tokensUsed });
+    return json({ answer, sources, chunksUsed: blocks.length, tokensUsed });
   } catch (error) {
     console.error("❌ vault-ask error:", error);
     return json({ error: error instanceof Error ? error.message : "Internal server error" }, 500);

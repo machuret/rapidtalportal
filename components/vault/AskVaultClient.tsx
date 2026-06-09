@@ -5,14 +5,14 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Brain, Send, Loader2, FileText, Sparkles } from "lucide-react";
+import { Brain, Send, Loader2, Sparkles } from "lucide-react";
 
 interface Source {
   n: number;
-  itemId: string;
+  kind: "dna" | "vault" | "kb" | "sop";
+  kindLabel: string;
   title: string;
-  category: string | null;
-  similarity: number;
+  itemId: string | null;
 }
 
 interface AskResponse {
@@ -120,13 +120,13 @@ export function AskVaultClient({ clientId, companyName }: { clientId: string; co
                   <div className="flex flex-wrap gap-1.5">
                     {t.sources.map((s) => (
                       <span
-                        key={s.itemId}
+                        key={s.n}
                         className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-300"
-                        title={`${Math.round(s.similarity * 100)}% match${s.category ? ` · ${s.category}` : ""}`}
+                        title={s.kindLabel}
                       >
                         <span className="text-zinc-500 font-mono">[{s.n}]</span>
-                        <FileText className="w-3 h-3 text-zinc-500" />
-                        <span className="truncate max-w-[14rem]">{s.title}</span>
+                        <span className="text-[10px] uppercase tracking-wide text-zinc-500">{s.kindLabel}</span>
+                        <span className="truncate max-w-[12rem] text-zinc-300">{s.title}</span>
                       </span>
                     ))}
                   </div>
