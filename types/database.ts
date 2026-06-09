@@ -146,9 +146,9 @@ export interface Database {
         Relationships: NoRelationships;
       };
       kb_entries: {
-        Row: { id: string; client_id: string; question: string; answer: string; source_vault_ids: string[]; category: string | null; generated_at: string };
-        Insert: { id?: string; client_id: string; question: string; answer: string; source_vault_ids: string[]; category?: string | null; generated_at?: string };
-        Update: { id?: string; client_id?: string; question?: string; answer?: string; source_vault_ids?: string[]; category?: string | null; generated_at?: string };
+        Row: { id: string; client_id: string; question: string; answer: string; source_vault_ids: string[]; category: string | null; generated_at: string; is_pinned: boolean };
+        Insert: { id?: string; client_id: string; question: string; answer: string; source_vault_ids: string[]; category?: string | null; generated_at?: string; is_pinned?: boolean };
+        Update: { id?: string; client_id?: string; question?: string; answer?: string; source_vault_ids?: string[]; category?: string | null; generated_at?: string; is_pinned?: boolean };
         Relationships: NoRelationships;
       };
       kb_generation_runs: {

@@ -39,9 +39,11 @@ export async function PATCH(
   const { clientId, ...updates } = parsed.data;
 
   const admin = createAdminClient();
+  // Mark as pinned so the next KB regeneration preserves this curated edit
+  // instead of wiping it (see kb-generate's "delete only non-pinned" step).
   const { error } = await admin
     .from("kb_entries")
-    .update(updates)
+    .update({ ...updates, is_pinned: true })
     .eq("id", params.id)
     .eq("client_id", clientId);
 

@@ -76,33 +76,51 @@ Deno.serve(async (req: Request) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Validate JWT using anon client — getUser() is the secure server-side check
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
-    });
-    const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
-    if (authError || !authUser) {
-      return new Response(JSON.stringify({ error: "Unauthorized." }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     // Use service role for all DB ops — bypasses RLS safely server-side
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // Fetch user row to verify role and client membership
-    const { data: userRow } = await admin
-      .from("users")
-      .select("role, client_id")
-      .eq("id", authUser.id)
-      .single();
+    // Two kinds of caller:
+    //   (a) A logged-in user (UI "reprocess") presenting their own JWT.
+    //   (b) A trusted server-to-server call (the post-ingest trigger in
+    //       lib/vault-process-trigger.ts) presenting the service-role key.
+    // For (b) we skip the user/role checks — only our own backend holds the
+    // service-role key — and rely on the clientId-scoped item fetch below.
+    const isInternal = jwt === serviceKey;
 
-    if (!userRow) {
-      return new Response(JSON.stringify({ error: "User record not found." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    let actorId: string | null = null;
+    let role = "super_admin";
+    let userClientId: string | null = null;
+
+    if (!isInternal) {
+      // Validate JWT using anon client — getUser() is the secure server-side check
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: `Bearer ${jwt}` } },
       });
+      const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
+      if (authError || !authUser) {
+        return new Response(JSON.stringify({ error: "Unauthorized." }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Fetch user row to verify role and client membership
+      const { data: userRow } = await admin
+        .from("users")
+        .select("role, client_id")
+        .eq("id", authUser.id)
+        .single();
+
+      if (!userRow) {
+        return new Response(JSON.stringify({ error: "User record not found." }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      actorId = authUser.id;
+      role = (userRow as { role: string }).role;
+      userClientId = (userRow as { client_id: string | null }).client_id;
     }
 
     // ── Validate input ────────────────────────────────────────────────────────
@@ -116,10 +134,9 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Client membership check — super_admin can process any client's items
-    const role = (userRow as { role: string }).role;
-    const userClientId = (userRow as { client_id: string | null }).client_id;
-    if (role !== "super_admin" && userClientId !== clientId) {
+    // Client membership check — super_admin (and trusted internal calls) can
+    // process any client's items; everyone else must match their own client.
+    if (!isInternal && role !== "super_admin" && userClientId !== clientId) {
       return new Response(JSON.stringify({ error: "Forbidden." }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -163,7 +180,7 @@ Deno.serve(async (req: Request) => {
     // Mark as processing before calling OpenAI — UI can show live status via Realtime
     await admin
       .from("vault_items")
-      .update({ status: "processing", updated_at: new Date().toISOString(), updated_by: authUser.id })
+      .update({ status: "processing", updated_at: new Date().toISOString(), updated_by: actorId })
       .eq("id", itemId);
 
     // ── OpenAI extraction ─────────────────────────────────────────────────────
@@ -235,7 +252,7 @@ Deno.serve(async (req: Request) => {
         status: "ready",
         error_message: null, // Clear any previous error
         updated_at: new Date().toISOString(),
-        updated_by: authUser.id,
+        updated_by: actorId,
       })
       .eq("id", itemId)
       .select()

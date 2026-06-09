@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { triggerVaultProcess } from "@/lib/vault-process-trigger";
 import { z } from "zod";
 
 const schema = z.object({
@@ -28,15 +30,44 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  const { error } = await supabase.from("vault_items").insert({
-    client_id: clientId,
-    source_type: "text",
-    title,
-    raw_content: content,
-    status: "ready",
-    created_by: userId,
-  });
+  // Deduplicate on exact content within the client (same as upload/url paths)
+  const contentHash = createHash("sha256").update(content).digest("hex");
+  const { data: duplicate } = await supabase
+    .from("vault_items")
+    .select("id, title")
+    .eq("client_id", clientId)
+    .eq("content_hash", contentHash)
+    .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (duplicate) {
+    return NextResponse.json(
+      { error: `Duplicate content. This text matches existing item "${(duplicate as { title: string }).title}".` },
+      { status: 409 }
+    );
+  }
+
+  // Insert as "processing" so AI metadata (summary/category/tags) is filled in,
+  // matching the upload/url ingestion paths. vault-process flips it to "ready".
+  const { data: item, error } = await supabase
+    .from("vault_items")
+    .insert({
+      client_id: clientId,
+      source_type: "text",
+      title,
+      raw_content: content,
+      content_hash: contentHash,
+      status: "processing",
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+
+  if (error || !item) {
+    return NextResponse.json({ error: error?.message ?? "Insert failed" }, { status: 500 });
+  }
+
+  // Fire-and-forget AI processing — extracts ai_summary, category, tags
+  triggerVaultProcess((item as { id: string }).id, clientId);
+
   return NextResponse.json({ success: true });
 }

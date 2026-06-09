@@ -362,12 +362,15 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Delete old entries — explicitly exclude the IDs we just inserted
+    // Delete old auto-generated entries — but PRESERVE manually-edited ones
+    // (is_pinned = true) and exclude the IDs we just inserted. This keeps human
+    // curation intact across regenerations instead of wiping the whole KB.
     const newIds = insertedRows.map((r: { id: string }) => r.id);
     const { error: deleteError } = await admin
       .from("kb_entries")
       .delete()
       .eq("client_id", clientId)
+      .eq("is_pinned", false)
       .not("id", "in", `(${newIds.join(",")})`);
 
     if (deleteError) {

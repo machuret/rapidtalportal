@@ -105,6 +105,11 @@ ingestion-to-knowledge, and a synthesized report — are the ones that don't exi
 
 Ordered by leverage. Each step moves toward *understand → report → serve the VA*.
 
+> **Status — Phase 1 implemented on this branch** (fixes 3.1, 3.2, 3.3). Requires two
+> out-of-band deploy steps: **(1)** run `db/migrations/017_kb_pinned.sql` in Supabase, and
+> **(2)** redeploy the edge functions `vault-process` and `kb-generate`
+> (`supabase functions deploy vault-process kb-generate`).
+
 ### Phase 1 — Make ingestion actually index (fixes, not features)
 1. **Fix auto-processing (3.1).** Either (a) have the trigger mint a real user/service JWT the edge fn accepts, or (b) drop the HTTP hop and run the same metadata extraction inline in the route (like `vault-crawl` already does). Make failures visible (set `status='error'`), not silent.
 2. **Index paste-text (3.2):** call the same extraction + compute `content_hash` in `/api/vault/text`.
