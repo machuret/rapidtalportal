@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ContentPiece, ContentTopic, ContentType } from "@/types/content";
 import { TopicsTab } from "./TopicsTab";
 import { CreateTab } from "./CreateTab";
@@ -23,21 +22,6 @@ interface ContentStudioProps {
   history: ContentPiece[];
   topics: ContentTopic[];
 }
-
-// Module-level singleton QueryClient - persists across renders
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60 * 1000,
-      gcTime: 5 * 60 * 1000,
-      retry: 2,
-      refetchOnWindowFocus: false,
-    },
-    mutations: {
-      retry: 1,
-    },
-  },
-});
 
 function ContentStudioInner({
   clientId,
@@ -123,10 +107,7 @@ function ContentStudioInner({
   );
 }
 
+// The portal layout provides a global QueryClientProvider, so this just renders.
 export function ContentStudio(props: ContentStudioProps) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ContentStudioInner {...props} />
-    </QueryClientProvider>
-  );
+  return <ContentStudioInner {...props} />;
 }

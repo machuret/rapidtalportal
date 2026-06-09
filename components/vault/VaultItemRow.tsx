@@ -1,7 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { DbVaultItem, VaultCategory } from "@/types/database";
+import type { DbVaultItem } from "@/types/database";
+import { CategoryBadge } from "@/components/shared/CategoryBadge";
 import {
   FileText, Globe, Type, FileUp, CheckCircle2, Clock,
   AlertCircle, Loader2, ExternalLink, Pencil, Tag,
@@ -21,15 +22,6 @@ const STATUS_META = {
   ready:      { label: "Ready",      cls: "bg-green-500/15 text-green-400 border-green-500/25",    icon: CheckCircle2 },
   error:      { label: "Error",      cls: "bg-red-500/15 text-red-400 border-red-500/25",          icon: AlertCircle },
 } as const;
-
-const CATEGORY_META: Record<VaultCategory, { label: string; cls: string }> = {
-  process:   { label: "Process",   cls: "bg-blue-500/15 text-blue-400 border-blue-500/25" },
-  policy:    { label: "Policy",    cls: "bg-amber-500/15 text-amber-400 border-amber-500/25" },
-  service:   { label: "Service",   cls: "bg-green-500/15 text-green-400 border-green-500/25" },
-  contact:   { label: "Contact",   cls: "bg-purple-500/15 text-purple-400 border-purple-500/25" },
-  reference: { label: "Reference", cls: "bg-cyan-500/15 text-cyan-400 border-cyan-500/25" },
-  general:   { label: "General",   cls: "bg-zinc-500/15 text-zinc-400 border-zinc-500/25" },
-};
 
 interface VaultItemRowProps {
   item: DbVaultItem;
@@ -53,7 +45,6 @@ export function VaultItemRow({
   const sta = STATUS_META[item.status];
   const SrcIcon = src?.icon ?? FileText;
   const StaIcon = sta?.icon ?? Clock;
-  const catMeta = item.category ? CATEGORY_META[item.category] : null;
 
   return (
     <div className={cn(
@@ -76,9 +67,7 @@ export function VaultItemRow({
           <p className="font-semibold text-sm text-zinc-100 truncate">{item.title}</p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", src?.bgCls, src?.iconCls)}>{src?.label}</span>
-            {catMeta && (
-              <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded border", catMeta.cls)}>{catMeta.label}</span>
-            )}
+            {item.category && <CategoryBadge category={item.category} />}
             <span className="text-xs text-zinc-600">
               {new Date(item.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
             </span>

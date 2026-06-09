@@ -29,7 +29,7 @@ import {
   useDeleteClientUser,
   type ClientUserRow,
 } from "@/hooks/useUsers";
-import type { UserRole } from "@/types/database";
+import { ROLES, ROLE_OPTIONS, type UserRole } from "@/lib/taxonomy/roles";
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type ClientUser = ClientUserRow;
@@ -46,17 +46,6 @@ interface ClientDetailProps {
   unassignedVas: UnassignedVa[];
 }
 
-const ROLE_STYLES: Record<string, string> = {
-  super_admin: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  client_admin: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  va: "bg-zinc-700 text-zinc-300 border-zinc-600",
-};
-
-const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: "va", label: "VA" },
-  { value: "client_admin", label: "Client Admin" },
-  { value: "super_admin", label: "Super Admin" },
-];
 
 /* ── Main component ───────────────────────────────────────────────── */
 export function ClientDetail({
@@ -506,7 +495,7 @@ export function ClientDetail({
                           handleRoleChange(u.id, e.target.value as UserRole)
                         }
                         className={`text-xs px-2 py-0.5 rounded-full border font-medium bg-transparent cursor-pointer ${
-                          ROLE_STYLES[u.role] ?? ROLE_STYLES.va
+                          ROLES[u.role]?.badgeClass ?? ROLES.va.badgeClass
                         }`}
                       >
                         {ROLE_OPTIONS.map((r) => (

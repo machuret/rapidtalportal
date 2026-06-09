@@ -14,13 +14,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
+import { VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
 import { z } from "zod";
 
 const patchSchema = z.object({
   clientId: z.string().uuid(),
   title: z.string().min(1).max(200).optional(),
   raw_content: z.string().min(1).max(500000).optional(),
-  category: z.enum(["process", "policy", "service", "contact", "reference", "general"]).optional(),
+  category: z.enum(VAULT_CATEGORY_KEYS).optional(),
   tags: z.array(z.string().max(50)).max(10).optional(),
 });
 

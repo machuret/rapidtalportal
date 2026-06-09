@@ -3,10 +3,12 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { DbCompanyDna } from "@/types/database";
 import {
-  Brain, Package, Contact, Workflow, ShieldCheck, BookOpen, FileText,
-  CheckCircle2, Circle, Building2, Phone, Mail, Globe, MapPin, Target, Users,
-  Archive, Sparkles,
+  Brain, BookOpen, CheckCircle2, Circle, Building2, Phone, Mail, Globe,
+  MapPin, Target, Users, Archive, Sparkles,
 } from "lucide-react";
+import {
+  VAULT_CATEGORIES, VAULT_CATEGORY_ORDER, isVaultCategory,
+} from "@/lib/taxonomy/vault-categories";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Company Report — RapidTal" };
@@ -20,20 +22,6 @@ type VaultItem = {
   source_type: string;
   updated_at: string | null;
 };
-
-/** Display metadata + ordering for each vault category. */
-const CATEGORY_META: Record<
-  string,
-  { label: string; blurb: string; icon: typeof Package }
-> = {
-  service:   { label: "Services & Products", blurb: "What the company offers",          icon: Package },
-  contact:   { label: "Contacts",            blurb: "People, suppliers, clients",        icon: Contact },
-  process:   { label: "Processes & Flows",   blurb: "How things get done",               icon: Workflow },
-  policy:    { label: "Policies",            blurb: "Rules, guidelines, compliance",     icon: ShieldCheck },
-  reference: { label: "Reference",           blurb: "Background knowledge & FAQs",        icon: BookOpen },
-  general:   { label: "General",             blurb: "Everything else",                   icon: FileText },
-};
-const CATEGORY_ORDER = ["service", "contact", "process", "policy", "reference", "general"] as const;
 
 export default async function CompanyReportPage() {
   const ctx = await getCurrentUserAndClient();
@@ -61,7 +49,7 @@ export default async function CompanyReportPage() {
   // Group ready items by (normalised) category
   const byCat: Record<string, VaultItem[]> = {};
   for (const it of vaultItems) {
-    const c = it.category && CATEGORY_META[it.category] ? it.category : "general";
+    const c = isVaultCategory(it.category) ? it.category : "general";
     (byCat[c] ??= []).push(it);
   }
   const indexedCount = vaultItems.filter((i) => i.ai_summary).length;
@@ -198,13 +186,13 @@ export default async function CompanyReportPage() {
       </section>
 
       {/* Category sections */}
-      {CATEGORY_ORDER.map((cat) => {
+      {VAULT_CATEGORY_ORDER.map((cat) => {
         const list = byCat[cat] ?? [];
-        const meta = CATEGORY_META[cat];
+        const meta = VAULT_CATEGORIES[cat];
         if (list.length === 0) return null;
         return (
           <section key={cat} className="mb-8">
-            <SectionHeader icon={meta.icon} title={meta.label} subtitle={meta.blurb} count={list.length} />
+            <SectionHeader icon={meta.icon} title={meta.fullLabel} subtitle={meta.blurb} count={list.length} />
             <div className="grid grid-cols-1 gap-3">
               {list.map((item) => (
                 <div key={item.id} className="surface-card p-4">

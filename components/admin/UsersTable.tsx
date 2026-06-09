@@ -23,7 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useUsers, type AdminUserRow } from "@/hooks/useUsers";
-import type { UserRole } from "@/types/database";
+import { ROLES, ROLE_OPTIONS, type UserRole } from "@/lib/taxonomy/roles";
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type UserRow = AdminUserRow;
@@ -38,18 +38,6 @@ interface UsersTableProps {
   clients: ClientOption[];
   currentUserId: string;
 }
-
-const ROLE_STYLES: Record<string, string> = {
-  super_admin: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  client_admin: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  va: "bg-zinc-700 text-zinc-300 border-zinc-600",
-};
-
-const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: "va", label: "VA" },
-  { value: "client_admin", label: "Client Admin" },
-  { value: "super_admin", label: "Super Admin" },
-];
 
 /* ── Main component ───────────────────────────────────────────────── */
 export function UsersTable({
@@ -451,7 +439,7 @@ export function UsersTable({
                             )
                           }
                           className={`text-xs px-2 py-0.5 rounded-full border font-medium bg-transparent cursor-pointer ${
-                            ROLE_STYLES[u.role] ?? ROLE_STYLES.va
+                            ROLES[u.role]?.badgeClass ?? ROLES.va.badgeClass
                           }`}
                         >
                           {ROLE_OPTIONS.map((r) => (

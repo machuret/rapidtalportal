@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import type { DbVaultItem, VaultCategory } from "@/types/database";
 import { toast } from "sonner";
 import {
@@ -14,6 +14,7 @@ import { VaultItemDrawer } from "./VaultItemDrawer";
 import { AddVaultItem } from "./AddVaultItem";
 import { VaultItemRow } from "./VaultItemRow";
 import { useVault, vaultKeys } from "@/hooks/useVault";
+import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
 
 const TYPE_FILTERS = [
   { value: "all" as const, label: "All Types" },
@@ -24,23 +25,9 @@ const TYPE_FILTERS = [
 ];
 
 const CATEGORY_FILTERS: { value: VaultCategory | "all"; label: string }[] = [
-  { value: "all",       label: "All Categories" },
-  { value: "process",   label: "Process" },
-  { value: "policy",    label: "Policy" },
-  { value: "service",   label: "Service" },
-  { value: "contact",   label: "Contact" },
-  { value: "reference", label: "Reference" },
-  { value: "general",   label: "General" },
+  { value: "all", label: "All Categories" },
+  ...VAULT_CATEGORY_KEYS.map((k) => ({ value: k, label: VAULT_CATEGORIES[k].shortLabel })),
 ];
-
-const CATEGORY_CLS: Record<string, string> = {
-  process:   "bg-blue-500/15 text-blue-400 border-blue-500/25",
-  policy:    "bg-amber-500/15 text-amber-400 border-amber-500/25",
-  service:   "bg-green-500/15 text-green-400 border-green-500/25",
-  contact:   "bg-purple-500/15 text-purple-400 border-purple-500/25",
-  reference: "bg-cyan-500/15 text-cyan-400 border-cyan-500/25",
-  general:   "bg-zinc-500/15 text-zinc-400 border-zinc-500/25",
-};
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -52,26 +39,10 @@ interface VaultClientProps {
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
-
-// The vault page has no global QueryClientProvider, so (like ContentStudio) we
-// host one locally and render the real component inside it.
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60 * 1000,
-      gcTime: 5 * 60 * 1000,
-      retry: 2,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+// The portal layout provides a global QueryClientProvider, so this just renders.
 
 export function VaultClient(props: VaultClientProps) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <VaultClientInner {...props} />
-    </QueryClientProvider>
-  );
+  return <VaultClientInner {...props} />;
 }
 
 function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps) {
@@ -261,7 +232,7 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
                   className={cn(
                     "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors border",
                     categoryFilter === f.value
-                      ? (f.value !== "all" ? CATEGORY_CLS[f.value as VaultCategory] : "bg-zinc-700 text-white border-zinc-700")
+                      ? (f.value !== "all" ? VAULT_CATEGORIES[f.value].badgeClass : "bg-zinc-700 text-white border-zinc-700")
                       : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
                   )}
                 >{f.label}</button>
