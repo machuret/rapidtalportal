@@ -55,23 +55,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authError.message }, { status: 500 });
   }
 
-  // 2. Insert user row in public.users table
+  // 2. Write the public.users profile row.
+  // UPSERT (not insert) because many Supabase projects have an on-signup trigger
+  // (handle_new_user) that already created a bare public.users row when the auth
+  // user was created above — a plain insert then collides on users_pkey. Upsert
+  // updates that row with the chosen role/client/name, and still inserts cleanly
+  // if no such trigger exists.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: userRow, error: dbError } = await (admin as any)
     .from("users")
-    .insert({
-      id: authUser.user.id,
-      email: parsed.data.email,
-      full_name: parsed.data.full_name,
-      role: parsed.data.role,
-      client_id: parsed.data.client_id ?? null,
-    })
+    .upsert(
+      {
+        id: authUser.user.id,
+        email: parsed.data.email,
+        full_name: parsed.data.full_name,
+        role: parsed.data.role,
+        client_id: parsed.data.client_id ?? null,
+      },
+      { onConflict: "id" },
+    )
     .select("id, email, full_name, role, client_id, created_at")
     .single();
 
   if (dbError) {
     console.error("[admin/users POST] DB error:", dbError.message);
-    // Attempt cleanup: delete the auth user we just created
+    // Attempt cleanup: delete the auth user we just created (cascades any
+    // trigger-created profile row via the FK).
     await admin.auth.admin.deleteUser(authUser.user.id);
     return NextResponse.json({ error: dbError.message }, { status: 500 });
   }
