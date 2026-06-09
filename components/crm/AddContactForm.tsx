@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCreateContact } from "@/hooks/useContacts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +27,7 @@ interface AddContactFormProps {
 
 export function AddContactForm({ clientId }: AddContactFormProps) {
   const router = useRouter();
-  const [saving, setSaving] = useState(false);
+  const { mutateAsync: createContact, isPending: saving } = useCreateContact();
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -57,35 +58,24 @@ export function AddContactForm({ clientId }: AddContactFormProps) {
       return;
     }
 
-    setSaving(true);
-
     try {
-      const res = await fetch("/api/crm/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId,
-          first_name: formData.first_name.trim(),
-          last_name:  formData.last_name.trim()  || null,
-          email:      formData.email.trim()      || null,
-          phone:      formData.phone.trim()      || null,
-          company:    formData.company.trim()    || null,
-          job_title:  formData.job_title.trim()  || null,
-          status:     formData.status,
-          source:     formData.source.trim()     || null,
-          notes:      formData.notes.trim()      || null,
-        }),
+      await createContact({
+        clientId,
+        first_name: formData.first_name.trim(),
+        last_name:  formData.last_name.trim()  || null,
+        email:      formData.email.trim()      || null,
+        phone:      formData.phone.trim()      || null,
+        company:    formData.company.trim()    || null,
+        job_title:  formData.job_title.trim()  || null,
+        status:     formData.status,
+        source:     formData.source.trim()     || null,
+        notes:      formData.notes.trim()      || null,
       });
-
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Failed to add contact.");
 
       toast.success("Contact added successfully!");
       router.push("/crm");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add contact.");
-    } finally {
-      setSaving(false);
     }
   };
 

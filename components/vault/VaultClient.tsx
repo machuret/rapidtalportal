@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useState, useMemo, useCallback } from "react";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import type { DbVaultItem, VaultCategory } from "@/types/database";
 import { toast } from "sonner";
 import {
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { VaultItemDrawer } from "./VaultItemDrawer";
 import { AddVaultItem } from "./AddVaultItem";
 import { VaultItemRow } from "./VaultItemRow";
+import { useVault, vaultKeys } from "@/hooks/useVault";
 
 const TYPE_FILTERS = [
   { value: "all" as const, label: "All Types" },
@@ -52,75 +53,45 @@ interface VaultClientProps {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function VaultClient({ clientId, userId, role, canWrite }: VaultClientProps) {
-  // Stabilise the Supabase client — createClient() must not be called on every render
-  // because each call creates a new instance, causing Realtime channels to multiply.
-  const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
-  const [items, setItems] = useState<DbVaultItem[]>([]);
-  const [loading, setLoading] = useState(true);
+// The vault page has no global QueryClientProvider, so (like ContentStudio) we
+// host one locally and render the real component inside it.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,
+      gcTime: 5 * 60 * 1000,
+      retry: 2,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+export function VaultClient(props: VaultClientProps) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <VaultClientInner {...props} />
+    </QueryClientProvider>
+  );
+}
+
+function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps) {
+  const qc = useQueryClient();
+  const {
+    items,
+    isLoading: loading,
+    deleteItems,
+    isDeleting: bulkDeleting,
+    reprocessItem,
+  } = useVault(clientId);
+
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<DbVaultItem | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkDeleting, setBulkDeleting] = useState(false);
+  // Tracks which single item is currently being re-processed (per-row spinner).
   const [reprocessing, setReprocessing] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "text" | "url" | "pdf" | "docx">("all");
   const [categoryFilter, setCategoryFilter] = useState<VaultCategory | "all">("all");
-
-  // ── Load items on mount ────────────────────────────────────────────────────
-  useEffect(() => {
-    async function load() {
-      const { data, error } = await supabase
-        .from("vault_items")
-        .select("id, client_id, source_type, title, source_url, storage_path, status, error_message, created_at, created_by, category, tags, ai_summary, updated_at, updated_by")
-        .eq("client_id", clientId)
-        .order("created_at", { ascending: false })
-        .limit(100);
-      if (error) {
-        console.error("[VaultClient] load error:", error.message, error.details);
-        toast.error(`Failed to load vault items: ${error.message}`);
-      } else {
-        setItems((data ?? []) as DbVaultItem[]);
-      }
-      setLoading(false);
-    }
-    load();
-  }, [supabase, clientId]);
-
-  // ── Supabase Realtime — live updates ──────────────────────────────────────
-  useEffect(() => {
-    const channel = supabase
-      .channel(`vault:${clientId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "vault_items", filter: `client_id=eq.${clientId}` },
-        (payload) => {
-          setItems(prev => {
-            if (prev.some(i => i.id === (payload.new as DbVaultItem).id)) return prev;
-            return [payload.new as DbVaultItem, ...prev];
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "vault_items", filter: `client_id=eq.${clientId}` },
-        (payload) => {
-          setItems(prev => prev.map(i => i.id === (payload.new as DbVaultItem).id ? payload.new as DbVaultItem : i));
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "vault_items", filter: `client_id=eq.${clientId}` },
-        (payload) => {
-          setItems(prev => prev.filter(i => i.id !== (payload.old as { id: string }).id));
-          setSelected(prev => { const n = new Set(prev); n.delete((payload.old as { id: string }).id); return n; });
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [clientId, supabase]);
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => items.filter(item => {
@@ -145,61 +116,47 @@ export function VaultClient({ clientId, userId, role, canWrite }: VaultClientPro
   }), [items]);
 
   // ── Single delete (via vault-delete edge fn) ──────────────────────────────
-  // Do NOT call setItems here — the Realtime DELETE subscription handles removal.
-  // Calling both causes a double-filter flicker. Let Realtime be the single source of truth.
+  // The Realtime DELETE subscription patches the query cache (list removal),
+  // so we only own UI side-effects (collapse + selection cleanup) here.
   const handleDelete = useCallback(async (id: string, title: string) => {
     if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
-    const res = await fetch("/api/vault/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itemIds: [id], clientId }),
-    });
-    if (res.ok) {
+    try {
+      await deleteItems({ itemIds: [id], clientId });
       if (expanded === id) setExpanded(null);
+      setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
       toast.success("Deleted.");
-    } else {
-      const d = await res.json().catch(() => ({}));
-      toast.error(d.error ?? "Delete failed.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed.");
     }
-  }, [clientId, expanded]);
+  }, [clientId, expanded, deleteItems]);
 
   // ── Bulk delete ───────────────────────────────────────────────────────────
   const handleBulkDelete = useCallback(async () => {
     const ids = Array.from(selected);
     if (!ids.length) return;
     if (!confirm(`Delete ${ids.length} item${ids.length !== 1 ? "s" : ""}? This cannot be undone.`)) return;
-    setBulkDeleting(true);
-    const res = await fetch("/api/vault/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itemIds: ids, clientId }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
+    try {
+      const data = await deleteItems({ itemIds: ids, clientId });
       setSelected(new Set());
-      toast.success(`${data.deleted ?? ids.length} item${(data.deleted ?? ids.length) !== 1 ? "s" : ""} deleted.`);
-    } else {
-      toast.error(data.error ?? "Bulk delete failed.");
+      const n = data?.deleted ?? ids.length;
+      toast.success(`${n} item${n !== 1 ? "s" : ""} deleted.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Bulk delete failed.");
     }
-    setBulkDeleting(false);
-  }, [selected, clientId]);
+  }, [selected, clientId, deleteItems]);
 
   // ── Re-process ────────────────────────────────────────────────────────────
   const handleReprocess = useCallback(async (id: string) => {
     setReprocessing(id);
-    const res = await fetch(`/api/vault/${id}/reprocess`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
+    try {
+      await reprocessItem({ id, clientId });
       toast.success("Re-processing complete.");
-    } else {
-      toast.error(data.error ?? "Re-process failed.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Re-process failed.");
+    } finally {
+      setReprocessing(null);
     }
-    setReprocessing(null);
-  }, [clientId]);
+  }, [clientId, reprocessItem]);
 
   // ── Callbacks ─────────────────────────────────────────────────────────────
   function toggleSelect(id: string) {
@@ -395,7 +352,11 @@ export function VaultClient({ clientId, userId, role, canWrite }: VaultClientPro
           clientId={clientId}
           onClose={() => setEditItem(null)}
           onSaved={(updated) => {
-            setItems(prev => prev.map(i => i.id === updated.id ? updated : i));
+            // Patch the shared vault query cache (Realtime also reconciles the
+            // AI metadata once vault-process completes).
+            qc.setQueryData<DbVaultItem[]>(vaultKeys.byClient(clientId), (prev = []) =>
+              prev.map(i => i.id === updated.id ? updated : i)
+            );
             setEditItem(null);
           }}
         />

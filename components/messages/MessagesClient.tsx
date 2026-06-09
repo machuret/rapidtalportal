@@ -6,17 +6,7 @@ import { Send, MessageSquare, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
-
-interface Message {
-  id: string;
-  client_id: string;
-  sender_id: string;
-  sender_name: string;
-  sender_role: string;
-  body: string;
-  read_by: string[];
-  created_at: string;
-}
+import { useMessages, type Message } from "@/hooks/useMessages";
 
 interface MessagesClientProps {
   currentUserId: string;
@@ -43,11 +33,17 @@ function DateDivider({ label }: { label: string }) {
 
 export function MessagesClient({ currentUserId, currentUserRole, clientId }: MessagesClientProps) {
   const supabase = createClient();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
+  const {
+    messages,
+    isLoading: loading,
+    isError,
+    sendMessage,
+    isSending: sending,
+    appendMessage,
+  } = useMessages(clientId);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const didInitialScroll = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -55,25 +51,18 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
     bottomRef.current?.scrollIntoView({ behavior });
   }, []);
 
-  // ── Load messages ───────────────────────────────────────────────────────────
+  // ── Surface query load errors in the banner ──────────────────────────────────
   useEffect(() => {
-    async function load() {
-      const { data, error: fetchErr } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("client_id", clientId)
-        .order("created_at", { ascending: true });
+    if (isError) setError("Failed to load messages.");
+  }, [isError]);
 
-      if (fetchErr) {
-        setError("Failed to load messages.");
-      } else {
-        setMessages((data as Message[]) ?? []);
-      }
-      setLoading(false);
+  // ── Scroll to bottom once the initial load completes ─────────────────────────
+  useEffect(() => {
+    if (!loading && !didInitialScroll.current) {
+      didInitialScroll.current = true;
       setTimeout(() => scrollToBottom("instant"), 100);
     }
-    load();
-  }, [supabase, clientId, scrollToBottom]);
+  }, [loading, scrollToBottom]);
 
   // ── Realtime subscription ───────────────────────────────────────────────────
   useEffect(() => {
@@ -88,42 +77,28 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
           filter: `client_id=eq.${clientId}`,
         },
         (payload) => {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === (payload.new as Message).id)) return prev;
-            return [...prev, payload.new as Message];
-          });
+          appendMessage(payload.new as Message);
           setTimeout(() => scrollToBottom(), 50);
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [clientId, supabase, scrollToBottom]);
+  }, [clientId, supabase, scrollToBottom, appendMessage]);
 
   // ── Send ────────────────────────────────────────────────────────────────────
   async function handleSend() {
     const trimmed = input.trim();
     if (!trimmed || sending) return;
 
-    setSending(true);
     setInput("");
 
     try {
-      const res = await fetch("/api/messages/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Failed to send message.");
-        setInput(trimmed);
-      }
-    } catch {
-      setError("Network error. Please try again.");
+      await sendMessage({ message: trimmed });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send message.");
       setInput(trimmed);
     } finally {
-      setSending(false);
       inputRef.current?.focus();
     }
   }

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Pencil, Trash2, Copy, Check, Save, X, ListChecks, Tag, Clock, Copy as CopyIcon, Loader2 } from "lucide-react";
+import { useSops } from "@/hooks/useSops";
 
 interface Props {
   sop: Sop;
@@ -19,14 +20,19 @@ interface Props {
 
 export function SopDetail({ sop: initial, canEdit, clientId, categories }: Props) {
   const router = useRouter();
+  const {
+    updateSop,
+    isUpdating: saving,
+    deleteSop: deleteSopMutation,
+    isDeleting: deleting,
+    createSop,
+    isCreating: duplicating,
+  } = useSops(clientId);
 
   const [sop, setSop] = useState(initial);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ title: sop.title, category: sop.category, body: sop.body });
-  const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [duplicating, setDuplicating] = useState(false);
 
   function setF(k: string, v: string) { setForm(f => ({ ...f, [k]: v })); }
 
@@ -35,66 +41,42 @@ export function SopDetail({ sop: initial, canEdit, clientId, categories }: Props
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
     try {
-      const res = await fetch("/api/sops", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: sop.id, clientId, ...form }),
-      });
-      const json = await res.json();
-      if (!res.ok) { toast.error(json.error ?? "Update failed."); return; }
-      setSop(json as Sop);
+      const updated = await updateSop({ id: sop.id, clientId, ...form });
+      setSop(updated as Sop);
       setEditing(false);
       toast.success("SOP updated.");
-    } finally {
-      setSaving(false);
+    } catch {
+      // Error toast handled by the API client.
     }
   }
 
   async function deleteSop() {
     if (!confirm("Delete this SOP permanently?")) return;
-    setDeleting(true);
     try {
-      const res = await fetch("/api/sops", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: sop.id, clientId }),
-      });
-      if (!res.ok) {
-        const json = await res.json();
-        toast.error(json.error ?? "Delete failed.");
-        return;
-      }
+      await deleteSopMutation({ id: sop.id, clientId });
       toast.success("SOP deleted.");
       router.push("/sops");
       router.refresh();
-    } finally {
-      setDeleting(false);
+    } catch {
+      // Error toast handled by the API client.
     }
   }
 
   async function duplicate() {
-    setDuplicating(true);
     try {
-      const res = await fetch("/api/sops", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId,
-          title:       `${sop.title} (Copy)`,
-          category:    sop.category,
-          body:        sop.body,
-          order_index: sop.order_index,
-        }),
+      const created = await createSop({
+        clientId,
+        title:       `${sop.title} (Copy)`,
+        category:    sop.category,
+        body:        sop.body,
+        order_index: sop.order_index,
       });
-      const json = await res.json();
-      if (!res.ok) { toast.error(json.error ?? "Duplicate failed."); return; }
       toast.success("SOP duplicated — opening copy.");
-      router.push(`/sops/${(json as Sop).id}`);
+      router.push(`/sops/${(created as Sop).id}`);
       router.refresh();
-    } finally {
-      setDuplicating(false);
+    } catch {
+      // Error toast handled by the API client.
     }
   }
 

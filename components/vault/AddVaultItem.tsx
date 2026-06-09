@@ -2,12 +2,15 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { api } from "@/lib/api-client";
+import { vaultKeys } from "@/hooks/useVault";
 import { Upload, Globe, Type, CloudUpload, FileText, X, Plus, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 
 interface AddVaultItemProps {
@@ -64,8 +67,8 @@ function CategoryTagsFields({
 
 export function AddVaultItem({ clientId, userId, onAdded }: AddVaultItemProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   const [category, setCategory] = useState("general");
   const [tagInput, setTagInput] = useState("");
@@ -75,7 +78,6 @@ export function AddVaultItem({ clientId, userId, onAdded }: AddVaultItemProps) {
 
   const [urlTitle, setUrlTitle] = useState("");
   const [urlValue, setUrlValue] = useState("");
-  const [isCrawling, setIsCrawling] = useState(false);
 
   const [file, setFile] = useState<File | null>(null);
   const [fileTitle, setFileTitle] = useState("");
@@ -83,6 +85,8 @@ export function AddVaultItem({ clientId, userId, onAdded }: AddVaultItemProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function done() {
+    // Reconcile the shared vault list (Realtime also patches it live).
+    queryClient.invalidateQueries({ queryKey: vaultKeys.byClient(clientId) });
     if (onAdded) {
       onAdded(); // Realtime handles the update in VaultClient
     } else {
@@ -94,102 +98,101 @@ export function AddVaultItem({ clientId, userId, onAdded }: AddVaultItemProps) {
     return tagInput.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
   }
 
-  async function submitText(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    const res = await fetch("/api/vault/text", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: textTitle, content: textContent, clientId, userId, category, tags: parsedTags() }),
-    });
-    if (res.ok) {
+  // ── Add text (JSON endpoint via api client) ───────────────────────────────
+  const textMutation = useMutation({
+    mutationFn: () =>
+      api.post("/vault/text", { title: textTitle, content: textContent, clientId, userId, category, tags: parsedTags() }, { showErrorToast: false }),
+    onSuccess: () => {
       toast.success("Text added to Vault. AI processing…");
       setTextTitle(""); setTextContent(""); setOpen(false); done();
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.error ?? "Failed to add text.");
-    }
-    setLoading(false);
-  }
+    },
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : "Failed to add text.");
+    },
+  });
 
-  async function submitUrl(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    const res = await fetch("/api/vault/url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: urlTitle, url: urlValue, clientId, userId, category, tags: parsedTags() }),
-    });
-    if (res.ok) {
+  // ── Add URL / standard crawl (JSON endpoint via api client) ───────────────
+  const urlMutation = useMutation({
+    mutationFn: () =>
+      api.post("/vault/url", { title: urlTitle, url: urlValue, clientId, userId, category, tags: parsedTags() }, { showErrorToast: false }),
+    onSuccess: () => {
       toast.success("URL queued for crawl.");
       setUrlTitle(""); setUrlValue(""); setOpen(false); done();
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.error ?? "Failed to add URL.");
-    }
-    setLoading(false);
+    },
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : "Failed to add URL.");
+    },
+  });
+
+  // ── AI crawl (JSON endpoint via api client) ───────────────────────────────
+  const crawlMutation = useMutation({
+    mutationFn: () =>
+      api.post<{ tokensUsed: number }>("/vault/crawl", {
+        url: urlValue.trim(),
+        title: urlTitle.trim() || undefined,
+        clientId,
+        tags: parsedTags(),
+      }, { showErrorToast: false }),
+    onSuccess: (data) => {
+      toast.success(`Content crawled and added to vault (${data.tokensUsed} tokens used)`);
+      setUrlTitle(""); setUrlValue(""); setOpen(false); done();
+    },
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : "Failed to crawl URL");
+    },
+  });
+
+  // ── Upload file (multipart/FormData — keeps fetch inside mutationFn) ───────
+  const fileMutation = useMutation({
+    mutationFn: async () => {
+      const fd = new FormData();
+      fd.append("file", file!);
+      fd.append("title", fileTitle || file!.name);
+      fd.append("clientId", clientId);
+      fd.append("userId", userId);
+      fd.append("category", category);
+      fd.append("tags", JSON.stringify(parsedTags()));
+      const res = await fetch("/api/vault/upload", { method: "POST", body: fd });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? "Upload failed.");
+      }
+      return res;
+    },
+    onSuccess: () => {
+      toast.success("File uploaded and AI processing started.");
+      setFile(null); setFileTitle(""); setOpen(false); done();
+    },
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : "Upload failed.");
+    },
+  });
+
+  const isCrawling = crawlMutation.isPending;
+
+  function submitText(e: React.FormEvent) {
+    e.preventDefault();
+    textMutation.mutate();
   }
 
-  async function submitAiCrawl(e: React.FormEvent) {
+  function submitUrl(e: React.FormEvent) {
     e.preventDefault();
-    
+    urlMutation.mutate();
+  }
+
+  function submitAiCrawl(e: React.FormEvent) {
+    e.preventDefault();
     if (!urlValue.trim()) {
       toast.error("Please enter a valid URL");
       return;
     }
-
-    setIsCrawling(true);
-    
-    try {
-      const res = await fetch("/api/vault/crawl", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: urlValue.trim(),
-          title: urlTitle.trim() || undefined,
-          clientId,
-          tags: parsedTags(),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        toast.success(`Content crawled and added to vault (${data.tokensUsed} tokens used)`);
-        setUrlTitle("");
-        setUrlValue("");
-        setOpen(false);
-        done();
-      } else {
-        toast.error(data.error || "Failed to crawl URL");
-      }
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setIsCrawling(false);
-    }
+    crawlMutation.mutate();
   }
 
-  async function submitFile(e: React.FormEvent) {
+  function submitFile(e: React.FormEvent) {
     e.preventDefault();
     if (!file) return;
-    setLoading(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("title", fileTitle || file.name);
-    fd.append("clientId", clientId);
-    fd.append("userId", userId);
-    fd.append("category", category);
-    fd.append("tags", JSON.stringify(parsedTags()));
-    const res = await fetch("/api/vault/upload", { method: "POST", body: fd });
-    if (res.ok) {
-      toast.success("File uploaded and AI processing started.");
-      setFile(null); setFileTitle(""); setOpen(false); done();
-    } else {
-      const j = await res.json().catch(() => ({}));
-      toast.error(j.error ?? "Upload failed.");
-    }
-    setLoading(false);
+    fileMutation.mutate();
   }
 
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -267,9 +270,9 @@ export function AddVaultItem({ clientId, userId, onAdded }: AddVaultItemProps) {
                 <CategoryTagsFields category={category} setCategory={setCategory} tagInput={tagInput} setTagInput={setTagInput} />
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)} className="text-zinc-400">Cancel</Button>
-                  <Button type="submit" disabled={loading} className="gap-2">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Type className="w-4 h-4" />}
-                    {loading ? "Saving…" : "Add Text"}
+                  <Button type="submit" disabled={textMutation.isPending} className="gap-2">
+                    {textMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Type className="w-4 h-4" />}
+                    {textMutation.isPending ? "Saving…" : "Add Text"}
                   </Button>
                 </div>
               </form>
@@ -333,14 +336,14 @@ export function AddVaultItem({ clientId, userId, onAdded }: AddVaultItemProps) {
                       Basic web crawling that extracts raw content from the page.
                     </p>
                     <form onSubmit={submitUrl}>
-                      <Button 
-                        type="submit" 
-                        disabled={loading || !urlValue.trim() || !urlTitle.trim()} 
+                      <Button
+                        type="submit"
+                        disabled={urlMutation.isPending || !urlValue.trim() || !urlTitle.trim()}
                         variant="outline"
                         className="w-full gap-2 border-zinc-600 hover:bg-zinc-800"
                       >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
-                        {loading ? "Queueing..." : "Queue Standard Crawl"}
+                        {urlMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+                        {urlMutation.isPending ? "Queueing..." : "Queue Standard Crawl"}
                       </Button>
                     </form>
                   </div>
@@ -417,9 +420,9 @@ export function AddVaultItem({ clientId, userId, onAdded }: AddVaultItemProps) {
 
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)} className="text-zinc-400">Cancel</Button>
-                  <Button type="submit" disabled={loading || !file} className="gap-2">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                    {loading ? "Uploading…" : "Upload File"}
+                  <Button type="submit" disabled={fileMutation.isPending || !file} className="gap-2">
+                    {fileMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {fileMutation.isPending ? "Uploading…" : "Upload File"}
                   </Button>
                 </div>
               </form>

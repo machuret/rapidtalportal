@@ -22,24 +22,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { api } from "@/lib/api-client";
+import { useUpdateClient, type ClientInfo } from "@/hooks/useClients";
+import {
+  useCreateClientUser,
+  useUpdateClientUser,
+  useDeleteClientUser,
+  type ClientUserRow,
+} from "@/hooks/useUsers";
 import type { UserRole } from "@/types/database";
 
 /* ── Types ────────────────────────────────────────────────────────── */
-interface ClientInfo {
-  id: string;
-  name: string;
-  slug: string;
-  created_at: string;
-}
-
-interface ClientUser {
-  id: string;
-  email: string;
-  full_name: string | null;
-  role: UserRole;
-  created_at: string;
-}
+type ClientUser = ClientUserRow;
 
 interface UnassignedVa {
   id: string;
@@ -75,11 +68,18 @@ export function ClientDetail({
   const [users, setUsers] = useState(initialUsers);
   const [unassigned, setUnassigned] = useState(initialUnassigned);
 
+  // Mutations
+  const updateClientMutation = useUpdateClient();
+  const createUserMutation = useCreateClientUser();
+  const updateUserMutation = useUpdateClientUser();
+  const deleteUserMutation = useDeleteClientUser();
+  const savingClient = updateClientMutation.isPending;
+  const addingSaving = createUserMutation.isPending;
+
   // Client edit state
   const [editingClient, setEditingClient] = useState(false);
   const [editName, setEditName] = useState(client.name);
   const [editSlug, setEditSlug] = useState(client.slug);
-  const [savingClient, setSavingClient] = useState(false);
 
   // Add user dialog
   const [addOpen, setAddOpen] = useState(false);
@@ -87,7 +87,6 @@ export function ClientDetail({
   const [newName, setNewName] = useState("");
   const [newRole, setNewRole] = useState<UserRole>("va");
   const [newPassword, setNewPassword] = useState("");
-  const [addingSaving, setAddingSaving] = useState(false);
 
   // Allocate VA dialog
   const [allocateOpen, setAllocateOpen] = useState(false);
@@ -96,21 +95,19 @@ export function ClientDetail({
 
   /* ── Client edit ──────────────────────────────────────────────── */
   const handleSaveClient = useCallback(async () => {
-    setSavingClient(true);
     try {
-      const updated = await api.patch<ClientInfo>(
-        `/api/admin/clients/${client.id}`,
-        { name: editName.trim(), slug: editSlug.trim() }
-      );
+      const updated = await updateClientMutation.mutateAsync({
+        id: client.id,
+        name: editName.trim(),
+        slug: editSlug.trim(),
+      });
       setClient(updated);
       setEditingClient(false);
       toast.success("Client updated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update client");
-    } finally {
-      setSavingClient(false);
     }
-  }, [client.id, editName, editSlug]);
+  }, [updateClientMutation, client.id, editName, editSlug]);
 
   const handleCancelEdit = useCallback(() => {
     setEditName(client.name);
@@ -122,9 +119,8 @@ export function ClientDetail({
   const handleCreateUser = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      setAddingSaving(true);
       try {
-        const user = await api.post<ClientUser>("/api/admin/users", {
+        const user = await createUserMutation.mutateAsync({
           email: newEmail.trim(),
           full_name: newName.trim(),
           role: newRole,
@@ -140,11 +136,9 @@ export function ClientDetail({
         toast.success(`User "${user.full_name}" created`);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to create user");
-      } finally {
-        setAddingSaving(false);
       }
     },
-    [client.id, newEmail, newName, newRole, newPassword]
+    [createUserMutation, client.id, newEmail, newName, newRole, newPassword]
   );
 
   /* ── Allocate existing VA ─────────────────────────────────────── */
@@ -152,7 +146,7 @@ export function ClientDetail({
     if (!selectedVaId) return;
     setAllocating(true);
     try {
-      const updated = await api.patch<ClientUser>("/api/admin/users", {
+      const updated = await updateUserMutation.mutateAsync({
         id: selectedVaId,
         client_id: client.id,
       });
@@ -166,13 +160,13 @@ export function ClientDetail({
     } finally {
       setAllocating(false);
     }
-  }, [selectedVaId, client.id, client.name]);
+  }, [updateUserMutation, selectedVaId, client.id, client.name]);
 
   /* ── Update user role ─────────────────────────────────────────── */
   const handleRoleChange = useCallback(
     async (userId: string, role: UserRole) => {
       try {
-        await api.patch("/api/admin/users", { id: userId, role });
+        await updateUserMutation.mutateAsync({ id: userId, role });
         setUsers((prev) =>
           prev.map((u) => (u.id === userId ? { ...u, role } : u))
         );
@@ -181,14 +175,14 @@ export function ClientDetail({
         toast.error(err instanceof Error ? err.message : "Failed to update role");
       }
     },
-    []
+    [updateUserMutation]
   );
 
   /* ── Remove user from client ──────────────────────────────────── */
   const handleRemoveFromClient = useCallback(
     async (userId: string) => {
       try {
-        await api.patch("/api/admin/users", { id: userId, client_id: null });
+        await updateUserMutation.mutateAsync({ id: userId, client_id: null });
         const removed = users.find((u) => u.id === userId);
         setUsers((prev) => prev.filter((u) => u.id !== userId));
         if (removed) {
@@ -202,20 +196,23 @@ export function ClientDetail({
         toast.error(err instanceof Error ? err.message : "Failed to remove user");
       }
     },
-    [users]
+    [updateUserMutation, users]
   );
 
   /* ── Delete user entirely ─────────────────────────────────────── */
-  const handleDeleteUser = useCallback(async (userId: string) => {
-    if (!confirm("Delete this user permanently? This cannot be undone.")) return;
-    try {
-      await api.delete("/api/admin/users", { id: userId });
-      setUsers((prev) => prev.filter((u) => u.id !== userId));
-      toast.success("User deleted");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete user");
-    }
-  }, []);
+  const handleDeleteUser = useCallback(
+    async (userId: string) => {
+      if (!confirm("Delete this user permanently? This cannot be undone.")) return;
+      try {
+        await deleteUserMutation.mutateAsync({ id: userId });
+        setUsers((prev) => prev.filter((u) => u.id !== userId));
+        toast.success("User deleted");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to delete user");
+      }
+    },
+    [deleteUserMutation]
+  );
 
   return (
     <div className="max-w-4xl flex flex-col gap-8">

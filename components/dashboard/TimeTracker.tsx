@@ -4,6 +4,12 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Play, Coffee, RotateCcw, LogOut, Clock, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { ManualTimeEntry } from "./ManualTimeEntry";
+import {
+  useTimeEntriesQuery,
+  useUpsertTimeEntry,
+  type TimeEntryRow,
+  type UpsertTimeEntryInput,
+} from "@/hooks/useTimeEntries";
 
 type Phase = "idle" | "working" | "break" | "done";
 
@@ -26,16 +32,16 @@ function fmt(ms: number) {
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
-async function apiPost(body: object): Promise<{ entry?: { id: string } } | null> {
-  try {
-    const res = await fetch("/api/time-entries", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) return null;
-    return res.json();
-  } catch { return null; }
+function rowsToSegments(rows: TimeEntryRow[]): Segment[] {
+  return rows.map(e => ({
+    id: e.id,
+    phase: e.phase,
+    start: e.started_at,
+    end: e.ended_at,
+    is_manual: e.is_manual ?? false,
+    notes: e.notes,
+    category: e.category,
+  }));
 }
 
 export function TimeTracker({ userId }: { userId: string }) {
@@ -48,38 +54,41 @@ export function TimeTracker({ userId }: { userId: string }) {
   const lastSegmentStartRef = useRef<string | null>(null);
   const today = new Date().toISOString().slice(0, 10);
 
-  // ── Load from DB on mount ──────────────────────────────────────────────
-  useEffect(() => {
-    async function load() {
+  const entriesQuery = useTimeEntriesQuery(today);
+  const upsertMutation = useUpsertTimeEntry();
+
+  // Local `apiPost` shim over the mutation: returns null on error to preserve
+  // the existing optimistic-UI flow (insert with id:null, then patch from DB).
+  const apiPost = useCallback(
+    async (body: UpsertTimeEntryInput): Promise<{ entry?: { id: string } } | null> => {
       try {
-        const res = await fetch(`/api/time-entries?date=${today}`);
-        if (res.ok) {
-          const json = await res.json() as { entries: Array<{ id: string; phase: "work"|"break"; started_at: string; ended_at: string|null; is_manual?: boolean; notes?: string | null; category?: string }> };
-          const segs: Segment[] = (json.entries ?? []).map(e => ({
-            id: e.id,
-            phase: e.phase,
-            start: e.started_at,
-            end: e.ended_at,
-            is_manual: e.is_manual ?? false,
-            notes: e.notes,
-            category: e.category,
-          }));
-          if (segs.length > 0) {
-            setEntries(segs);
-            const last = segs[segs.length - 1];
-            if (last.end) {
-              setPhase("done");
-            } else {
-              setPhase(last.phase === "work" ? "working" : "break");
-            }
-          }
-        }
-      } catch { /* offline — fallback to localStorage below */ }
-      setLoaded(true);
+        return await upsertMutation.mutateAsync(body);
+      } catch {
+        return null;
+      }
+    },
+    [upsertMutation]
+  );
+
+  // ── Hydrate local state from the query (mount + refetch) ────────────────
+  // We mirror query data into local `entries`/`phase` because start/break/resume
+  // optimistically push segments with id:null before the DB confirms; the query
+  // result reconciles those once it lands.
+  useEffect(() => {
+    if (loaded) return;
+    if (entriesQuery.isLoading) return;
+    const segs = rowsToSegments(entriesQuery.data ?? []);
+    if (segs.length > 0) {
+      setEntries(segs);
+      const last = segs[segs.length - 1];
+      if (last.end) {
+        setPhase("done");
+      } else {
+        setPhase(last.phase === "work" ? "working" : "break");
+      }
     }
-    load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [today]);
+    setLoaded(true);
+  }, [entriesQuery.isLoading, entriesQuery.data, loaded]);
 
   // ── Mirror to localStorage as fallback ────────────────────────────────
   useEffect(() => {
@@ -114,20 +123,8 @@ export function TimeTracker({ userId }: { userId: string }) {
 
   async function refreshEntries() {
     try {
-      const res = await fetch(`/api/time-entries?date=${today}`);
-      if (res.ok) {
-        const json = await res.json() as { entries: Array<{ id: string; phase: "work"|"break"; started_at: string; ended_at: string|null; is_manual?: boolean; notes?: string | null; category?: string }> };
-        const segs: Segment[] = (json.entries ?? []).map(e => ({
-          id: e.id,
-          phase: e.phase,
-          start: e.started_at,
-          end: e.ended_at,
-          is_manual: e.is_manual ?? false,
-          notes: e.notes,
-          category: e.category,
-        }));
-        setEntries(segs);
-      }
+      const { data } = await entriesQuery.refetch();
+      if (data) setEntries(rowsToSegments(data));
     } catch { /* ignore */ }
   }
 
@@ -135,7 +132,7 @@ export function TimeTracker({ userId }: { userId: string }) {
     const last = entries[entries.length - 1];
     if (!last || !last.id || last.end) return;
     await apiPost({ id: last.id, work_date: today, phase: last.phase, started_at: last.start, ended_at: end });
-  }, [entries, today]);
+  }, [entries, today, apiPost]);
 
   const startWork = useCallback(async () => {
     if (phase !== "idle") return;
@@ -145,7 +142,7 @@ export function TimeTracker({ userId }: { userId: string }) {
     setEntries([{ id: dbId, phase: "work", start, end: null }]);
     setPhase("working");
     toast.success("Work session started.");
-  }, [phase, today]);
+  }, [phase, today, apiPost]);
 
   const startBreak = useCallback(async () => {
     if (phase !== "working") return;
@@ -163,7 +160,7 @@ export function TimeTracker({ userId }: { userId: string }) {
     setEntries(prev => [...prev, { id: dbId, phase: "break", start, end: null }]);
     setPhase("break");
     toast("Break started.");
-  }, [phase, today, closeLastInDB]);
+  }, [phase, today, closeLastInDB, apiPost]);
 
   const resumeWork = useCallback(async () => {
     if (phase !== "break") return;
@@ -181,7 +178,7 @@ export function TimeTracker({ userId }: { userId: string }) {
     setEntries(prev => [...prev, { id: dbId, phase: "work", start, end: null }]);
     setPhase("working");
     toast.success("Back to work.");
-  }, [phase, today, closeLastInDB]);
+  }, [phase, today, closeLastInDB, apiPost]);
 
   const logOff = useCallback(async () => {
     if (phase === "idle" || phase === "done") return;

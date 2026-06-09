@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useMutation } from "@tanstack/react-query";
+import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,8 +33,20 @@ export function VaProfileEditor({ vaId, initial }: VaProfileEditorProps) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ ...initial });
   const [skillInput, setSkillInput] = useState("");
-  const [saving, setSaving] = useState(false);
-  const savingRef = useRef(false);
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: typeof form) =>
+      api.patch(`/team/${vaId}`, {
+        ...payload,
+        salary: payload.salary != null ? Number(payload.salary) : null,
+      }),
+    onSuccess: () => {
+      toast.success("Profile updated.");
+      setOpen(false);
+      router.refresh();
+    },
+  });
+  const saving = saveMutation.isPending;
 
   function set<K extends keyof typeof form>(key: K, value: typeof form[K]) {
     setForm(f => ({ ...f, [key]: value }));
@@ -49,33 +63,9 @@ export function VaProfileEditor({ vaId, initial }: VaProfileEditorProps) {
     set("skills", (form.skills ?? []).filter((_, idx) => idx !== i));
   }
 
-  async function save() {
-    if (savingRef.current) return;
-    savingRef.current = true;
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/team/${vaId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          salary: form.salary != null ? Number(form.salary) : null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? "Failed to save profile.");
-      } else {
-        toast.success("Profile updated.");
-        setOpen(false);
-        router.refresh();
-      }
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
-    }
+  function save() {
+    if (saveMutation.isPending) return;
+    saveMutation.mutate(form);
   }
 
   return (

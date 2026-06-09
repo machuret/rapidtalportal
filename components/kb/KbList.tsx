@@ -9,6 +9,7 @@ import {
   BookOpen, Search, Filter, Clock, Sparkles, Loader2, Settings,
 } from "lucide-react";
 import { KbEntryCard } from "./KbEntryCard";
+import { useKb } from "@/hooks/useKb";
 
 interface KbEntry {
   id: string;
@@ -43,12 +44,12 @@ const DEFAULT_CATEGORIES = [
 
 export function KbList({ entries: initialEntries, lastRun, canRegenerate, clientId, vaultTitleMap = {} }: KbListProps) {
   const router = useRouter();
+  const { generate, isGenerating: generating, updateEntry, deleteEntry: deleteEntryMutation } = useKb(clientId);
   const generatingRef = useRef(false);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [entries, setEntries] = useState(initialEntries);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [generating, setGenerating] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [pollElapsed, setPollElapsed] = useState(0);
@@ -115,7 +116,6 @@ export function KbList({ entries: initialEntries, lastRun, canRegenerate, client
   async function regenerate() {
     if (generatingRef.current) return;
     generatingRef.current = true;
-    setGenerating(true);
     setPollElapsed(0);
     setShowCategoryConfig(false);
 
@@ -126,24 +126,17 @@ export function KbList({ entries: initialEntries, lastRun, canRegenerate, client
     }, 1000);
 
     try {
-      const res = await fetch("/api/kb/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, customCategories: customCategories.split(",").map(c => c.trim()).filter(Boolean) }),
+      const data = await generate({
+        clientId,
+        customCategories: customCategories.split(",").map(c => c.trim()).filter(Boolean),
       });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(`Knowledge base regenerated — ${data.count} entries created.`);
-        router.refresh();
-      } else {
-        toast.error(data.error ?? "Generation failed.");
-      }
-    } catch {
-      toast.error("Network error during generation.");
+      toast.success(`Knowledge base regenerated — ${data.count} entries created.`);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Generation failed.");
     } finally {
       stopPolling();
       generatingRef.current = false;
-      setGenerating(false);
     }
   }
 
@@ -156,21 +149,12 @@ export function KbList({ entries: initialEntries, lastRun, canRegenerate, client
   async function saveEdit(id: string) {
     setSavingId(id);
     try {
-      const res = await fetch(`/api/kb/entries/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, ...editForm }),
-      });
-      if (res.ok) {
-        setEntries(prev => prev.map(e => e.id === id ? { ...e, ...editForm } : e));
-        setEditingId(null);
-        toast.success("Entry updated.");
-      } else {
-        const d = await res.json();
-        toast.error(d.error ?? "Failed to save.");
-      }
-    } catch {
-      toast.error("Network error.");
+      await updateEntry({ id, clientId, ...editForm });
+      setEntries(prev => prev.map(e => e.id === id ? { ...e, ...editForm } : e));
+      setEditingId(null);
+      toast.success("Entry updated.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save.");
     } finally {
       setSavingId(null);
     }
@@ -179,21 +163,12 @@ export function KbList({ entries: initialEntries, lastRun, canRegenerate, client
   async function deleteEntry(id: string) {
     setDeletingId(id);
     try {
-      const res = await fetch(`/api/kb/entries/${id}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId }),
-      });
-      if (res.ok) {
-        setEntries(prev => prev.filter(e => e.id !== id));
-        if (expanded === id) setExpanded(null);
-        toast.success("Entry deleted.");
-      } else {
-        const d = await res.json();
-        toast.error(d.error ?? "Failed to delete.");
-      }
-    } catch {
-      toast.error("Network error.");
+      await deleteEntryMutation({ id, clientId });
+      setEntries(prev => prev.filter(e => e.id !== id));
+      if (expanded === id) setExpanded(null);
+      toast.success("Entry deleted.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete.");
     } finally {
       setDeletingId(null);
     }

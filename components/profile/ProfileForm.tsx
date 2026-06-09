@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { DbUser } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
+import { useProfile } from "@/hooks/useProfile";
 
 interface Props {
   user: DbUser;
@@ -16,37 +17,34 @@ interface Props {
 export function ProfileForm({ user }: Props) {
   const supabase = createClient();
   const fileRef = useRef<HTMLInputElement>(null);
+  const {
+    updateProfile,
+    isUpdating: saving,
+    changePassword: changePasswordMutation,
+    isChangingPassword: savingPw,
+  } = useProfile();
 
   const [fullName, setFullName]   = useState(user.full_name ?? "");
   const [phone, setPhone]         = useState(user.phone ?? "");
   const [birthday, setBirthday]   = useState(user.birthday ?? "");
   const [avatarUrl, setAvatarUrl] = useState(user.avatar_url ?? "");
-  const [saving, setSaving]       = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [newPassword, setNewPassword]     = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [savingPw, setSavingPw]           = useState(false);
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    const res = await fetch("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      await updateProfile({
         full_name:  fullName  || null,
         phone:      phone     || null,
         birthday:   birthday  || null,
         avatar_url: avatarUrl || null,
-      }),
-    });
-    setSaving(false);
-    if (res.ok) {
+      });
       toast.success("Profile updated.");
-    } else {
-      const body = await res.json().catch(() => ({}));
-      toast.error(body?.error ?? "Failed to save profile.");
+    } catch {
+      // Error toast handled by the API client.
     }
   }
 
@@ -74,11 +72,7 @@ export function ProfileForm({ user }: Props) {
     const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
     setAvatarUrl(publicUrl);
 
-    await fetch("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ avatar_url: publicUrl }),
-    });
+    await updateProfile({ avatar_url: publicUrl });
     setUploadingPhoto(false);
     toast.success("Photo updated.");
   }
@@ -89,20 +83,13 @@ export function ProfileForm({ user }: Props) {
       toast.error("Passwords do not match.");
       return;
     }
-    setSavingPw(true);
-    const res = await fetch("/api/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ new_password: newPassword }),
-    });
-    setSavingPw(false);
-    if (res.ok) {
+    try {
+      await changePasswordMutation({ new_password: newPassword });
       toast.success("Password changed.");
       setNewPassword("");
       setConfirmPassword("");
-    } else {
-      const body = await res.json().catch(() => ({}));
-      toast.error(body?.error ?? "Failed to change password.");
+    } catch {
+      // Error toast handled by the API client.
     }
   }
 

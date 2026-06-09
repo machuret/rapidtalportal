@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useCallback, type Dispatch, type SetStateAction } from "react";
+import { memo, useState, useEffect, useCallback, type Dispatch, type SetStateAction } from "react";
 import {
   Clock,
   ChevronRight,
@@ -15,17 +15,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
-import { api } from "@/lib/api-client";
+import { usePieceDetail, useUpdatePieceStatus } from "@/hooks/useContent";
+import type { ContentPieceFull } from "@/hooks/useContent";
 import type { ContentPiece, ContentStatus } from "@/types/content";
 import { TYPE_ICON_COLORS, TYPE_ICONS, CONTENT_STATUS_STYLES } from "@/types/content";
-
-/* ── Full piece with body (returned by detail endpoint) ─────────── */
-interface ContentPieceFull extends ContentPiece {
-  brief?: string | null;
-  body: string | null;
-  updated_at?: string;
-}
 
 /* ── Props ──────────────────────────────────────────────────────── */
 interface HistoryTabProps {
@@ -88,7 +81,8 @@ function PieceDetail({
   onStatusChanged: (id: string, status: ContentStatus) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
+
+  const { updateStatus, isUpdating } = useUpdatePieceStatus();
 
   const TypeIcon = TYPE_ICONS[piece.content_type] || BookText;
   const iconColor = TYPE_ICON_COLORS[piece.content_type] || "text-zinc-400";
@@ -103,22 +97,18 @@ function PieceDetail({
 
   const handleStatusChange = useCallback(
     async (newStatus: ContentStatus) => {
-      setIsUpdating(true);
       try {
-        await api.patch("/api/content/pieces", {
+        await updateStatus({
           client_id: clientId,
           id: piece.id,
           status: newStatus,
         });
         onStatusChanged(piece.id, newStatus);
-        toast.success(`Content ${newStatus === "approved" ? "approved" : "archived"}`);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to update status");
-      } finally {
-        setIsUpdating(false);
+      } catch {
+        // error toast handled by the mutation
       }
     },
-    [clientId, piece.id, onStatusChanged]
+    [updateStatus, clientId, piece.id, onStatusChanged]
   );
 
   return (
@@ -230,28 +220,28 @@ export const HistoryTab = memo(function HistoryTab({
   canApprove,
   onHistoryUpdate,
 }: HistoryTabProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedPiece, setSelectedPiece] = useState<ContentPieceFull | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState("");
 
-  const handleItemClick = useCallback(
-    async (piece: ContentPiece) => {
-      setIsLoading(true);
-      try {
-        const full = await api.get<ContentPieceFull>(
-          `/api/content/pieces?client_id=${clientId}&id=${piece.id}`
-        );
-        setSelectedPiece(full);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to load content");
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [clientId]
-  );
+  const detailQuery = usePieceDetail(clientId, selectedId);
+  const isLoading = detailQuery.isLoading;
 
-  const handleBack = useCallback(() => setSelectedPiece(null), []);
+  // Sync fetched detail into local selected piece (so status edits can patch it)
+  useEffect(() => {
+    if (detailQuery.data) {
+      setSelectedPiece(detailQuery.data);
+    }
+  }, [detailQuery.data]);
+
+  const handleItemClick = useCallback((piece: ContentPiece) => {
+    setSelectedId(piece.id);
+  }, []);
+
+  const handleBack = useCallback(() => {
+    setSelectedId(null);
+    setSelectedPiece(null);
+  }, []);
 
   const handleStatusChanged = useCallback(
     (id: string, status: ContentStatus) => {

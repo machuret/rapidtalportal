@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Save, ListChecks, Loader2 } from "lucide-react";
 import type { Sop } from "@/app/(portal)/sops/page";
+import { useSops } from "@/hooks/useSops";
 
 interface Props {
   clientId: string;
@@ -18,8 +19,8 @@ interface Props {
 
 export function SopNewForm({ clientId, categories = [] }: Props) {
   const router = useRouter();
+  const { createSop, isCreating: saving } = useSops(clientId);
   const [form, setForm] = useState({ title: "", category: "General", body: "" });
-  const [saving, setSaving] = useState(false);
 
   function setF(k: string, v: string) { setForm(f => ({ ...f, [k]: v })); }
 
@@ -28,20 +29,13 @@ export function SopNewForm({ clientId, categories = [] }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
     try {
-      const res = await fetch("/api/sops", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, ...form, order_index: 0 }),
-      });
-      const json = await res.json();
-      if (!res.ok) { toast.error(json.error ?? "Failed to create SOP."); return; }
+      const created = await createSop({ clientId, ...form, order_index: 0 });
       toast.success("SOP created.");
-      router.push(`/sops/${(json as Sop).id}`);
+      router.push(`/sops/${(created as Sop).id}`);
       router.refresh();
-    } finally {
-      setSaving(false);
+    } catch {
+      // Error toast handled by the API client.
     }
   }
 

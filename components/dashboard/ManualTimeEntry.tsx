@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Clock } from "lucide-react";
+import { useUpsertTimeEntry } from "@/hooks/useTimeEntries";
 
 interface ManualTimeEntryProps {
   open: boolean;
@@ -34,11 +35,12 @@ export function ManualTimeEntry({ open, onOpenChange, onSuccess }: ManualTimeEnt
   const [phase, setPhase] = useState<"work" | "break">("work");
   const [category, setCategory] = useState("General");
   const [notes, setNotes] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const upsertEntry = useUpsertTimeEntry();
+  const submitting = upsertEntry.isPending;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
+
     if (!date || !startTime || !endTime) {
       toast.error("Please fill in all required fields");
       return;
@@ -46,47 +48,33 @@ export function ManualTimeEntry({ open, onOpenChange, onSuccess }: ManualTimeEnt
 
     const startDateTime = new Date(`${date}T${startTime}`);
     const endDateTime = new Date(`${date}T${endTime}`);
-    
+
     if (endDateTime <= startDateTime) {
       toast.error("End time must be after start time");
       return;
     }
 
-    setSubmitting(true);
-    
     try {
-      const response = await fetch("/api/time-entries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          work_date: date,
-          phase,
-          started_at: startDateTime.toISOString(),
-          ended_at: endDateTime.toISOString(),
-          is_manual: true,
-          notes: notes.trim() || null,
-          category,
-        }),
+      await upsertEntry.mutateAsync({
+        work_date: date,
+        phase,
+        started_at: startDateTime.toISOString(),
+        ended_at: endDateTime.toISOString(),
+        is_manual: true,
+        notes: notes.trim() || null,
+        category,
       });
 
-      const data = await response.json();
-      
-      if (response.ok) {
-        toast.success("Manual time entry added successfully");
-        onOpenChange(false);
-        onSuccess();
-        // Reset form
-        setNotes("");
-        setStartTime("09:00");
-        setEndTime("10:00");
-        setCategory("General");
-      } else {
-        toast.error(data.error || "Failed to add time entry");
-      }
+      toast.success("Manual time entry added successfully");
+      onOpenChange(false);
+      onSuccess();
+      // Reset form
+      setNotes("");
+      setStartTime("09:00");
+      setEndTime("10:00");
+      setCategory("General");
     } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setSubmitting(false);
+      // api-client already surfaces a toast for the error.
     }
   }
 

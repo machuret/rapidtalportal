@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { DbCompanyDna } from "@/types/database";
+import { useDna } from "@/hooks/useDna";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,12 +30,11 @@ const fields: { key: keyof DbCompanyDna; label: string; multiline?: boolean }[] 
 ];
 
 export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
+  const { saveDna, isSaving: saving, scrapeDna, isScraping } = useDna();
   const [form, setForm] = useState<Partial<DbCompanyDna>>(initialData ?? {});
-  const [saving, setSaving] = useState(false);
   const [updatedAt, setUpdatedAt] = useState(initialData?.updated_at ?? null);
   const [copied, setCopied] = useState(false);
   const [scrapingUrl, setScrapingUrl] = useState("");
-  const [isScraping, setIsScraping] = useState(false);
 
   function set(key: keyof DbCompanyDna, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -48,61 +48,41 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
       return;
     }
 
-    setIsScraping(true);
-    
     try {
-      const res = await fetch("/api/company-dna/scrape", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          url: scrapingUrl.trim(), 
-          clientId 
-        }),
-      });
+      const data = await scrapeDna({ url: scrapingUrl.trim(), clientId });
 
-      const data = await res.json();
-      
-      if (res.ok) {
-        // Update form with scraped data
-        const scrapedData = data.data;
-        setForm(prev => ({
-          ...prev,
-          company_name: scrapedData.company_name || prev.company_name,
-          services: scrapedData.services || prev.services,
-          values: scrapedData.values || prev.values,
-          phone: scrapedData.phone || prev.phone,
-          email: scrapedData.email || prev.email,
-          website: scrapedData.website || prev.website,
-          founders: scrapedData.founders || prev.founders,
-          target_demographic: scrapedData.target_demographic || prev.target_demographic,
-          client_type: scrapedData.client_type || prev.client_type,
-        }));
-        
-        setUpdatedAt(scrapedData.updated_at);
-        toast.success(`Company information extracted successfully (${data.tokensUsed} tokens used)`);
-        setScrapingUrl("");
-      } else {
-        toast.error(data.error || "Failed to extract company information");
-      }
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setIsScraping(false);
+      // Update form with scraped data
+      const scrapedData = data.data;
+      setForm(prev => ({
+        ...prev,
+        company_name: scrapedData.company_name || prev.company_name,
+        services: scrapedData.services || prev.services,
+        values: scrapedData.values || prev.values,
+        phone: scrapedData.phone || prev.phone,
+        email: scrapedData.email || prev.email,
+        website: scrapedData.website || prev.website,
+        founders: scrapedData.founders || prev.founders,
+        target_demographic: scrapedData.target_demographic || prev.target_demographic,
+        client_type: scrapedData.client_type || prev.client_type,
+      }));
+
+      setUpdatedAt(scrapedData.updated_at ?? null);
+      toast.success(`Company information extracted successfully (${data.tokensUsed} tokens used)`);
+      setScrapingUrl("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to extract company information");
     }
   }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    const res = await fetch("/api/company-dna", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, client_id: clientId }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) { toast.error("Failed to save: " + (body?.error ?? res.status)); }
-    else { toast.success("Company DNA saved."); setUpdatedAt(new Date().toISOString()); }
-    setSaving(false);
+    try {
+      await saveDna({ form, clientId });
+      toast.success("Company DNA saved.");
+      setUpdatedAt(new Date().toISOString());
+    } catch (err) {
+      toast.error("Failed to save: " + (err instanceof Error ? err.message : "error"));
+    }
   }
 
   async function copyAll() {

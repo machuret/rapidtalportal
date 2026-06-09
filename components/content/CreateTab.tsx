@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { api } from "@/lib/api-client";
+import { useGenerateContent } from "@/hooks/useContent";
 import { CONTENT_TYPES, TONES, LENGTHS, TYPE_ICON_COLORS, TYPE_ICONS } from "@/types/content";
 import type { ContentType, ContentPiece } from "@/types/content";
 
@@ -18,11 +18,6 @@ interface CreateTabProps {
   initialTitle?: string;
   initialBrief?: string;
   onContentGenerated: (piece: ContentPiece) => void;
-}
-
-interface GenerationResponse {
-  id: string;
-  body: string;
 }
 
 export const CreateTab = memo(function CreateTab({
@@ -38,10 +33,11 @@ export const CreateTab = memo(function CreateTab({
   const [brief, setBrief] = useState(initialBrief);
   const [tone, setTone] = useState("Professional");
   const [length, setLength] = useState<"short" | "medium" | "long">("medium");
-  const [isGenerating, setIsGenerating] = useState(false);
   const [output, setOutput] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  
+
+  const { generate, isGenerating } = useGenerateContent();
+
   const generatingRef = useRef(false);
 
   const handleGenerate = useCallback(async () => {
@@ -49,14 +45,13 @@ export const CreateTab = memo(function CreateTab({
       toast.error("Please fill in all fields");
       return;
     }
-    
+
     if (generatingRef.current) return;
     generatingRef.current = true;
-    setIsGenerating(true);
     setOutput(null);
 
     try {
-      const data = await api.post<GenerationResponse>("/content/generate", {
+      const data = await generate({
         clientId,
         userId,
         contentType: selectedType,
@@ -67,7 +62,7 @@ export const CreateTab = memo(function CreateTab({
       });
 
       setOutput(data.body);
-      
+
       const newPiece: ContentPiece = {
         id: data.id,
         content_type: selectedType,
@@ -75,16 +70,14 @@ export const CreateTab = memo(function CreateTab({
         status: "draft",
         created_at: new Date().toISOString(),
       };
-      
+
       onContentGenerated(newPiece);
-      toast.success("Content generated!");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Generation failed");
+    } catch {
+      // error toast handled by the mutation
     } finally {
       generatingRef.current = false;
-      setIsGenerating(false);
     }
-  }, [clientId, userId, selectedType, title, brief, tone, length, onContentGenerated]);
+  }, [generate, clientId, userId, selectedType, title, brief, tone, length, onContentGenerated]);
 
   const handleCopy = useCallback(async () => {
     if (!output) return;

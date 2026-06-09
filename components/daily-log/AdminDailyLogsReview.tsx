@@ -6,6 +6,7 @@ import { CheckCircle, Clock, ChevronDown, ChevronUp, Send, Loader2 } from "lucid
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { useSubmitDailyLogFeedback } from "@/hooks/useDailyLog";
 import type { Mood } from "./DailyLogStudio";
 
 interface LogWithUser {
@@ -48,23 +49,18 @@ function Section({ label, value }: { label: string; value: string }) {
 function LogRow({ log, onFeedbackSaved }: { log: LogWithUser; onFeedbackSaved: (id: string, feedback: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [feedback, setFeedback] = useState(log.admin_feedback ?? "");
-  const [saving, setSaving] = useState(false);
+  const feedbackMutation = useSubmitDailyLogFeedback();
+  const saving = feedbackMutation.isPending;
   const isReviewed = !!log.reviewed_at;
   const vaName = log.users?.full_name ?? log.users?.email ?? "Unknown VA";
 
   async function submitFeedback() {
     if (!feedback.trim()) return;
-    setSaving(true);
-    const res = await fetch("/api/daily-log/feedback", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ log_id: log.id, feedback: feedback.trim() }),
-    });
-    setSaving(false);
-    if (res.ok) {
+    try {
+      await feedbackMutation.mutateAsync({ log_id: log.id, feedback: feedback.trim() });
       toast.success("Feedback sent.");
       onFeedbackSaved(log.id, feedback.trim());
-    } else {
+    } catch {
       toast.error("Failed to save feedback.");
     }
   }

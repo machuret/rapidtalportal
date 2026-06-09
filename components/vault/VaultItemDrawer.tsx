@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { DbVaultItem, VaultCategory } from "@/types/database";
 import { X, Save, Loader2, Tag, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { api } from "@/lib/api-client";
+import { vaultKeys } from "@/hooks/useVault";
 import { cn } from "@/lib/utils";
 
 const CATEGORIES: { value: VaultCategory; label: string; color: string }[] = [
@@ -27,51 +30,47 @@ interface VaultItemDrawerProps {
 }
 
 export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemDrawerProps) {
+  const queryClient = useQueryClient();
   const [title, setTitle] = useState(item.title);
   const [content, setContent] = useState(item.raw_content ?? "");
   const [category, setCategory] = useState<VaultCategory>(item.category ?? "general");
   const [tagInput, setTagInput] = useState(item.tags?.join(", ") ?? "");
-  const [saving, setSaving] = useState(false);
-  // Ref guard prevents double-submit between the click and the React re-render
-  // that sets saving=true. Without this, rapid double-clicks get through.
-  const savingRef = useRef(false);
 
   function parseTags(raw: string): string[] {
     return raw.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
   }
 
-  async function handleSave() {
+  // PATCH /api/vault/[id] — JSON endpoint via api client. useMutation's isPending
+  // also guards against double-submit (replaces the previous savingRef guard).
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      api.patch(`/vault/${item.id}`, {
+        clientId,
+        title: title.trim(),
+        raw_content: content.trim() || undefined,
+        category,
+        tags: parseTags(tagInput),
+      }, { showErrorToast: false }),
+    onSuccess: () => {
+      toast.success("Saved. AI is re-processing…");
+      // Return updated item to parent optimistically
+      onSaved({ ...item, title: title.trim(), raw_content: content.trim(), category, tags: parseTags(tagInput) });
+      onClose();
+    },
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : "Save failed.");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: vaultKeys.byClient(clientId) });
+    },
+  });
+
+  const saving = saveMutation.isPending;
+
+  function handleSave() {
     if (!title.trim()) { toast.error("Title is required."); return; }
-    if (savingRef.current) return; // Prevent double-submit before re-render
-    savingRef.current = true;
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/vault/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId,
-          title: title.trim(),
-          raw_content: content.trim() || undefined,
-          category,
-          tags: parseTags(tagInput),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? "Save failed.");
-      } else {
-        toast.success("Saved. AI is re-processing…");
-        // Return updated item to parent optimistically
-        onSaved({ ...item, title: title.trim(), raw_content: content.trim(), category, tags: parseTags(tagInput) });
-        onClose();
-      }
-    } catch {
-      toast.error("Network error. Please try again.");
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
-    }
+    if (saveMutation.isPending) return; // Prevent double-submit
+    saveMutation.mutate();
   }
 
   return (

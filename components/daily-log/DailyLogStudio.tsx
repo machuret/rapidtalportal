@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { format, subDays, parseISO, isFuture } from "date-fns";
 import { ChevronLeft, ChevronRight, Plus, Trash2, BarChart2, Loader2, Check } from "lucide-react";
 import { DailyLogHistory } from "./DailyLogHistory";
@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
 import { toast } from "sonner";
+import {
+  useDailyLogQuery,
+  useUpsertDailyLog,
+  useAddDailyLogNote,
+  useDeleteDailyLogNote,
+  dailyLogKeys,
+} from "@/hooks/useDailyLog";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Mood, DailyLog, DailyLogNote } from "@/types/daily-log";
 
 export type { Mood, DailyLog, DailyLogNote } from "@/types/daily-log";
@@ -44,23 +52,49 @@ export function DailyLogStudio({ initialLog, initialNotes, initialHistory, readO
   const isActiveToday = activeDate === today;
   const isReadOnly = readOnly || !isActiveToday;
 
+  const queryClient = useQueryClient();
+
+  // React Query drives date navigation. For today, server-provided initialData
+  // seeds the cache so the initial render needs no fetch.
+  const dayQuery = useDailyLogQuery(activeDate, viewingUserId, {
+    initialData: isActiveToday ? { log: initialLog, notes: initialNotes } : undefined,
+  });
+
+  const upsertMutation = useUpsertDailyLog();
+  const addNoteMutation = useAddDailyLogNote();
+  const deleteNoteMutation = useDeleteDailyLogNote();
+
+  // Local editable copies — the structured form is autosaved via debounce, so we
+  // keep working state locally and sync from the query when the date changes.
   const [log, setLog] = useState<DailyLog | null>(initialLog);
   const [history, setHistory] = useState<HistoryEntry[]>(initialHistory);
   const [notes, setNotes] = useState<DailyLogNote[]>(initialNotes);
-  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [noteText, setNoteText] = useState("");
-  const [addingNote, setAddingNote] = useState(false);
-  const [loadingDate, setLoadingDate] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // useRef holds latest form values to avoid stale closure in debounced save
   const logRef = useRef<DailyLog | null>(initialLog);
-  const navInFlight = useRef(false);
+  // Tracks the date whose query data we've synced into local state, so edits to
+  // the active day aren't clobbered by background refetches.
+  const syncedDateRef = useRef(today);
   // Track which fields changed since last save — only send dirty fields
   const dirtyFields = useRef<Set<string>>(new Set());
   // In-flight delete guard — prevents double-delete on rapid click
   const deletingNotes = useRef<Set<string>>(new Set());
+
+  const saving = upsertMutation.isPending;
+  const loadingDate = !isActiveToday && dayQuery.isFetching && syncedDateRef.current !== activeDate;
+
+  // Sync query data into local editable state when a new date's data arrives.
+  useEffect(() => {
+    if (!dayQuery.data) return;
+    if (syncedDateRef.current === activeDate) return;
+    syncedDateRef.current = activeDate;
+    logRef.current = dayQuery.data.log;
+    setLog(dayQuery.data.log);
+    setNotes(dayQuery.data.notes ?? []);
+  }, [dayQuery.data, activeDate]);
 
   function debouncedSave() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -77,17 +111,15 @@ export function DailyLogStudio({ initialLog, initialNotes, initialHistory, readO
       payload[key] = (current as Record<string, string | Mood | null> | null)?.[key] ?? (key === "mood" ? null : "");
     }
     dirtyFields.current.clear();
-    setSaving(true);
-    const res = await fetch("/api/daily-log/upsert", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    setSaving(false);
-    if (res.ok) {
-      const updated = await res.json();
+    try {
+      const updated = await upsertMutation.mutateAsync(payload as { log_date: string; [key: string]: string | Mood | null });
       setLog(updated);
       logRef.current = updated;
+      // Keep the today query cache in sync with the saved log.
+      queryClient.setQueryData(dailyLogKeys.byDate(today, viewingUserId), {
+        log: updated,
+        notes,
+      });
       setSaved(true);
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaved(false), 2000);
@@ -96,7 +128,7 @@ export function DailyLogStudio({ initialLog, initialNotes, initialHistory, readO
         if (exists) return prev.map(h => h.log_date === today ? { ...h, mood: updated.mood } : h);
         return [...prev, { log_date: today, mood: updated.mood }];
       });
-    } else {
+    } catch {
       toast.error("Failed to save. Try again.");
     }
   }
@@ -126,20 +158,15 @@ export function DailyLogStudio({ initialLog, initialNotes, initialHistory, readO
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReadOnly]);
 
+  const addingNote = addNoteMutation.isPending;
+
   async function addNote() {
     if (!noteText.trim() || !log?.id) return;
-    setAddingNote(true);
-    const res = await fetch("/api/daily-log/notes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ log_id: log.id, body: noteText.trim() }),
-    });
-    setAddingNote(false);
-    if (res.ok) {
-      const note = await res.json();
+    try {
+      const note = await addNoteMutation.mutateAsync({ log_id: log.id, body: noteText.trim() });
       setNotes(prev => [note, ...prev]);
       setNoteText("");
-    } else {
+    } catch {
       toast.error("Failed to add note.");
     }
   }
@@ -147,37 +174,24 @@ export function DailyLogStudio({ initialLog, initialNotes, initialHistory, readO
   async function deleteNote(id: string) {
     if (deletingNotes.current.has(id)) return;
     deletingNotes.current.add(id);
-    const res = await fetch(`/api/daily-log/notes?id=${id}`, { method: "DELETE" });
-    deletingNotes.current.delete(id);
-    if (res.ok) setNotes(prev => prev.filter(n => n.id !== id));
-    else toast.error("Failed to delete note.");
+    try {
+      await deleteNoteMutation.mutateAsync(id);
+      setNotes(prev => prev.filter(n => n.id !== id));
+    } catch {
+      toast.error("Failed to delete note.");
+    } finally {
+      deletingNotes.current.delete(id);
+    }
   }
 
-  async function loadDate(date: string) {
-    if (date === activeDate || navInFlight.current) return;
+  function loadDate(date: string) {
+    if (date === activeDate) return;
     if (isFuture(parseISO(date))) return;
-    navInFlight.current = true;
-    setLoadingDate(true);
+    // Switching activeDate re-keys the query (date in queryKey); the sync effect
+    // copies the fetched log/notes into local state once data arrives. When an
+    // admin views a VA's log, viewingUserId is part of the query key so the API
+    // returns the correct log instead of defaulting to the admin's own.
     setActiveDate(date);
-    try {
-      // When an admin is viewing a VA's log, pass the VA's user_id so the API
-      // returns the correct log instead of defaulting to the admin's own.
-      const url = viewingUserId
-        ? `/api/daily-log/${date}?user_id=${viewingUserId}`
-        : `/api/daily-log/${date}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const { log: l, notes: n } = await res.json();
-        logRef.current = l;
-        setLog(l);
-        setNotes(n ?? []);
-      } else {
-        toast.error("Could not load that date.");
-      }
-    } finally {
-      setLoadingDate(false);
-      navInFlight.current = false;
-    }
   }
 
   const historyMap = useMemo(

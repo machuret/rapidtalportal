@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { CrmContact } from "@/app/(portal)/crm/page";
+import { useContactMutations } from "@/hooks/useContacts";
 import { CRM_STATUS_META, CRM_STATUSES } from "@/lib/crm-config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,12 +47,16 @@ export function CrmDetailPanel({
   contact, notes, loadingNotes, clientId,
   onClose, onUpdated, onDeleted, onNoteAdded, onNoteDeleted,
 }: CrmDetailPanelProps) {
+  const {
+    updateContact, isUpdating: saving,
+    deleteContact,
+    createNote, isCreatingNote: savingNote,
+    deleteNote: deleteNoteMutation,
+  } = useContactMutations(clientId);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<CrmContact>>({});
-  const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [noteBody, setNoteBody] = useState("");
-  const [savingNote, setSavingNote] = useState(false);
   const deletingNotesRef = useRef<Set<string>>(new Set());
 
   function startEdit() {
@@ -62,69 +67,51 @@ export function CrmDetailPanel({
   async function saveEdit() {
     if (savingRef.current) return;
     savingRef.current = true;
-    setSaving(true);
     try {
-      const res = await fetch("/api/crm/contacts", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id:         contact.id,
-          clientId,
-          first_name: editForm.first_name,
-          last_name:  editForm.last_name  ?? null,
-          email:      editForm.email      ?? null,
-          phone:      editForm.phone      ?? null,
-          company:    editForm.company    ?? null,
-          job_title:  editForm.job_title  ?? null,
-          status:     editForm.status     ?? "lead",
-          source:     editForm.source     ?? null,
-          notes:      editForm.notes      ?? null,
-        }),
+      const updated = await updateContact({
+        id:         contact.id,
+        clientId,
+        first_name: editForm.first_name,
+        last_name:  editForm.last_name  ?? null,
+        email:      editForm.email      ?? null,
+        phone:      editForm.phone      ?? null,
+        company:    editForm.company    ?? null,
+        job_title:  editForm.job_title  ?? null,
+        status:     editForm.status     ?? "lead",
+        source:     editForm.source     ?? null,
+        notes:      editForm.notes      ?? null,
       });
-      const json = await res.json();
-      if (!res.ok) { toast.error(json.error ?? "Update failed."); return; }
-      onUpdated(json as CrmContact);
+      onUpdated(updated);
       setEditing(false);
       toast.success("Contact updated.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed.");
     } finally {
       savingRef.current = false;
-      setSaving(false);
     }
   }
 
   async function handleDelete() {
     if (!confirm("Delete this contact and all their notes? This cannot be undone.")) return;
-    const res = await fetch("/api/crm/contacts", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: contact.id, clientId }),
-    });
-    if (!res.ok) {
-      const json = await res.json();
-      toast.error(json.error ?? "Delete failed.");
-      return;
+    try {
+      await deleteContact({ id: contact.id, clientId });
+      onDeleted(contact.id);
+      toast.success("Contact deleted.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed.");
     }
-    onDeleted(contact.id);
-    toast.success("Contact deleted.");
   }
 
   async function addNote(e: React.FormEvent) {
     e.preventDefault();
     if (!noteBody.trim() || savingNote) return;
-    setSavingNote(true);
     try {
-      const res = await fetch("/api/crm/notes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactId: contact.id, clientId, body: noteBody.trim() }),
-      });
-      const json = await res.json();
-      if (!res.ok) { toast.error(json.error ?? "Failed to save note."); return; }
-      onNoteAdded(json as Note);
+      const note = await createNote({ contactId: contact.id, clientId, body: noteBody.trim() });
+      onNoteAdded(note);
       setNoteBody("");
       toast.success("Note saved.");
-    } finally {
-      setSavingNote(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save note.");
     }
   }
 
@@ -132,17 +119,10 @@ export function CrmDetailPanel({
     if (deletingNotesRef.current.has(noteId)) return;
     deletingNotesRef.current.add(noteId);
     try {
-      const res = await fetch("/api/crm/notes", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: noteId, clientId }),
-      });
-      if (!res.ok) {
-        const json = await res.json();
-        toast.error(json.error ?? "Failed to delete note.");
-        return;
-      }
+      await deleteNoteMutation({ id: noteId, clientId });
       onNoteDeleted(noteId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete note.");
     } finally {
       deletingNotesRef.current.delete(noteId);
     }

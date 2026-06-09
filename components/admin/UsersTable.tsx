@@ -20,19 +20,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
-import { api } from "@/lib/api-client";
+import { useUsers, type AdminUserRow } from "@/hooks/useUsers";
 import type { UserRole } from "@/types/database";
 
 /* ── Types ────────────────────────────────────────────────────────── */
-interface UserRow {
-  id: string;
-  email: string;
-  full_name: string | null;
-  role: UserRole;
-  client_id: string | null;
-  created_at: string;
-}
+type UserRow = AdminUserRow;
 
 interface ClientOption {
   id: string;
@@ -61,7 +53,15 @@ export function UsersTable({
   users: initialUsers,
   clients,
 }: UsersTableProps) {
-  const [users, setUsers] = useState(initialUsers);
+  const {
+    users,
+    createUser,
+    isCreating: addSaving,
+    updateUser,
+    isUpdating: saving,
+    quickUpdateUser,
+    deleteUser,
+  } = useUsers(initialUsers);
   const [search, setSearch] = useState("");
 
   // Inline editing
@@ -72,7 +72,6 @@ export function UsersTable({
     role: UserRole;
     client_id: string | null;
   }>({ email: "", full_name: "", role: "va", client_id: null });
-  const [saving, setSaving] = useState(false);
 
   // Add user dialog
   const [addOpen, setAddOpen] = useState(false);
@@ -81,7 +80,6 @@ export function UsersTable({
   const [newRole, setNewRole] = useState<UserRole>("va");
   const [newClientId, setNewClientId] = useState<string>("");
   const [newPassword, setNewPassword] = useState("");
-  const [addSaving, setAddSaving] = useState(false);
 
   const clientMap: Record<string, string> = {};
   for (const c of clients) clientMap[c.id] = c.name;
@@ -103,111 +101,96 @@ export function UsersTable({
 
   const saveEdit = useCallback(async () => {
     if (!editingId) return;
-    setSaving(true);
-    try {
-      const updates: Record<string, unknown> = { id: editingId };
-      const original = users.find((u) => u.id === editingId);
-      if (!original) return;
+    const original = users.find((u) => u.id === editingId);
+    if (!original) return;
+    const updates: Parameters<typeof updateUser>[0] = { id: editingId };
 
-      if (editFields.email !== original.email) updates.email = editFields.email;
-      if (editFields.full_name !== (original.full_name ?? ""))
-        updates.full_name = editFields.full_name || null;
-      if (editFields.role !== original.role) updates.role = editFields.role;
-      if (editFields.client_id !== original.client_id)
-        updates.client_id = editFields.client_id;
+    if (editFields.email !== original.email) updates.email = editFields.email;
+    if (editFields.full_name !== (original.full_name ?? ""))
+      updates.full_name = editFields.full_name || null;
+    if (editFields.role !== original.role) updates.role = editFields.role;
+    if (editFields.client_id !== original.client_id)
+      updates.client_id = editFields.client_id;
 
-      if (Object.keys(updates).length <= 1) {
-        setEditingId(null);
-        return;
-      }
-
-      const updated = await api.patch<UserRow>("/api/admin/users", updates);
-      setUsers((prev) =>
-        prev.map((u) => (u.id === editingId ? updated : u))
-      );
+    if (Object.keys(updates).length <= 1) {
       setEditingId(null);
-      toast.success("User updated");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update");
-    } finally {
-      setSaving(false);
+      return;
     }
-  }, [editingId, editFields, users]);
+
+    try {
+      await updateUser(updates);
+      setEditingId(null);
+    } catch {
+      // error toast handled by the mutation
+    }
+  }, [editingId, editFields, users, updateUser]);
 
   /* ── Quick role change (non-edit mode) ─────────────────────── */
   const handleQuickRoleChange = useCallback(
     async (userId: string, role: UserRole) => {
       try {
-        await api.patch("/api/admin/users", { id: userId, role });
-        setUsers((prev) =>
-          prev.map((u) => (u.id === userId ? { ...u, role } : u))
-        );
-        toast.success("Role updated");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to update");
+        await quickUpdateUser({
+          input: { id: userId, role },
+          successMessage: "Role updated",
+        });
+      } catch {
+        // error toast handled by the mutation
       }
     },
-    []
+    [quickUpdateUser]
   );
 
   /* ── Quick client change (non-edit mode) ───────────────────── */
   const handleQuickClientChange = useCallback(
     async (userId: string, clientId: string | null) => {
       try {
-        await api.patch("/api/admin/users", { id: userId, client_id: clientId });
-        setUsers((prev) =>
-          prev.map((u) =>
-            u.id === userId ? { ...u, client_id: clientId } : u
-          )
-        );
-        toast.success("Client updated");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to update");
+        await quickUpdateUser({
+          input: { id: userId, client_id: clientId },
+          successMessage: "Client updated",
+        });
+      } catch {
+        // error toast handled by the mutation
       }
     },
-    []
+    [quickUpdateUser]
   );
 
   /* ── Delete user ───────────────────────────────────────────── */
-  const handleDelete = useCallback(async (userId: string) => {
-    if (!confirm("Delete this user permanently? This cannot be undone.")) return;
-    try {
-      await api.delete("/api/admin/users", { id: userId });
-      setUsers((prev) => prev.filter((u) => u.id !== userId));
-      toast.success("User deleted");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete");
-    }
-  }, []);
+  const handleDelete = useCallback(
+    async (userId: string) => {
+      if (!confirm("Delete this user permanently? This cannot be undone.")) return;
+      try {
+        await deleteUser({ id: userId });
+      } catch {
+        // error toast handled by the mutation
+      }
+    },
+    [deleteUser]
+  );
 
   /* ── Create user ───────────────────────────────────────────── */
   const handleCreate = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      setAddSaving(true);
       try {
-        const user = await api.post<UserRow>("/api/admin/users", {
+        await createUser({
           email: newEmail.trim(),
           full_name: newName.trim(),
           role: newRole,
           client_id: newClientId || null,
           ...(newPassword.trim() ? { password: newPassword.trim() } : {}),
         });
-        setUsers((prev) => [user, ...prev]);
         setAddOpen(false);
         setNewEmail("");
         setNewName("");
         setNewRole("va");
         setNewClientId("");
         setNewPassword("");
-        toast.success(`User "${user.full_name}" created`);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to create");
-      } finally {
-        setAddSaving(false);
+      } catch {
+        // error toast handled by the mutation
       }
     },
-    [newEmail, newName, newRole, newClientId, newPassword]
+    [createUser, newEmail, newName, newRole, newClientId, newPassword]
   );
 
   /* ── Filter ────────────────────────────────────────────────── */
