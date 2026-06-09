@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Brain, Send, Loader2, Sparkles, ChevronDown } from "lucide-react";
+import { Brain, Send, Loader2, Sparkles, ChevronDown, ThumbsUp, ThumbsDown, BookmarkPlus, Check } from "lucide-react";
 
 interface Source {
   n: number;
@@ -38,7 +39,15 @@ const SUGGESTIONS = [
   "Who do I contact about billing?",
 ];
 
-export function AskVaultClient({ clientId, companyName }: { clientId: string; companyName: string }) {
+export function AskVaultClient({
+  clientId,
+  companyName,
+  canCurate,
+}: {
+  clientId: string;
+  companyName: string;
+  canCurate: boolean;
+}) {
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [loading, setLoading] = useState(false);
@@ -112,6 +121,7 @@ export function AskVaultClient({ clientId, companyName }: { clientId: string; co
             key={i}
             turn={t}
             clientId={clientId}
+            canCurate={canCurate}
             history={turns.slice(Math.max(0, i - 4), i).map((p) => ({ question: p.question, answer: p.answer }))}
           />
         ))}
@@ -146,10 +156,14 @@ export function AskVaultClient({ clientId, companyName }: { clientId: string; co
 }
 
 /** One Q&A exchange — clean answer by default, with optional "Go deeper" + sources. */
-function ChatTurn({ turn, clientId, history }: { turn: Turn; clientId: string; history: HistoryItem[] }) {
+function ChatTurn({
+  turn, clientId, history, canCurate,
+}: { turn: Turn; clientId: string; history: HistoryItem[]; canCurate: boolean }) {
   const [showSources, setShowSources] = useState(false);
   const [deepAnswer, setDeepAnswer] = useState<string | null>(null);
   const [deepLoading, setDeepLoading] = useState(false);
+  const [rated, setRated] = useState<1 | -1 | null>(null);
+  const [saved, setSaved] = useState(false);
 
   async function goDeeper() {
     if (deepLoading || deepAnswer) return;
@@ -166,6 +180,32 @@ function ChatTurn({ turn, clientId, history }: { turn: Turn; clientId: string; h
       // api-client surfaces a toast
     } finally {
       setDeepLoading(false);
+    }
+  }
+
+  async function rate(r: 1 | -1) {
+    if (rated) return;
+    setRated(r);
+    try {
+      await api.post(ROUTES.vault.feedback(), {
+        clientId, question: turn.question, answer: deepAnswer ?? turn.answer, rating: r,
+      }, { showErrorToast: false });
+      toast.success("Thanks for the feedback.");
+    } catch {
+      setRated(null);
+    }
+  }
+
+  async function saveToKb() {
+    if (saved) return;
+    try {
+      await api.post(ROUTES.vault.promoteKb(), {
+        clientId, question: turn.question, answer: deepAnswer ?? turn.answer,
+      });
+      setSaved(true);
+      toast.success("Saved to the Knowledge Base.");
+    } catch {
+      // api-client surfaces a toast
     }
   }
 
@@ -210,6 +250,39 @@ function ChatTurn({ turn, clientId, history }: { turn: Turn; clientId: string; h
               {showSources ? "Hide sources" : `Sources (${turn.sources.length})`}
             </button>
           )}
+
+          {/* Feedback */}
+          <div className="flex items-center gap-1 ml-auto">
+            <button
+              onClick={() => rate(1)}
+              disabled={rated !== null}
+              title="Good answer"
+              className={cn("p-1 rounded transition-colors disabled:cursor-default",
+                rated === 1 ? "text-green-400" : "text-zinc-500 hover:text-green-400 disabled:hover:text-zinc-500")}
+            >
+              <ThumbsUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => rate(-1)}
+              disabled={rated !== null}
+              title="Needs work"
+              className={cn("p-1 rounded transition-colors disabled:cursor-default",
+                rated === -1 ? "text-red-400" : "text-zinc-500 hover:text-red-400 disabled:hover:text-zinc-500")}
+            >
+              <ThumbsDown className="w-3.5 h-3.5" />
+            </button>
+            {canCurate && (
+              <button
+                onClick={saveToKb}
+                disabled={saved}
+                title="Save this answer to the Knowledge Base"
+                className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-blue-400 transition-colors disabled:text-green-400 ml-1"
+              >
+                {saved ? <Check className="w-3.5 h-3.5" /> : <BookmarkPlus className="w-3.5 h-3.5" />}
+                {saved ? "Saved" : "Save to KB"}
+              </button>
+            )}
+          </div>
         </div>
 
         {showSources && turn.sources.length > 0 && (

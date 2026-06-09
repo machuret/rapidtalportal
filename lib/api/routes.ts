@@ -25,6 +25,8 @@ export const ROUTES = {
     upload: () => "/api/vault/upload",
     delete: () => "/api/vault/delete",
     ask: () => "/api/vault/ask",
+    feedback: () => "/api/vault/feedback",
+    promoteKb: () => "/api/vault/promote-kb",
     item: (id: string) => `/api/vault/${id}`,
     reprocess: (id: string) => `/api/vault/${id}/reprocess`,
   },

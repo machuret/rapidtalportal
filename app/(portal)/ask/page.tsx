@@ -11,5 +11,13 @@ export default async function AskPage() {
   const { user, client } = ctx;
   if (!user.client_id) redirect("/dashboard");
 
-  return <AskVaultClient clientId={user.client_id} companyName={client?.name ?? "your company"} />;
+  const canCurate = user.role === "client_admin" || user.role === "super_admin";
+
+  return (
+    <AskVaultClient
+      clientId={user.client_id}
+      companyName={client?.name ?? "your company"}
+      canCurate={canCurate}
+    />
+  );
 }

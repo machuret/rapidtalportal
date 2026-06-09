@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { DbCompanyDna } from "@/types/database";
 import {
   Brain, BookOpen, CheckCircle2, Circle, Building2, Phone, Mail, Globe,
-  MapPin, Target, Users, Archive, Sparkles,
+  MapPin, Target, Users, Archive, Sparkles, AlertTriangle,
 } from "lucide-react";
 import {
   VAULT_CATEGORIES, VAULT_CATEGORY_ORDER, isVaultCategory,
@@ -21,6 +21,7 @@ type VaultItem = {
   tags: string[];
   source_type: string;
   updated_at: string | null;
+  content_hash: string | null;
 };
 
 export default async function CompanyReportPage() {
@@ -36,7 +37,7 @@ export default async function CompanyReportPage() {
     admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
     admin
       .from("vault_items")
-      .select("id, title, category, ai_summary, tags, source_type, updated_at")
+      .select("id, title, category, ai_summary, tags, source_type, updated_at, content_hash")
       .eq("client_id", clientId)
       .eq("status", "ready")
       .order("updated_at", { ascending: false }),
@@ -74,6 +75,18 @@ export default async function CompanyReportPage() {
     (byCat[c] ??= []).push(it);
   }
   const indexedCount = vaultItems.filter((i) => i.ai_summary).length;
+
+  // ── Vault health — items worth reviewing so the brain stays accurate ──
+  const byHash: Record<string, VaultItem[]> = {};
+  for (const it of vaultItems) if (it.content_hash) (byHash[it.content_hash] ??= []).push(it);
+  const duplicateItems = Object.values(byHash).filter((g) => g.length > 1).flatMap((g) => g.slice(1));
+  const STALE_MS = 90 * 24 * 60 * 60 * 1000;
+  const staleItems = vaultItems.filter(
+    (it) => it.source_type === "url" && it.updated_at && Date.now() - new Date(it.updated_at).getTime() > STALE_MS,
+  );
+  const DEMO_RE = /\b(demo|lorem ipsum|placeholder|example\.com|test data|sample)\b/i;
+  const demoItems = vaultItems.filter((it) => DEMO_RE.test(it.title) || (it.ai_summary ? DEMO_RE.test(it.ai_summary) : false));
+  const healthIssues = duplicateItems.length + staleItems.length + demoItems.length;
 
   const has = (v?: string | null) => !!(v && v.trim());
 
@@ -209,6 +222,24 @@ export default async function CompanyReportPage() {
         </section>
       )}
 
+      {/* Vault health — items worth reviewing */}
+      {healthIssues > 0 && (
+        <section className="surface-card p-6 mb-8">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <h2 className="text-lg font-semibold text-white">Vault health</h2>
+          </div>
+          <p className="text-xs text-zinc-500 mb-4">
+            {healthIssues} item{healthIssues !== 1 ? "s" : ""} worth a look so answers stay accurate.
+          </p>
+          <div className="space-y-4">
+            <HealthGroup label="Possible demo / placeholder" hint="Looks like seed data — delete if it isn't real." items={demoItems} />
+            <HealthGroup label="Duplicates" hint="Same content as another item — keep one." items={duplicateItems} />
+            <HealthGroup label="Possibly stale links" hint="A URL not refreshed in 90+ days — re-crawl or verify." items={staleItems} />
+          </div>
+        </section>
+      )}
+
       {/* Identity */}
       <section className="mb-8">
         <SectionHeader icon={Building2} title="Identity" subtitle="Who the company is" count={identityKnown.length} />
@@ -313,6 +344,23 @@ function WideField({ label, value }: { label: string; value: string }) {
     <div className="sm:col-span-2">
       <p className="label-section">{label}</p>
       <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words">{value}</p>
+    </div>
+  );
+}
+
+function HealthGroup({ label, hint, items }: { label: string; hint: string; items: VaultItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <p className="text-sm text-zinc-200 font-medium">{label} <span className="text-zinc-500 font-normal">· {items.length}</span></p>
+      <p className="text-xs text-zinc-500 mb-1.5">{hint}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {items.slice(0, 12).map((it) => (
+          <span key={it.id} className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 truncate max-w-[16rem]">
+            {it.title}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
