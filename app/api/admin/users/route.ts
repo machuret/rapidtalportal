@@ -108,18 +108,29 @@ export async function PATCH(req: NextRequest) {
 
   const admin = createAdminClient();
 
-  // If email is being changed, update auth user email too
-  if (updates.email) {
-    const { error: authError } = await admin.auth.admin.updateUserById(id, {
-      email: updates.email,
-    });
-    if (authError) {
-      console.error("[admin/users PATCH] Auth email update error:", authError.message);
-      return NextResponse.json({ error: "Failed to update email in auth: " + authError.message }, { status: 500 });
+  // Fetch current state for the lockout guard + email rollback.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: current } = await (admin as any)
+    .from("users")
+    .select("role, email")
+    .eq("id", id)
+    .single();
+  if (!current) return NextResponse.json({ error: "User not found." }, { status: 404 });
+  const cur = current as { role: string; email: string };
+
+  // Guard: never demote the last remaining super_admin (avoids locking everyone
+  // out of admin).
+  if (updates.role && updates.role !== "super_admin" && cur.role === "super_admin") {
+    const { count } = await admin
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "super_admin");
+    if ((count ?? 0) <= 1) {
+      return NextResponse.json({ error: "Cannot demote the last super admin." }, { status: 400 });
     }
   }
 
-  // Update the public.users row
+  // Update the public.users row first.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("users")
@@ -131,6 +142,18 @@ export async function PATCH(req: NextRequest) {
   if (error) {
     console.error("[admin/users PATCH]", error.code, error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Sync the auth email only when it actually changed; roll the row back on
+  // failure so public.users and auth.users never desync.
+  if (updates.email && updates.email !== cur.email) {
+    const { error: authError } = await admin.auth.admin.updateUserById(id, { email: updates.email });
+    if (authError) {
+      console.error("[admin/users PATCH] Auth email update error:", authError.message);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (admin as any).from("users").update({ email: cur.email }).eq("id", id);
+      return NextResponse.json({ error: "Failed to update email in auth: " + authError.message }, { status: 500 });
+    }
   }
 
   return NextResponse.json(data);
@@ -160,6 +183,23 @@ export async function DELETE(req: NextRequest) {
   }
 
   const admin = createAdminClient();
+
+  // Guard: never delete the last remaining super_admin.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: victim } = await (admin as any)
+    .from("users")
+    .select("role")
+    .eq("id", parsed.data.id)
+    .single();
+  if (victim && (victim as { role: string }).role === "super_admin") {
+    const { count } = await admin
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "super_admin");
+    if ((count ?? 0) <= 1) {
+      return NextResponse.json({ error: "Cannot delete the last super admin." }, { status: 400 });
+    }
+  }
 
   // Delete from public.users first
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
