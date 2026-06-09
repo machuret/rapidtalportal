@@ -17,6 +17,7 @@ export const ROUTES = {
     entry: (id: string) => `/api/kb/entries/${id}`,
   },
   vault: {
+    items: () => "/api/vault/items",
     text: () => "/api/vault/text",
     url: () => "/api/vault/url",
     crawl: () => "/api/vault/crawl",
