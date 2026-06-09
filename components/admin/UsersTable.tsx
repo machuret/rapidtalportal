@@ -9,7 +9,9 @@ import {
   Trash2,
   Search,
   RefreshCw,
+  LogIn,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +36,7 @@ interface ClientOption {
 interface UsersTableProps {
   users: UserRow[];
   clients: ClientOption[];
+  currentUserId: string;
 }
 
 const ROLE_STYLES: Record<string, string> = {
@@ -52,6 +55,7 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
 export function UsersTable({
   users: initialUsers,
   clients,
+  currentUserId,
 }: UsersTableProps) {
   const {
     users,
@@ -167,6 +171,28 @@ export function UsersTable({
     },
     [deleteUser]
   );
+
+  /* ── Login as (impersonate) ────────────────────────────────── */
+  const [impersonatingId, setImpersonatingId] = useState<string | null>(null);
+  const handleImpersonate = useCallback(async (u: UserRow) => {
+    if (!confirm(`Log in as ${u.full_name ?? u.email}? You'll see the app exactly as they do, with a banner to switch back.`)) return;
+    setImpersonatingId(u.id);
+    try {
+      const res = await fetch("/api/admin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: u.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to start impersonation.");
+      }
+      window.location.href = "/dashboard";
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to start impersonation.");
+      setImpersonatingId(null);
+    }
+  }, []);
 
   /* ── Create user ───────────────────────────────────────────── */
   const handleCreate = useCallback(
@@ -509,6 +535,20 @@ export function UsersTable({
                         </div>
                       ) : (
                         <div className="flex items-center justify-end gap-1">
+                          {u.id !== currentUserId && (
+                            <button
+                              onClick={() => handleImpersonate(u)}
+                              disabled={impersonatingId === u.id}
+                              title="Log in as this user"
+                              className="p-1.5 rounded-lg text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors disabled:opacity-40"
+                            >
+                              {impersonatingId === u.id ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <LogIn className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
                           <button
                             onClick={() => startEdit(u)}
                             title="Edit user"

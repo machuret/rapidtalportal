@@ -39,6 +39,7 @@ export default async function AdminUsersPage() {
           }[]
         }
         clients={(clients ?? []) as { id: string; name: string }[]}
+        currentUserId={ctx.user.id}
       />
     </div>
   );

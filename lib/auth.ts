@@ -1,17 +1,45 @@
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { DbUser, DbClient } from "@/types/database";
 
+/** Cookie holding the user id a super_admin is currently impersonating. */
+export const IMPERSONATE_COOKIE = "rt_impersonate";
+
+const USER_COLUMNS =
+  "id, email, full_name, role, client_id, created_at, phone, birthday, avatar_url";
+
 export interface CurrentUserAndClient {
+  /** Effective user — the impersonated target when impersonating, else the real user. */
   user: DbUser;
   client: DbClient | null;
+  /** True when a super_admin is viewing the app as another user. */
+  impersonating?: boolean;
+  /** The real super_admin behind the session (only set while impersonating). */
+  actualUser?: DbUser;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function loadClient(admin: any, clientId: string | null): Promise<DbClient | null> {
+  if (!clientId) return null;
+  const { data } = await admin
+    .from("clients")
+    .select("id, name, slug, created_at, created_by")
+    .eq("id", clientId)
+    .single();
+  return (data as DbClient) ?? null;
 }
 
 /**
- * Fetches the authenticated user + their client in a single DB query.
+ * Fetches the authenticated user + their client.
  * Wrapped with React.cache() so multiple callers within the same server
  * render tree (e.g. layout + page) share one result — zero duplicate queries.
+ *
+ * Impersonation: if a super_admin has an IMPERSONATE_COOKIE set, the returned
+ * `user`/`client` are the *target's*, with `impersonating: true` and the real
+ * admin in `actualUser`. The cookie is only ever honoured for a real
+ * super_admin session, so it can't be used for privilege escalation.
  */
 export const getCurrentUserAndClient = cache(
   async (): Promise<CurrentUserAndClient | null> => {
@@ -27,25 +55,36 @@ export const getCurrentUserAndClient = cache(
 
     const { data: userRow } = await admin
       .from("users")
-      .select("id, email, full_name, role, client_id, created_at, phone, birthday, avatar_url")
+      .select(USER_COLUMNS)
       .eq("id", authUser.id)
       .single();
 
     if (!userRow) return null;
 
-    const user = userRow as DbUser;
+    const realUser = userRow as DbUser;
 
-    let client: DbClient | null = null;
-    if (user.client_id) {
-      const { data } = await admin
-        .from("clients")
-        .select("id, name, slug, created_at, created_by")
-        .eq("id", user.client_id)
+    // ── Impersonation (super_admin only) ──────────────────────────────────────
+    const impersonateId = cookies().get(IMPERSONATE_COOKIE)?.value;
+    if (realUser.role === "super_admin" && impersonateId && impersonateId !== realUser.id) {
+      const { data: targetRow } = await admin
+        .from("users")
+        .select(USER_COLUMNS)
+        .eq("id", impersonateId)
         .single();
-      client = (data as DbClient) ?? null;
+
+      if (targetRow) {
+        const target = targetRow as DbUser;
+        return {
+          user: target,
+          client: await loadClient(admin, target.client_id),
+          impersonating: true,
+          actualUser: realUser,
+        };
+      }
+      // Stale/invalid target → fall through to the real user.
     }
 
-    return { user, client };
+    return { user: realUser, client: await loadClient(admin, realUser.client_id) };
   }
 );
 

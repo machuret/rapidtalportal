@@ -69,6 +69,15 @@ export async function DELETE(
 
   const admin = createAdminClient();
 
+  // Collect this client's users BEFORE deleting the client. The FK cascade will
+  // remove their public.users rows, but NOT their auth.users entries — leaving
+  // ghost accounts that can still authenticate (→ "Profile not found") and whose
+  // emails stay "taken". We delete those auth accounts explicitly.
+  const { data: clientUsers } = await admin
+    .from("users")
+    .select("id")
+    .eq("client_id", params.id);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (admin as any)
     .from("clients")
@@ -80,5 +89,14 @@ export async function DELETE(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  // Best-effort auth cleanup — the client (and cascaded user rows) are already
+  // gone, so a failure here only leaves an orphaned auth account (logged).
+  let authDeleted = 0;
+  for (const u of (clientUsers ?? []) as { id: string }[]) {
+    const { error: authErr } = await admin.auth.admin.deleteUser(u.id);
+    if (authErr) console.error(`[admin/clients DELETE] auth user ${u.id}:`, authErr.message);
+    else authDeleted++;
+  }
+
+  return NextResponse.json({ success: true, authDeleted });
 }

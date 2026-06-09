@@ -34,8 +34,10 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient();
 
-  // 1. Create auth user via Supabase Admin Auth
-  const password = parsed.data.password || Math.random().toString(36).slice(2) + "Aa1!";
+  // 1. Create auth user via Supabase Admin Auth.
+  // Fallback uses cryptographically strong entropy (the admin sets a real
+  // password or the user resets) rather than weak Math.random().
+  const password = parsed.data.password || `${crypto.randomUUID()}${crypto.randomUUID()}Aa1!`;
   const { data: authUser, error: authError } = await admin.auth.admin.createUser({
     email: parsed.data.email,
     password,

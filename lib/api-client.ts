@@ -34,7 +34,13 @@ export async function apiClient<T>(
 ): Promise<T> {
   const { retries = MAX_RETRIES, showErrorToast = true, ...fetchConfig } = config;
   
-  const url = endpoint.startsWith("/") ? endpoint : `/api/${endpoint}`;
+  // Normalise to exactly one "/api" prefix. Call sites are inconsistent — most
+  // pass "/kb/generate" or "sops", a few pass "/api/admin/users" — but every
+  // route lives under /api. Without this, leading-slash paths like "/kb/generate"
+  // were fetched verbatim and 404'd (or hit a page route), silently breaking
+  // most mutations across the app.
+  const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  const url = path === "/api" || path.startsWith("/api/") ? path : `/api${path}`;
   
   const defaultHeaders: HeadersInit = {
     "Content-Type": "application/json",

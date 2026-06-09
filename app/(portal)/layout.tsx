@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileSidebarTrigger } from "@/components/layout/MobileSidebarTrigger";
 import { createClient } from "@/lib/supabase/server";
 import { QueryProvider } from "@/components/providers/QueryProvider";
+import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 
 export default async function PortalLayout({
   children,
@@ -51,8 +52,15 @@ export default async function PortalLayout({
       {/* Mobile sidebar drawer */}
       <MobileSidebarTrigger user={ctx.user} client={ctx.client} />
       {/* Main content — pt accounts for mobile menu button */}
-      <main className="flex-1 overflow-auto pt-14 md:pt-0 px-4 py-6 md:p-8">
-        <div className="max-w-6xl mx-auto">
+      <main className="flex-1 overflow-auto pt-14 md:pt-0">
+        {ctx.impersonating && ctx.actualUser && (
+          <ImpersonationBanner
+            viewingName={ctx.user.full_name ?? ctx.user.email}
+            viewingRole={ctx.user.role}
+            adminEmail={ctx.actualUser.email}
+          />
+        )}
+        <div className="max-w-6xl mx-auto px-4 py-6 md:p-8">
           <QueryProvider>{children}</QueryProvider>
         </div>
       </main>
