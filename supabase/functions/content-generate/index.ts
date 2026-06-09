@@ -53,10 +53,10 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
 
-    if (!openaiKey) {
-      return new Response(JSON.stringify({ error: "OpenAI not configured." }), {
+    if (!openrouterKey) {
+      return new Response(JSON.stringify({ error: "OpenRouter not configured." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -180,14 +180,14 @@ ${TYPE_PROMPTS[contentType]}`;
     const userPrompt = `${context}\n=== CONTENT REQUEST ===\nType: ${contentType}\nTitle: ${title}\nBrief: ${brief}`;
 
     console.log(`✍️ Generating ${contentType} content...`);
-    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openaiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${openaiKey}`,
+        "Authorization": `Bearer ${openrouterKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "openai/gpt-4o-mini",
         max_tokens: 4000,
         messages: [
           { role: "system", content: systemPrompt },

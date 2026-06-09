@@ -72,10 +72,10 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
 
-    if (!openaiKey) {
-      return new Response(JSON.stringify({ error: "OpenAI not configured." }), {
+    if (!openrouterKey) {
+      return new Response(JSON.stringify({ error: "OpenRouter not configured." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -268,14 +268,14 @@ Deno.serve(async (req: Request) => {
 
     // ── OpenAI generation ─────────────────────────────────────────────────────
     console.log("🤖 Generating KB entries...");
-    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openaiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${openaiKey}`,
+        "Authorization": `Bearer ${openrouterKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "openai/gpt-4o-mini",
         response_format: { type: "json_object" },
         max_tokens: 12000,
         temperature: 0.3,

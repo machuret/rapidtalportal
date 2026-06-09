@@ -14,8 +14,9 @@
  * DB Writes: vault_items (category, tags, ai_summary, status, error_message, updated_at)
  *
  * Auth:    Bearer JWT → getUser() → DB user row → client membership check
- * Secrets: OPENAI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
- * Timeout: ~15s (OpenAI gpt-4o-mini only — no Firecrawl)
+ * Secrets: OPENROUTER_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
+ * AI:      summary via OpenRouter (openai/gpt-4o-mini); embeddings via Supabase
+ *          built-in gte-small (384-dim, no key). DB Writes also: vault_chunks.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -87,37 +88,34 @@ function chunkText(text: string, maxLen = 1200, overlap = 150, maxChunks = 60): 
  * AI summary/category are the primary result and must not be blocked by this.
  */
 // deno-lint-ignore no-explicit-any
-async function embedAndStoreChunks(admin: any, openaiKey: string, itemId: string, clientId: string, rawContent: string): Promise<number> {
+async function embedAndStoreChunks(admin: any, itemId: string, clientId: string, rawContent: string): Promise<number> {
   // Clear stale chunks regardless of outcome below.
   await admin.from("vault_chunks").delete().eq("item_id", itemId);
 
   const chunks = chunkText(rawContent);
   if (!chunks.length) return 0;
 
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
-    body: JSON.stringify({ model: "text-embedding-3-small", input: chunks }),
-  });
+  // Supabase's built-in gte-small model (384-dim) — runs in the Edge Runtime
+  // with no API key. Embeds one chunk at a time.
+  // @ts-expect-error Supabase.ai is provided by the Supabase Edge Runtime
+  const session = new Supabase.ai.Session("gte-small");
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "unknown");
-    console.warn(`⚠️ vault-process: embeddings failed for ${itemId}: ${res.status} ${errText}`);
-    return 0;
+  const rows: Record<string, unknown>[] = [];
+  for (let i = 0; i < chunks.length; i++) {
+    try {
+      const emb = (await session.run(chunks[i], { mean_pool: true, normalize: true })) as number[];
+      rows.push({
+        item_id: itemId,
+        client_id: clientId,
+        chunk_index: i,
+        content: chunks[i],
+        // pgvector expects the text form "[1,2,3]"; stringify the array.
+        embedding: JSON.stringify(emb),
+      });
+    } catch (e) {
+      console.warn(`⚠️ vault-process: embedding chunk ${i} failed for ${itemId}:`, e);
+    }
   }
-
-  const json = await res.json();
-  const data: { embedding: number[] }[] = json.data ?? [];
-  const rows = data.map((d, i) => ({
-    item_id: itemId,
-    client_id: clientId,
-    chunk_index: i,
-    content: chunks[i],
-    // pgvector expects the text form "[1,2,3]". Passing a raw JS array makes
-    // PostgREST serialise it as a Postgres array "{1,2,3}", which pgvector
-    // rejects — so the insert silently fails. Stringify to the vector literal.
-    embedding: JSON.stringify(d.embedding),
-  }));
   if (!rows.length) return 0;
 
   const { error } = await admin.from("vault_chunks").insert(rows);
@@ -247,9 +245,9 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Env check ─────────────────────────────────────────────────────────────
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!openaiKey) {
-      return new Response(JSON.stringify({ error: "OpenAI not configured." }), {
+    const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
+    if (!openrouterKey) {
+      return new Response(JSON.stringify({ error: "OpenRouter not configured." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -263,14 +261,16 @@ Deno.serve(async (req: Request) => {
 
     // ── OpenAI extraction ─────────────────────────────────────────────────────
     console.log(`🤖 vault-process: analysing item ${itemId}`);
-    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openaiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${openaiKey}`,
+        "Authorization": `Bearer ${openrouterKey}`,
+        "HTTP-Referer": "https://rapidtalportal.vercel.app",
+        "X-Title": "RapidTal Portal",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "openai/gpt-4o-mini",
         response_format: { type: "json_object" },
         max_tokens: 500, // Summary + category + tags only — keep cost low
         temperature: 0.1, // Low temp = consistent categorisation
@@ -348,7 +348,7 @@ Deno.serve(async (req: Request) => {
     // fail the request — the summary/category are already saved above.
     let chunksStored = 0;
     try {
-      chunksStored = await embedAndStoreChunks(admin, openaiKey, itemId, clientId, rawContent);
+      chunksStored = await embedAndStoreChunks(admin, itemId, clientId, rawContent);
       console.log(`🧠 vault-process: stored ${chunksStored} embedding chunks for ${itemId}`);
     } catch (embErr) {
       console.warn(`⚠️ vault-process: embedding step errored for ${itemId}:`, embErr);

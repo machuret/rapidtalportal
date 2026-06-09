@@ -121,11 +121,11 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Env checks ────────────────────────────────────────────────────────────
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
     const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
 
-    if (!openaiKey) {
-      return new Response(JSON.stringify({ error: "OpenAI not configured." }), {
+    if (!openrouterKey) {
+      return new Response(JSON.stringify({ error: "OpenRouter not configured." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -169,14 +169,14 @@ Deno.serve(async (req: Request) => {
 
     // ── Step 2: OpenAI extraction ─────────────────────────────────────────────
     console.log("🤖 Calling OpenAI...");
-    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openaiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${openaiKey}`,
+        "Authorization": `Bearer ${openrouterKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "openai/gpt-4o-mini",
         response_format: { type: "json_object" },
         max_tokens: 2000,
         temperature: 0.1,

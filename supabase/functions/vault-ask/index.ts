@@ -2,9 +2,9 @@
  * vault-ask — Retrieval-augmented Q&A over a client's Vault ("Ask the Vault")
  *
  * Flow:
- *   1. Embed the user's question (text-embedding-3-small).
+ *   1. Embed the user's question (Supabase gte-small, 384-dim).
  *   2. Retrieve the most similar vault_chunks for the client (match_vault_chunks RPC).
- *   3. Answer with gpt-4o-mini, grounded ONLY in the retrieved chunks, with citations.
+ *   3. Answer via OpenRouter (openai/gpt-4o-mini), grounded ONLY in retrieved chunks, with citations.
  *
  * Called by: /api/vault/ask (proxied with the end-user's JWT).
  *
@@ -12,7 +12,7 @@
  * DB Writes: none
  *
  * Auth:    Bearer JWT → getUser() → DB user row → client membership check
- * Secrets: OPENAI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
+ * Secrets: OPENROUTER_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -52,8 +52,8 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!openaiKey) return json({ error: "OpenAI not configured." }, 500);
+    const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
+    if (!openrouterKey) return json({ error: "OpenRouter not configured." }, 500);
 
     const admin = createClient(supabaseUrl, serviceKey);
 
@@ -86,18 +86,16 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Forbidden." }, 403);
     }
 
-    // ── 1. Embed the question ───────────────────────────────────────────────────
-    const embRes = await fetch("https://api.openai.com/v1/embeddings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
-      body: JSON.stringify({ model: "text-embedding-3-small", input: question }),
-    });
-    if (!embRes.ok) {
-      const e = await embRes.text().catch(() => "unknown");
-      return json({ error: `Embedding failed: ${e}` }, 500);
+    // ── 1. Embed the question (Supabase gte-small, 384-dim — must match the
+    //       model used to embed chunks in vault-process) ─────────────────────────
+    let queryEmbedding: number[] = [];
+    try {
+      // @ts-expect-error Supabase.ai is provided by the Supabase Edge Runtime
+      const session = new Supabase.ai.Session("gte-small");
+      queryEmbedding = (await session.run(question, { mean_pool: true, normalize: true })) as number[];
+    } catch (e) {
+      return json({ error: `Embedding failed: ${e instanceof Error ? e.message : e}` }, 500);
     }
-    const embJson = await embRes.json();
-    const queryEmbedding: number[] = embJson.data?.[0]?.embedding ?? [];
     if (!queryEmbedding.length) return json({ error: "Could not embed question." }, 500);
 
     // ── 2. Retrieve similar chunks ──────────────────────────────────────────────
@@ -148,11 +146,16 @@ Deno.serve(async (req: Request) => {
       context += `[${n}] ${title}\n${c.content.trim()}\n\n`;
     }
 
-    const chatRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const chatRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openaiKey}` },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${openrouterKey}`,
+        "HTTP-Referer": "https://rapidtalportal.vercel.app",
+        "X-Title": "RapidTal Portal",
+      },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "openai/gpt-4o-mini",
         max_tokens: 700,
         temperature: 0.2,
         messages: [
