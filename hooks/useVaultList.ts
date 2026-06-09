@@ -1,6 +1,8 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { createClient } from "@/lib/supabase/client";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import type { DbVaultItem } from "@/types/database";
@@ -16,33 +18,40 @@ interface VaultPage {
   items: DbVaultItem[];
   page: number;
   nextPage: number | null;
-  counts: VaultCounts;
+  counts: VaultCounts | null;
 }
 
 export interface VaultListFilters {
   q?: string;
   category?: string; // VaultCategory | "all"
+  type?: string;     // source_type | "all"
   status?: string;
 }
 
+const EMPTY_COUNTS: VaultCounts = { total: 0, ready: 0, processing: 0, error: 0 };
+
+/** Query-key prefix — invalidate this to refresh the list across all filters. */
+export const vaultListKeys = {
+  all: (clientId: string) => ["vault-list", clientId] as const,
+};
+
 /**
  * Server-side, paginated + searchable Vault list (scales per-tenant).
- * Pairs with GET /api/vault/items + the FTS index (020_vault_search.sql).
- *
- * This is the scalable replacement for useVault's "load 100 + filter in memory"
- * query. Wiring VaultClient over to it (incl. reconciling Realtime with paging)
- * is the remaining step.
+ * Owns the list query, Realtime invalidation, and the delete/reprocess
+ * mutations. Pairs with GET /api/vault/items + FTS index (020_vault_search.sql).
  */
 export function useVaultList(clientId: string, filters: VaultListFilters = {}) {
-  const { q = "", category = "all", status } = filters;
+  const queryClient = useQueryClient();
+  const { q = "", category = "all", type = "all", status } = filters;
 
   const query = useInfiniteQuery({
-    queryKey: ["vault-list", clientId, { q, category, status }],
+    queryKey: [...vaultListKeys.all(clientId), { q, category, type, status }],
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ clientId, page: String(pageParam) });
       if (q) params.set("q", q);
       if (category && category !== "all") params.set("category", category);
+      if (type && type !== "all") params.set("type", type);
       if (status) params.set("status", status);
       return api.get<VaultPage>(`${ROUTES.vault.items()}?${params.toString()}`);
     },
@@ -50,16 +59,50 @@ export function useVaultList(clientId: string, filters: VaultListFilters = {}) {
     staleTime: 30 * 1000,
   });
 
+  // ── Realtime — invalidate (refetch) on any change to this client's items ────
+  const supabaseRef = useRef(createClient());
+  useEffect(() => {
+    const supabase = supabaseRef.current;
+    const channel = supabase
+      .channel(`vault-list:${clientId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "vault_items", filter: `client_id=eq.${clientId}` },
+        () => { queryClient.invalidateQueries({ queryKey: vaultListKeys.all(clientId) }); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [clientId, queryClient]);
+
+  // ── Mutations — invalidate the list on settle ───────────────────────────────
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: vaultListKeys.all(clientId) });
+
+  const deleteMutation = useMutation({
+    mutationFn: (input: { itemIds: string[]; clientId: string }) =>
+      api.post<{ deleted?: number }>(ROUTES.vault.delete(), input),
+    onSettled: invalidate,
+  });
+
+  const reprocessMutation = useMutation({
+    mutationFn: (input: { id: string; clientId: string }) =>
+      api.post(ROUTES.vault.reprocess(input.id), { clientId: input.clientId }),
+    onSettled: invalidate,
+  });
+
   const items = query.data?.pages.flatMap((p) => p.items) ?? [];
-  const counts = query.data?.pages[0]?.counts ?? { total: 0, ready: 0, processing: 0, error: 0 };
+  const counts = query.data?.pages[0]?.counts ?? EMPTY_COUNTS;
 
   return {
     items,
     counts,
     isLoading: query.isLoading,
     isFetchingNextPage: query.isFetchingNextPage,
-    hasNextPage: query.hasNextPage,
+    hasNextPage: !!query.hasNextPage,
     fetchNextPage: query.fetchNextPage,
     refetch: query.refetch,
+
+    deleteItems: deleteMutation.mutateAsync,
+    isDeleting: deleteMutation.isPending,
+    reprocessItem: reprocessMutation.mutateAsync,
   };
 }

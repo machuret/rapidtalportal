@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useCallback } from "react";
 import type { DbVaultItem, VaultCategory } from "@/types/database";
 import { toast } from "sonner";
 import {
@@ -13,23 +12,23 @@ import { cn } from "@/lib/utils";
 import { VaultItemDrawer } from "./VaultItemDrawer";
 import { AddVaultItem } from "./AddVaultItem";
 import { VaultItemRow } from "./VaultItemRow";
-import { useVault, vaultKeys } from "@/hooks/useVault";
+import { useVaultList } from "@/hooks/useVaultList";
 import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
 
-const TYPE_FILTERS = [
-  { value: "all" as const, label: "All Types" },
-  { value: "text" as const, label: "Text" },
-  { value: "url" as const, label: "URL" },
-  { value: "pdf" as const, label: "PDF" },
-  { value: "docx" as const, label: "DOCX" },
+type TypeFilter = "all" | "text" | "url" | "pdf" | "docx";
+
+const TYPE_FILTERS: { value: TypeFilter; label: string }[] = [
+  { value: "all", label: "All Types" },
+  { value: "text", label: "Text" },
+  { value: "url", label: "URL" },
+  { value: "pdf", label: "PDF" },
+  { value: "docx", label: "DOCX" },
 ];
 
 const CATEGORY_FILTERS: { value: VaultCategory | "all"; label: string }[] = [
   { value: "all", label: "All Categories" },
   ...VAULT_CATEGORY_KEYS.map((k) => ({ value: k, label: VAULT_CATEGORIES[k].shortLabel })),
 ];
-
-// ── Props ────────────────────────────────────────────────────────────────────
 
 interface VaultClientProps {
   clientId: string;
@@ -38,57 +37,43 @@ interface VaultClientProps {
   canWrite: boolean; // client_admin or super_admin
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
 // The portal layout provides a global QueryClientProvider, so this just renders.
-
 export function VaultClient(props: VaultClientProps) {
   return <VaultClientInner {...props} />;
 }
 
 function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps) {
-  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<VaultCategory | "all">("all");
+
+  // Debounce the search box so we don't fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const {
     items,
-    isLoading: loading,
+    counts,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
     deleteItems,
     isDeleting: bulkDeleting,
     reprocessItem,
-  } = useVault(clientId);
+  } = useVaultList(clientId, { q: debouncedSearch, category: categoryFilter, type: typeFilter });
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<DbVaultItem | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  // Tracks which single item is currently being re-processed (per-row spinner).
   const [reprocessing, setReprocessing] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "text" | "url" | "pdf" | "docx">("all");
-  const [categoryFilter, setCategoryFilter] = useState<VaultCategory | "all">("all");
 
-  // ── Filtering ─────────────────────────────────────────────────────────────
-  const filtered = useMemo(() => items.filter(item => {
-    if (typeFilter !== "all" && item.source_type !== typeFilter) return false;
-    if (categoryFilter !== "all" && item.category !== categoryFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      const matchTitle   = item.title.toLowerCase().includes(q);
-      const matchTags    = item.tags?.some(t => t.toLowerCase().includes(q));
-      const matchSummary = item.ai_summary?.toLowerCase().includes(q);
-      if (!matchTitle && !matchTags && !matchSummary) return false;
-    }
-    return true;
-  }), [items, typeFilter, categoryFilter, search]);
+  const hasFilters = debouncedSearch !== "" || typeFilter !== "all" || categoryFilter !== "all";
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
-  const stats = useMemo(() => ({
-    total:      items.length,
-    ready:      items.filter(i => i.status === "ready").length,
-    processing: items.filter(i => i.status === "processing" || i.status === "pending").length,
-    error:      items.filter(i => i.status === "error").length,
-  }), [items]);
-
-  // ── Single delete (via vault-delete edge fn) ──────────────────────────────
-  // The Realtime DELETE subscription patches the query cache (list removal),
-  // so we only own UI side-effects (collapse + selection cleanup) here.
+  // ── Delete (single) ─────────────────────────────────────────────────────────
   const handleDelete = useCallback(async (id: string, title: string) => {
     if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
     try {
@@ -129,7 +114,6 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
     }
   }, [clientId, reprocessItem]);
 
-  // ── Callbacks ─────────────────────────────────────────────────────────────
   function toggleSelect(id: string) {
     setSelected(prev => {
       const n = new Set(prev);
@@ -139,15 +123,11 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
   }
 
   function toggleSelectAll() {
-    if (selected.size === filtered.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(filtered.map(i => i.id)));
-    }
+    if (selected.size === items.length) setSelected(new Set());
+    else setSelected(new Set(items.map(i => i.id)));
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
@@ -155,9 +135,11 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
     );
   }
 
+  const isEmptyVault = counts.total === 0 && !hasFilters;
+
   return (
     <div className="max-w-5xl">
-      {/* Header + stats */}
+      {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Vault</h1>
@@ -165,7 +147,7 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
             Document and content store — the source of truth for AI-generated knowledge.
           </p>
         </div>
-        {items.length > 0 && (
+        {counts.total > 0 && (
           <div className="hidden md:flex items-center gap-1.5 text-xs text-zinc-500">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             Live
@@ -174,13 +156,13 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
       </div>
 
       {/* Stats strip */}
-      {items.length > 0 && (
+      {counts.total > 0 && (
         <div className="grid grid-cols-4 gap-3 mb-6">
           {[
-            { label: "Total Items", value: stats.total,      color: "text-zinc-100" },
-            { label: "Ready",       value: stats.ready,      color: "text-green-400" },
-            { label: "Processing",  value: stats.processing, color: "text-blue-400" },
-            { label: "Errors",      value: stats.error,      color: "text-red-400" },
+            { label: "Total Items", value: counts.total,      color: "text-zinc-100" },
+            { label: "Ready",       value: counts.ready,      color: "text-green-400" },
+            { label: "Processing",  value: counts.processing, color: "text-blue-400" },
+            { label: "Errors",      value: counts.error,      color: "text-red-400" },
           ].map(s => (
             <div key={s.label} className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
               <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -190,13 +172,13 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
         </div>
       )}
 
-      {/* Add item panel — VAs and client_admin can add. onAdded omitted: Realtime handles list updates. */}
+      {/* Add item — VAs and client_admin can add. Realtime invalidation refreshes the list. */}
       {(canWrite || role === "va") && (
         <AddVaultItem clientId={clientId} userId={userId} />
       )}
 
       {/* Search + filter toolbar */}
-      {items.length > 0 && (
+      {!isEmptyVault && (
         <div className="flex flex-col gap-3 mb-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
@@ -208,7 +190,6 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
             />
           </div>
           <div className="flex gap-2 flex-wrap">
-            {/* Type filter */}
             <div className="flex gap-1">
               {TYPE_FILTERS.map(f => (
                 <button
@@ -223,7 +204,6 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
                 >{f.label}</button>
               ))}
             </div>
-            {/* Category filter */}
             <div className="flex gap-1 flex-wrap">
               {CATEGORY_FILTERS.map(f => (
                 <button
@@ -250,13 +230,7 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
             <X className="w-3.5 h-3.5" />
           </button>
           <div className="flex-1" />
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={handleBulkDelete}
-            disabled={bulkDeleting}
-            className="gap-1.5 h-7 text-xs"
-          >
+          <Button size="sm" variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting} className="gap-1.5 h-7 text-xs">
             {bulkDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
             Delete {selected.size} item{selected.size !== 1 ? "s" : ""}
           </Button>
@@ -264,26 +238,21 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
       )}
 
       {/* Results count */}
-      {items.length > 0 && (
+      {!isEmptyVault && items.length > 0 && (
         <div className="flex items-center gap-3 mb-2">
-          {canWrite && filtered.length > 0 && (
+          {canWrite && (
             <button onClick={toggleSelectAll} className="text-zinc-500 hover:text-zinc-300 transition-colors">
-              {selected.size === filtered.length && filtered.length > 0
-                ? <CheckSquare className="w-4 h-4" />
-                : <Square className="w-4 h-4" />
-              }
+              {selected.size === items.length ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
             </button>
           )}
           <p className="text-xs text-zinc-600">
-            {filtered.length === items.length
-              ? `${items.length} item${items.length !== 1 ? "s" : ""}`
-              : `${filtered.length} of ${items.length} items`}
+            Showing {items.length}{hasNextPage ? "+" : ""}{hasFilters ? "" : ` of ${counts.total}`} item{items.length !== 1 ? "s" : ""}
           </p>
         </div>
       )}
 
-      {/* Item list */}
-      {items.length === 0 ? (
+      {/* List */}
+      {isEmptyVault ? (
         <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-16 text-center">
           <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center mx-auto mb-4">
             <FileText className="w-7 h-7 text-zinc-600" />
@@ -291,45 +260,49 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
           <p className="text-zinc-300 font-semibold text-lg mb-1">Your Vault is empty</p>
           <p className="text-zinc-500 text-sm">Add a document, URL, or text above to get started.</p>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-10 text-center">
           <p className="text-zinc-400 text-sm">No items match your search or filters.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          {filtered.map(item => (
-            <VaultItemRow
-              key={item.id}
-              item={item}
-              userId={userId}
-              canWrite={canWrite}
-              isExpanded={expanded === item.id}
-              isSelected={selected.has(item.id)}
-              reprocessing={reprocessing === item.id}
-              onToggleExpand={() => setExpanded(expanded === item.id ? null : item.id)}
-              onToggleSelect={() => toggleSelect(item.id)}
-              onEdit={() => setEditItem(item)}
-              onDelete={() => handleDelete(item.id, item.title)}
-              onReprocess={() => handleReprocess(item.id)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="flex flex-col gap-2">
+            {items.map(item => (
+              <VaultItemRow
+                key={item.id}
+                item={item}
+                userId={userId}
+                canWrite={canWrite}
+                isExpanded={expanded === item.id}
+                isSelected={selected.has(item.id)}
+                reprocessing={reprocessing === item.id}
+                onToggleExpand={() => setExpanded(expanded === item.id ? null : item.id)}
+                onToggleSelect={() => toggleSelect(item.id)}
+                onEdit={() => setEditItem(item)}
+                onDelete={() => handleDelete(item.id, item.title)}
+                onReprocess={() => handleReprocess(item.id)}
+              />
+            ))}
+          </div>
+
+          {hasNextPage && (
+            <div className="flex justify-center mt-4">
+              <Button variant="outline" size="sm" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="gap-1.5 border-zinc-700">
+                {isFetchingNextPage && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Load more
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Edit drawer */}
+      {/* Edit drawer — VaultItemDrawer invalidates the list on save. */}
       {editItem && (
         <VaultItemDrawer
           item={editItem}
           clientId={clientId}
           onClose={() => setEditItem(null)}
-          onSaved={(updated) => {
-            // Patch the shared vault query cache (Realtime also reconciles the
-            // AI metadata once vault-process completes).
-            qc.setQueryData<DbVaultItem[]>(vaultKeys.byClient(clientId), (prev = []) =>
-              prev.map(i => i.id === updated.id ? updated : i)
-            );
-            setEditItem(null);
-          }}
+          onSaved={() => setEditItem(null)}
         />
       )}
     </div>

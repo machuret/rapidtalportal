@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
-import { vaultKeys } from "@/hooks/useVault";
+import { ROUTES } from "@/lib/api/routes";
+import { vaultListKeys } from "@/hooks/useVaultList";
 import { Upload, Globe, Type, CloudUpload, FileText, X, Plus, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 
 interface AddVaultItemProps {
@@ -85,8 +86,8 @@ export function AddVaultItem({ clientId, userId, onAdded }: AddVaultItemProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function done() {
-    // Reconcile the shared vault list (Realtime also patches it live).
-    queryClient.invalidateQueries({ queryKey: vaultKeys.byClient(clientId) });
+    // Reconcile the shared vault list (Realtime also invalidates it live).
+    queryClient.invalidateQueries({ queryKey: vaultListKeys.all(clientId) });
     if (onAdded) {
       onAdded(); // Realtime handles the update in VaultClient
     } else {
@@ -101,7 +102,7 @@ export function AddVaultItem({ clientId, userId, onAdded }: AddVaultItemProps) {
   // ── Add text (JSON endpoint via api client) ───────────────────────────────
   const textMutation = useMutation({
     mutationFn: () =>
-      api.post("/vault/text", { title: textTitle, content: textContent, clientId, userId, category, tags: parsedTags() }, { showErrorToast: false }),
+      api.post(ROUTES.vault.text(), { title: textTitle, content: textContent, clientId, userId, category, tags: parsedTags() }, { showErrorToast: false }),
     onSuccess: () => {
       toast.success("Text added to Vault. AI processing…");
       setTextTitle(""); setTextContent(""); setOpen(false); done();
@@ -114,7 +115,7 @@ export function AddVaultItem({ clientId, userId, onAdded }: AddVaultItemProps) {
   // ── Add URL / standard crawl (JSON endpoint via api client) ───────────────
   const urlMutation = useMutation({
     mutationFn: () =>
-      api.post("/vault/url", { title: urlTitle, url: urlValue, clientId, userId, category, tags: parsedTags() }, { showErrorToast: false }),
+      api.post(ROUTES.vault.url(), { title: urlTitle, url: urlValue, clientId, userId, category, tags: parsedTags() }, { showErrorToast: false }),
     onSuccess: () => {
       toast.success("URL queued for crawl.");
       setUrlTitle(""); setUrlValue(""); setOpen(false); done();
@@ -127,7 +128,7 @@ export function AddVaultItem({ clientId, userId, onAdded }: AddVaultItemProps) {
   // ── AI crawl (JSON endpoint via api client) ───────────────────────────────
   const crawlMutation = useMutation({
     mutationFn: () =>
-      api.post<{ tokensUsed: number }>("/vault/crawl", {
+      api.post<{ tokensUsed: number }>(ROUTES.vault.crawl(), {
         url: urlValue.trim(),
         title: urlTitle.trim() || undefined,
         clientId,

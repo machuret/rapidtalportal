@@ -30,6 +30,7 @@ export const GET = withAuth(async (req, { user }) => {
 
   const q = url.searchParams.get("q")?.trim() ?? "";
   const category = url.searchParams.get("category");
+  const type = url.searchParams.get("type"); // source_type
   const status = url.searchParams.get("status");
   const page = Math.max(0, Number(url.searchParams.get("page")) || 0);
   const limit = Math.min(MAX_LIMIT, Math.max(1, Number(url.searchParams.get("limit")) || DEFAULT_LIMIT));
@@ -38,6 +39,7 @@ export const GET = withAuth(async (req, { user }) => {
 
   let query = admin.from("vault_items").select(COLS).eq("client_id", clientId);
   if (category && isVaultCategory(category)) query = query.eq("category", category);
+  if (type) query = query.eq("source_type", type);
   if (status) query = query.eq("status", status);
   if (q) query = query.textSearch("fts", q, { type: "websearch", config: "english" });
 
@@ -52,21 +54,26 @@ export const GET = withAuth(async (req, { user }) => {
 
   const items = data ?? [];
 
-  // Status counts for the stats strip (fast via the (client_id, status) index).
-  const countFor = async (s?: string) => {
-    let cq = admin.from("vault_items").select("id", { count: "exact", head: true }).eq("client_id", clientId);
-    if (s) cq = cq.eq("status", s);
-    const { count } = await cq;
-    return count ?? 0;
-  };
-  const [total, ready, processing, pending, errored] = await Promise.all([
-    countFor(), countFor("ready"), countFor("processing"), countFor("pending"), countFor("error"),
-  ]);
+  // Status counts (overall vault health) — only needed once, on the first page.
+  // Fast via the (client_id, status) index. Skipped on subsequent pages.
+  let counts: { total: number; ready: number; processing: number; error: number } | null = null;
+  if (page === 0) {
+    const countFor = async (s?: string) => {
+      let cq = admin.from("vault_items").select("id", { count: "exact", head: true }).eq("client_id", clientId);
+      if (s) cq = cq.eq("status", s);
+      const { count } = await cq;
+      return count ?? 0;
+    };
+    const [total, ready, processing, pending, errored] = await Promise.all([
+      countFor(), countFor("ready"), countFor("processing"), countFor("pending"), countFor("error"),
+    ]);
+    counts = { total, ready, processing: processing + pending, error: errored };
+  }
 
   return NextResponse.json({
     items,
     page,
     nextPage: items.length === limit ? page + 1 : null,
-    counts: { total, ready, processing: processing + pending, error: errored },
+    counts,
   });
 });

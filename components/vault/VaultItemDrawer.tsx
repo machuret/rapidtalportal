@@ -10,17 +10,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
-import { vaultKeys } from "@/hooks/useVault";
+import { ROUTES } from "@/lib/api/routes";
+import { vaultListKeys } from "@/hooks/useVaultList";
+import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
 import { cn } from "@/lib/utils";
 
-const CATEGORIES: { value: VaultCategory; label: string; color: string }[] = [
-  { value: "process",   label: "Process",   color: "bg-blue-500/15 text-blue-400 border-blue-500/25" },
-  { value: "policy",    label: "Policy",    color: "bg-amber-500/15 text-amber-400 border-amber-500/25" },
-  { value: "service",   label: "Service",   color: "bg-green-500/15 text-green-400 border-green-500/25" },
-  { value: "contact",   label: "Contact",   color: "bg-purple-500/15 text-purple-400 border-purple-500/25" },
-  { value: "reference", label: "Reference", color: "bg-cyan-500/15 text-cyan-400 border-cyan-500/25" },
-  { value: "general",   label: "General",   color: "bg-zinc-500/15 text-zinc-400 border-zinc-500/25" },
-];
+const CATEGORIES: { value: VaultCategory; label: string; color: string }[] =
+  VAULT_CATEGORY_KEYS.map((value) => ({
+    value,
+    label: VAULT_CATEGORIES[value].shortLabel,
+    color: VAULT_CATEGORIES[value].badgeClass,
+  }));
 
 interface VaultItemDrawerProps {
   item: DbVaultItem;
@@ -44,7 +44,7 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
   // also guards against double-submit (replaces the previous savingRef guard).
   const saveMutation = useMutation({
     mutationFn: () =>
-      api.patch(`/vault/${item.id}`, {
+      api.patch(ROUTES.vault.item(item.id), {
         clientId,
         title: title.trim(),
         raw_content: content.trim() || undefined,
@@ -61,7 +61,7 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
       toast.error(e instanceof Error ? e.message : "Save failed.");
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: vaultKeys.byClient(clientId) });
+      queryClient.invalidateQueries({ queryKey: vaultListKeys.all(clientId) });
     },
   });
 
