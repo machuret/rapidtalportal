@@ -44,28 +44,16 @@ const nextConfig = {
     ];
   },
   
-  // Webpack optimizations
-  webpack: (config, { dev, isServer }) => {
+  // Webpack tweaks. NOTE: do not override optimization.splitChunks here — a
+  // previous "vendors" override merged ALL of node_modules into one 442 kB
+  // chunk every page had to download (recharts shipped to pages that never
+  // chart). Next's default granular chunking splits per page.
+  webpack: (config) => {
     // canvas is an optional native dep of pdfjs-dist — not needed in serverless
     config.resolve.alias = {
       ...config.resolve.alias,
       canvas: false,
     };
-
-    // Optimize bundle size
-    if (!dev && !isServer) {
-      config.optimization.splitChunks = {
-        chunks: 'all',
-        cacheGroups: {
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendors',
-            chunks: 'all',
-          },
-        },
-      };
-    }
-    
     return config;
   },
   

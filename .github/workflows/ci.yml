@@ -35,3 +35,13 @@ jobs:
 
       - name: Test
         run: pnpm run test
+
+      # Full production build — catches what tsc/lint can't (bad imports in
+      # server/client boundaries, config errors, route conflicts). Placeholder
+      # env is enough: every page is force-dynamic, so nothing prerenders.
+      - name: Build
+        run: pnpm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+          SUPABASE_SERVICE_ROLE_KEY: placeholder
