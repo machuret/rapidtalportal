@@ -9,6 +9,8 @@
 export const ROUTES = {
   admin: {
     users: () => "/api/admin/users",
+    usersSuspend: () => "/api/admin/users/suspend",
+    usersLoginLink: () => "/api/admin/users/login-link",
     client: (id: string) => `/api/admin/clients/${id}`,
     impersonate: () => "/api/admin/impersonate",
   },

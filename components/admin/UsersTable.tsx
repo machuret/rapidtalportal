@@ -9,8 +9,12 @@ import {
   Search,
   RefreshCw,
   LogIn,
+  Ban,
+  Link2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import { Input } from "@/components/ui/input";
 import { useUsers, type AdminUserRow } from "@/hooks/useUsers";
 import { ROLES, ROLE_OPTIONS, type UserRole } from "@/lib/taxonomy/roles";
@@ -28,6 +32,8 @@ interface UsersTableProps {
   users: UserRow[];
   clients: ClientOption[];
   currentUserId: string;
+  lastActive: Record<string, string | null>;
+  suspendedInit: Record<string, boolean>;
 }
 
 /* ── Main component ───────────────────────────────────────────────── */
@@ -35,6 +41,8 @@ export function UsersTable({
   users: initialUsers,
   clients,
   currentUserId,
+  lastActive,
+  suspendedInit,
 }: UsersTableProps) {
   const {
     users,
@@ -143,6 +151,44 @@ export function UsersTable({
     [deleteUser]
   );
 
+  /* ── Suspend / reinstate ───────────────────────────────────── */
+  const [suspended, setSuspended] = useState<Record<string, boolean>>(suspendedInit);
+  const [suspendBusy, setSuspendBusy] = useState<string | null>(null);
+  const toggleSuspend = useCallback(async (u: UserRow) => {
+    const next = !suspended[u.id];
+    const verb = next ? "Suspend" : "Reinstate";
+    if (!confirm(`${verb} ${u.full_name ?? u.email}? ${next ? "They won't be able to sign in until reinstated. Their data is kept." : "They'll be able to sign in again."}`)) return;
+    setSuspendBusy(u.id);
+    try {
+      await api.post(ROUTES.admin.usersSuspend(), { id: u.id, suspend: next });
+      setSuspended((p) => ({ ...p, [u.id]: next }));
+      toast.success(next ? "User suspended." : "User reinstated.");
+    } catch { /* api-client toasts */ } finally {
+      setSuspendBusy(null);
+    }
+  }, [suspended]);
+
+  /* ── One-time login link ───────────────────────────────────── */
+  const [linkBusy, setLinkBusy] = useState<string | null>(null);
+  const copyLoginLink = useCallback(async (u: UserRow) => {
+    setLinkBusy(u.id);
+    try {
+      const { link } = await api.post<{ link: string }>(ROUTES.admin.usersLoginLink(), { id: u.id });
+      await navigator.clipboard.writeText(link);
+      toast.success("One-time login link copied — send it to the user; it signs them straight in.");
+    } catch { /* api-client toasts */ } finally {
+      setLinkBusy(null);
+    }
+  }, []);
+
+  const relTime = (iso: string | null | undefined) => {
+    if (!iso) return "never";
+    const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+    if (mins < 60) return `${Math.max(1, mins)}m ago`;
+    if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
+    return `${Math.floor(mins / 1440)}d ago`;
+  };
+
   /* ── Login as (impersonate) ────────────────────────────────── */
   const [impersonatingId, setImpersonatingId] = useState<string | null>(null);
   const handleImpersonate = useCallback(async (u: UserRow) => {
@@ -217,7 +263,7 @@ export function UsersTable({
                   Client
                 </th>
                 <th className="text-left px-4 py-3 text-zinc-400 font-medium">
-                  Joined
+                  Last active
                 </th>
                 <th className="text-right px-4 py-3 text-zinc-400 font-medium">
                   Actions
@@ -249,7 +295,14 @@ export function UsersTable({
                           className="h-7 text-sm bg-zinc-900 border-zinc-700"
                         />
                       ) : (
-                        u.email
+                        <span className="inline-flex items-center gap-2">
+                          {u.email}
+                          {suspended[u.id] && (
+                            <span className="text-[10px] font-semibold text-red-400 bg-red-500/10 rounded-full px-2 py-0.5">
+                              Suspended
+                            </span>
+                          )}
+                        </span>
                       )}
                     </td>
 
@@ -353,9 +406,9 @@ export function UsersTable({
                       )}
                     </td>
 
-                    {/* Joined */}
-                    <td className="px-4 py-3 text-zinc-500">
-                      {new Date(u.created_at).toLocaleDateString()}
+                    {/* Last active (joined date on hover) */}
+                    <td className="px-4 py-3 text-zinc-500" title={`Joined ${new Date(u.created_at).toLocaleDateString()}`}>
+                      {relTime(lastActive[u.id])}
                     </td>
 
                     {/* Actions */}
@@ -396,6 +449,28 @@ export function UsersTable({
                               ) : (
                                 <LogIn className="w-3.5 h-3.5" />
                               )}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => copyLoginLink(u)}
+                            disabled={linkBusy === u.id}
+                            title="Copy one-time login link (for onboarding — signs them straight in)"
+                            className="p-1.5 rounded-lg text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-40"
+                          >
+                            {linkBusy === u.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+                          </button>
+                          {u.id !== currentUserId && (
+                            <button
+                              onClick={() => toggleSuspend(u)}
+                              disabled={suspendBusy === u.id}
+                              title={suspended[u.id] ? "Reinstate user" : "Suspend user (keeps data, blocks sign-in)"}
+                              className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${
+                                suspended[u.id]
+                                  ? "text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                                  : "text-zinc-500 hover:text-amber-400 hover:bg-amber-500/10"
+                              }`}
+                            >
+                              {suspendBusy === u.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
                             </button>
                           )}
                           <button

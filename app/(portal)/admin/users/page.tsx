@@ -12,13 +12,23 @@ export default async function AdminUsersPage() {
   if (ctx.user.role !== "super_admin") redirect("/dashboard");
 
   const admin = createAdminClient();
-  const [{ data: users }, { data: clients }] = await Promise.all([
+  const [{ data: users }, { data: clients }, authList] = await Promise.all([
     admin
       .from("users")
       .select("id, email, full_name, role, client_id, created_at")
       .order("created_at", { ascending: false }),
     admin.from("clients").select("id, name").order("name"),
+    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
   ]);
+
+  // Auth metadata: last sign-in and ban (= suspended) status per user.
+  const lastActive: Record<string, string | null> = {};
+  const suspended: Record<string, boolean> = {};
+  for (const au of authList.data?.users ?? []) {
+    lastActive[au.id] = au.last_sign_in_at ?? null;
+    const bannedUntil = (au as { banned_until?: string }).banned_until;
+    suspended[au.id] = !!bannedUntil && new Date(bannedUntil) > new Date();
+  }
 
   return (
     <div>
@@ -40,6 +50,8 @@ export default async function AdminUsersPage() {
         }
         clients={(clients ?? []) as { id: string; name: string }[]}
         currentUserId={ctx.user.id}
+        lastActive={lastActive}
+        suspendedInit={suspended}
       />
     </div>
   );
