@@ -19,6 +19,7 @@ export const ROUTES = {
   vault: {
     items: () => "/api/vault/items",
     recap: () => "/api/vault/recap",
+    expand: () => "/api/vault/expand",
     unindexed: () => "/api/vault/unindexed",
     text: () => "/api/vault/text",
     url: () => "/api/vault/url",

@@ -15,6 +15,7 @@ import { VaultItemDrawer } from "./VaultItemDrawer";
 import { AddVaultItem } from "./AddVaultItem";
 import { CrawlJobPanel, type CrawlJob } from "./CrawlJobPanel";
 import { VaultRecap } from "./VaultRecap";
+import { VaultExpanded } from "./VaultExpanded";
 import { VaultItemRow } from "./VaultItemRow";
 import { useVaultList } from "@/hooks/useVaultList";
 import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
@@ -78,7 +79,7 @@ function VaultClientInner({
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [crawlJob, setCrawlJob] = useState<CrawlJob | null>(null);
-  const [view, setView] = useState<"items" | "recap">("items");
+  const [view, setView] = useState<"items" | "recap" | "expanded">("items");
   const [editItem, setEditItem] = useState<DbVaultItem | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reprocessing, setReprocessing] = useState<string | null>(null);
@@ -214,9 +215,9 @@ function VaultClientInner({
         </div>
       </div>
 
-      {/* View tabs: browse items vs. read the recap digest */}
+      {/* View tabs: browse items, read the recap digest, or the deep analysis */}
       <div className="flex items-center gap-1 mb-5 border-b border-zinc-800">
-        {([["items", "Items"], ["recap", "Recap"]] as const).map(([v, label]) => (
+        {([["items", "Items"], ["recap", "Recap"], ["expanded", "Expanded View"]] as const).map(([v, label]) => (
           <button
             key={v}
             onClick={() => setView(v)}
@@ -232,6 +233,8 @@ function VaultClientInner({
 
       {view === "recap" ? (
         <VaultRecap clientId={clientId} />
+      ) : view === "expanded" ? (
+        <VaultExpanded clientId={clientId} canWrite={canWrite} />
       ) : (
       <>
       {/* Stats strip */}

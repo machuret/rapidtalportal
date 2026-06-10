@@ -66,3 +66,7 @@ export const credentialRevealLimiter = new SlidingWindowLimiter(30, 5 * 60_000);
 // Starting a full-site crawl: each one consumes Firecrawl credits for up to
 // ~50 pages plus LLM synthesis. A handful per window is plenty.
 export const siteCrawlLimiter = new SlidingWindowLimiter(3, 15 * 60_000);
+
+// Deep "Expanded View" analysis: one frontier-model call over the whole
+// corpus. Generated on demand and rarely re-run, so a few per hour is ample.
+export const deepAnalysisLimiter = new SlidingWindowLimiter(6, 60 * 60_000);
