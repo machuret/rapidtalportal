@@ -39,6 +39,19 @@ const SELECT = "id, client_id, assigned_to, created_by, title, description, stat
 
 const isAdmin = (role: string) => role === "client_admin" || role === "super_admin";
 
+const STATUS_LABEL: Record<string, string> = {
+  todo: "To Do", in_progress: "In Progress", review: "Review", done: "Done",
+};
+
+/** Fire-and-forget activity trail entry ("moved to Review", …). */
+function logActivity(taskId: string, clientId: string, userId: string, body: string): void {
+  const admin = createAdminClient();
+  void admin
+    .from("task_events")
+    .insert({ task_id: taskId, client_id: clientId, user_id: userId, kind: "activity", body })
+    .then(({ error }) => { if (error) console.warn("[task activity]", error.message); });
+}
+
 export const POST = withAuth(async (req, { user }) => {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
@@ -68,6 +81,8 @@ export const POST = withAuth(async (req, { user }) => {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  logActivity((data as { id: string }).id, parsed.data.clientId, user.id, "created this task");
 
   // Tell the assignee they have a new card (unless they created it themselves).
   if (assignedTo && assignedTo !== user.id) {
@@ -127,6 +142,25 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const updated = data as { title: string; client_id: string };
+
+  // Activity trail — answers "who moved this?"
+  if (parsed.data.status !== undefined) {
+    logActivity(parsed.data.id, updated.client_id, user.id, `moved this to ${STATUS_LABEL[parsed.data.status] ?? parsed.data.status}`);
+  }
+  if (parsed.data.assignedTo !== undefined && parsed.data.assignedTo !== task.assigned_to) {
+    if (parsed.data.assignedTo) {
+      const { data: assignee } = await admin.from("users").select("full_name, email").eq("id", parsed.data.assignedTo).maybeSingle();
+      const who = (assignee as { full_name: string | null; email: string } | null);
+      logActivity(parsed.data.id, updated.client_id, user.id, `assigned this to ${who?.full_name ?? who?.email ?? "someone"}`);
+    } else {
+      logActivity(parsed.data.id, updated.client_id, user.id, "unassigned this task");
+    }
+  }
+  if (parsed.data.status === undefined && parsed.data.assignedTo === undefined
+      && (parsed.data.title !== undefined || parsed.data.description !== undefined || parsed.data.dueDate !== undefined)) {
+    logActivity(parsed.data.id, updated.client_id, user.id, "edited this task");
+  }
+
   // Reassigned to someone else → tell them.
   if (parsed.data.assignedTo && parsed.data.assignedTo !== task.assigned_to && parsed.data.assignedTo !== user.id) {
     void notify([parsed.data.assignedTo], {

@@ -238,6 +238,12 @@ export interface Database {
         Update: { id?: string; client_id?: string; created_by?: string | null; url?: string; status?: string; error?: string | null; firecrawl_id?: string | null; page_cap?: number; pages_total?: number; pages_done?: number; items_created?: number; products_seen?: number; pages_dropped?: number; tokens_used?: number; dossier_item_id?: string | null; meta?: Record<string, unknown>; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
+      task_events: {
+        Row: { id: string; task_id: string; client_id: string; user_id: string | null; kind: string; body: string; created_at: string };
+        Insert: { id?: string; task_id: string; client_id: string; user_id?: string | null; kind: string; body: string; created_at?: string };
+        Update: { id?: string; task_id?: string; client_id?: string; user_id?: string | null; kind?: string; body?: string; created_at?: string };
+        Relationships: NoRelationships;
+      };
       notifications: {
         Row: { id: string; user_id: string; client_id: string | null; type: string; title: string; body: string; href: string | null; read_at: string | null; created_at: string };
         Insert: { id?: string; user_id: string; client_id?: string | null; type: string; title: string; body?: string; href?: string | null; read_at?: string | null; created_at?: string };

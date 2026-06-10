@@ -55,6 +55,7 @@ export const ROUTES = {
     topicsGenerate: () => "/api/content/topics/generate",
   },
   tasks: () => "/api/tasks",
+  taskEvents: () => "/api/tasks/events",
   goldenQuestions: () => "/api/golden-questions",
   notifications: () => "/api/notifications",
   access: () => "/api/access",

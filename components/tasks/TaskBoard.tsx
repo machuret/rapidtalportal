@@ -13,7 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, CalendarDays, Loader2, Trash2, Save } from "lucide-react";
+import { Plus, CalendarDays, Loader2, Trash2, Save, MessageSquare } from "lucide-react";
+import { TaskActivity } from "./TaskActivity";
 
 export type TaskStatus = "todo" | "in_progress" | "review" | "done";
 
@@ -46,10 +47,12 @@ interface TaskBoardProps {
   userId: string;
   isAdmin: boolean; // client_admin or super_admin
   members: BoardMember[]; // assignable people (VAs + admins of the client)
+  commentCounts?: Record<string, number>;
 }
 
-export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members }: TaskBoardProps) {
+export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, commentCounts }: TaskBoardProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [counts, setCounts] = useState<Record<string, number>>(commentCounts ?? {});
   const [editing, setEditing] = useState<Task | null>(null);
   const [creatingIn, setCreatingIn] = useState<TaskStatus | null>(null);
   const [live, setLive] = useState(false);
@@ -172,8 +175,14 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members }: 
                       {t.description.trim() && (
                         <p className="text-xs text-zinc-500 mt-1 line-clamp-2 whitespace-pre-wrap">{t.description}</p>
                       )}
-                      {(name || t.due_date) && (
+                      {(name || t.due_date || (counts[t.id] ?? 0) > 0) && (
                         <div className="flex items-center gap-2 mt-2">
+                          {(counts[t.id] ?? 0) > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400 bg-zinc-800 rounded-full px-2 py-0.5">
+                              <MessageSquare className="w-3 h-3" />
+                              {counts[t.id]}
+                            </span>
+                          )}
                           {name && (
                             <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400 bg-zinc-800 rounded-full px-2 py-0.5">
                               <span className="w-3.5 h-3.5 rounded-full bg-zinc-700 text-[9px] font-semibold flex items-center justify-center text-zinc-300">
@@ -226,6 +235,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members }: 
           onClose={() => setEditing(null)}
           onSaved={(t) => { setTasks((p) => p.map((x) => (x.id === t.id ? t : x))); setEditing(null); }}
           onDeleted={(id) => { setTasks((p) => p.filter((x) => x.id !== id)); setEditing(null); }}
+          onCommented={() => setCounts((p) => ({ ...p, [editing.id]: (p[editing.id] ?? 0) + 1 }))}
         />
       )}
     </>
@@ -233,7 +243,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members }: 
 }
 
 function TaskDialog({
-  mode, task, status, clientId, isAdmin, canWrite = true, members, onClose, onSaved, onDeleted,
+  mode, task, status, clientId, isAdmin, canWrite = true, members, onClose, onSaved, onDeleted, onCommented,
 }: {
   mode: "create" | "edit";
   task?: Task;
@@ -245,6 +255,7 @@ function TaskDialog({
   onClose: () => void;
   onSaved: (t: Task) => void;
   onDeleted?: (id: string) => void;
+  onCommented?: () => void;
 }) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
@@ -330,6 +341,11 @@ function TaskDialog({
                 className="bg-zinc-800 border-zinc-700" />
             </div>
           </div>
+          {/* Comments + activity trail (existing cards only) */}
+          {mode === "edit" && task && (
+            <TaskActivity taskId={task.id} onCommented={onCommented} />
+          )}
+
           <div className="flex justify-between gap-2 pt-1">
             <div>
               {mode === "edit" && canWrite && (

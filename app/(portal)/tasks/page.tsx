@@ -14,11 +14,17 @@ export default async function TasksPage() {
   if (!user.client_id) redirect("/dashboard");
 
   const admin = createAdminClient();
-  const [{ data: tasks }, { data: people }] = await Promise.all([
+  const [{ data: tasks }, { data: people }, { data: commentRows }] = await Promise.all([
     admin.from("tasks").select("*").eq("client_id", user.client_id)
       .order("status").order("order_index").order("created_at"),
     admin.from("users").select("id, full_name, email, role").eq("client_id", user.client_id),
+    admin.from("task_events").select("task_id").eq("client_id", user.client_id).eq("kind", "comment"),
   ]);
+
+  const commentCounts: Record<string, number> = {};
+  for (const r of (commentRows ?? []) as { task_id: string }[]) {
+    commentCounts[r.task_id] = (commentCounts[r.task_id] ?? 0) + 1;
+  }
 
   const members: BoardMember[] = ((people ?? []) as { id: string; full_name: string | null; email: string }[])
     .map((p) => ({ id: p.id, name: p.full_name ?? p.email }));
@@ -45,6 +51,7 @@ export default async function TasksPage() {
         userId={user.id}
         isAdmin={isAdmin}
         members={members}
+        commentCounts={commentCounts}
       />
     </div>
   );
