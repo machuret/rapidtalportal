@@ -170,7 +170,9 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Retrieve from all sources in parallel ───────────────────────────────────
-    const [dnaRes, kbRes, sopRes, vaultRes] = await Promise.all([
+    // Hybrid: vector search over chunks PLUS keyword (FTS) search over documents,
+    // so exact terms (product names, codes) are caught even when vectors miss.
+    const [dnaRes, kbRes, sopRes, vaultRes, ftsRes] = await Promise.all([
       admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
       admin.from("kb_entries").select("question, answer")
         .eq("client_id", clientId)
@@ -183,6 +185,11 @@ Deno.serve(async (req: Request) => {
       queryEmbedding.length
         ? admin.rpc("match_vault_chunks", { p_client_id: clientId, p_query_embedding: queryEmbedding, p_match_count: matchCount })
         : Promise.resolve({ data: [], error: null }),
+      admin.from("vault_items").select("id, title")
+        .eq("client_id", clientId)
+        .eq("status", "ready")
+        .textSearch("fts", retrievalQuery, { type: "websearch", config: "english" })
+        .limit(3),
     ]);
 
     const blocks: Block[] = [];
@@ -215,6 +222,27 @@ Deno.serve(async (req: Request) => {
       for (const id of orderedIds) {
         const text = matches.filter((c) => c.item_id === id).map((c) => c.content.trim()).join("\n…\n");
         blocks.push({ kind: "vault", title: titleById.get(id) ?? "Untitled", text, itemId: id });
+      }
+    }
+
+    // 2b. Hybrid: docs found by keyword search that vectors missed — pull their
+    //     leading chunks so exact-term hits still reach the answer.
+    if (!ftsRes.error) {
+      const vectorItemIds = new Set(matches.map((c) => c.item_id));
+      const ftsItems = ((ftsRes.data ?? []) as { id: string; title: string }[])
+        .filter((it) => !vectorItemIds.has(it.id))
+        .slice(0, 2);
+      for (const it of ftsItems) {
+        try {
+          const { data: cks } = await admin
+            .from("vault_chunks")
+            .select("content")
+            .eq("item_id", it.id)
+            .order("chunk_index", { ascending: true })
+            .limit(2);
+          const text = ((cks ?? []) as { content: string }[]).map((c) => c.content.trim()).join("\n…\n");
+          if (text) blocks.push({ kind: "vault", title: it.title, text, itemId: it.id });
+        } catch (_e) { /* best-effort */ }
       }
     }
 

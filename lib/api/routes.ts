@@ -27,6 +27,7 @@ export const ROUTES = {
     ask: () => "/api/vault/ask",
     feedback: () => "/api/vault/feedback",
     promoteKb: () => "/api/vault/promote-kb",
+    teach: () => "/api/vault/teach",
     item: (id: string) => `/api/vault/${id}`,
     reprocess: (id: string) => `/api/vault/${id}/reprocess`,
   },

@@ -7,7 +7,8 @@ import { ROUTES } from "@/lib/api/routes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Brain, Send, Loader2, Sparkles, ChevronDown, ThumbsUp, ThumbsDown, BookmarkPlus, Check } from "lucide-react";
+import { Brain, Send, Loader2, Sparkles, ChevronDown, ThumbsUp, ThumbsDown, BookmarkPlus, Check, GraduationCap } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Source {
   n: number;
@@ -243,6 +244,29 @@ function ChatTurn({
   const [deepLoading, setDeepLoading] = useState(false);
   const [rated, setRated] = useState<1 | -1 | null>(null);
   const [saved, setSaved] = useState(false);
+  const [teaching, setTeaching] = useState(false);
+  const [teachText, setTeachText] = useState("");
+  const [teachBusy, setTeachBusy] = useState(false);
+  const [taught, setTaught] = useState(false);
+
+  const unanswered = turn.sources.length === 0;
+
+  async function teach() {
+    if (teachText.trim().length < 3 || teachBusy) return;
+    setTeachBusy(true);
+    try {
+      await api.post(ROUTES.vault.teach(), {
+        clientId, question: turn.question, answer: teachText.trim(),
+      });
+      setTaught(true);
+      setTeaching(false);
+      toast.success("Thanks — the brain learned it. Next person who asks gets your answer.");
+    } catch {
+      // api-client surfaces a toast
+    } finally {
+      setTeachBusy(false);
+    }
+  }
 
   async function goDeeper() {
     if (deepLoading || deepAnswer) return;
@@ -308,9 +332,51 @@ function ChatTurn({
           </div>
         )}
 
+        {/* Teach the brain — capture knowledge at the moment a gap is found */}
+        {unanswered && !taught && (
+          <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+            {!teaching ? (
+              <button
+                onClick={() => setTeaching(true)}
+                className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 transition-colors"
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                Know the answer? Teach the brain
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs text-zinc-400">
+                  Type the answer — it&apos;s saved to the Knowledge Base and the next person who asks gets it.
+                </p>
+                <Textarea
+                  value={teachText}
+                  onChange={(e) => setTeachText(e.target.value)}
+                  rows={3}
+                  placeholder="The answer is…"
+                  className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600 text-sm"
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={teach} disabled={teachBusy || teachText.trim().length < 3} className="gap-1.5 h-7 text-xs">
+                    {teachBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <GraduationCap className="w-3 h-3" />}
+                    Teach it
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setTeaching(false)} className="h-7 text-xs border-zinc-700">
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {taught && (
+          <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-green-400">
+            <Check className="w-3.5 h-3.5" /> Learned — saved to the Knowledge Base.
+          </p>
+        )}
+
         {/* Actions */}
         <div className="mt-3 flex items-center gap-4 flex-wrap">
-          {!deepAnswer && (
+          {!deepAnswer && !unanswered && (
             <button
               onClick={goDeeper}
               disabled={deepLoading}

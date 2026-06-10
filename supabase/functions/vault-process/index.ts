@@ -51,22 +51,16 @@ Requirements:
 - tags must be lowercase single words or short phrases, no punctuation
 - category must be exactly one of the six options listed`;
 
-/**
- * Split text into ~maxLen-char chunks, preferring paragraph/sentence boundaries,
- * with a small overlap so context isn't lost across chunk edges. Capped at
- * maxChunks to bound embedding cost/latency on very large documents.
- */
-function chunkText(text: string, maxLen = 1200, overlap = 150, maxChunks = 60): string[] {
+/** Character-level fallback splitter (paragraph/sentence-boundary aware). */
+function charChunks(text: string, maxLen = 1200, overlap = 150): string[] {
   const clean = text.replace(/\r\n/g, "\n").trim();
   if (!clean) return [];
   if (clean.length <= maxLen) return [clean];
-
   const chunks: string[] = [];
   let start = 0;
-  while (start < clean.length && chunks.length < maxChunks) {
+  while (start < clean.length) {
     let end = Math.min(start + maxLen, clean.length);
     if (end < clean.length) {
-      // Try to end on a natural boundary in the back half of the window.
       const slice = clean.slice(start, end);
       const para = slice.lastIndexOf("\n\n");
       const sent = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("\n"));
@@ -81,6 +75,56 @@ function chunkText(text: string, maxLen = 1200, overlap = 150, maxChunks = 60): 
   return chunks;
 }
 
+/** Does this line look like a section heading? (markdown #, SECTION X, ALL-CAPS short line) */
+function isHeading(line: string): boolean {
+  const l = line.trim();
+  if (!l || l.length > 90) return false;
+  if (/^#{1,6}\s+\S/.test(l)) return true;
+  if (/^(section|part|chapter)\s+\d+/i.test(l)) return true;
+  if (l.length >= 8 && l === l.toUpperCase() && /[A-Z]{4,}/.test(l) && !/[.!?]$/.test(l)) return true;
+  return false;
+}
+
+/**
+ * Structure-aware, context-carrying chunking.
+ * Splits on document headings first (so chunks don't sever a section), falls
+ * back to character chunks within oversized sections, and prefixes EVERY chunk
+ * with the document title + section heading — so each embedded vector knows
+ * what it is about ("the price is $450" → "[KB v4 › Tours] the price is $450").
+ */
+function chunkText(text: string, title: string, maxLen = 1200, maxChunks = 80): string[] {
+  const clean = text.replace(/\r\n/g, "\n").trim();
+  if (!clean) return [];
+
+  // Split into (heading, body) sections.
+  const sections: { heading: string; body: string }[] = [];
+  let heading = "";
+  let buf: string[] = [];
+  for (const line of clean.split("\n")) {
+    if (isHeading(line)) {
+      if (buf.join("\n").trim()) sections.push({ heading, body: buf.join("\n").trim() });
+      heading = line.replace(/^#{1,6}\s*/, "").trim();
+      buf = [];
+    } else {
+      buf.push(line);
+    }
+  }
+  if (buf.join("\n").trim()) sections.push({ heading, body: buf.join("\n").trim() });
+  if (!sections.length) sections.push({ heading: "", body: clean });
+
+  const out: string[] = [];
+  const shortTitle = title.slice(0, 80);
+  for (const s of sections) {
+    if (out.length >= maxChunks) break;
+    const prefix = s.heading ? `[${shortTitle} › ${s.heading.slice(0, 60)}]\n` : `[${shortTitle}]\n`;
+    for (const piece of charChunks(s.body, maxLen)) {
+      if (out.length >= maxChunks) break;
+      out.push(prefix + piece);
+    }
+  }
+  return out;
+}
+
 /**
  * Chunk + embed the full document and (re)write its vault_chunks rows. Best-effort:
  * existing chunks are cleared first so reprocess/edits never leave stale vectors.
@@ -88,11 +132,11 @@ function chunkText(text: string, maxLen = 1200, overlap = 150, maxChunks = 60): 
  * AI summary/category are the primary result and must not be blocked by this.
  */
 // deno-lint-ignore no-explicit-any
-async function embedAndStoreChunks(admin: any, itemId: string, clientId: string, rawContent: string): Promise<number> {
+async function embedAndStoreChunks(admin: any, itemId: string, clientId: string, title: string, rawContent: string): Promise<number> {
   // Clear stale chunks regardless of outcome below.
   await admin.from("vault_chunks").delete().eq("item_id", itemId);
 
-  const chunks = chunkText(rawContent);
+  const chunks = chunkText(rawContent, title);
   if (!chunks.length) return 0;
 
   // Supabase's built-in gte-small model (384-dim) — runs in the Edge Runtime
@@ -223,7 +267,7 @@ Deno.serve(async (req: Request) => {
     // ── Fetch vault item ──────────────────────────────────────────────────────
     const { data: item, error: fetchErr } = await admin
       .from("vault_items")
-      .select("id, client_id, raw_content, status")
+      .select("id, client_id, title, raw_content, status, meta_curated, category, tags")
       .eq("id", itemId)
       .eq("client_id", clientId) // Double-check ownership — never trust clientId alone
       .maybeSingle();
@@ -235,7 +279,10 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const rawContent = (item as { raw_content: string | null }).raw_content ?? "";
+    const itemRow = item as { raw_content: string | null; title: string; meta_curated?: boolean; category: string | null; tags: string[] | null };
+    const rawContent = itemRow.raw_content ?? "";
+    const itemTitle = itemRow.title ?? "Untitled";
+    const metaCurated = itemRow.meta_curated === true;
 
     // Guard: content must be substantive enough for AI to analyse
     if (rawContent.trim().length < 50) {
@@ -319,7 +366,14 @@ Deno.serve(async (req: Request) => {
 
     // Validate category — fall back to 'general' if AI returned something invalid
     const validCategories = ["process", "policy", "service", "contact", "reference", "general"];
-    const category = validCategories.includes(extracted.category ?? "") ? extracted.category : "general";
+    const aiCategory = validCategories.includes(extracted.category ?? "") ? extracted.category : "general";
+
+    // Respect human curation: if a person set category/tags, AI must not
+    // overwrite them — only the summary (and embeddings) refresh.
+    const category = metaCurated ? (itemRow.category ?? aiCategory) : aiCategory;
+    const tags = metaCurated
+      ? (itemRow.tags ?? [])
+      : (Array.isArray(extracted.tags) ? extracted.tags.slice(0, 10) : []);
 
     // ── Persist results ───────────────────────────────────────────────────────
     const { data: updated, error: updateErr } = await admin
@@ -327,7 +381,7 @@ Deno.serve(async (req: Request) => {
       .update({
         ai_summary: extracted.ai_summary ?? null,
         category,
-        tags: Array.isArray(extracted.tags) ? extracted.tags.slice(0, 10) : [], // Cap at 10 tags
+        tags,
         status: "ready",
         error_message: null, // Clear any previous error
         updated_at: new Date().toISOString(),
@@ -349,7 +403,7 @@ Deno.serve(async (req: Request) => {
     // fail the request — the summary/category are already saved above.
     let chunksStored = 0;
     try {
-      chunksStored = await embedAndStoreChunks(admin, itemId, clientId, rawContent);
+      chunksStored = await embedAndStoreChunks(admin, itemId, clientId, itemTitle, rawContent);
       console.log(`🧠 vault-process: stored ${chunksStored} embedding chunks for ${itemId}`);
     } catch (embErr) {
       console.warn(`⚠️ vault-process: embedding step errored for ${itemId}:`, embErr);
