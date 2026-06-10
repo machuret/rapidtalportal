@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,7 +52,45 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members }: 
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [editing, setEditing] = useState<Task | null>(null);
   const [creatingIn, setCreatingIn] = useState<TaskStatus | null>(null);
+  const [live, setLive] = useState(false);
   const dragId = useRef<string | null>(null);
+  const supabaseRef = useRef(createClient());
+
+  // Live updates: anything a teammate creates/moves/edits/deletes shows up here
+  // without a refresh. Patches are idempotent so they tolerate the echo of our
+  // own optimistic updates (we upsert by id rather than blindly appending).
+  useEffect(() => {
+    const supabase = supabaseRef.current;
+    const channel = supabase
+      .channel(`tasks:${clientId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "tasks", filter: `client_id=eq.${clientId}` },
+        (payload) => {
+          const t = payload.new as Task;
+          setTasks((p) => (p.some((x) => x.id === t.id) ? p.map((x) => (x.id === t.id ? t : x)) : [...p, t]));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "tasks", filter: `client_id=eq.${clientId}` },
+        (payload) => {
+          const t = payload.new as Task;
+          setTasks((p) => p.map((x) => (x.id === t.id ? t : x)));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "tasks", filter: `client_id=eq.${clientId}` },
+        (payload) => {
+          const id = (payload.old as { id?: string }).id;
+          if (id) setTasks((p) => p.filter((x) => x.id !== id));
+        },
+      )
+      .subscribe((status) => setLive(status === "SUBSCRIBED"));
+
+    return () => { void supabase.removeChannel(channel); };
+  }, [clientId]);
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.name ?? null;
   const canMove = (t: Task) => isAdmin || t.assigned_to === userId || t.created_by === userId;
@@ -76,6 +115,15 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members }: 
 
   return (
     <>
+      <div className="flex items-center justify-end mb-3 -mt-2">
+        <span className={cn(
+          "inline-flex items-center gap-1.5 text-[11px] font-medium rounded-full px-2.5 py-1 transition-colors",
+          live ? "text-green-400 bg-green-500/10" : "text-zinc-500 bg-zinc-800",
+        )}>
+          <span className={cn("w-1.5 h-1.5 rounded-full", live ? "bg-green-400 animate-pulse" : "bg-zinc-500")} />
+          {live ? "Live" : "Connecting…"}
+        </span>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
         {COLUMNS.map((col) => {
           const items = byCol(col.key);
