@@ -17,7 +17,7 @@ import { encryptSecret, isEncryptionConfigured } from "@/lib/crypto/credentials"
 const ADMIN_ROLES = ["client_admin", "super_admin"];
 
 // Safe columns only — password_enc must never leave the server in a list.
-const SAFE_SELECT = "id, client_id, created_by, site, category, url, username, created_at, updated_at";
+const SAFE_SELECT = "id, client_id, created_by, site, category, url, username, restricted_to, created_at, updated_at";
 
 const createSchema = z.object({
   clientId: z.string().uuid(),
@@ -26,6 +26,7 @@ const createSchema = z.object({
   url: z.string().max(2000).optional().default(""),
   username: z.string().max(500).optional().default(""),
   password: z.string().min(1).max(5000),
+  restrictedTo: z.array(z.string().uuid()).max(100).nullable().optional(),
 });
 
 const patchSchema = z.object({
@@ -35,7 +36,11 @@ const patchSchema = z.object({
   url: z.string().max(2000).optional(),
   username: z.string().max(500).optional(),
   password: z.string().min(1).max(5000).optional(),
+  restrictedTo: z.array(z.string().uuid()).max(100).nullable().optional(),
 });
+
+/** Empty/absent list means "everyone on the team" → store NULL. */
+const normalizeRestrict = (v: string[] | null | undefined) => (v && v.length ? v : null);
 
 const deleteSchema = z.object({ id: z.string().uuid() });
 
@@ -53,12 +58,13 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("access_credentials")
     .select(SAFE_SELECT)
-    .eq("client_id", clientId)
-    .order("category")
-    .order("site");
+    .eq("client_id", clientId);
+  // VAs only see unrestricted logins, or ones they're explicitly granted.
+  if (user.role === "va") query = query.or(`restricted_to.is.null,restricted_to.cs.{${user.id}}`);
+  const { data, error } = await query.order("category").order("site");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
@@ -85,6 +91,7 @@ export const POST = withAuth(async (req, { user }) => {
       url: parsed.data.url.trim(),
       username: parsed.data.username.trim(),
       password_enc: encryptSecret(parsed.data.password),
+      restricted_to: normalizeRestrict(parsed.data.restrictedTo),
       updated_at: new Date().toISOString(),
     })
     .select(SAFE_SELECT)
@@ -120,6 +127,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     if (!isEncryptionConfigured()) return encryptionNotConfigured();
     updates.password_enc = encryptSecret(parsed.data.password);
   }
+  if (parsed.data.restrictedTo !== undefined) updates.restricted_to = normalizeRestrict(parsed.data.restrictedTo);
 
   const { data, error } = await admin
     .from("access_credentials")

@@ -40,6 +40,7 @@ function makeAdmin(results: Record<string, Result>, calls: RecordedCall[] = []) 
       b.update = (vals: unknown) => rec("update", vals);
       b.delete = () => rec("delete", null);
       b.eq = () => b;
+      b.or = () => b;
       b.order = () => b;
       b.maybeSingle = async () => result;
       b.single = async () => result;

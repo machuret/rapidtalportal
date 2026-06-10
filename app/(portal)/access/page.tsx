@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Access — RapidTal" };
 
 // Passwords (even encrypted) never enter a page payload.
-const SAFE_SELECT = "id, client_id, created_by, site, category, url, username, created_at, updated_at";
+const SAFE_SELECT = "id, client_id, created_by, site, category, url, username, restricted_to, created_at, updated_at";
 
 export default async function AccessPage({ searchParams }: { searchParams: { client?: string } }) {
   const ctx = await getCurrentUserAndClient();
@@ -35,13 +35,21 @@ export default async function AccessPage({ searchParams }: { searchParams: { cli
   }
   if (!clientId) redirect("/dashboard");
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: items } = await (admin as any)
-    .from("access_credentials")
-    .select(SAFE_SELECT)
-    .eq("client_id", clientId)
-    .order("category")
-    .order("site");
+  const [{ data: rawItems }, { data: people }] = await Promise.all([
+    admin.from("access_credentials").select(SAFE_SELECT).eq("client_id", clientId).order("category").order("site"),
+    admin.from("users").select("id, full_name, email, role").eq("client_id", clientId),
+  ]);
+
+  // VAs only receive logins they're allowed to see (admins get all).
+  const allItems = (rawItems ?? []) as AccessEntry[];
+  const items = isAdmin
+    ? allItems
+    : allItems.filter((i) => !i.restricted_to?.length || i.restricted_to.includes(user.id));
+
+  // VAs are the people a login can be restricted to (admins always see everything).
+  const members = ((people ?? []) as { id: string; full_name: string | null; email: string; role: string }[])
+    .filter((p) => p.role === "va")
+    .map((p) => ({ id: p.id, name: p.full_name ?? p.email }));
 
   const clientName = isSuperAdmin
     ? clients.find((c) => c.id === clientId)?.name
@@ -84,9 +92,10 @@ export default async function AccessPage({ searchParams }: { searchParams: { cli
 
       <AccessClient
         key={clientId}
-        initialItems={(items ?? []) as AccessEntry[]}
+        initialItems={items}
         clientId={clientId}
         isAdmin={isAdmin}
+        members={members}
         encryptionReady={isEncryptionConfigured()}
       />
     </div>

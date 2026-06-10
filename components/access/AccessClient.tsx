@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Plus, Search, Eye, EyeOff, Copy, Check, ExternalLink, Pencil, Trash2, Loader2, Save, KeyRound, AlertTriangle, History, ShieldCheck,
+  Plus, Search, Eye, EyeOff, Copy, Check, ExternalLink, Pencil, Trash2, Loader2, Save, KeyRound, AlertTriangle, History, ShieldCheck, Lock,
 } from "lucide-react";
 
 export interface AccessEntry {
@@ -23,9 +23,12 @@ export interface AccessEntry {
   category: string;
   url: string;
   username: string;
+  restricted_to: string[] | null;
   created_at: string;
   updated_at: string;
 }
+
+export interface AccessMember { id: string; name: string }
 
 const CATEGORY_SUGGESTIONS = [
   "Website", "Hosting", "Email", "Social Media", "Ads", "E-commerce", "AI Tools", "Analytics", "Finance", "Other",
@@ -35,10 +38,11 @@ interface AccessClientProps {
   initialItems: AccessEntry[];
   clientId: string;
   isAdmin: boolean; // client_admin or super_admin — can add/edit/delete
+  members: AccessMember[]; // VAs a login can be restricted to
   encryptionReady: boolean; // CREDENTIALS_ENCRYPTION_KEY is set on the server
 }
 
-export function AccessClient({ initialItems, clientId, isAdmin, encryptionReady }: AccessClientProps) {
+export function AccessClient({ initialItems, clientId, isAdmin, members, encryptionReady }: AccessClientProps) {
   const [items, setItems] = useState<AccessEntry[]>(initialItems);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<AccessEntry | null>(null);
@@ -164,7 +168,17 @@ export function AccessClient({ initialItems, clientId, isAdmin, encryptionReady 
                   return (
                     <div key={entry.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
                       <div className="min-w-[160px] flex-1">
-                        <p className="text-sm font-medium text-zinc-100">{entry.site}</p>
+                        <p className="text-sm font-medium text-zinc-100 flex items-center gap-1.5">
+                          {entry.site}
+                          {isAdmin && (entry.restricted_to?.length ?? 0) > 0 && (
+                            <span
+                              title={`Only ${entry.restricted_to!.length} person(s) can see this`}
+                              className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-300 bg-amber-500/10 rounded-full px-1.5 py-0.5"
+                            >
+                              <Lock className="w-2.5 h-2.5" /> {entry.restricted_to!.length}
+                            </span>
+                          )}
+                        </p>
                         {entry.url && (
                           <a
                             href={entry.url.startsWith("http") ? entry.url : `https://${entry.url}`}
@@ -256,6 +270,7 @@ export function AccessClient({ initialItems, clientId, isAdmin, encryptionReady 
         <AccessDialog
           entry={editing ?? undefined}
           clientId={clientId}
+          members={members}
           onClose={() => { setCreating(false); setEditing(null); }}
           onSaved={(saved) => {
             setItems((p) => (p.some((x) => x.id === saved.id) ? p.map((x) => (x.id === saved.id ? saved : x)) : [...p, saved]));
@@ -315,10 +330,11 @@ function AuditDialog({ entry, onClose }: { entry: AccessEntry; onClose: () => vo
 }
 
 function AccessDialog({
-  entry, clientId, onClose, onSaved, onDeleted,
+  entry, clientId, members, onClose, onSaved, onDeleted,
 }: {
   entry?: AccessEntry;
   clientId: string;
+  members: AccessMember[];
   onClose: () => void;
   onSaved: (e: AccessEntry) => void;
   onDeleted: (id: string) => void;
@@ -330,6 +346,11 @@ function AccessDialog({
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
+  // null = everyone on the team; a Set = only these VAs.
+  const [restrictMode, setRestrictMode] = useState<"all" | "some">(entry?.restricted_to?.length ? "some" : "all");
+  const [allowed, setAllowed] = useState<Set<string>>(new Set(entry?.restricted_to ?? []));
+  const toggleAllowed = (id: string) => setAllowed((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const restrictedTo = restrictMode === "some" ? Array.from(allowed) : null;
 
   const isEdit = !!entry;
   const canSave = site.trim() && category.trim() && (isEdit || password.length > 0);
@@ -346,6 +367,7 @@ function AccessDialog({
           url: url.trim(),
           username: username.trim(),
           ...(password ? { password } : {}),
+          restrictedTo,
         });
         toast.success("Login updated.");
         onSaved(saved);
@@ -357,6 +379,7 @@ function AccessDialog({
           url: url.trim(),
           username: username.trim(),
           password,
+          restrictedTo,
         });
         toast.success("Login added.");
         onSaved(saved);
@@ -436,6 +459,39 @@ function AccessDialog({
           <p className="text-xs text-zinc-500">
             Passwords are encrypted (AES-256) before they&apos;re stored — nobody can read them from the database.
           </p>
+
+          {/* Who can see this login */}
+          <div className="flex flex-col gap-2">
+            <Label>Who can see this</Label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setRestrictMode("all")}
+                className={cn("px-3 h-8 rounded-lg text-xs font-medium border transition-colors",
+                  restrictMode === "all" ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-700 text-zinc-400 hover:text-white")}>
+                Everyone on the team
+              </button>
+              <button type="button" onClick={() => setRestrictMode("some")}
+                className={cn("px-3 h-8 rounded-lg text-xs font-medium border transition-colors",
+                  restrictMode === "some" ? "bg-zinc-700 border-zinc-600 text-white" : "border-zinc-700 text-zinc-400 hover:text-white")}>
+                Only specific people
+              </button>
+            </div>
+            {restrictMode === "some" && (
+              members.length === 0 ? (
+                <p className="text-xs text-zinc-500">No VAs on this client yet.</p>
+              ) : (
+                <div className="flex flex-col gap-1 max-h-36 overflow-y-auto rounded-lg border border-zinc-800 p-2">
+                  {members.map((m) => (
+                    <label key={m.id} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer hover:text-white px-1 py-0.5">
+                      <input type="checkbox" checked={allowed.has(m.id)} onChange={() => toggleAllowed(m.id)} className="accent-blue-500" />
+                      {m.name}
+                    </label>
+                  ))}
+                  {allowed.size === 0 && <p className="text-[11px] text-amber-400/80 mt-1">Pick at least one person, or nobody but admins will see it.</p>}
+                </div>
+              )
+            )}
+          </div>
+
           <div className="flex justify-between gap-2 pt-1">
             <div>
               {isEdit && (

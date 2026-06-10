@@ -215,9 +215,9 @@ export interface Database {
         Relationships: NoRelationships;
       };
       access_credentials: {
-        Row: { id: string; client_id: string; created_by: string | null; site: string; category: string; url: string; username: string; password_enc: string; created_at: string; updated_at: string };
-        Insert: { id?: string; client_id: string; created_by?: string | null; site: string; category?: string; url?: string; username?: string; password_enc: string; created_at?: string; updated_at?: string };
-        Update: { id?: string; client_id?: string; created_by?: string | null; site?: string; category?: string; url?: string; username?: string; password_enc?: string; created_at?: string; updated_at?: string };
+        Row: { id: string; client_id: string; created_by: string | null; site: string; category: string; url: string; username: string; password_enc: string; restricted_to: string[] | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; created_by?: string | null; site: string; category?: string; url?: string; username?: string; password_enc: string; restricted_to?: string[] | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; created_by?: string | null; site?: string; category?: string; url?: string; username?: string; password_enc?: string; restricted_to?: string[] | null; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
       access_credential_reveals: {

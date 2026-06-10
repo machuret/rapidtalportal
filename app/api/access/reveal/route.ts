@@ -29,14 +29,19 @@ export const POST = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   const { data: row } = await admin
     .from("access_credentials")
-    .select("id, client_id, password_enc")
+    .select("id, client_id, password_enc, restricted_to")
     .eq("id", parsed.data.id)
     .maybeSingle();
   if (!row) return NextResponse.json({ error: "Entry not found." }, { status: 404 });
 
-  const cred = row as { id: string; client_id: string; password_enc: string };
+  const cred = row as { id: string; client_id: string; password_enc: string; restricted_to: string[] | null };
   const denied = assertClientAccess(user, cred.client_id);
   if (denied) return denied;
+
+  // Respect per-VA scoping: a restricted login is invisible to VAs not granted it.
+  if (user.role === "va" && cred.restricted_to && cred.restricted_to.length > 0 && !cred.restricted_to.includes(user.id)) {
+    return NextResponse.json({ error: "Entry not found." }, { status: 404 });
+  }
 
   let password: string;
   try {
