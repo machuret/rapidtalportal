@@ -45,6 +45,7 @@ interface UpdateContactInput {
   status?: string;
   source?: string | null;
   notes?: string | null;
+  archived?: boolean;
 }
 
 interface DeleteContactInput {

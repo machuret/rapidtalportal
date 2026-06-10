@@ -19,10 +19,12 @@ export default async function CrmPage() {
   const admin = createAdminClient();
   const { data: contacts } = await admin
     .from("crm_contacts")
-    .select("id, client_id, first_name, last_name, email, phone, company, job_title, status, source, tags, notes, created_at, updated_at")
+    .select("id, client_id, first_name, last_name, email, phone, company, job_title, status, source, tags, notes, archived_at, created_at, updated_at")
     .eq("client_id", user.client_id)
     .order("created_at", { ascending: false })
     .limit(500);
+
+  const isAdmin = user.role === "client_admin" || user.role === "super_admin";
 
   return (
     <div>
@@ -44,6 +46,7 @@ export default async function CrmPage() {
         contacts={(contacts ?? []) as CrmContact[]}
         clientId={user.client_id}
         userId={user.id}
+        isAdmin={isAdmin}
       />
     </div>
   );
@@ -62,6 +65,7 @@ export interface CrmContact {
   source: string | null;
   tags: string[];
   notes: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }

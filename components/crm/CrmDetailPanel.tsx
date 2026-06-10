@@ -12,8 +12,11 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
   X, Pencil, Trash2, Save, Mail, Phone, Building2,
-  CalendarDays, Tag, Loader2,
+  CalendarDays, Tag, Loader2, Archive, ArchiveRestore, History,
 } from "lucide-react";
+import { useEffect } from "react";
+import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 
 type Note = { id: string; body: string; created_at: string };
 
@@ -22,6 +25,7 @@ interface CrmDetailPanelProps {
   notes: Note[];
   loadingNotes: boolean;
   clientId: string;
+  isAdmin: boolean;
   onClose: () => void;
   onUpdated: (c: CrmContact) => void;
   onDeleted: (id: string) => void;
@@ -44,7 +48,7 @@ const EDIT_FIELDS = [
 ] as const;
 
 export function CrmDetailPanel({
-  contact, notes, loadingNotes, clientId,
+  contact, notes, loadingNotes, clientId, isAdmin,
   onClose, onUpdated, onDeleted, onNoteAdded, onNoteDeleted,
 }: CrmDetailPanelProps) {
   const {
@@ -92,7 +96,7 @@ export function CrmDetailPanel({
   }
 
   async function handleDelete() {
-    if (!confirm("Delete this contact and all their notes? This cannot be undone.")) return;
+    if (!confirm("Permanently delete this contact and all their notes? This cannot be undone.")) return;
     try {
       await deleteContact({ id: contact.id, clientId });
       onDeleted(contact.id);
@@ -101,6 +105,29 @@ export function CrmDetailPanel({
       toast.error(err instanceof Error ? err.message : "Delete failed.");
     }
   }
+
+  async function handleArchive(archive: boolean) {
+    try {
+      const updated = await updateContact({ id: contact.id, clientId, archived: archive });
+      onUpdated(updated);
+      toast.success(archive ? "Contact archived — recoverable from the Archived view." : "Contact restored.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed.");
+    }
+  }
+
+  // Activity trail — who created / moved / edited / archived this contact.
+  const [events, setEvents] = useState<{ id: string; body: string; who: string; created_at: string }[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setEvents(null);
+    api.get<{ events: { id: string; body: string; who: string; created_at: string }[] }>(
+      `${ROUTES.crm.events()}?contactId=${contact.id}`, { showErrorToast: false },
+    )
+      .then((d) => { if (!cancelled) setEvents(d.events); })
+      .catch(() => { if (!cancelled) setEvents([]); });
+    return () => { cancelled = true; };
+  }, [contact.id]);
 
   async function addNote(e: React.FormEvent) {
     e.preventDefault();
@@ -150,13 +177,26 @@ export function CrmDetailPanel({
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="border-zinc-700 text-zinc-300 hover:text-white h-7 text-xs gap-1" onClick={startEdit}>
-            <Pencil className="w-3.5 h-3.5" /> Edit
-          </Button>
-          <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-7 text-xs gap-1" onClick={handleDelete}>
-            <Trash2 className="w-3.5 h-3.5" /> Delete
-          </Button>
+        <div className="flex gap-2 flex-wrap">
+          {!contact.archived_at && (
+            <Button size="sm" variant="outline" className="border-zinc-700 text-zinc-300 hover:text-white h-7 text-xs gap-1" onClick={startEdit}>
+              <Pencil className="w-3.5 h-3.5" /> Edit
+            </Button>
+          )}
+          {contact.archived_at ? (
+            <Button size="sm" variant="outline" className="border-zinc-700 text-green-400 hover:text-green-300 h-7 text-xs gap-1" onClick={() => handleArchive(false)}>
+              <ArchiveRestore className="w-3.5 h-3.5" /> Restore
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 h-7 text-xs gap-1" onClick={() => handleArchive(true)}>
+              <Archive className="w-3.5 h-3.5" /> Archive
+            </Button>
+          )}
+          {isAdmin && (
+            <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-7 text-xs gap-1" onClick={handleDelete}>
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </Button>
+          )}
         </div>
       </div>
 
@@ -291,6 +331,27 @@ export function CrmDetailPanel({
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Activity trail — who created / moved / edited / archived this contact */}
+        <div className="px-5 py-4 border-t border-zinc-800">
+          <p className="flex items-center gap-1.5 label-section mb-2">
+            <History className="w-3.5 h-3.5" /> Activity
+          </p>
+          {events === null ? (
+            <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-zinc-500" /></div>
+          ) : events.length === 0 ? (
+            <p className="text-xs text-zinc-600">No recorded activity yet.</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {events.map((e) => (
+                <p key={e.id} className="text-[11px] text-zinc-500 leading-relaxed">
+                  <span className="text-zinc-400">{e.who}</span> {e.body} ·{" "}
+                  {new Date(e.created_at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </p>
               ))}
             </div>
           )}

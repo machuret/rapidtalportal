@@ -158,9 +158,15 @@ export interface Database {
         Relationships: NoRelationships;
       };
       crm_contacts: {
-        Row: { id: string; client_id: string; first_name: string; last_name: string | null; email: string | null; phone: string | null; company: string | null; job_title: string | null; status: string; source: string | null; tags: string[]; notes: string | null; created_by: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; client_id: string; first_name: string; last_name?: string | null; email?: string | null; phone?: string | null; company?: string | null; job_title?: string | null; status?: string; source?: string | null; tags?: string[]; notes?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
-        Update: { id?: string; client_id?: string; first_name?: string; last_name?: string | null; email?: string | null; phone?: string | null; company?: string | null; job_title?: string | null; status?: string; source?: string | null; tags?: string[]; notes?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Row: { id: string; client_id: string; first_name: string; last_name: string | null; email: string | null; phone: string | null; company: string | null; job_title: string | null; status: string; source: string | null; tags: string[]; notes: string | null; created_by: string | null; archived_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; first_name: string; last_name?: string | null; email?: string | null; phone?: string | null; company?: string | null; job_title?: string | null; status?: string; source?: string | null; tags?: string[]; notes?: string | null; created_by?: string | null; archived_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; first_name?: string; last_name?: string | null; email?: string | null; phone?: string | null; company?: string | null; job_title?: string | null; status?: string; source?: string | null; tags?: string[]; notes?: string | null; created_by?: string | null; archived_at?: string | null; created_at?: string; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      crm_events: {
+        Row: { id: string; contact_id: string; client_id: string; user_id: string | null; body: string; created_at: string };
+        Insert: { id?: string; contact_id: string; client_id: string; user_id?: string | null; body: string; created_at?: string };
+        Update: { id?: string; contact_id?: string; client_id?: string; user_id?: string | null; body?: string; created_at?: string };
         Relationships: NoRelationships;
       };
       crm_notes: {

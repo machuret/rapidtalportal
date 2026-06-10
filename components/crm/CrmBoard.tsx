@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { CRM_STATUS_META, CRM_STATUSES } from "@/lib/crm-config";
-import { Plus, Search, User } from "lucide-react";
+import { Plus, Search, User, Archive } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { CrmContactCard } from "./CrmContactCard";
 import { CrmDetailPanel } from "./CrmDetailPanel";
@@ -21,26 +21,33 @@ interface CrmBoardProps {
   contacts: CrmContact[];
   clientId: string;
   userId: string;
+  isAdmin: boolean;
 }
 
 type Note = { id: string; body: string; created_at: string };
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function CrmBoard({ contacts: initial, clientId }: CrmBoardProps) {
+export function CrmBoard({ contacts: initial, clientId, isAdmin }: CrmBoardProps) {
   const router = useRouter();
   // Read-only Supabase browser client — only used for SELECT (notes fetch)
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
 
-  const [contacts, setContacts] = useState<CrmContact[]>(initial);
+  const [allContacts, setAllContacts] = useState<CrmContact[]>(initial);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [showArchived, setShowArchived] = useState(false);
 
   // Detail panel state
   const [selected, setSelected] = useState<CrmContact | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const notesCacheRef = useRef<Map<string, Note[]>>(new Map());
+
+  const setContacts = setAllContacts;
+  const archivedCount = allContacts.filter(c => c.archived_at).length;
+  // Active board by default; flip to the archived list with the toggle.
+  const contacts = allContacts.filter(c => showArchived ? !!c.archived_at : !c.archived_at);
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = contacts.filter(c => {
@@ -105,6 +112,20 @@ export function CrmBoard({ contacts: initial, clientId }: CrmBoardProps) {
               </button>
             ))}
           </div>
+          {archivedCount > 0 && (
+            <button
+              onClick={() => { setShowArchived(s => !s); setStatusFilter("all"); setSelected(null); }}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors shrink-0",
+                showArchived
+                  ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
+                  : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200",
+              )}
+            >
+              <Archive className="w-3.5 h-3.5" />
+              {showArchived ? "Back to active" : `Archived (${archivedCount})`}
+            </button>
+          )}
           <Button
             onClick={() => router.push("/crm/add-contact")}
             className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shrink-0"
@@ -170,10 +191,13 @@ export function CrmBoard({ contacts: initial, clientId }: CrmBoardProps) {
           notes={notes}
           loadingNotes={loadingNotes}
           clientId={clientId}
+          isAdmin={isAdmin}
           onClose={() => setSelected(null)}
           onUpdated={updated => {
             setContacts(cs => cs.map(c => c.id === updated.id ? updated : c));
-            setSelected(updated);
+            // Archiving/restoring moves it out of the current view — close the panel.
+            if (!!updated.archived_at !== showArchived) setSelected(null);
+            else setSelected(updated);
           }}
           onDeleted={id => {
             setContacts(cs => cs.filter(c => c.id !== id));

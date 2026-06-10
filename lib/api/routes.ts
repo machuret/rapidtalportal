@@ -46,6 +46,7 @@ export const ROUTES = {
   crm: {
     contacts: () => "/api/crm/contacts",
     notes: () => "/api/crm/notes",
+    events: () => "/api/crm/events",
   },
   content: {
     pieces: () => "/api/content/pieces",

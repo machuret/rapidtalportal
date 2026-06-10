@@ -26,7 +26,7 @@ export default async function DashboardPage() {
     sopsResult,
   ] = await Promise.all([
     supabase.from("kb_entries").select("id, question, answer").eq("client_id", clientId).order("generated_at", { ascending: false }).limit(50),
-    supabase.from("crm_contacts").select("id, first_name, last_name, company, status, updated_at").eq("client_id", clientId).order("updated_at", { ascending: false }).limit(8),
+    supabase.from("crm_contacts").select("id, first_name, last_name, company, status, updated_at").eq("client_id", clientId).is("archived_at", null).order("updated_at", { ascending: false }).limit(8),
     supabase.rpc("get_contact_status_counts", { p_client_id: clientId }),
     supabase.from("vault_items").select("*", { count: "exact", head: true }).eq("client_id", clientId).eq("status", "ready"),
     supabase.from("sops").select("*", { count: "exact", head: true }).eq("client_id", clientId),
