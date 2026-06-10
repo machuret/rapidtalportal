@@ -150,6 +150,21 @@ describe("POST /api/access/reveal", () => {
     expect(calls.some((c) => c.table === "access_credential_reveals" && c.op === "insert")).toBe(false);
   });
 
+  test("a burst of reveals is throttled with 429 (anti bulk-export)", async () => {
+    // Distinct user so the limiter state never interferes with other tests.
+    asAuth({ id: "u-burst", role: "va", client_id: CLIENT_A });
+    (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({
+      access_credentials: { data: { id: CRED, client_id: CLIENT_A, password_enc: encryptSecret("pw") }, error: null },
+      access_credential_reveals: { data: null, error: null },
+    }));
+    let throttled = 0;
+    for (let i = 0; i < 40; i++) {
+      const res = await REVEAL(jsonReq({ id: CRED }));
+      if (res.status === 429) throttled++;
+    }
+    expect(throttled).toBe(10); // 30 allowed per window, the next 10 rejected
+  });
+
   test("a VA reveals a password from their own client and the access is audited", async () => {
     asAuth(va(CLIENT_A));
     const calls: RecordedCall[] = [];

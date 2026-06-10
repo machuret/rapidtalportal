@@ -12,10 +12,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { decryptSecret } from "@/lib/crypto/credentials";
+import { credentialRevealLimiter, tooManyRequests } from "@/lib/rate-limit";
 
 const schema = z.object({ id: z.string().uuid() });
 
 export const POST = withAuth(async (req, { user }) => {
+  // Throttle reveals so a compromised session can't bulk-export the vault.
+  const rl = credentialRevealLimiter.check(`reveal:${user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
+
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
   const parsed = schema.safeParse(body);

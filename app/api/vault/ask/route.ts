@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
+import { askVaultLimiter, tooManyRequests } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   clientId: z.string().uuid(),
@@ -18,6 +19,10 @@ export async function POST(req: NextRequest) {
   const auth = await requireApiAuth();
   if ("error" in auth) return auth.error;
   const { user } = auth;
+
+  // Each question costs an OpenRouter call — throttle per user.
+  const rl = askVaultLimiter.check(`ask:${user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   let body: unknown;
   try { body = await req.json(); }

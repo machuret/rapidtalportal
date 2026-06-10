@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
 import { streamEdgeFunction } from "@/lib/edge-proxy";
+import { askVaultLimiter, tooManyRequests } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   clientId: z.string().uuid(),
@@ -17,6 +18,10 @@ const bodySchema = z.object({
 export async function POST(req: NextRequest) {
   const auth = await requireApiAuth();
   if ("error" in auth) return auth.error;
+
+  // Shares the ask quota with /api/vault/ask — same user, same OpenRouter cost.
+  const rl = askVaultLimiter.check(`ask:${auth.user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   let body: unknown;
   try { body = await req.json(); }

@@ -83,6 +83,7 @@ const adminLinks = [
   { href: "/admin/users",      label: "All Users",   icon: Users },
   { href: "/admin/sops",       label: "SOP Library", icon: ListChecks },
   { href: "/admin/vault",      label: "Client Vaults", icon: Archive },
+  { href: "/admin/ask",        label: "Ask as Client", icon: Sparkles },
   { href: "/access",           label: "Access",      icon: KeyRound },
   { href: "/supervision",      label: "Supervision", icon: Eye },
   { href: "/admin/daily-logs", label: "Daily Logs",  icon: NotebookPen },
