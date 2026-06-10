@@ -89,10 +89,29 @@ export async function POST(req: NextRequest) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${firecrawlKey}`,
         },
-        body: JSON.stringify({ url, formats: ["markdown"] }),
+        // onlyMainContent strips nav/footer noise; waitFor lets JS-heavy pages
+        // render; timeout gives slow pages room before Firecrawl gives up.
+        body: JSON.stringify({
+          url,
+          formats: ["markdown"],
+          onlyMainContent: true,
+          waitFor: 2500,
+          timeout: 60000,
+        }),
       });
       const crawlData = await crawlRes.json();
       const content = crawlData?.data?.markdown ?? crawlData?.markdown ?? "";
+      if (!crawlRes.ok || !content) {
+        const reason = crawlData?.error ?? "the page took too long or returned no content";
+        await supabase
+          .from("vault_items")
+          .update({ status: "error", error_message: `Couldn't fetch this page — ${reason}.` })
+          .eq("id", itemId);
+        return NextResponse.json(
+          { error: `Couldn't fetch this page — ${reason}. Try "Add page" on a lighter URL, or paste the text directly.` },
+          { status: 422 },
+        );
+      }
 
       // Generate content hash for deduplication
       const contentHash = createHash("sha256").update(content).digest("hex");

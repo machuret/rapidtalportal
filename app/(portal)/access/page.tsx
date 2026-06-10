@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AccessClient, type AccessEntry } from "@/components/access/AccessClient";
+import { isEncryptionConfigured } from "@/lib/crypto/credentials";
 import { cn } from "@/lib/utils";
 import { KeyRound } from "lucide-react";
 
@@ -86,6 +87,7 @@ export default async function AccessPage({ searchParams }: { searchParams: { cli
         initialItems={(items ?? []) as AccessEntry[]}
         clientId={clientId}
         isAdmin={isAdmin}
+        encryptionReady={isEncryptionConfigured()}
       />
     </div>
   );

@@ -170,13 +170,25 @@ Deno.serve(async (req: Request) => {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${firecrawlKey}`,
       },
-      body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+      // waitFor lets JS-heavy pages render; timeout gives slow pages room before
+      // Firecrawl gives up (the default is short and trips on heavy sites).
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        onlyMainContent: true,
+        waitFor: 3000,
+        timeout: 60000,
+      }),
     });
 
     const crawlJson = await crawlRes.json();
 
     if (!crawlRes.ok || !crawlJson?.data) {
-      return new Response(JSON.stringify({ error: `Firecrawl failed: ${crawlJson?.error ?? "No content returned"}` }), {
+      const reason = crawlJson?.error ?? "No content returned";
+      const friendly = /timed out|timeout/i.test(String(reason))
+        ? "This page took too long to load (heavy JavaScript or a slow site). Try the plain \"Add page\" option instead, or paste the text directly into the Vault."
+        : `Couldn't fetch this page: ${reason}`;
+      return new Response(JSON.stringify({ error: friendly }), {
         status: 422,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

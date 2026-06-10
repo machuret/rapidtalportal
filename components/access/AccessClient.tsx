@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Plus, Search, Eye, EyeOff, Copy, Check, ExternalLink, Pencil, Trash2, Loader2, Save, KeyRound,
+  Plus, Search, Eye, EyeOff, Copy, Check, ExternalLink, Pencil, Trash2, Loader2, Save, KeyRound, AlertTriangle,
 } from "lucide-react";
 
 export interface AccessEntry {
@@ -35,9 +35,10 @@ interface AccessClientProps {
   initialItems: AccessEntry[];
   clientId: string;
   isAdmin: boolean; // client_admin or super_admin — can add/edit/delete
+  encryptionReady: boolean; // CREDENTIALS_ENCRYPTION_KEY is set on the server
 }
 
-export function AccessClient({ initialItems, clientId, isAdmin }: AccessClientProps) {
+export function AccessClient({ initialItems, clientId, isAdmin, encryptionReady }: AccessClientProps) {
   const [items, setItems] = useState<AccessEntry[]>(initialItems);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<AccessEntry | null>(null);
@@ -103,6 +104,20 @@ export function AccessClient({ initialItems, clientId, isAdmin }: AccessClientPr
 
   return (
     <>
+      {isAdmin && !encryptionReady && (
+        <div className="flex items-start gap-3 mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-200">
+            <p className="font-medium">Password encryption isn&apos;t configured yet.</p>
+            <p className="text-amber-200/80 mt-0.5">
+              Set <code className="bg-amber-500/15 rounded px-1 py-0.5 text-xs">CREDENTIALS_ENCRYPTION_KEY</code> in
+              your deployment&apos;s environment variables (generate with <code className="bg-amber-500/15 rounded px-1 py-0.5 text-xs">openssl rand -base64 32</code>),
+              then redeploy. Until then, new logins can&apos;t be saved.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-3 mb-6">
         <div className="relative flex-1 max-w-sm">
           <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -114,7 +129,13 @@ export function AccessClient({ initialItems, clientId, isAdmin }: AccessClientPr
           />
         </div>
         {isAdmin && (
-          <Button size="sm" onClick={() => setCreating(true)} className="gap-1.5">
+          <Button
+            size="sm"
+            onClick={() => setCreating(true)}
+            disabled={!encryptionReady}
+            title={encryptionReady ? undefined : "Set CREDENTIALS_ENCRYPTION_KEY to enable saving logins"}
+            className="gap-1.5"
+          >
             <Plus className="w-4 h-4" /> Add login
           </Button>
         )}
@@ -245,7 +266,7 @@ function AccessDialog({
   onDeleted: (id: string) => void;
 }) {
   const [site, setSite] = useState(entry?.site ?? "");
-  const [category, setCategory] = useState(entry?.category ?? "");
+  const [category, setCategory] = useState(entry?.category ?? "Other");
   const [url, setUrl] = useState(entry?.url ?? "");
   const [username, setUsername] = useState(entry?.username ?? "");
   const [password, setPassword] = useState("");
