@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Plus, ListChecks, ChevronRight, Tag } from "lucide-react";
 
+interface SopUsage { runs: number; completions: number; users: number }
+
 interface SopsLibraryProps {
   sops: Sop[];
   clientId: string;
@@ -14,9 +16,11 @@ interface SopsLibraryProps {
   canEdit: boolean;
   /** Where the "New SOP" button points (admin library passes ?scope=global). */
   newHref?: string;
+  /** Optional per-SOP usage stats (admin library shows adoption). */
+  usage?: Record<string, SopUsage>;
 }
 
-export function SopsLibrary({ sops, canEdit, newHref = "/sops/new" }: SopsLibraryProps) {
+export function SopsLibrary({ sops, canEdit, newHref = "/sops/new", usage }: SopsLibraryProps) {
   const [search, setSearch] = useState("");
 
   const q = search.toLowerCase();
@@ -117,6 +121,13 @@ export function SopsLibrary({ sops, canEdit, newHref = "/sops/new" }: SopsLibrar
                         <p className="text-sm text-zinc-500 mt-0.5">
                           {stepCount > 0 ? `${stepCount} step${stepCount !== 1 ? "s" : ""}` : "View procedure"}
                           {" · "}Updated {new Date(sop.updated_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                          {usage?.[sop.id] && (
+                            <span className="text-zinc-400">
+                              {" · "}{usage[sop.id].runs} run{usage[sop.id].runs !== 1 ? "s" : ""}
+                              {usage[sop.id].completions > 0 && `, ${usage[sop.id].completions} completed`}
+                              {usage[sop.id].users > 0 && ` · ${usage[sop.id].users} VA${usage[sop.id].users !== 1 ? "s" : ""}`}
+                            </span>
+                          )}
                         </p>
                       </div>
                       <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0" />

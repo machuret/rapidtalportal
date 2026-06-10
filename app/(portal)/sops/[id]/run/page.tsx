@@ -32,7 +32,7 @@ export default async function SopRunPage({ params }: { params: { id: string } })
         <ArrowLeft className="w-4 h-4" />
         Back to SOP
       </Link>
-      <SopRunner title={s.title} body={s.body} clientId={user.client_id ?? ""} />
+      <SopRunner sopId={s.id} title={s.title} body={s.body} clientId={user.client_id ?? ""} />
     </div>
   );
 }

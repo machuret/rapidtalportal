@@ -1,0 +1,65 @@
+/**
+ * POST  /api/sops/run   { sopId, stepsTotal } — record that a VA started running
+ *   a SOP (logged on first real interaction). Returns { id }.
+ * PATCH /api/sops/run   { id, stepsDone, completed } — update progress/completion.
+ *
+ * Best-effort usage tracking — any authenticated user; failures must never break
+ * the runner, so the client calls these without surfacing errors.
+ */
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { withAuth } from "@/lib/api/with-auth";
+
+const startSchema = z.object({ sopId: z.string().uuid(), stepsTotal: z.number().int().min(0).max(1000) });
+const patchSchema = z.object({
+  id: z.string().uuid(),
+  stepsDone: z.number().int().min(0).max(1000),
+  completed: z.boolean(),
+});
+
+export const POST = withAuth(async (req, { user }) => {
+  let body: unknown;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
+  const parsed = startSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
+
+  const admin = createAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (admin as any)
+    .from("sop_runs")
+    .insert({
+      sop_id: parsed.data.sopId,
+      client_id: user.client_id,
+      user_id: user.id,
+      status: "started",
+      steps_total: parsed.data.stepsTotal,
+    })
+    .select("id")
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ id: data?.id }, { status: 201 });
+});
+
+export const PATCH = withAuth(async (req, { user }) => {
+  let body: unknown;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
+  const parsed = patchSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
+
+  const admin = createAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (admin as any)
+    .from("sop_runs")
+    .update({
+      steps_done: parsed.data.stepsDone,
+      status: parsed.data.completed ? "completed" : "started",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", parsed.data.id)
+    .eq("user_id", user.id); // a user can only update their own run
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+});

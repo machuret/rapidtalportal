@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { parseSopSteps } from "@/lib/sop-steps";
@@ -9,20 +9,49 @@ import { CheckCircle2, Circle, RotateCcw, Sparkles, Loader2, PartyPopper } from 
 
 interface AskResponse { answer: string }
 
-export function SopRunner({ title, body, clientId }: {
-  title: string; body: string; clientId: string;
+export function SopRunner({ sopId, title, body, clientId }: {
+  sopId: string; title: string; body: string; clientId: string;
 }) {
   const steps = useMemo(() => parseSopSteps(body), [body]);
   const [done, setDone] = useState<Set<number>>(new Set());
   const [help, setHelp] = useState<Record<number, string>>({});
   const [helpLoading, setHelpLoading] = useState<number | null>(null);
 
+  // Best-effort usage tracking — never blocks the runner.
+  const runId = useRef<string | null>(null);
+  const completedLogged = useRef(false);
+
+  async function ensureRun() {
+    if (runId.current) return;
+    try {
+      const r = await api.post<{ id: string }>(ROUTES.sopRun(), { sopId, stepsTotal: steps.length }, { showErrorToast: false });
+      runId.current = r.id ?? null;
+    } catch { /* tracking is best-effort */ }
+  }
+
+  async function logProgress(stepsDone: number, isComplete: boolean) {
+    if (!runId.current) return;
+    try {
+      await api.patch(ROUTES.sopRun(), { id: runId.current, stepsDone, completed: isComplete }, { showErrorToast: false });
+    } catch { /* best-effort */ }
+  }
+
   const completed = done.size;
   const pct = steps.length ? Math.round((completed / steps.length) * 100) : 0;
   const allDone = steps.length > 0 && completed === steps.length;
 
   function toggle(i: number) {
-    setDone((prev) => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; });
+    setDone((prev) => {
+      const n = new Set(prev);
+      if (n.has(i)) n.delete(i); else n.add(i);
+      // Start tracking on first interaction; log completion when all done.
+      if (n.size > 0) void ensureRun().then(() => {
+        const isComplete = n.size === steps.length && steps.length > 0;
+        if (isComplete && !completedLogged.current) completedLogged.current = true;
+        void logProgress(n.size, isComplete);
+      });
+      return n;
+    });
   }
 
   async function askHelp(i: number) {
