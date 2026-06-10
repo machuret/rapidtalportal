@@ -2,13 +2,14 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { Sop } from "@/app/(portal)/sops/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Pencil, Trash2, Copy, Check, Save, X, ListChecks, Tag, Clock, Copy as CopyIcon, Loader2 } from "lucide-react";
+import { Pencil, Trash2, Copy, Check, Save, X, ListChecks, Tag, Clock, Copy as CopyIcon, Loader2, Play } from "lucide-react";
 import { useSops } from "@/hooks/useSops";
 
 interface Props {
@@ -163,6 +164,11 @@ export function SopDetail({ sop: initial, canEdit, clientId, categories }: Props
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <Link href={`/sops/${sop.id}/run`}>
+            <Button size="sm" className="gap-1.5">
+              <Play className="w-3.5 h-3.5" /> Run step-by-step
+            </Button>
+          </Link>
           <Button variant="outline" size="sm" onClick={copy}>
             {copied
               ? <><Check className="w-3.5 h-3.5 text-green-400" /> Copied</>
