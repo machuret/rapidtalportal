@@ -19,6 +19,14 @@ export class ApiError extends Error {
 interface RequestConfig extends RequestInit {
   retries?: number;
   showErrorToast?: boolean;
+  /**
+   * Allow automatic retries for a non-GET request. Off by default: retrying a
+   * POST/PATCH/DELETE that failed with a network error or 5xx is unsafe — the
+   * server may have already processed it, so a retry can duplicate the write
+   * (a second task, a second credential, a double charge). Set this only for
+   * endpoints that are genuinely idempotent.
+   */
+  idempotent?: boolean;
 }
 
 const MAX_RETRIES = 3;
@@ -32,8 +40,16 @@ export async function apiClient<T>(
   endpoint: string,
   config: RequestConfig = {}
 ): Promise<T> {
-  const { retries = MAX_RETRIES, showErrorToast = true, ...fetchConfig } = config;
-  
+  const { retries = MAX_RETRIES, showErrorToast = true, idempotent, ...fetchConfig } = config;
+
+  // Only auto-retry requests that are safe to repeat. GET/HEAD are always safe;
+  // a write (POST/PATCH/DELETE) is retried only when the caller explicitly marks
+  // the endpoint idempotent, otherwise a single network blip after the server
+  // already committed would create a duplicate record.
+  const method = (fetchConfig.method ?? "GET").toUpperCase();
+  const canRetry = idempotent ?? (method === "GET" || method === "HEAD");
+  const maxAttempts = canRetry ? retries : 1;
+
   // Normalise to exactly one "/api" prefix. Call sites are inconsistent — most
   // pass "/kb/generate" or "sops", a few pass "/api/admin/users" — but every
   // route lives under /api. Without this, leading-slash paths like "/kb/generate"
@@ -48,7 +64,7 @@ export async function apiClient<T>(
   
   let lastError: Error | null = null;
   
-  for (let attempt = 0; attempt < retries; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       const response = await fetch(url, {
         ...fetchConfig,
@@ -82,7 +98,7 @@ export async function apiClient<T>(
       }
       
       // Last attempt failed
-      if (attempt === retries - 1) break;
+      if (attempt === maxAttempts - 1) break;
       
       // Exponential backoff
       await sleep(RETRY_DELAY * Math.pow(2, attempt));
