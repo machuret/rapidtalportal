@@ -22,8 +22,7 @@ export const POST = withAuth(async (req, { user }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: row } = await (admin as any)
+  const { data: row } = await admin
     .from("access_credentials")
     .select("id, client_id, password_enc")
     .eq("id", parsed.data.id)
@@ -45,8 +44,7 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   // Audit trail: the client admin can see exactly who viewed which login.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (admin as any).from("access_credential_reveals").insert({
+  await admin.from("access_credential_reveals").insert({
     credential_id: cred.id,
     client_id: cred.client_id,
     user_id: user.id,

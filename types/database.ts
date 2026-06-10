@@ -202,6 +202,36 @@ export interface Database {
         Update: { id?: string; user_id?: string; client_id?: string; work_date?: string; phase?: TimeEntryPhase; started_at?: string; ended_at?: string | null; is_manual?: boolean; notes?: string | null; category?: string; created_at?: string };
         Relationships: NoRelationships;
       };
+      sop_runs: {
+        Row: { id: string; sop_id: string; client_id: string | null; user_id: string | null; status: string; steps_total: number; steps_done: number; created_at: string; updated_at: string };
+        Insert: { id?: string; sop_id: string; client_id?: string | null; user_id?: string | null; status?: string; steps_total?: number; steps_done?: number; created_at?: string; updated_at?: string };
+        Update: { id?: string; sop_id?: string; client_id?: string | null; user_id?: string | null; status?: string; steps_total?: number; steps_done?: number; created_at?: string; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      tasks: {
+        Row: { id: string; client_id: string; assigned_to: string | null; created_by: string | null; title: string; description: string; status: string; order_index: number; due_date: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; assigned_to?: string | null; created_by?: string | null; title: string; description?: string; status?: string; order_index?: number; due_date?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; assigned_to?: string | null; created_by?: string | null; title?: string; description?: string; status?: string; order_index?: number; due_date?: string | null; created_at?: string; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      access_credentials: {
+        Row: { id: string; client_id: string; created_by: string | null; site: string; category: string; url: string; username: string; password_enc: string; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; created_by?: string | null; site: string; category?: string; url?: string; username?: string; password_enc: string; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; created_by?: string | null; site?: string; category?: string; url?: string; username?: string; password_enc?: string; created_at?: string; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      access_credential_reveals: {
+        Row: { id: string; credential_id: string; client_id: string; user_id: string | null; revealed_at: string };
+        Insert: { id?: string; credential_id: string; client_id: string; user_id?: string | null; revealed_at?: string };
+        Update: { id?: string; credential_id?: string; client_id?: string; user_id?: string | null; revealed_at?: string };
+        Relationships: NoRelationships;
+      };
+      schema_migrations: {
+        Row: { version: string; applied_at: string };
+        Insert: { version: string; applied_at?: string };
+        Update: { version?: string; applied_at?: string };
+        Relationships: NoRelationships;
+      };
     };
     Views: Record<string, never>;
     Functions: {

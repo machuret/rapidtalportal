@@ -11,6 +11,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
+import type { Database } from "@/types/database";
 import { encryptSecret, isEncryptionConfigured } from "@/lib/crypto/credentials";
 
 const ADMIN_ROLES = ["client_admin", "super_admin"];
@@ -52,8 +53,7 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("access_credentials")
     .select(SAFE_SELECT)
     .eq("client_id", clientId)
@@ -75,8 +75,7 @@ export const POST = withAuth(async (req, { user }) => {
   if (!isEncryptionConfigured()) return encryptionNotConfigured();
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("access_credentials")
     .insert({
       client_id: parsed.data.clientId,
@@ -102,8 +101,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input.", issues: parsed.error.flatten() }, { status: 422 });
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (admin as any)
+  const { data: existing } = await admin
     .from("access_credentials")
     .select("id, client_id")
     .eq("id", parsed.data.id)
@@ -113,7 +111,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   const denied = assertClientAccess(user, (existing as { client_id: string }).client_id);
   if (denied) return denied;
 
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const updates: Database["public"]["Tables"]["access_credentials"]["Update"] = { updated_at: new Date().toISOString() };
   if (parsed.data.site !== undefined) updates.site = parsed.data.site.trim();
   if (parsed.data.category !== undefined) updates.category = parsed.data.category.trim();
   if (parsed.data.url !== undefined) updates.url = parsed.data.url.trim();
@@ -123,8 +121,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     updates.password_enc = encryptSecret(parsed.data.password);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("access_credentials")
     .update(updates)
     .eq("id", parsed.data.id)
@@ -142,8 +139,7 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (admin as any)
+  const { data: existing } = await admin
     .from("access_credentials")
     .select("id, client_id")
     .eq("id", parsed.data.id)
@@ -153,8 +149,7 @@ export const DELETE = withAuth(async (req, { user }) => {
   const denied = assertClientAccess(user, (existing as { client_id: string }).client_id);
   if (denied) return denied;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any).from("access_credentials").delete().eq("id", parsed.data.id);
+  const { error } = await admin.from("access_credentials").delete().eq("id", parsed.data.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }, { roles: ADMIN_ROLES });

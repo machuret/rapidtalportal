@@ -9,6 +9,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
+import type { Database } from "@/types/database";
 
 const STATUSES = ["todo", "in_progress", "review", "done"] as const;
 
@@ -50,8 +51,7 @@ export const POST = withAuth(async (req, { user }) => {
   const assignedTo = isAdmin(user.role) ? (parsed.data.assignedTo ?? null) : user.id;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("tasks")
     .insert({
       client_id: parsed.data.clientId,
@@ -97,7 +97,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "Only admins can reassign tasks." }, { status: 403 });
   }
 
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const updates: Database["public"]["Tables"]["tasks"]["Update"] = { updated_at: new Date().toISOString() };
   if (parsed.data.title !== undefined) updates.title = parsed.data.title.trim();
   if (parsed.data.description !== undefined) updates.description = parsed.data.description;
   if (parsed.data.assignedTo !== undefined) updates.assigned_to = parsed.data.assignedTo;
@@ -105,8 +105,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (parsed.data.status !== undefined) updates.status = parsed.data.status;
   if (parsed.data.orderIndex !== undefined) updates.order_index = parsed.data.orderIndex;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("tasks")
     .update(updates)
     .eq("id", parsed.data.id)
