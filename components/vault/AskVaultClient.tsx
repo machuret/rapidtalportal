@@ -96,10 +96,13 @@ export function AskVaultClient({
   clientId,
   companyName,
   canCurate,
+  externalAsk,
 }: {
   clientId: string;
   companyName: string;
   canCurate: boolean;
+  /** Lets a parent (e.g. golden questions panel) submit a question into this chat. */
+  externalAsk?: { q: string; nonce: number } | null;
 }) {
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -110,6 +113,12 @@ export function AskVaultClient({
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns, interim]);
+
+  // A parent panel (golden questions) can push a question into the chat.
+  useEffect(() => {
+    if (externalAsk?.q) void ask(externalAsk.q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalAsk?.nonce]);
 
   async function ask(q: string) {
     const trimmed = q.trim();

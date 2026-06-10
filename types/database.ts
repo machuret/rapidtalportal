@@ -238,6 +238,12 @@ export interface Database {
         Update: { id?: string; client_id?: string; created_by?: string | null; url?: string; status?: string; error?: string | null; firecrawl_id?: string | null; page_cap?: number; pages_total?: number; pages_done?: number; items_created?: number; products_seen?: number; pages_dropped?: number; tokens_used?: number; dossier_item_id?: string | null; meta?: Record<string, unknown>; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
+      golden_questions: {
+        Row: { id: string; client_id: string; question: string; last_status: string | null; last_checked_at: string | null; history: { s: string; at: string }[]; created_by: string | null; created_at: string };
+        Insert: { id?: string; client_id: string; question: string; last_status?: string | null; last_checked_at?: string | null; history?: { s: string; at: string }[]; created_by?: string | null; created_at?: string };
+        Update: { id?: string; client_id?: string; question?: string; last_status?: string | null; last_checked_at?: string | null; history?: { s: string; at: string }[]; created_by?: string | null; created_at?: string };
+        Relationships: NoRelationships;
+      };
       vault_analyses: {
         Row: { id: string; client_id: string; content: string; model: string | null; source_url: string | null; tokens_used: number; created_by: string | null; created_at: string; updated_at: string };
         Insert: { id?: string; client_id: string; content: string; model?: string | null; source_url?: string | null; tokens_used?: number; created_by?: string | null; created_at?: string; updated_at?: string };

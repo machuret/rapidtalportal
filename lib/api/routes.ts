@@ -53,6 +53,7 @@ export const ROUTES = {
     topicsGenerate: () => "/api/content/topics/generate",
   },
   tasks: () => "/api/tasks",
+  goldenQuestions: () => "/api/golden-questions",
   access: () => "/api/access",
   accessReveal: () => "/api/access/reveal",
   accessReveals: () => "/api/access/reveals",

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { AskVaultClient } from "@/components/vault/AskVaultClient";
+import { AdminAskClient } from "@/components/vault/AdminAskClient";
 import { cn } from "@/lib/utils";
 import { Sparkles } from "lucide-react";
 
@@ -66,11 +66,10 @@ export default async function AdminAskPage({ searchParams }: { searchParams: { c
           </div>
 
           {clientId && (
-            <AskVaultClient
+            <AdminAskClient
               key={clientId}
               clientId={clientId}
               companyName={clientName}
-              canCurate
             />
           )}
         </>
