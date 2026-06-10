@@ -5,6 +5,7 @@ import { MobileSidebarTrigger } from "@/components/layout/MobileSidebarTrigger";
 import { createClient } from "@/lib/supabase/server";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
+import { ErrorReporter } from "@/components/layout/ErrorReporter";
 
 export default async function PortalLayout({
   children,
@@ -45,6 +46,7 @@ export default async function PortalLayout({
 
   return (
     <div className="flex min-h-screen bg-zinc-950 text-zinc-50">
+      <ErrorReporter />
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
         <Sidebar user={ctx.user} client={ctx.client} />

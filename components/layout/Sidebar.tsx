@@ -29,6 +29,7 @@ import {
   Eye,
   KanbanSquare,
   KeyRound,
+  Bug,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,7 @@ const adminLinks = [
   { href: "/access",           label: "Access",      icon: KeyRound },
   { href: "/supervision",      label: "Supervision", icon: Eye },
   { href: "/admin/daily-logs", label: "Daily Logs",  icon: NotebookPen },
+  { href: "/admin/errors",     label: "Errors",      icon: Bug },
 ];
 
 export function Sidebar({ user, client, onNavigate }: SidebarProps) {

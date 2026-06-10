@@ -73,3 +73,6 @@ export const deepAnalysisLimiter = new SlidingWindowLimiter(6, 60 * 60_000);
 
 // Refreshing the Company Dossier from the current vault — one synthesis call.
 export const briefingLimiter = new SlidingWindowLimiter(8, 60 * 60_000);
+
+// Browser error reports — enough for real bugs, useless for flooding.
+export const clientErrorLimiter = new SlidingWindowLimiter(10, 5 * 60_000);

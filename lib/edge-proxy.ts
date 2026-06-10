@@ -13,6 +13,7 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
+import { captureError } from "@/lib/error-tracking";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -59,7 +60,7 @@ export async function proxyToEdgeFunction(
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch (err) {
-    console.error(`Edge function proxy error [${functionName}]:`, err);
+    captureError("proxy", err, { userId: user.id, url: `edge:${functionName}` });
     return NextResponse.json(
       { error: "Failed to reach edge function." },
       { status: 502 },
@@ -111,7 +112,7 @@ export async function streamEdgeFunction(
       },
     });
   } catch (err) {
-    console.error(`Edge stream proxy error [${functionName}]:`, err);
+    captureError("proxy", err, { userId: user.id, url: `edge:${functionName}` });
     return NextResponse.json({ error: "Failed to reach edge function." }, { status: 502 });
   }
 }

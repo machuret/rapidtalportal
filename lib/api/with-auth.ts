@@ -9,6 +9,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiAuth, type ApiUser } from "@/lib/api-auth";
+import { captureError } from "@/lib/error-tracking";
 
 type AuthedHandler<P> = (
   req: NextRequest,
@@ -25,7 +26,18 @@ export function withAuth<P = Record<string, never>>(
     if (opts?.roles && !opts.roles.includes(auth.user.role)) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
-    return handler(req, { user: auth.user, params: (routeCtx?.params ?? {}) as P });
+    try {
+      return await handler(req, { user: auth.user, params: (routeCtx?.params ?? {}) as P });
+    } catch (err) {
+      // One catch instruments every wrapped route: the error is recorded for
+      // /admin/errors and the caller gets a clean 500 instead of a crash page.
+      captureError("api", err, {
+        userId: auth.user.id,
+        clientId: auth.user.client_id,
+        url: req.nextUrl?.pathname,
+      });
+      return NextResponse.json({ error: "Something went wrong on our side. The team has been notified." }, { status: 500 });
+    }
   };
 }
 

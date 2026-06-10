@@ -25,12 +25,14 @@ export default async function AdminOverviewPage() {
   const since7d = new Date(Date.now() - 7 * 86400_000).toISOString();
   const logSince = new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10);
 
-  const [{ data: clients }, { data: users }, { data: vault }, { data: tasks }, { data: logs }] = await Promise.all([
+  const since24h = new Date(Date.now() - 86_400_000).toISOString();
+  const [{ data: clients }, { data: users }, { data: vault }, { data: tasks }, { data: logs }, { count: errors24h }] = await Promise.all([
     admin.from("clients").select("id, name, created_at").order("name"),
     admin.from("users").select("id, client_id, role"),
     admin.from("vault_items").select("client_id, status, created_at, tags"),
     admin.from("tasks").select("client_id, status, updated_at"),
     admin.from("daily_logs").select("client_id, user_id, log_date").gte("log_date", logSince),
+    admin.from("app_errors").select("id", { count: "exact", head: true }).gte("created_at", since24h),
   ]);
 
   type U = { id: string; client_id: string | null; role: string };
@@ -108,6 +110,9 @@ export default async function AdminOverviewPage() {
           <p className="text-zinc-400 text-sm mt-1">
             {totals.clients} client{totals.clients !== 1 ? "s" : ""} · {totals.vas} VA{totals.vas !== 1 ? "s" : ""}
             {totals.attention > 0 && <span className="text-amber-400"> · {totals.attention} need{totals.attention === 1 ? "s" : ""} attention</span>}
+            {(errors24h ?? 0) > 0 && (
+              <Link href="/admin/errors" className="text-red-400 hover:text-red-300"> · {errors24h} app error{errors24h !== 1 ? "s" : ""} · 24h</Link>
+            )}
           </p>
         </div>
       </div>

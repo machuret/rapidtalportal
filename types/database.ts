@@ -163,6 +163,12 @@ export interface Database {
         Update: { id?: string; client_id?: string; first_name?: string; last_name?: string | null; email?: string | null; phone?: string | null; company?: string | null; job_title?: string | null; status?: string; source?: string | null; tags?: string[]; notes?: string | null; created_by?: string | null; archived_at?: string | null; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
+      app_errors: {
+        Row: { id: string; source: string; message: string; stack: string | null; url: string | null; user_id: string | null; client_id: string | null; created_at: string };
+        Insert: { id?: string; source: string; message: string; stack?: string | null; url?: string | null; user_id?: string | null; client_id?: string | null; created_at?: string };
+        Update: { id?: string; source?: string; message?: string; stack?: string | null; url?: string | null; user_id?: string | null; client_id?: string | null; created_at?: string };
+        Relationships: NoRelationships;
+      };
       crm_events: {
         Row: { id: string; contact_id: string; client_id: string; user_id: string | null; body: string; created_at: string };
         Insert: { id?: string; contact_id: string; client_id: string; user_id?: string | null; body: string; created_at?: string };
