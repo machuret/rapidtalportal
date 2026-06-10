@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Wand2, Loader2, Copy, Check, RefreshCw } from "lucide-react";
+import { Wand2, Loader2, Copy, Check, RefreshCw, Reply } from "lucide-react";
 
 interface AskResponse {
   answer: string;
@@ -26,9 +26,21 @@ Task: ${task}
 Write a polished, ready-to-send ${noun} in ${company}'s voice and tone, using our real services, details, and policies from the company knowledge. Plain text only — no markdown. If a specific detail (a name, date, or price) isn't in our knowledge, leave a clear [placeholder] instead of inventing it. Output only the draft itself.`;
 }
 
+function buildReplyInstruction(inbound: string, guidance: string, company: string) {
+  return `A customer or contact sent ${company} this message:
+"""
+${inbound}
+"""
+${guidance ? `Extra guidance for the reply: ${guidance}\n` : ""}
+Draft a helpful, professional reply on behalf of ${company}, in our voice and tone. Address their specific questions and requests using our real services, details, and policies from the company knowledge. Plain text only — no markdown. If a specific detail isn't in our knowledge, leave a clear [placeholder] instead of inventing it. Output only the reply.`;
+}
+
 export function ComposeClient({ clientId, companyName }: { clientId: string; companyName: string }) {
+  const [mode, setMode] = useState<"new" | "reply">("new");
   const [type, setType] = useState<DraftType>("Email");
   const [task, setTask] = useState("");
+  const [inbound, setInbound] = useState("");
+  const [guidance, setGuidance] = useState("");
   const [draft, setDraft] = useState<string | null>(null);
   const [sources, setSources] = useState<AskResponse["sources"]>([]);
   const [history, setHistory] = useState<{ question: string; answer: string }[]>([]);
@@ -57,8 +69,14 @@ export function ComposeClient({ clientId, companyName }: { clientId: string; com
   }
 
   function compose() {
-    if (task.trim().length < 5 || loading) return;
-    run(buildInstruction(type, task.trim(), companyName), false);
+    if (loading) return;
+    if (mode === "new") {
+      if (task.trim().length < 5) return;
+      run(buildInstruction(type, task.trim(), companyName), false);
+    } else {
+      if (inbound.trim().length < 5) return;
+      run(buildReplyInstruction(inbound.trim(), guidance.trim(), companyName), false);
+    }
   }
 
   function doRefine() {
@@ -90,36 +108,77 @@ export function ComposeClient({ clientId, companyName }: { clientId: string; com
         </div>
       </div>
 
-      {/* Type */}
-      <div className="flex gap-1.5 flex-wrap mb-3">
-        {TYPES.map((t) => (
-          <button
-            key={t}
-            onClick={() => setType(t)}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
-              type === t
-                ? "bg-zinc-700 text-white border-zinc-700"
-                : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200",
-            )}
-          >
-            {t}
-          </button>
-        ))}
+      {/* Mode toggle */}
+      <div className="flex gap-1.5 mb-4">
+        <button
+          onClick={() => setMode("new")}
+          className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+            mode === "new" ? "bg-zinc-700 text-white border-zinc-700" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200")}
+        >
+          <Wand2 className="w-3.5 h-3.5" /> New draft
+        </button>
+        <button
+          onClick={() => setMode("reply")}
+          className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+            mode === "reply" ? "bg-zinc-700 text-white border-zinc-700" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200")}
+        >
+          <Reply className="w-3.5 h-3.5" /> Reply to a message
+        </button>
       </div>
 
-      {/* Task */}
-      <Textarea
-        value={task}
-        onChange={(e) => setTask(e.target.value)}
-        rows={3}
-        placeholder="e.g. Draft a friendly confirmation email for a customer who just booked the A Strait Day tour for 2 people next Saturday."
-        className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600 mb-3"
-      />
-      <Button onClick={compose} disabled={loading || task.trim().length < 5} className="gap-1.5">
-        {loading && !draft ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-        Draft it
-      </Button>
+      {mode === "new" ? (
+        <>
+          {/* Type */}
+          <div className="flex gap-1.5 flex-wrap mb-3">
+            {TYPES.map((t) => (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+                  type === t
+                    ? "bg-zinc-700 text-white border-zinc-700"
+                    : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200",
+                )}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <Textarea
+            value={task}
+            onChange={(e) => setTask(e.target.value)}
+            rows={3}
+            placeholder="e.g. Draft a friendly confirmation email for a customer who just booked the A Strait Day tour for 2 people next Saturday."
+            className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600 mb-3"
+          />
+          <Button onClick={compose} disabled={loading || task.trim().length < 5} className="gap-1.5">
+            {loading && !draft ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+            Draft it
+          </Button>
+        </>
+      ) : (
+        <>
+          <label className="label-section mb-1.5 block">Paste the message you received</label>
+          <Textarea
+            value={inbound}
+            onChange={(e) => setInbound(e.target.value)}
+            rows={6}
+            placeholder="Paste the customer's email or message here…"
+            className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600 mb-3"
+          />
+          <Input
+            value={guidance}
+            onChange={(e) => setGuidance(e.target.value)}
+            placeholder="Optional: how to handle it — e.g. offer the 2-day tour, be apologetic, confirm availability…"
+            className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600 mb-3"
+          />
+          <Button onClick={compose} disabled={loading || inbound.trim().length < 5} className="gap-1.5">
+            {loading && !draft ? <Loader2 className="w-4 h-4 animate-spin" /> : <Reply className="w-4 h-4" />}
+            Draft reply
+          </Button>
+        </>
+      )}
 
       {/* Draft output */}
       {draft && (
