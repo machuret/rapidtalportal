@@ -140,9 +140,9 @@ export interface Database {
         Relationships: NoRelationships;
       };
       vault_items: {
-        Row: { id: string; client_id: string; source_type: string; title: string; source_url: string | null; storage_path: string | null; raw_content: string | null; status: string; error_message: string | null; created_at: string; created_by: string | null; category: string | null; tags: string[]; ai_summary: string | null; updated_at: string | null; updated_by: string | null; content_hash: string | null };
-        Insert: { id?: string; client_id: string; source_type: string; title: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null };
-        Update: { id?: string; client_id?: string; source_type?: string; title?: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null };
+        Row: { id: string; client_id: string; source_type: string; title: string; source_url: string | null; storage_path: string | null; raw_content: string | null; status: string; error_message: string | null; created_at: string; created_by: string | null; category: string | null; tags: string[]; ai_summary: string | null; updated_at: string | null; updated_by: string | null; content_hash: string | null; meta_curated: boolean };
+        Insert: { id?: string; client_id: string; source_type: string; title: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null; meta_curated?: boolean };
+        Update: { id?: string; client_id?: string; source_type?: string; title?: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null; meta_curated?: boolean };
         Relationships: NoRelationships;
       };
       kb_entries: {
@@ -230,6 +230,12 @@ export interface Database {
         Row: { version: string; applied_at: string };
         Insert: { version: string; applied_at?: string };
         Update: { version?: string; applied_at?: string };
+        Relationships: NoRelationships;
+      };
+      crawl_jobs: {
+        Row: { id: string; client_id: string; created_by: string | null; url: string; status: string; error: string | null; firecrawl_id: string | null; page_cap: number; pages_total: number; pages_done: number; items_created: number; products_seen: number; pages_dropped: number; tokens_used: number; dossier_item_id: string | null; meta: Record<string, unknown>; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; created_by?: string | null; url: string; status?: string; error?: string | null; firecrawl_id?: string | null; page_cap?: number; pages_total?: number; pages_done?: number; items_created?: number; products_seen?: number; pages_dropped?: number; tokens_used?: number; dossier_item_id?: string | null; meta?: Record<string, unknown>; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; created_by?: string | null; url?: string; status?: string; error?: string | null; firecrawl_id?: string | null; page_cap?: number; pages_total?: number; pages_done?: number; items_created?: number; products_seen?: number; pages_dropped?: number; tokens_used?: number; dossier_item_id?: string | null; meta?: Record<string, unknown>; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
     };

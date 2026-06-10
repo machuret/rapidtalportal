@@ -1,0 +1,123 @@
+/**
+ * Full-site crawl — start + status.
+ *
+ * POST — kick off a site crawl: creates a crawl_jobs row and submits the crawl
+ *        to Firecrawl's async API. Firecrawl does discovery + scraping on its
+ *        own infrastructure; our /advance endpoint ingests the results in
+ *        small idempotent ticks.
+ * GET  — latest job for a client (the Vault page uses this to resume/display).
+ */
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { assertClientAccess } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api/with-auth";
+import { siteCrawlLimiter, tooManyRequests } from "@/lib/rate-limit";
+
+const PAGE_CAP = 50;
+
+const startSchema = z.object({
+  clientId: z.string().uuid(),
+  url: z.string().url(),
+});
+
+const PRIVATE_IP_RE = /^(localhost|127\.|0\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1|fc00:|fe80:)/i;
+
+function isBlockedUrl(raw: string): boolean {
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol !== "https:" || PRIVATE_IP_RE.test(parsed.hostname);
+  } catch {
+    return true;
+  }
+}
+
+export const GET = withAuth(async (req, { user }) => {
+  const clientId = req.nextUrl.searchParams.get("clientId");
+  if (!clientId) return NextResponse.json({ error: "Missing clientId." }, { status: 400 });
+  const denied = assertClientAccess(user, clientId);
+  if (denied) return denied;
+
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("crawl_jobs")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return NextResponse.json({ job: data ?? null });
+});
+
+export const POST = withAuth(async (req, { user }) => {
+  let body: unknown;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
+  const parsed = startSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "A valid https URL is required." }, { status: 422 });
+
+  const denied = assertClientAccess(user, parsed.data.clientId);
+  if (denied) return denied;
+
+  if (isBlockedUrl(parsed.data.url)) {
+    return NextResponse.json({ error: "Only public HTTPS URLs can be crawled." }, { status: 400 });
+  }
+
+  const rl = siteCrawlLimiter.check(`site-crawl:${user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
+
+  const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+  if (!firecrawlKey) {
+    return NextResponse.json({ error: "FIRECRAWL_API_KEY is not configured." }, { status: 503 });
+  }
+
+  const admin = createAdminClient();
+
+  // One active crawl per client at a time — they're heavyweight.
+  const { data: active } = await admin
+    .from("crawl_jobs")
+    .select("id, status")
+    .eq("client_id", parsed.data.clientId)
+    .in("status", ["crawling", "ingesting", "synthesizing"])
+    .limit(1)
+    .maybeSingle();
+  if (active) {
+    return NextResponse.json({ error: "A crawl is already running for this client. Let it finish first." }, { status: 409 });
+  }
+
+  // Submit to Firecrawl's async crawl API. Account/cart/legal paths are
+  // excluded up front so they never consume crawl credits.
+  const fcRes = await fetch("https://api.firecrawl.dev/v1/crawl", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${firecrawlKey}` },
+    body: JSON.stringify({
+      url: parsed.data.url,
+      limit: PAGE_CAP,
+      excludePaths: ["cart", "checkout", "account", "login", "register", "wishlist", "search"],
+      scrapeOptions: { formats: ["markdown"], onlyMainContent: true, waitFor: 2000, timeout: 45000 },
+    }),
+  });
+  const fcJson = await fcRes.json().catch(() => ({}));
+  if (!fcRes.ok || !fcJson?.id) {
+    return NextResponse.json(
+      { error: `Couldn't start the crawl: ${fcJson?.error ?? `Firecrawl returned ${fcRes.status}`}` },
+      { status: 502 },
+    );
+  }
+
+  const { data: job, error } = await admin
+    .from("crawl_jobs")
+    .insert({
+      client_id: parsed.data.clientId,
+      created_by: user.id,
+      url: parsed.data.url,
+      status: "crawling",
+      firecrawl_id: fcJson.id as string,
+      page_cap: PAGE_CAP,
+    })
+    .select("*")
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ job }, { status: 201 });
+});

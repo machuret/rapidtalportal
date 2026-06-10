@@ -62,3 +62,7 @@ export const askVaultLimiter = new SlidingWindowLimiter(20, 5 * 60_000);
 // compromised session from bulk-exporting an entire credential vault in
 // seconds — the reveal audit log captures whatever does get through.
 export const credentialRevealLimiter = new SlidingWindowLimiter(30, 5 * 60_000);
+
+// Starting a full-site crawl: each one consumes Firecrawl credits for up to
+// ~50 pages plus LLM synthesis. A handful per window is plenty.
+export const siteCrawlLimiter = new SlidingWindowLimiter(3, 15 * 60_000);

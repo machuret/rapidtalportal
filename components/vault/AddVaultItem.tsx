@@ -11,10 +11,13 @@ import { vaultListKeys } from "@/hooks/useVaultList";
 import { cn } from "@/lib/utils";
 import { CloudUpload, Globe, Type, Loader2, Sparkles, Plus } from "lucide-react";
 
+import type { CrawlJob } from "./CrawlJobPanel";
+
 interface AddVaultItemProps {
   clientId: string;
   userId: string;
   onAdded?: () => void;
+  onCrawlStarted?: (job: CrawlJob) => void;
 }
 
 const ACCEPTED = ".pdf,.docx,.txt,.md,.csv";
@@ -25,7 +28,7 @@ const URL_RE = /^https?:\/\/\S+$/i;
  * figures out which. No title/category/tags to fill in: titles are derived
  * server-side and category/tags come from AI processing.
  */
-export function AddVaultItem({ clientId, onAdded }: AddVaultItemProps) {
+export function AddVaultItem({ clientId, onAdded, onCrawlStarted }: AddVaultItemProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -79,8 +82,13 @@ export function AddVaultItem({ clientId, onAdded }: AddVaultItemProps) {
     try {
       if (URL_RE.test(value)) {
         if (aiCrawl) {
-          await api.post(ROUTES.vault.crawl(), { url: value, clientId }, { showErrorToast: false });
-          toast.success("Page crawled and added — AI is processing.");
+          // Full-site crawl: maps + scrapes the whole site via Firecrawl, then
+          // classifies pages, builds a product catalog, and writes a dossier.
+          const { job } = await api.post<{ job: CrawlJob }>(
+            ROUTES.vault.crawlSite(), { url: value, clientId }, { showErrorToast: false },
+          );
+          toast.success("Site crawl started — progress shows above.");
+          onCrawlStarted?.(job);
         } else {
           await api.post(ROUTES.vault.url(), { url: value, clientId }, { showErrorToast: false });
           toast.success("URL added — fetching and processing.");
@@ -163,8 +171,9 @@ export function AddVaultItem({ clientId, onAdded }: AddVaultItemProps) {
               {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
               Add page
             </Button>
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => submitText(true)} className="gap-1.5 border-zinc-700">
-              <Sparkles className="w-3.5 h-3.5" /> AI crawl
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => submitText(true)} className="gap-1.5 border-zinc-700"
+              title="Crawl the entire site: every meaningful page stored, products aggregated, plus a full company dossier">
+              <Sparkles className="w-3.5 h-3.5" /> Crawl whole site
             </Button>
           </>
         ) : (

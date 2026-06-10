@@ -13,6 +13,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { VaultItemDrawer } from "./VaultItemDrawer";
 import { AddVaultItem } from "./AddVaultItem";
+import { CrawlJobPanel, type CrawlJob } from "./CrawlJobPanel";
 import { VaultItemRow } from "./VaultItemRow";
 import { useVaultList } from "@/hooks/useVaultList";
 import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
@@ -75,6 +76,7 @@ function VaultClientInner({
   } = useVaultList(clientId, { q: debouncedSearch, category: categoryFilter, type: typeFilter });
 
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [crawlJob, setCrawlJob] = useState<CrawlJob | null>(null);
   const [editItem, setEditItem] = useState<DbVaultItem | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reprocessing, setReprocessing] = useState<string | null>(null);
@@ -227,9 +229,12 @@ function VaultClientInner({
         </div>
       )}
 
+      {/* Site-crawl progress — also resumes any job left running. */}
+      <CrawlJobPanel clientId={clientId} startedJob={crawlJob} />
+
       {/* Add item — VAs and client_admin can add. Realtime invalidation refreshes the list. */}
       {(canWrite || role === "va") && (
-        <AddVaultItem clientId={clientId} userId={userId} />
+        <AddVaultItem clientId={clientId} userId={userId} onCrawlStarted={setCrawlJob} />
       )}
 
       {/* Search + filter toolbar */}
