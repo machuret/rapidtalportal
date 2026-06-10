@@ -37,6 +37,8 @@ interface VaultClientProps {
   userId: string;
   role: string;
   canWrite: boolean; // client_admin or super_admin
+  title?: string;
+  subtitle?: string;
 }
 
 // The portal layout provides a global QueryClientProvider, so this just renders.
@@ -44,7 +46,11 @@ export function VaultClient(props: VaultClientProps) {
   return <VaultClientInner {...props} />;
 }
 
-function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps) {
+function VaultClientInner({
+  clientId, userId, role, canWrite,
+  title = "Vault",
+  subtitle = "Document and content store — the source of truth for AI-generated knowledge.",
+}: VaultClientProps) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -177,10 +183,8 @@ function VaultClientInner({ clientId, userId, role, canWrite }: VaultClientProps
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Vault</h1>
-          <p className="text-zinc-400 text-sm mt-1">
-            Document and content store — the source of truth for AI-generated knowledge.
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+          <p className="text-zinc-400 text-sm mt-1">{subtitle}</p>
         </div>
         <div className="flex items-center gap-3">
           {canReprocess && counts.total > 0 && (
