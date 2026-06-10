@@ -48,6 +48,8 @@ export const ROUTES = {
     topicsGenerate: () => "/api/content/topics/generate",
   },
   tasks: () => "/api/tasks",
+  access: () => "/api/access",
+  accessReveal: () => "/api/access/reveal",
   timeEntries: () => "/api/time-entries",
   team: (id: string) => `/api/team/${id}`,
   profile: () => "/api/profile",
