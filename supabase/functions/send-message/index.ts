@@ -137,6 +137,46 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // ── Notify teammates (deduped) ───────────────────────────────────────────
+    // One unread "new messages" notification per person per client at a time:
+    // recipients who already have one unread are skipped, so a chatty thread
+    // produces a single badge, not fifty. Best-effort — never fails the send.
+    try {
+      const { data: teammates } = await admin
+        .from("users")
+        .select("id")
+        .eq("client_id", userClientId)
+        .neq("id", authUser.id);
+      const recipientIds = ((teammates ?? []) as { id: string }[]).map((u) => u.id);
+
+      if (recipientIds.length > 0) {
+        const { data: alreadyUnread } = await admin
+          .from("notifications")
+          .select("user_id")
+          .eq("type", "message")
+          .eq("client_id", userClientId)
+          .is("read_at", null)
+          .in("user_id", recipientIds);
+        const skip = new Set(((alreadyUnread ?? []) as { user_id: string }[]).map((n) => n.user_id));
+        const toNotify = recipientIds.filter((id) => !skip.has(id));
+
+        if (toNotify.length > 0) {
+          await admin.from("notifications").insert(
+            toNotify.map((user_id) => ({
+              user_id,
+              client_id: userClientId,
+              type: "message",
+              title: `New messages from ${fullName}`,
+              body: trimmed.slice(0, 200),
+              href: "/messages",
+            })),
+          );
+        }
+      }
+    } catch (notifyErr) {
+      console.warn("send-message notify failed:", notifyErr);
+    }
+
     return new Response(JSON.stringify({ success: true, message: msg }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

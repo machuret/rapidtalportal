@@ -11,6 +11,8 @@ import { withAuth } from "@/lib/api/with-auth";
 const patchSchema = z.union([
   z.object({ id: z.string().uuid() }),
   z.object({ all: z.literal(true) }),
+  // Type-scoped clear, e.g. opening /messages marks all "message" ones read.
+  z.object({ type: z.string().min(1).max(50) }),
 ]);
 
 export const GET = withAuth(async (_req, { user }) => {
@@ -45,6 +47,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .eq("user_id", user.id)
     .is("read_at", null);
   if ("id" in parsed.data) query = query.eq("id", parsed.data.id);
+  if ("type" in parsed.data) query = query.eq("type", parsed.data.type);
 
   const { error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -137,6 +137,8 @@ function LogRow({ log, onFeedbackSaved }: { log: LogWithUser; onFeedbackSaved: (
 
 export function AdminDailyLogsReview({ logs }: { logs: LogWithUser[] }) {
   const [items, setItems] = useState(logs);
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "reviewed">("all");
+  const [vaFilter, setVaFilter] = useState<string>("all");
 
   function handleFeedbackSaved(id: string, feedback: string) {
     setItems(prev => prev.map(l => l.id === id ? { ...l, admin_feedback: feedback, reviewed_at: new Date().toISOString() } : l));
@@ -145,32 +147,77 @@ export function AdminDailyLogsReview({ logs }: { logs: LogWithUser[] }) {
   const pending  = items.filter(l => !l.reviewed_at).length;
   const reviewed = items.filter(l => l.reviewed_at).length;
 
+  // VA dropdown options from the loaded logs.
+  const vas = Array.from(
+    new Map(items.map(l => [l.user_id, l.users?.full_name ?? l.users?.email ?? "Unknown VA"])).entries(),
+  ).sort((a, b) => a[1].localeCompare(b[1]));
+
+  // Review queue: unreviewed logs first (oldest pending at the top so nothing
+  // rots), then reviewed ones newest-first.
+  const visible = items
+    .filter(l => statusFilter === "all" || (statusFilter === "pending" ? !l.reviewed_at : !!l.reviewed_at))
+    .filter(l => vaFilter === "all" || l.user_id === vaFilter)
+    .sort((a, b) => {
+      const aPending = a.reviewed_at ? 1 : 0;
+      const bPending = b.reviewed_at ? 1 : 0;
+      if (aPending !== bPending) return aPending - bPending;
+      return aPending === 0
+        ? a.log_date.localeCompare(b.log_date)   // pending: oldest first
+        : b.log_date.localeCompare(a.log_date);  // reviewed: newest first
+    });
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold">VA Daily Logs</h1>
-        <p className="text-zinc-400 text-sm mt-0.5">Last 30 days — review and leave feedback</p>
+        <p className="text-zinc-400 text-sm mt-0.5">Last 30 days — pending logs queue to the top, oldest first</p>
       </div>
 
-      <div className="flex gap-3">
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+      <div className="flex gap-3 flex-wrap items-end">
+        <button
+          onClick={() => setStatusFilter(statusFilter === "pending" ? "all" : "pending")}
+          className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+            statusFilter === "pending" ? "border-amber-500/50 bg-amber-500/10" : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
+          }`}
+        >
           <p className="text-2xl font-bold text-amber-400">{pending}</p>
           <p className="text-xs text-zinc-500">Pending Review</p>
-        </div>
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+        </button>
+        <button
+          onClick={() => setStatusFilter(statusFilter === "reviewed" ? "all" : "reviewed")}
+          className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+            statusFilter === "reviewed" ? "border-green-500/50 bg-green-500/10" : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
+          }`}
+        >
           <p className="text-2xl font-bold text-green-400">{reviewed}</p>
           <p className="text-xs text-zinc-500">Reviewed</p>
+        </button>
+        <div className="ml-auto">
+          <select
+            value={vaFilter}
+            onChange={e => setVaFilter(e.target.value)}
+            className="h-9 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-300 px-3 text-sm"
+          >
+            <option value="all">All VAs</option>
+            {vas.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
         </div>
       </div>
 
-      {items.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="text-center py-16 text-zinc-600">
-          <p>No daily logs in the last 30 days.</p>
-          <p className="text-sm mt-1">Your VAs haven&apos;t submitted logs yet.</p>
+          {items.length === 0 ? (
+            <>
+              <p>No daily logs in the last 30 days.</p>
+              <p className="text-sm mt-1">Your VAs haven&apos;t submitted logs yet.</p>
+            </>
+          ) : (
+            <p>Nothing matches these filters{statusFilter === "pending" ? " — review queue is clear 🎉" : "."}</p>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {items.map(log => (
+          {visible.map(log => (
             <LogRow key={log.id} log={log} onFeedbackSaved={handleFeedbackSaved} />
           ))}
         </div>

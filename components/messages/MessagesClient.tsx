@@ -56,6 +56,15 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
     if (isError) setError("Failed to load messages.");
   }, [isError]);
 
+  // ── Opening the chat clears the "new messages" bell notification ─────────────
+  useEffect(() => {
+    void fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "message" }),
+    }).catch(() => {});
+  }, []);
+
   // ── Scroll to bottom once the initial load completes ─────────────────────────
   useEffect(() => {
     if (!loading && !didInitialScroll.current) {
