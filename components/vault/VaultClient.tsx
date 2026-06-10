@@ -232,7 +232,7 @@ function VaultClientInner({
       </div>
 
       {view === "recap" ? (
-        <VaultRecap clientId={clientId} />
+        <VaultRecap clientId={clientId} canWrite={canWrite} />
       ) : view === "expanded" ? (
         <VaultExpanded clientId={clientId} canWrite={canWrite} />
       ) : (

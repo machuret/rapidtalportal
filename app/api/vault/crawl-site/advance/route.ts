@@ -24,6 +24,7 @@ import { triggerVaultProcess } from "@/lib/vault-process-trigger";
 import {
   classifyPage, extractPrices, buildCatalogMarkdown, verifyFigures, type CatalogEntry,
 } from "@/lib/crawl/classify";
+import { dossierSystemPrompt } from "@/lib/crawl/prompts";
 
 export const maxDuration = 60;
 
@@ -283,7 +284,7 @@ export const POST = withAuth(async (req, { user }) => {
           : "";
         const { text, tokens } = await llm(
           SYNTHESIS_MODEL,
-          `You are writing the definitive company dossier for ${host}, used daily by virtual assistants answering real customer questions. Write 1500-3000 words of rich, structured markdown with these sections (omit any with no data): ## Company Overview, ## Products & Pricing, ## Shipping & Delivery, ## Returns & Warranty, ## Programs (trade/wholesale/etc.), ## Contact & Support, ## Brand Voice & Positioning, ## FAQs. Rules: every number (prices, thresholds, timeframes) must be quoted VERBATIM from the notes — never invent or round. Cite source URLs inline like (source: URL). Be specific and complete; a VA should be able to answer customer questions from this document alone.`,
+          dossierSystemPrompt(host),
           `NOTES FROM ${meta.notes?.length ?? 0} PAGE GROUPS:\n\n${(meta.notes ?? []).join("\n\n---\n\n")}${catalogSection}`,
           4000,
         );

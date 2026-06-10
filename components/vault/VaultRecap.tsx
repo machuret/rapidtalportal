@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Markdown } from "./Markdown";
 import { VAULT_CATEGORIES, isVaultCategory } from "@/lib/taxonomy/vault-categories";
 import {
-  Loader2, FileText, ExternalLink, ChevronDown, ChevronRight, BookOpen, Package, Sparkles, AlertTriangle,
+  Loader2, FileText, ExternalLink, ChevronDown, ChevronRight, BookOpen, Package, Sparkles, AlertTriangle, RefreshCw,
 } from "lucide-react";
 
 interface RecapItem {
@@ -27,20 +29,40 @@ function StatusDot({ status }: { status: string }) {
   return <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", map[status] ?? "bg-zinc-500")} />;
 }
 
-export function VaultRecap({ clientId }: { clientId: string }) {
+export function VaultRecap({ clientId, canWrite }: { clientId: string; canWrite: boolean }) {
   const [data, setData] = useState<RecapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCatalog, setShowCatalog] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await api.get<RecapData>(`${ROUTES.vault.recap()}?clientId=${clientId}`, { showErrorToast: false });
+      setData(d);
+    } catch { setData(null); }
+  }, [clientId]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    api.get<RecapData>(`${ROUTES.vault.recap()}?clientId=${clientId}`, { showErrorToast: false })
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch(() => { if (!cancelled) setData(null); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    load().finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [clientId]);
+  }, [load]);
+
+  const refreshDossier = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const r = await api.post<{ unverified: string[]; itemsSummarized: number }>(
+        ROUTES.vault.refreshDossier(), { clientId }, { showErrorToast: false },
+      );
+      toast.success(`Dossier rebuilt from ${r.itemsSummarized} items${r.unverified.length ? ` · ${r.unverified.length} figure(s) flagged` : ""}.`);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't refresh the dossier.");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [clientId, load]);
 
   const grouped = useMemo(() => {
     if (!data) return [];
@@ -75,6 +97,16 @@ export function VaultRecap({ clientId }: { clientId: string }) {
         <span className="flex items-center gap-1.5 text-green-400"><span className="w-2 h-2 rounded-full bg-green-500" />{counts.ready} indexed</span>
         {counts.processing > 0 && <span className="flex items-center gap-1.5 text-blue-400"><span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />{counts.processing} indexing…</span>}
         {counts.error > 0 && <span className="flex items-center gap-1.5 text-red-400"><AlertTriangle className="w-3.5 h-3.5" />{counts.error} failed (use “Index for AI search”)</span>}
+        {canWrite && (
+          <Button
+            size="sm" variant="outline" onClick={refreshDossier} disabled={refreshing}
+            className="ml-auto gap-1.5 border-zinc-700 h-8 text-xs"
+            title="Rebuild the Company Dossier from everything currently in the vault, including newly added items"
+          >
+            {refreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            {data.dossier ? "Refresh dossier" : "Generate dossier"}
+          </Button>
+        )}
       </div>
 
       {/* Company Dossier — the full picture */}

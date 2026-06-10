@@ -19,6 +19,7 @@ export const ROUTES = {
   vault: {
     items: () => "/api/vault/items",
     recap: () => "/api/vault/recap",
+    refreshDossier: () => "/api/vault/refresh-dossier",
     expand: () => "/api/vault/expand",
     unindexed: () => "/api/vault/unindexed",
     text: () => "/api/vault/text",
