@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { VaDashboard } from "@/components/dashboard/VaDashboard";
+import { VaDayStrip, AdminTeamStrip } from "@/components/dashboard/DayStrips";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard — RapidTal" };
@@ -39,6 +40,48 @@ export default async function DashboardPage() {
 
   const statusCounts = (statusResult.data ?? []) as { status: string; count: number }[];
 
+  // ── Role-aware day strip ─────────────────────────────────────────────
+  const isAdmin = user.role === "client_admin";
+  const today = new Date().toISOString().slice(0, 10);
+  let topSlot: React.ReactNode = null;
+
+  if (isAdmin) {
+    const [{ data: vas }, { data: logsToday }, { data: openTaskRows }, { data: timeToday }] = await Promise.all([
+      supabase.from("users").select("id").eq("client_id", clientId).eq("role", "va"),
+      supabase.from("daily_logs").select("user_id").eq("client_id", clientId).eq("log_date", today),
+      supabase.from("tasks").select("id, status").eq("client_id", clientId).neq("status", "done"),
+      supabase.from("time_entries").select("started_at, ended_at").eq("client_id", clientId).eq("phase", "work").eq("work_date", today),
+    ]);
+    const open = (openTaskRows ?? []) as { status: string }[];
+    let hoursMs = 0;
+    for (const t of (timeToday ?? []) as { started_at: string; ended_at: string | null }[]) {
+      if (t.ended_at) hoursMs += new Date(t.ended_at).getTime() - new Date(t.started_at).getTime();
+    }
+    topSlot = (
+      <AdminTeamStrip
+        vaCount={(vas ?? []).length}
+        loggedToday={new Set(((logsToday ?? []) as { user_id: string }[]).map((l) => l.user_id)).size}
+        openTasks={open.length}
+        reviewTasks={open.filter((t) => t.status === "review").length}
+        hoursToday={hoursMs / 3_600_000}
+      />
+    );
+  } else {
+    const [{ data: myTasks }, { data: myLog }] = await Promise.all([
+      supabase.from("tasks").select("id, status, due_date").eq("client_id", clientId).eq("assigned_to", user.id).neq("status", "done"),
+      supabase.from("daily_logs").select("id").eq("user_id", user.id).eq("log_date", today).maybeSingle(),
+    ]);
+    const open = (myTasks ?? []) as { due_date: string | null }[];
+    topSlot = (
+      <VaDayStrip
+        openTasks={open.length}
+        dueToday={open.filter((t) => t.due_date === today).length}
+        overdue={open.filter((t) => t.due_date && t.due_date < today).length}
+        loggedToday={!!myLog}
+      />
+    );
+  }
+
   return (
     <VaDashboard
       userName={user.full_name ?? user.email}
@@ -49,6 +92,7 @@ export default async function DashboardPage() {
       statusCounts={statusCounts}
       vaultCount={vaultResult.count ?? 0}
       sopCount={sopsResult.count ?? 0}
+      topSlot={topSlot}
     />
   );
 }

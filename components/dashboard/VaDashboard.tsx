@@ -37,10 +37,12 @@ interface VaDashboardProps {
   statusCounts: StatusCount[];
   vaultCount: number;
   sopCount: number;
+  /** Role-aware "my day" / "team today" strip, server-rendered by the page. */
+  topSlot?: React.ReactNode;
 }
 
 
-export function VaDashboard({ userName, clientName, userId, kbEntries, recentContacts, statusCounts, vaultCount, sopCount }: VaDashboardProps) {
+export function VaDashboard({ userName, clientName, userId, kbEntries, recentContacts, statusCounts, vaultCount, sopCount, topSlot }: VaDashboardProps) {
   const [kbSearch, setKbSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -64,6 +66,9 @@ export function VaDashboard({ userName, clientName, userId, kbEntries, recentCon
         <h1 className="text-3xl font-bold tracking-tight">Good day, {userName} 👋</h1>
         <p className="text-zinc-400 text-sm mt-1 leading-relaxed">{clientName || "Welcome to your portal"}</p>
       </div>
+
+      {/* Role-aware day strip */}
+      {topSlot}
 
       {/* Getting started banner — shown when KB is empty */}
       {isEmpty && (

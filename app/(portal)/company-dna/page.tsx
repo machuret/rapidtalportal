@@ -20,15 +20,16 @@ export default async function CompanyDnaPage() {
     .eq("client_id", user.client_id)
     .maybeSingle();
 
-  // Any member of the client (client_admin or va) can edit Company DNA.
-  const canEdit =
-    user.role === "client_admin" || user.role === "super_admin" || user.role === "va";
+  // Admin-only editing: DNA feeds every AI answer, so a stray VA edit would
+  // silently poison the Brain. VAs read it; admins own it.
+  const canEdit = user.role === "client_admin" || user.role === "super_admin";
 
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold mb-1">Company DNA</h1>
       <p className="text-zinc-400 text-sm mb-8">
         Core information about {client?.name ?? "your client"} — used by the AI to generate knowledge base answers.
+        {!canEdit && " Read-only: ask your admin to update anything that's wrong."}
       </p>
       <DnaForm initialData={dna ?? null} clientId={user.client_id} readOnly={!canEdit} />
     </div>
