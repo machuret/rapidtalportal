@@ -47,6 +47,7 @@ export const ROUTES = {
     topicsForClient: (clientId: string) => `/api/content/topics?client_id=${clientId}`,
     topicsGenerate: () => "/api/content/topics/generate",
   },
+  tasks: () => "/api/tasks",
   timeEntries: () => "/api/time-entries",
   team: (id: string) => `/api/team/${id}`,
   profile: () => "/api/profile",

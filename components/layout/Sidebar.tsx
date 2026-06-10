@@ -27,6 +27,7 @@ import {
   Wand2,
   BarChart3,
   Eye,
+  KanbanSquare,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ const vaLinks = [
   { href: "/company-report", label: "Company Report", icon: Brain },
   { href: "/ask",            label: "Ask the Vault",  icon: Sparkles },
   { href: "/compose",        label: "Compose",        icon: Wand2 },
+  { href: "/tasks",          label: "Tasks",          icon: KanbanSquare },
   { href: "/daily-log",      label: "Daily Log",      icon: NotebookPen },
   { href: "/messages",       label: "Messages",       icon: MessageSquare },
   { href: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
@@ -60,6 +62,7 @@ const clientAdminLinks = [
   { href: "/compose",        label: "Compose",         icon: Wand2 },
   { href: "/brain-analytics",label: "Brain Analytics", icon: BarChart3 },
   { href: "/supervision",    label: "Supervision",     icon: Eye },
+  { href: "/tasks",          label: "Tasks",           icon: KanbanSquare },
   { href: "/team",           label: "My Team",         icon: UsersRound },
   { href: "/messages",       label: "Messages",       icon: MessageSquare },
   { href: "/daily-log",      label: "Daily Log",      icon: NotebookPen },
