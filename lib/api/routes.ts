@@ -28,6 +28,7 @@ export const ROUTES = {
     feedback: () => "/api/vault/feedback",
     promoteKb: () => "/api/vault/promote-kb",
     teach: () => "/api/vault/teach",
+    gaps: () => "/api/vault/gaps",
     item: (id: string) => `/api/vault/${id}`,
     reprocess: (id: string) => `/api/vault/${id}/reprocess`,
   },

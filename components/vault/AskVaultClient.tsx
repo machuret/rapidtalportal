@@ -291,7 +291,11 @@ function ChatTurn({
     setRated(r);
     try {
       await api.post(ROUTES.vault.feedback(), {
-        clientId, question: turn.question, answer: deepAnswer ?? turn.answer, rating: r,
+        clientId,
+        question: turn.question,
+        answer: deepAnswer ?? turn.answer,
+        rating: r,
+        sources: turn.sources.map((s) => ({ kind: s.kind, title: s.title, itemId: s.itemId })),
       }, { showErrorToast: false });
       toast.success("Thanks for the feedback.");
     } catch {

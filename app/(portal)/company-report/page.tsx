@@ -9,6 +9,8 @@ import {
 import {
   VAULT_CATEGORIES, VAULT_CATEGORY_ORDER, isVaultCategory,
 } from "@/lib/taxonomy/vault-categories";
+import { KnowledgeGaps } from "@/components/vault/KnowledgeGaps";
+import { HealthGroupActions } from "@/components/vault/VaultHealthActions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Company Report — RapidTal" };
@@ -44,7 +46,7 @@ export default async function CompanyReportPage() {
     admin.from("kb_entries").select("*", { count: "exact", head: true }).eq("client_id", clientId),
     admin
       .from("vault_queries")
-      .select("question, answered, created_at")
+      .select("*")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false })
       .limit(300),
@@ -54,13 +56,13 @@ export default async function CompanyReportPage() {
   const vaultItems = (items ?? []) as VaultItem[];
 
   // ── Knowledge gaps — questions the brain couldn't answer (from vault_queries) ──
-  const queries = (queriesRes.error ? [] : (queriesRes.data ?? [])) as { question: string; answered: boolean }[];
+  const queries = (queriesRes.error ? [] : (queriesRes.data ?? [])) as { question: string; answered: boolean; dismissed?: boolean }[];
   const askedTotal = queries.length;
   const answeredTotal = queries.filter((q) => q.answered).length;
   const knowledgeGaps: string[] = [];
   const seenGap = new Set<string>();
   for (const q of queries) {
-    if (q.answered) continue;
+    if (q.answered || q.dismissed) continue;
     const key = q.question.trim().toLowerCase();
     if (!key || seenGap.has(key)) continue;
     seenGap.add(key);
@@ -207,18 +209,11 @@ export default async function CompanyReportPage() {
           <p className="text-xs text-zinc-500 mb-4">
             Questions your team asked that the brain couldn&apos;t answer — add docs covering these to close the gaps.
           </p>
-          {knowledgeGaps.length === 0 ? (
-            <p className="text-sm text-green-400">No gaps — every recent question was answered. 🎉</p>
-          ) : (
-            <ul className="space-y-2">
-              {knowledgeGaps.map((q, i) => (
-                <li key={i} className="flex items-start gap-2.5">
-                  <Circle className="w-4 h-4 text-amber-500/70 mt-0.5 shrink-0" />
-                  <span className="text-sm text-zinc-200">{q}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <KnowledgeGaps
+            gaps={knowledgeGaps}
+            clientId={clientId}
+            canCurate={user.role === "client_admin" || user.role === "super_admin"}
+          />
         </section>
       )}
 
@@ -233,9 +228,9 @@ export default async function CompanyReportPage() {
             {healthIssues} item{healthIssues !== 1 ? "s" : ""} worth a look so answers stay accurate.
           </p>
           <div className="space-y-4">
-            <HealthGroup label="Possible demo / placeholder" hint="Looks like seed data — delete if it isn't real." items={demoItems} />
-            <HealthGroup label="Duplicates" hint="Same content as another item — keep one." items={duplicateItems} />
-            <HealthGroup label="Possibly stale links" hint="A URL not refreshed in 90+ days — re-crawl or verify." items={staleItems} />
+            <HealthGroupActions label="Possible demo / placeholder" hint="Looks like seed data — delete if it isn't real." items={demoItems} clientId={clientId} deletable />
+            <HealthGroupActions label="Duplicates" hint="Same content as another item — these copies can go." items={duplicateItems} clientId={clientId} deletable />
+            <HealthGroupActions label="Possibly stale links" hint="A URL not refreshed in 90+ days — verify it's still accurate." items={staleItems} clientId={clientId} deletable={false} />
           </div>
         </section>
       )}
@@ -344,23 +339,6 @@ function WideField({ label, value }: { label: string; value: string }) {
     <div className="sm:col-span-2">
       <p className="label-section">{label}</p>
       <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words">{value}</p>
-    </div>
-  );
-}
-
-function HealthGroup({ label, hint, items }: { label: string; hint: string; items: VaultItem[] }) {
-  if (items.length === 0) return null;
-  return (
-    <div>
-      <p className="text-sm text-zinc-200 font-medium">{label} <span className="text-zinc-500 font-normal">· {items.length}</span></p>
-      <p className="text-xs text-zinc-500 mb-1.5">{hint}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {items.slice(0, 12).map((it) => (
-          <span key={it.id} className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 truncate max-w-[16rem]">
-            {it.title}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }

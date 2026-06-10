@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   BarChart3, MessageSquare, CheckCircle2, ThumbsUp, Circle, ThumbsDown,
 } from "lucide-react";
+import { KnowledgeGaps } from "@/components/vault/KnowledgeGaps";
+import { AnswersToReview, type ReviewItem } from "@/components/vault/AnswersToReview";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Brain Analytics — RapidTal" };
@@ -22,14 +24,17 @@ export default async function BrainAnalyticsPage() {
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
   const [queriesRes, feedbackRes] = await Promise.all([
-    admin.from("vault_queries").select("question, answered, created_at")
+    admin.from("vault_queries").select("*")
       .eq("client_id", clientId).gte("created_at", since).order("created_at", { ascending: false }).limit(2000),
-    admin.from("vault_feedback").select("question, answer, rating, created_at")
+    admin.from("vault_feedback").select("*")
       .eq("client_id", clientId).gte("created_at", since).order("created_at", { ascending: false }).limit(1000),
   ]);
 
-  const queries = (queriesRes.error ? [] : (queriesRes.data ?? [])) as { question: string; answered: boolean }[];
-  const feedback = (feedbackRes.error ? [] : (feedbackRes.data ?? [])) as { question: string; answer: string; rating: number }[];
+  const queries = (queriesRes.error ? [] : (queriesRes.data ?? [])) as { question: string; answered: boolean; dismissed?: boolean }[];
+  const feedback = (feedbackRes.error ? [] : (feedbackRes.data ?? [])) as {
+    id: string; question: string; answer: string; rating: number;
+    sources?: { kind: string; title: string }[]; resolved?: boolean;
+  }[];
 
   const asked = queries.length;
   const answered = queries.filter((q) => q.answered).length;
@@ -50,11 +55,11 @@ export default async function BrainAnalyticsPage() {
   }
   const topQuestions = Array.from(counts.values()).sort((a, b) => b.count - a.count).slice(0, 10);
 
-  // Distinct gaps (unanswered).
+  // Distinct gaps (unanswered + not dismissed).
   const gaps: string[] = [];
   const seen = new Set<string>();
   for (const q of queries) {
-    if (q.answered) continue;
+    if (q.answered || q.dismissed) continue;
     const key = q.question.trim().toLowerCase();
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -62,7 +67,15 @@ export default async function BrainAnalyticsPage() {
     if (gaps.length >= 10) break;
   }
 
-  const downvoted = feedback.filter((f) => f.rating === -1).slice(0, 8);
+  const downvoted: ReviewItem[] = feedback
+    .filter((f) => f.rating === -1 && !f.resolved)
+    .slice(0, 12)
+    .map((f) => ({
+      id: f.id,
+      question: f.question,
+      answer: f.answer,
+      sources: Array.isArray(f.sources) ? f.sources : [],
+    }));
 
   return (
     <div className="max-w-5xl">
@@ -114,19 +127,8 @@ export default async function BrainAnalyticsPage() {
             {/* Gaps */}
             <section className="surface-card p-6">
               <h2 className="text-lg font-semibold text-white mb-1">Knowledge gaps</h2>
-              <p className="text-xs text-zinc-500 mb-4">Couldn&apos;t be answered — add docs covering these.</p>
-              {gaps.length === 0 ? (
-                <p className="text-sm text-green-400">No gaps — everything was answered. 🎉</p>
-              ) : (
-                <ul className="space-y-2">
-                  {gaps.map((q, i) => (
-                    <li key={i} className="flex items-start gap-2.5">
-                      <Circle className="w-4 h-4 text-amber-500/70 mt-0.5 shrink-0" />
-                      <span className="text-sm text-zinc-200">{q}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <p className="text-xs text-zinc-500 mb-4">Couldn&apos;t be answered — answer one to teach the brain, or dismiss noise.</p>
+              <KnowledgeGaps gaps={gaps} clientId={clientId} canCurate />
             </section>
           </div>
 
@@ -137,15 +139,8 @@ export default async function BrainAnalyticsPage() {
                 <ThumbsDown className="w-4 h-4 text-red-400" />
                 <h2 className="text-lg font-semibold text-white">Answers to review</h2>
               </div>
-              <p className="text-xs text-zinc-500 mb-4">Marked unhelpful — fix the underlying doc, then re-ask.</p>
-              <div className="space-y-3">
-                {downvoted.map((f, i) => (
-                  <div key={i} className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
-                    <p className="text-sm text-zinc-100 font-medium">{f.question}</p>
-                    <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{f.answer}</p>
-                  </div>
-                ))}
-              </div>
+              <p className="text-xs text-zinc-500 mb-4">Marked unhelpful — add a correction (saved as a pinned KB answer) or resolve.</p>
+              <AnswersToReview items={downvoted} clientId={clientId} />
             </section>
           )}
         </>
