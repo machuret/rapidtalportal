@@ -56,6 +56,7 @@ export const ROUTES = {
   },
   tasks: () => "/api/tasks",
   goldenQuestions: () => "/api/golden-questions",
+  notifications: () => "/api/notifications",
   access: () => "/api/access",
   accessReveal: () => "/api/access/reveal",
   accessReveals: () => "/api/access/reveals",

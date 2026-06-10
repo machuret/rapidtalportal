@@ -32,6 +32,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NotificationsBell } from "./NotificationsBell";
 
 interface SidebarProps {
   user: DbUser;
@@ -118,7 +119,10 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
       <aside className="flex flex-col w-60 min-h-screen bg-zinc-900 border-r border-zinc-800 px-4 py-6 gap-6 shrink-0">
         {/* Brand */}
         <div>
-          <span className="font-bold text-white text-xl tracking-tight leading-none">RapidTal</span>
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-white text-xl tracking-tight leading-none">RapidTal</span>
+            <NotificationsBell userId={user.id} />
+          </div>
           {isSuperAdmin ? (
             <div className="mt-1 flex items-center gap-2 text-xs text-amber-400 font-medium">
               <ShieldCheck className="w-3.5 h-3.5" />

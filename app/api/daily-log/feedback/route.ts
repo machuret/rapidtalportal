@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiAuth } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notify } from "@/lib/notifications";
 
 const schema = z.object({
   log_id:   z.string().uuid(),
@@ -37,5 +38,18 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Tell the VA their log got feedback — previously this landed silently.
+  const log = data as { user_id: string; log_date: string };
+  if (log.user_id !== user.id) {
+    void notify([log.user_id], {
+      clientId: user.client_id,
+      type: "log_feedback",
+      title: "New feedback on your daily log",
+      body: parsed.data.feedback.slice(0, 200),
+      href: "/daily-log",
+    });
+  }
+
   return NextResponse.json(data);
 }

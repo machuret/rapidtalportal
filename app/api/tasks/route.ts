@@ -9,6 +9,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
+import { notify, clientAdminIds } from "@/lib/notifications";
 import type { Database } from "@/types/database";
 
 const STATUSES = ["todo", "in_progress", "review", "done"] as const;
@@ -67,6 +68,17 @@ export const POST = withAuth(async (req, { user }) => {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Tell the assignee they have a new card (unless they created it themselves).
+  if (assignedTo && assignedTo !== user.id) {
+    void notify([assignedTo], {
+      clientId: parsed.data.clientId,
+      type: "task_assigned",
+      title: `New task: ${parsed.data.title.trim().slice(0, 120)}`,
+      href: "/tasks",
+    });
+  }
+
   return NextResponse.json(data, { status: 201 });
 });
 
@@ -113,6 +125,29 @@ export const PATCH = withAuth(async (req, { user }) => {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const updated = data as { title: string; client_id: string };
+  // Reassigned to someone else → tell them.
+  if (parsed.data.assignedTo && parsed.data.assignedTo !== task.assigned_to && parsed.data.assignedTo !== user.id) {
+    void notify([parsed.data.assignedTo], {
+      clientId: updated.client_id,
+      type: "task_assigned",
+      title: `Task assigned to you: ${updated.title.slice(0, 120)}`,
+      href: "/tasks",
+    });
+  }
+  // A VA moved a card into Review → tell the client admins.
+  if (parsed.data.status === "review" && !isAdmin(user.role)) {
+    void clientAdminIds(updated.client_id).then((ids) =>
+      notify(ids.filter((id) => id !== user.id), {
+        clientId: updated.client_id,
+        type: "task_review",
+        title: `Ready for review: ${updated.title.slice(0, 120)}`,
+        href: "/tasks",
+      }),
+    );
+  }
+
   return NextResponse.json(data);
 });
 

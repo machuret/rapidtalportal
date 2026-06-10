@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notify } from "@/lib/notifications";
 
 const querySchema = z.object({
   client_id: z.string().uuid(),
@@ -104,12 +105,24 @@ export async function PATCH(req: NextRequest) {
     .update(updates)
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
-    .select("id, content_type, title, brief, body, status, created_at, updated_at")
+    .select("id, content_type, title, brief, body, status, created_by, created_at, updated_at")
     .single();
 
   if (error) {
     console.error("[content/pieces PATCH]", error.code, error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Approval used to land silently — tell the author.
+  const piece = data as { title: string; created_by: string | null };
+  if (parsed.data.status === "approved" && piece.created_by && piece.created_by !== user.id) {
+    void notify([piece.created_by], {
+      clientId: parsed.data.client_id,
+      type: "content_approved",
+      title: `Content approved: ${piece.title.slice(0, 120)}`,
+      href: "/content",
+    });
+  }
+
   return NextResponse.json(data);
 }

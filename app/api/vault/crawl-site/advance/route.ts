@@ -25,6 +25,7 @@ import {
   classifyPage, extractPrices, buildCatalogMarkdown, verifyFigures, type CatalogEntry,
 } from "@/lib/crawl/classify";
 import { dossierSystemPrompt } from "@/lib/crawl/prompts";
+import { notify } from "@/lib/notifications";
 
 export const maxDuration = 60;
 
@@ -52,6 +53,7 @@ type JobMeta = {
 interface CrawlJob {
   id: string;
   client_id: string;
+  created_by: string | null;
   url: string;
   status: string;
   firecrawl_id: string | null;
@@ -384,6 +386,22 @@ export const POST = withAuth(async (req, { user }) => {
     .select("*")
     .single();
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+  // Crawls take minutes — tell whoever started it when it lands (or fails).
+  if ((patch.status === "done" || patch.status === "error") && job.created_by) {
+    const host = (() => { try { return new URL(job.url).hostname; } catch { return job.url; } })();
+    const { data: creator } = await admin.from("users").select("role").eq("id", job.created_by).maybeSingle();
+    const isSuper = (creator as { role: string } | null)?.role === "super_admin";
+    void notify([job.created_by], {
+      clientId: job.client_id,
+      type: patch.status === "done" ? "crawl_done" : "crawl_failed",
+      title: patch.status === "done"
+        ? `Site crawl complete — ${host}`
+        : `Site crawl failed — ${host}`,
+      body: patch.status === "done" ? "Pages stored, dossier ready. Spot-check it with your golden questions." : String(patch.error ?? ""),
+      href: isSuper ? `/admin/vault?client=${job.client_id}` : "/vault",
+    });
+  }
 
   return NextResponse.json({ job: updated });
 });
