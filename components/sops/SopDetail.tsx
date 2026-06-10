@@ -9,8 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Pencil, Trash2, Copy, Check, Save, X, ListChecks, Tag, Clock, Copy as CopyIcon, Loader2, Play } from "lucide-react";
+import { Pencil, Trash2, Copy, Check, Save, X, ListChecks, Tag, Clock, Copy as CopyIcon, Loader2, Play, GitFork } from "lucide-react";
 import { useSops } from "@/hooks/useSops";
+import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 
 // (interface below) clientId may be null for global library SOPs.
 interface Props {
@@ -18,10 +20,29 @@ interface Props {
   canEdit: boolean;
   clientId: string | null; // null = global library SOP
   categories: string[];
+  /** When set (viewing a Library SOP as a client admin), enables "Copy to my SOPs". */
+  forkToClientId?: string | null;
 }
 
-export function SopDetail({ sop: initial, canEdit, clientId, categories }: Props) {
+export function SopDetail({ sop: initial, canEdit, clientId, categories, forkToClientId }: Props) {
   const router = useRouter();
+  const [forking, setForking] = useState(false);
+
+  async function fork() {
+    if (forking) return;
+    setForking(true);
+    try {
+      const res = await api.post<{ id: string }>(ROUTES.sopFork(), { sopId: initial.id });
+      toast.success("Copied to your SOPs — customize it freely.");
+      router.push(`/sops/${res.id}`);
+      router.refresh();
+    } catch {
+      // api-client surfaces a toast
+    } finally {
+      setForking(false);
+    }
+  }
+
   const {
     updateSop,
     isUpdating: saving,
@@ -170,6 +191,12 @@ export function SopDetail({ sop: initial, canEdit, clientId, categories }: Props
               <Play className="w-3.5 h-3.5" /> Run step-by-step
             </Button>
           </Link>
+          {forkToClientId && (
+            <Button variant="outline" size="sm" onClick={fork} disabled={forking} className="gap-1.5">
+              {forking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitFork className="w-3.5 h-3.5" />}
+              Copy to my SOPs
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={copy}>
             {copied
               ? <><Check className="w-3.5 h-3.5 text-green-400" /> Copied</>

@@ -30,6 +30,12 @@ export default async function SopDetailPage({ params }: { params: { id: string }
     ? user.role === "super_admin"
     : user.role === "super_admin" || (user.role === "client_admin" && sameClient);
 
+  // A client admin viewing a Library SOP can fork it into their own client.
+  const forkToClientId =
+    isGlobal && !!user.client_id && (user.role === "client_admin" || user.role === "super_admin")
+      ? user.client_id
+      : null;
+
   // Category suggestions from the same scope.
   let catQuery = admin.from("sops").select("category");
   catQuery = isGlobal ? catQuery.is("client_id", null) : catQuery.eq("client_id", sop.client_id!);
@@ -54,7 +60,7 @@ export default async function SopDetailPage({ params }: { params: { id: string }
           RapidTal Library — shared with all VAs
         </div>
       )}
-      <SopDetail sop={sop} canEdit={canEdit} clientId={sop.client_id} categories={categories} />
+      <SopDetail sop={sop} canEdit={canEdit} clientId={sop.client_id} categories={categories} forkToClientId={forkToClientId} />
     </div>
   );
 }

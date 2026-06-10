@@ -33,6 +33,7 @@ export const ROUTES = {
     reprocess: (id: string) => `/api/vault/${id}/reprocess`,
   },
   sops: () => "/api/sops",
+  sopFork: () => "/api/sops/fork",
   crm: {
     contacts: () => "/api/crm/contacts",
     notes: () => "/api/crm/notes",
