@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { MessagesClient } from "@/components/messages/MessagesClient";
+import { PageIntro } from "@/components/layout/PageIntro";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Messages — RapidTal" };
@@ -22,10 +23,13 @@ export default async function MessagesPage() {
   }
 
   return (
-    <MessagesClient
-      currentUserId={user.id}
-      currentUserRole={user.role}
-      clientId={user.client_id}
-    />
+    <>
+      <PageIntro id="messages" />
+      <MessagesClient
+        currentUserId={user.id}
+        currentUserRole={user.role}
+        clientId={user.client_id}
+      />
+    </>
   );
 }

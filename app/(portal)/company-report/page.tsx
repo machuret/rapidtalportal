@@ -10,6 +10,7 @@ import {
   VAULT_CATEGORIES, VAULT_CATEGORY_ORDER, isVaultCategory,
 } from "@/lib/taxonomy/vault-categories";
 import { KnowledgeGaps } from "@/components/vault/KnowledgeGaps";
+import { PageIntro } from "@/components/layout/PageIntro";
 import { HealthGroupActions } from "@/components/vault/VaultHealthActions";
 
 export const dynamic = "force-dynamic";
@@ -156,6 +157,8 @@ export default async function CompanyReportPage() {
           </p>
         </div>
       </div>
+
+      <PageIntro id="company-report" />
 
       {/* Stats strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">

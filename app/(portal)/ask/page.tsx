@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { AskVaultClient } from "@/components/vault/AskVaultClient";
+import { PageIntro } from "@/components/layout/PageIntro";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Ask the Vault — RapidTal" };
@@ -14,10 +15,13 @@ export default async function AskPage() {
   const canCurate = user.role === "client_admin" || user.role === "super_admin";
 
   return (
-    <AskVaultClient
-      clientId={user.client_id}
-      companyName={client?.name ?? "your company"}
-      canCurate={canCurate}
-    />
+    <div className="max-w-3xl">
+      <PageIntro id="ask" />
+      <AskVaultClient
+        clientId={user.client_id}
+        companyName={client?.name ?? "your company"}
+        canCurate={canCurate}
+      />
+    </div>
   );
 }

@@ -4,6 +4,7 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AccessClient, type AccessEntry } from "@/components/access/AccessClient";
 import { isEncryptionConfigured } from "@/lib/crypto/credentials";
+import { PageIntro } from "@/components/layout/PageIntro";
 import { cn } from "@/lib/utils";
 import { KeyRound } from "lucide-react";
 
@@ -70,6 +71,8 @@ export default async function AccessPage({ searchParams }: { searchParams: { cli
           </p>
         </div>
       </div>
+
+      <PageIntro id="access" />
 
       {isSuperAdmin && clients.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-6">

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { KbList } from "@/components/kb/KbList";
+import { PageIntro } from "@/components/layout/PageIntro";
 import { Brain, BookOpen, Zap, TrendingUp } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +62,8 @@ export default async function KnowledgeBasePage() {
           </p>
         </div>
       </div>
+
+      <PageIntro id="knowledge-base" />
 
       {/* Stats strip */}
       <div className="grid grid-cols-4 gap-4 mb-8">

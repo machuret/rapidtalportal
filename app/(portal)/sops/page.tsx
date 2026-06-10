@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SopsLibrary } from "@/components/sops/SopsLibrary";
+import { PageIntro } from "@/components/layout/PageIntro";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "SOPs — RapidTal" };
@@ -30,6 +31,7 @@ export default async function SopsPage() {
       <p className="text-zinc-400 text-sm mb-8">
         Step-by-step processes for {client?.name ?? "your team"}, plus the shared RapidTal library.
       </p>
+      <PageIntro id="sops" />
       <SopsLibrary
         sops={(sops ?? []) as Sop[]}
         clientId={user.client_id}

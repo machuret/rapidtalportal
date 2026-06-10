@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ContentStudio } from "@/components/content/ContentStudio";
+import { PageIntro } from "@/components/layout/PageIntro";
 import type { ContentPiece, ContentTopic } from "@/types/content";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ export default async function ContentPage() {
       <p className="text-zinc-400 text-sm mb-8">
         AI-powered drafts grounded in your Vault and Company DNA.
       </p>
+      <PageIntro id="content" />
       <ContentStudio
         clientId={user.client_id}
         userId={user.id}

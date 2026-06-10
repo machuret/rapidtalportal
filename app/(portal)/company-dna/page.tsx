@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DnaForm } from "@/components/dna/DnaForm";
+import { PageIntro } from "@/components/layout/PageIntro";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Company DNA — RapidTal" };
@@ -31,6 +32,7 @@ export default async function CompanyDnaPage() {
         Core information about {client?.name ?? "your client"} — used by the AI to generate knowledge base answers.
         {!canEdit && " Read-only: ask your admin to update anything that's wrong."}
       </p>
+      <PageIntro id="company-dna" />
       <DnaForm initialData={dna ?? null} clientId={user.client_id} readOnly={!canEdit} />
     </div>
   );

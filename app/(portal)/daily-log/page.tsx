@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { format, subDays } from "date-fns";
 import { DailyLogStudio } from "@/components/daily-log/DailyLogStudio";
 import { ClientAdminLogViewer } from "@/components/daily-log/ClientAdminLogViewer";
+import { PageIntro } from "@/components/layout/PageIntro";
 import type { DailyLog, DailyLogNote, Mood } from "@/types/daily-log";
 
 export const dynamic = "force-dynamic";
@@ -90,10 +91,13 @@ export default async function DailyLogPage({
   const history = (historyResult.data ?? []) as { log_date: string; mood: Mood | null }[];
 
   return (
-    <DailyLogStudio
-      initialLog={todayLog}
-      initialNotes={todayNotes}
-      initialHistory={history}
-    />
+    <div>
+      <PageIntro id="daily-log" />
+      <DailyLogStudio
+        initialLog={todayLog}
+        initialNotes={todayNotes}
+        initialHistory={history}
+      />
+    </div>
   );
 }

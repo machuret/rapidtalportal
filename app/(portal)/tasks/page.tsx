@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TaskBoard, type Task, type BoardMember } from "@/components/tasks/TaskBoard";
+import { PageIntro } from "@/components/layout/PageIntro";
 import { KanbanSquare } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,8 @@ export default async function TasksPage() {
           </p>
         </div>
       </div>
+
+      <PageIntro id="tasks" />
 
       <TaskBoard
         initialTasks={(tasks ?? []) as Task[]}

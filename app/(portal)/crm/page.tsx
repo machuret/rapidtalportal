@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CrmBoard } from "@/components/crm/CrmBoard";
+import { PageIntro } from "@/components/layout/PageIntro";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import Link from "next/link";
@@ -42,6 +43,7 @@ export default async function CrmPage() {
           </Button>
         </Link>
       </div>
+      <PageIntro id="crm" />
       <CrmBoard
         contacts={(contacts ?? []) as CrmContact[]}
         clientId={user.client_id}

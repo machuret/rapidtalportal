@@ -5,6 +5,7 @@ import {
   BarChart3, MessageSquare, CheckCircle2, ThumbsUp, Circle, ThumbsDown,
 } from "lucide-react";
 import { KnowledgeGaps } from "@/components/vault/KnowledgeGaps";
+import { PageIntro } from "@/components/layout/PageIntro";
 import { AnswersToReview, type ReviewItem } from "@/components/vault/AnswersToReview";
 
 export const dynamic = "force-dynamic";
@@ -90,6 +91,8 @@ export default async function BrainAnalyticsPage() {
           </p>
         </div>
       </div>
+
+      <PageIntro id="brain-analytics" />
 
       {asked === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-12 text-center">

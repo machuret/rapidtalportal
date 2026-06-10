@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ExportCsv } from "@/components/supervision/ExportCsv";
+import { PageIntro } from "@/components/layout/PageIntro";
 import { Eye, NotebookPen, Clock, ListChecks, ChevronRight, KanbanSquare, AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -120,6 +121,8 @@ export default async function SupervisionPage() {
         </div>
         <ExportCsv rows={csvRows} filename={`supervision-${new Date().toISOString().slice(0, 10)}.csv`} />
       </div>
+
+      <PageIntro id="supervision" />
 
       {sorted.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-12 text-center">
