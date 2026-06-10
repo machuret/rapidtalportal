@@ -63,10 +63,16 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  const { error: updateErr } = await supabase
+  // A human choosing category/tags is curation — mark it so vault-process
+  // preserves these fields instead of overwriting them with AI values.
+  const curating = updates.category !== undefined || updates.tags !== undefined;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: updateErr } = await (supabase as any)
     .from("vault_items")
     .update({
       ...updates,
+      ...(curating ? { meta_curated: true } : {}),
       updated_at: new Date().toISOString(),
       updated_by: user.id,
     })

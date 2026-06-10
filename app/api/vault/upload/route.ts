@@ -105,6 +105,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Honest ingestion: if extraction produced (near-)no text, flag it instead of
+    // marking it "ready" — a scanned/image PDF would otherwise become a silent
+    // blind spot the brain can never answer from.
+    if (text.trim().length < 50) {
+      await supabase
+        .from("vault_items")
+        .update({
+          raw_content: text,
+          content_hash: contentHash,
+          status: "error",
+          error_message:
+            sourceType === "pdf"
+              ? "No readable text found — this PDF looks scanned or image-based. Paste the text manually, or upload a text-based version."
+              : "No readable text could be extracted from this file.",
+        })
+        .eq("id", itemId);
+      return NextResponse.json({
+        success: true,
+        warning: "No readable text found in this file — it was flagged for attention.",
+      });
+    }
+
     await supabase
       .from("vault_items")
       .update({ raw_content: text, content_hash: contentHash, status: "ready" })

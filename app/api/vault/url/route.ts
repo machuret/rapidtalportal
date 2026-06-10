@@ -6,10 +6,22 @@ import { triggerVaultProcess } from "@/lib/vault-process-trigger";
 import { z } from "zod";
 
 const schema = z.object({
-  title: z.string().min(1).max(200),
+  title: z.string().max(200).optional(),
   url: z.string().url(),
   clientId: z.string().uuid(),
 });
+
+/** Derive a readable title from the URL when none is given. */
+function deriveTitle(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const path = u.pathname.replace(/\/+$/, "").split("/").filter(Boolean).pop() ?? "";
+    const pretty = decodeURIComponent(path).replace(/[-_]+/g, " ").trim();
+    return (pretty ? `${u.hostname} — ${pretty}` : u.hostname).slice(0, 200);
+  } catch {
+    return raw.slice(0, 200);
+  }
+}
 
 const PRIVATE_IP_RE = /^(localhost|127\.|0\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1|fc00:|fe80:)/i;
 
@@ -35,7 +47,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  const { title, url, clientId } = parsed.data;
+  const { url, clientId } = parsed.data;
+  const title = parsed.data.title?.trim() || deriveTitle(url);
   const userId = user.id;
 
   if (isBlockedUrl(url)) {

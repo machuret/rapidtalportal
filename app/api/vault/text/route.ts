@@ -6,10 +6,20 @@ import { triggerVaultProcess } from "@/lib/vault-process-trigger";
 import { z } from "zod";
 
 const schema = z.object({
-  title: z.string().min(1).max(200),
+  title: z.string().max(200).optional(),
   content: z.string().min(1).max(100000),
   clientId: z.string().uuid(),
 });
+
+/** Derive a sensible title from the first non-empty line of pasted text. */
+function deriveTitle(content: string): string {
+  const firstLine = content
+    .split("\n")
+    .map((l) => l.replace(/^#+\s*/, "").trim())
+    .find(Boolean);
+  const t = (firstLine ?? "").slice(0, 80).trim();
+  return t.length >= 3 ? t : `Note — ${new Date().toLocaleDateString()}`;
+}
 
 export async function POST(req: NextRequest) {
   const auth = await requireApiAuth();
@@ -22,7 +32,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  const { title, content, clientId } = parsed.data;
+  const { content, clientId } = parsed.data;
+  const title = parsed.data.title?.trim() || deriveTitle(content);
   const userId = user.id;
 
   const accessError = assertClientAccess(user, clientId);
