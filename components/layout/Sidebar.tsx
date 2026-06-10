@@ -26,6 +26,7 @@ import {
   Sparkles,
   Wand2,
   BarChart3,
+  Eye,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ const clientAdminLinks = [
   { href: "/ask",            label: "Ask the Vault",   icon: Sparkles },
   { href: "/compose",        label: "Compose",         icon: Wand2 },
   { href: "/brain-analytics",label: "Brain Analytics", icon: BarChart3 },
+  { href: "/supervision",    label: "Supervision",     icon: Eye },
   { href: "/team",           label: "My Team",         icon: UsersRound },
   { href: "/messages",       label: "Messages",       icon: MessageSquare },
   { href: "/daily-log",      label: "Daily Log",      icon: NotebookPen },
@@ -74,6 +76,7 @@ const adminLinks = [
   { href: "/admin/clients",    label: "Clients",     icon: Building2 },
   { href: "/admin/users",      label: "All Users",   icon: Users },
   { href: "/admin/sops",       label: "SOP Library", icon: ListChecks },
+  { href: "/supervision",      label: "Supervision", icon: Eye },
   { href: "/admin/daily-logs", label: "Daily Logs",  icon: NotebookPen },
 ];
 
