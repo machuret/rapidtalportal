@@ -12,7 +12,7 @@ export default async function DashboardPage() {
 
   const { user, client } = ctx;
 
-  if (user.role === "super_admin") redirect("/admin/clients");
+  if (user.role === "super_admin") redirect("/admin");
 
   const supabase = createAdminClient();
   const clientId = user.client_id!;

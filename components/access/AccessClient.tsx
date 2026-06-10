@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Plus, Search, Eye, EyeOff, Copy, Check, ExternalLink, Pencil, Trash2, Loader2, Save, KeyRound, AlertTriangle,
+  Plus, Search, Eye, EyeOff, Copy, Check, ExternalLink, Pencil, Trash2, Loader2, Save, KeyRound, AlertTriangle, History, ShieldCheck,
 } from "lucide-react";
 
 export interface AccessEntry {
@@ -42,6 +42,7 @@ export function AccessClient({ initialItems, clientId, isAdmin, encryptionReady 
   const [items, setItems] = useState<AccessEntry[]>(initialItems);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<AccessEntry | null>(null);
+  const [auditing, setAuditing] = useState<AccessEntry | null>(null);
   const [creating, setCreating] = useState(false);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [revealBusy, setRevealBusy] = useState<string | null>(null);
@@ -218,6 +219,13 @@ export function AccessClient({ initialItems, clientId, isAdmin, encryptionReady 
                       {isAdmin && (
                         <div className="flex items-center gap-1 ml-auto">
                           <button
+                            onClick={() => setAuditing(entry)}
+                            title="Who viewed this password"
+                            className="p-1.5 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                          </button>
+                          <button
                             onClick={() => setEditing(entry)}
                             title="Edit"
                             className="p-1.5 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
@@ -234,6 +242,15 @@ export function AccessClient({ initialItems, clientId, isAdmin, encryptionReady 
           ))}
         </div>
       )}
+
+      {!isAdmin && items.length > 0 && (
+        <p className="flex items-center gap-1.5 text-[11px] text-zinc-600 mt-4">
+          <ShieldCheck className="w-3 h-3" />
+          For security, every password reveal is logged and visible to your client.
+        </p>
+      )}
+
+      {auditing && <AuditDialog entry={auditing} onClose={() => setAuditing(null)} />}
 
       {(creating || editing) && (
         <AccessDialog
@@ -253,6 +270,47 @@ export function AccessClient({ initialItems, clientId, isAdmin, encryptionReady 
         />
       )}
     </>
+  );
+}
+
+function AuditDialog({ entry, onClose }: { entry: AccessEntry; onClose: () => void }) {
+  const [reveals, setReveals] = useState<{ who: string; at: string }[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get<{ reveals: { who: string; at: string }[] }>(`${ROUTES.accessReveals()}?id=${entry.id}`, { showErrorToast: false })
+      .then((d) => { if (!cancelled) setReveals(d.reveals); })
+      .catch(() => { if (!cancelled) setReveals([]); });
+    return () => { cancelled = true; };
+  }, [entry.id]);
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="bg-zinc-900 border-zinc-700">
+        <DialogHeader>
+          <DialogTitle>Who viewed “{entry.site}”</DialogTitle>
+        </DialogHeader>
+        <div className="mt-2 max-h-80 overflow-y-auto">
+          {reveals === null ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-zinc-500" /></div>
+          ) : reveals.length === 0 ? (
+            <p className="text-sm text-zinc-500 py-4 text-center">No one has revealed this password yet.</p>
+          ) : (
+            <div className="divide-y divide-zinc-800">
+              {reveals.map((r, i) => (
+                <div key={i} className="flex items-center justify-between py-2.5">
+                  <span className="text-sm text-zinc-200">{r.who}</span>
+                  <span className="text-xs text-zinc-500">
+                    {new Date(r.at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <p className="text-[11px] text-zinc-600 mt-2">Last 100 reveals. Every reveal is recorded automatically.</p>
+      </DialogContent>
+    </Dialog>
   );
 }
 

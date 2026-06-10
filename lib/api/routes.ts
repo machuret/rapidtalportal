@@ -55,6 +55,7 @@ export const ROUTES = {
   tasks: () => "/api/tasks",
   access: () => "/api/access",
   accessReveal: () => "/api/access/reveal",
+  accessReveals: () => "/api/access/reveals",
   timeEntries: () => "/api/time-entries",
   team: (id: string) => `/api/team/${id}`,
   profile: () => "/api/profile",

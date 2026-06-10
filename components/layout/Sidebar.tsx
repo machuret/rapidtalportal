@@ -79,6 +79,7 @@ const clientAdminLinks = [
 ];
 
 const adminLinks = [
+  { href: "/admin",            label: "Overview",    icon: LayoutDashboard },
   { href: "/admin/clients",    label: "Clients",     icon: Building2 },
   { href: "/admin/users",      label: "All Users",   icon: Users },
   { href: "/admin/sops",       label: "SOP Library", icon: ListChecks },
@@ -137,7 +138,8 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
               onClick={onNavigate}
               className={cn(
                 "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                pathname === href || pathname.startsWith(href + "/")
+                // "/admin" is exact-only, otherwise it would highlight on every /admin/* page.
+                pathname === href || (href !== "/admin" && pathname.startsWith(href + "/"))
                   ? "bg-zinc-700 text-white"
                   : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
               )}
