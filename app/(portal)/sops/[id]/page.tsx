@@ -6,34 +6,55 @@ import type { Sop } from "@/app/(portal)/sops/page";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default async function SopDetailPage({ params }: { params: { id: string } }) {
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
-
   const { user } = ctx;
-  if (!user.client_id) redirect("/dashboard");
 
   const admin = createAdminClient();
-  const [{ data: sop }, { data: allSops }] = await Promise.all([
-    admin.from("sops").select("*").eq("id", params.id).eq("client_id", user.client_id).single(),
-    admin.from("sops").select("category").eq("client_id", user.client_id),
-  ]);
+  const { data: sopRow } = await admin.from("sops").select("*").eq("id", params.id).maybeSingle();
+  if (!sopRow) notFound();
+  const sop = sopRow as Sop;
 
-  if (!sop) notFound();
+  const isGlobal = sop.client_id === null;
+  const sameClient = !!user.client_id && sop.client_id === user.client_id;
 
-  const categories = Array.from(new Set((allSops ?? []).map((s: { category: string }) => s.category).filter(Boolean)));
-  const canEdit = user.role === "client_admin" || user.role === "super_admin";
+  // Access: global SOPs are readable by anyone; client SOPs only by that client
+  // (or a super_admin).
+  if (!isGlobal && !sameClient && user.role !== "super_admin") notFound();
+
+  // Edit rights: global → super_admin only; client → super_admin or the client's admin.
+  const canEdit = isGlobal
+    ? user.role === "super_admin"
+    : user.role === "super_admin" || (user.role === "client_admin" && sameClient);
+
+  // Category suggestions from the same scope.
+  let catQuery = admin.from("sops").select("category");
+  catQuery = isGlobal ? catQuery.is("client_id", null) : catQuery.eq("client_id", sop.client_id!);
+  const { data: allSops } = await catQuery;
+  const categories = Array.from(
+    new Set((allSops ?? []).map((s: { category: string }) => s.category).filter(Boolean)),
+  );
+
+  const backHref = isGlobal && user.role === "super_admin" ? "/admin/sops" : "/sops";
 
   return (
     <div className="max-w-3xl">
       <Link
-        href="/sops"
+        href={backHref}
         className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white mb-6 transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
-        Back to SOPs
+        {isGlobal && user.role === "super_admin" ? "Back to SOP Library" : "Back to SOPs"}
       </Link>
-      <SopDetail sop={sop as Sop} canEdit={canEdit} clientId={user.client_id} categories={categories} />
+      {isGlobal && (
+        <div className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-full px-2.5 py-0.5">
+          RapidTal Library — shared with all VAs
+        </div>
+      )}
+      <SopDetail sop={sop} canEdit={canEdit} clientId={sop.client_id} categories={categories} />
     </div>
   );
 }

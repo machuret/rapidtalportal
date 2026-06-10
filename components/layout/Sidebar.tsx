@@ -71,9 +71,10 @@ const clientAdminLinks = [
 ];
 
 const adminLinks = [
-  { href: "/admin/clients",    label: "Clients",    icon: Building2 },
-  { href: "/admin/users",      label: "All Users",  icon: Users },
-  { href: "/admin/daily-logs", label: "Daily Logs", icon: NotebookPen },
+  { href: "/admin/clients",    label: "Clients",     icon: Building2 },
+  { href: "/admin/users",      label: "All Users",   icon: Users },
+  { href: "/admin/sops",       label: "SOP Library", icon: ListChecks },
+  { href: "/admin/daily-logs", label: "Daily Logs",  icon: NotebookPen },
 ];
 
 export function Sidebar({ user, client, onNavigate }: SidebarProps) {

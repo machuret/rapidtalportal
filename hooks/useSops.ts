@@ -2,13 +2,12 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
-import { toast } from "sonner";
 import type { Sop } from "@/app/(portal)/sops/page";
 
 const SOPS_KEY = "sops";
 
 interface CreateSopInput {
-  clientId: string;
+  clientId: string | null; // null = global library SOP
   title: string;
   category: string;
   body: string;
@@ -17,7 +16,7 @@ interface CreateSopInput {
 
 interface UpdateSopInput {
   id: string;
-  clientId: string;
+  clientId: string | null;
   title: string;
   category: string;
   body: string;
@@ -25,13 +24,13 @@ interface UpdateSopInput {
 
 interface DeleteSopInput {
   id: string;
-  clientId: string;
+  clientId: string | null;
 }
 
 // Query Keys
 export const sopKeys = {
   all: [SOPS_KEY] as const,
-  byClient: (clientId: string) => [SOPS_KEY, clientId] as const,
+  byClient: (clientId: string | null) => [SOPS_KEY, clientId ?? "global"] as const,
 };
 
 // Create SOP
@@ -50,7 +49,7 @@ async function deleteSop(input: DeleteSopInput): Promise<void> {
 }
 
 // Hook for SOP mutations
-export function useSops(clientId: string) {
+export function useSops(clientId: string | null) {
   const queryClient = useQueryClient();
 
   const createMutation = useMutation({

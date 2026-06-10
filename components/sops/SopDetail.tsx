@@ -12,10 +12,11 @@ import { toast } from "sonner";
 import { Pencil, Trash2, Copy, Check, Save, X, ListChecks, Tag, Clock, Copy as CopyIcon, Loader2, Play } from "lucide-react";
 import { useSops } from "@/hooks/useSops";
 
+// (interface below) clientId may be null for global library SOPs.
 interface Props {
   sop: Sop;
   canEdit: boolean;
-  clientId: string;
+  clientId: string | null; // null = global library SOP
   categories: string[];
 }
 

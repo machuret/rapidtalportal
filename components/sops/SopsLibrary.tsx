@@ -12,9 +12,11 @@ interface SopsLibraryProps {
   clientId: string;
   userId: string;
   canEdit: boolean;
+  /** Where the "New SOP" button points (admin library passes ?scope=global). */
+  newHref?: string;
 }
 
-export function SopsLibrary({ sops, canEdit }: SopsLibraryProps) {
+export function SopsLibrary({ sops, canEdit, newHref = "/sops/new" }: SopsLibraryProps) {
   const [search, setSearch] = useState("");
 
   const q = search.toLowerCase();
@@ -63,7 +65,7 @@ export function SopsLibrary({ sops, canEdit }: SopsLibraryProps) {
           />
         </div>
         {canEdit && (
-          <Link href="/sops/new">
+          <Link href={newHref}>
             <Button size="sm"><Plus className="w-4 h-4" /> New SOP</Button>
           </Link>
         )}
@@ -81,7 +83,7 @@ export function SopsLibrary({ sops, canEdit }: SopsLibraryProps) {
               : `No procedures match "${search}".`}
           </p>
           {sops.length === 0 && canEdit && (
-            <Link href="/sops/new">
+            <Link href={newHref}>
               <Button variant="outline" size="sm"><Plus className="w-4 h-4" /> Create first SOP</Button>
             </Link>
           )}
@@ -108,7 +110,10 @@ export function SopsLibrary({ sops, canEdit }: SopsLibraryProps) {
                         <ListChecks className="w-4.5 h-4.5 text-amber-400" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-base text-zinc-100 group-hover:text-white transition-colors">{sop.title}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-base text-zinc-100 group-hover:text-white transition-colors">{sop.title}</p>
+                          {sop.client_id === null && <span className="text-[10px] font-medium uppercase tracking-wide text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-full px-1.5 py-0.5 shrink-0">Library</span>}
+                        </div>
                         <p className="text-sm text-zinc-500 mt-0.5">
                           {stepCount > 0 ? `${stepCount} step${stepCount !== 1 ? "s" : ""}` : "View procedure"}
                           {" · "}Updated {new Date(sop.updated_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}

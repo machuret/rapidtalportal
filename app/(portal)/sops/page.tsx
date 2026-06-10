@@ -14,10 +14,11 @@ export default async function SopsPage() {
   if (!user.client_id) redirect("/dashboard");
 
   const admin = createAdminClient();
+  // The VA/client library = this client's SOPs PLUS the global admin library.
   const { data: sops } = await admin
     .from("sops")
     .select("*")
-    .eq("client_id", user.client_id)
+    .or(`client_id.eq.${user.client_id},client_id.is.null`)
     .order("category")
     .order("order_index");
 
@@ -27,7 +28,7 @@ export default async function SopsPage() {
     <div>
       <h1 className="text-2xl font-bold mb-1">Standard Operating Procedures</h1>
       <p className="text-zinc-400 text-sm mb-8">
-        Step-by-step processes for {client?.name ?? "your team"}.
+        Step-by-step processes for {client?.name ?? "your team"}, plus the shared RapidTal library.
       </p>
       <SopsLibrary
         sops={(sops ?? []) as Sop[]}
@@ -41,7 +42,7 @@ export default async function SopsPage() {
 
 export interface Sop {
   id: string;
-  client_id: string;
+  client_id: string | null;
   title: string;
   category: string;
   body: string;

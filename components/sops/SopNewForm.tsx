@@ -12,13 +12,14 @@ import type { Sop } from "@/app/(portal)/sops/page";
 import { useSops } from "@/hooks/useSops";
 
 interface Props {
-  clientId: string;
+  clientId: string | null; // null = global library SOP
   userId: string;
   categories?: string[];
 }
 
 export function SopNewForm({ clientId, categories = [] }: Props) {
   const router = useRouter();
+  const isGlobal = clientId === null;
   const { createSop, isCreating: saving } = useSops(clientId);
   const [form, setForm] = useState({ title: "", category: "General", body: "" });
 
@@ -46,8 +47,12 @@ export function SopNewForm({ clientId, categories = [] }: Props) {
           <ListChecks className="w-5 h-5 text-amber-400" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">New SOP</h1>
-          <p className="text-sm text-zinc-400">Create a new Standard Operating Procedure</p>
+          <h1 className="text-2xl font-bold">{isGlobal ? "New Library SOP" : "New SOP"}</h1>
+          <p className="text-sm text-zinc-400">
+            {isGlobal
+              ? "A generic SOP available to every VA across all clients."
+              : "Create a new Standard Operating Procedure"}
+          </p>
         </div>
       </div>
 

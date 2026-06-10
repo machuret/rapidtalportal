@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { requireApiAuth, assertClientAccess, type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+// clientId null  → global library SOP (super_admin only)
+// clientId uuid  → client SOP (client_admin for own client, or super_admin)
 const createSchema = z.object({
-  clientId:    z.string().uuid(),
+  clientId:    z.string().uuid().nullable().optional(),
   title:       z.string().min(1).max(300),
   category:    z.string().max(100).optional().default("General"),
   body:        z.string().min(1).max(100000),
@@ -13,7 +15,7 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   id:       z.string().uuid(),
-  clientId: z.string().uuid(),
+  clientId: z.string().uuid().nullable().optional(),
   title:    z.string().min(1).max(300).optional(),
   category: z.string().max(100).optional(),
   body:     z.string().min(1).max(100000).optional(),
@@ -21,10 +23,24 @@ const updateSchema = z.object({
 
 const deleteSchema = z.object({
   id:       z.string().uuid(),
-  clientId: z.string().uuid(),
+  clientId: z.string().uuid().nullable().optional(),
 });
 
 const SELECT = "id, client_id, title, category, body, order_index, created_at, updated_at";
+
+/** Authorise a write against a SOP's scope. Returns an error response or null. */
+function authorizeScope(user: ApiUser, clientId: string | null): NextResponse | null {
+  if (clientId === null) {
+    if (user.role !== "super_admin") {
+      return NextResponse.json({ error: "Only RapidTal admins can manage the global SOP library." }, { status: 403 });
+    }
+    return null;
+  }
+  if (!["client_admin", "super_admin"].includes(user.role)) {
+    return NextResponse.json({ error: "Only admins can manage SOPs." }, { status: 403 });
+  }
+  return assertClientAccess(user, clientId);
+}
 
 // ── POST: create SOP ──────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -32,24 +48,22 @@ export async function POST(req: NextRequest) {
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  if (!["client_admin", "super_admin"].includes(user.role)) {
-    return NextResponse.json({ error: "Only admins can create SOPs." }, { status: 403 });
-  }
-
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
 
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid input.", issues: parsed.error.flatten() }, { status: 400 });
 
-  const accessError = assertClientAccess(user, parsed.data.clientId);
-  if (accessError) return accessError;
+  const clientId = parsed.data.clientId ?? null;
+  const denied = authorizeScope(user, clientId);
+  if (denied) return denied;
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (admin as any)
     .from("sops")
     .insert({
-      client_id:   parsed.data.clientId,
+      client_id:   clientId,
       created_by:  user.id,
       title:       parsed.data.title.trim(),
       category:    parsed.data.category.trim() || "General",
@@ -70,32 +84,23 @@ export async function PATCH(req: NextRequest) {
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  if (!["client_admin", "super_admin"].includes(user.role)) {
-    return NextResponse.json({ error: "Only admins can edit SOPs." }, { status: 403 });
-  }
-
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
 
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid input.", issues: parsed.error.flatten() }, { status: 400 });
 
-  const accessError = assertClientAccess(user, parsed.data.clientId);
-  if (accessError) return accessError;
-
   const admin = createAdminClient();
 
-  // Verify ownership
-  const { data: existing } = await admin
-    .from("sops")
-    .select("id")
-    .eq("id", parsed.data.id)
-    .eq("client_id", parsed.data.clientId)
-    .maybeSingle();
-
+  // Fetch the SOP and authorise against its ACTUAL scope (never trust the body).
+  const { data: existing } = await admin.from("sops").select("id, client_id").eq("id", parsed.data.id).maybeSingle();
   if (!existing) return NextResponse.json({ error: "SOP not found." }, { status: 404 });
 
-  const { id, clientId, ...fields } = parsed.data;
+  const denied = authorizeScope(user, (existing as { client_id: string | null }).client_id);
+  if (denied) return denied;
+
+  const id = parsed.data.id;
+  const fields = { title: parsed.data.title, category: parsed.data.category, body: parsed.data.body };
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const [k, v] of Object.entries(fields)) {
     if (v !== undefined) updates[k] = typeof v === "string" ? v.trim() || null : v;
@@ -103,12 +108,11 @@ export async function PATCH(req: NextRequest) {
   if (updates.title === null) delete updates.title;
   if (updates.body === null) delete updates.body;
 
-  const { data, error } = await admin
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (admin as any)
     .from("sops")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update(updates as any)
+    .update(updates)
     .eq("id", id)
-    .eq("client_id", clientId)
     .select(SELECT)
     .single();
 
@@ -122,26 +126,20 @@ export async function DELETE(req: NextRequest) {
   if ("error" in auth) return auth.error;
   const { user } = auth;
 
-  if (!["client_admin", "super_admin"].includes(user.role)) {
-    return NextResponse.json({ error: "Only admins can delete SOPs." }, { status: 403 });
-  }
-
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
 
   const parsed = deleteSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 400 });
 
-  const accessError = assertClientAccess(user, parsed.data.clientId);
-  if (accessError) return accessError;
-
   const admin = createAdminClient();
-  const { error } = await admin
-    .from("sops")
-    .delete()
-    .eq("id", parsed.data.id)
-    .eq("client_id", parsed.data.clientId);
+  const { data: existing } = await admin.from("sops").select("id, client_id").eq("id", parsed.data.id).maybeSingle();
+  if (!existing) return NextResponse.json({ error: "SOP not found." }, { status: 404 });
 
+  const denied = authorizeScope(user, (existing as { client_id: string | null }).client_id);
+  if (denied) return denied;
+
+  const { error } = await admin.from("sops").delete().eq("id", parsed.data.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

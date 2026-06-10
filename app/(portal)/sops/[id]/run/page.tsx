@@ -11,18 +11,20 @@ export default async function SopRunPage({ params }: { params: { id: string } })
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;
-  if (!user.client_id) redirect("/dashboard");
 
   const admin = createAdminClient();
   const { data: sop } = await admin
     .from("sops")
-    .select("id, title, body")
+    .select("id, title, body, client_id")
     .eq("id", params.id)
-    .eq("client_id", user.client_id)
-    .single();
+    .maybeSingle();
 
   if (!sop) notFound();
-  const s = sop as { id: string; title: string; body: string };
+  const s = sop as { id: string; title: string; body: string; client_id: string | null };
+
+  const isGlobal = s.client_id === null;
+  const sameClient = !!user.client_id && s.client_id === user.client_id;
+  if (!isGlobal && !sameClient && user.role !== "super_admin") notFound();
 
   return (
     <div className="max-w-3xl">
@@ -30,7 +32,7 @@ export default async function SopRunPage({ params }: { params: { id: string } })
         <ArrowLeft className="w-4 h-4" />
         Back to SOP
       </Link>
-      <SopRunner title={s.title} body={s.body} clientId={user.client_id} />
+      <SopRunner title={s.title} body={s.body} clientId={user.client_id ?? ""} />
     </div>
   );
 }
