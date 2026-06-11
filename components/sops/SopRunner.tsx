@@ -3,16 +3,24 @@
 import { useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import { parseSopSteps } from "@/lib/sop-steps";
+import { parseSopSteps, type SopStep } from "@/lib/sop-steps";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Circle, RotateCcw, Sparkles, Loader2, PartyPopper } from "lucide-react";
+import { CheckCircle2, Circle, RotateCcw, Sparkles, Loader2, PartyPopper, Lightbulb, ClipboardList } from "lucide-react";
 
 interface AskResponse { answer: string }
 
-export function SopRunner({ sopId, title, body, clientId }: {
+export function SopRunner({ sopId, title, body, clientId, structured, intro, prerequisites }: {
   sopId: string; title: string; body: string; clientId: string;
+  structured?: SopStep[]; intro?: string; prerequisites?: string[];
 }) {
-  const steps = useMemo(() => parseSopSteps(body), [body]);
+  // Prefer real structured steps; fall back to parsing the body for legacy SOPs.
+  const steps: SopStep[] = useMemo(
+    () => (structured && structured.length
+      ? structured
+      : parseSopSteps(body).map((t) => ({ title: t, detail: "" }))),
+    [structured, body],
+  );
+  const hasPrereqs = (prerequisites?.length ?? 0) > 0;
   const [done, setDone] = useState<Set<number>>(new Set());
   const [help, setHelp] = useState<Record<number, string>>({});
   const [helpLoading, setHelpLoading] = useState<number | null>(null);
@@ -58,9 +66,11 @@ export function SopRunner({ sopId, title, body, clientId }: {
     if (helpLoading !== null) return;
     setHelpLoading(i);
     try {
+      const s = steps[i];
+      const stepText = s.detail ? `${s.title} — ${s.detail}` : s.title;
       const res = await api.post<AskResponse>(ROUTES.vault.ask(), {
         clientId,
-        question: `I'm following our SOP "${title}". For this step, give me practical help, specifics, and anything I should watch out for. Step: ${steps[i]}`,
+        question: `I'm following our SOP "${title}". For this step, give me practical help, specifics, and anything I should watch out for. Step: ${stepText}`,
       }, { showErrorToast: false });
       setHelp((h) => ({ ...h, [i]: res.answer }));
     } catch {
@@ -80,8 +90,9 @@ export function SopRunner({ sopId, title, body, clientId }: {
       <div className="surface-card p-5">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-lg font-semibold text-white">{title}</h2>
-          <span className="text-sm text-zinc-400">{completed}/{steps.length} done</span>
+          <span className="text-sm text-zinc-400 shrink-0 ml-3">{completed}/{steps.length} done</span>
         </div>
+        {intro && <p className="text-sm text-zinc-400 leading-relaxed mb-3">{intro}</p>}
         <div className="h-2.5 w-full rounded-full bg-zinc-800 overflow-hidden">
           <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-green-500 transition-all" style={{ width: `${pct}%` }} />
         </div>
@@ -97,6 +108,18 @@ export function SopRunner({ sopId, title, body, clientId }: {
         )}
       </div>
 
+      {/* Prerequisites */}
+      {hasPrereqs && (
+        <div className="surface-card p-4">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 mb-2">
+            <ClipboardList className="w-3.5 h-3.5" /> Before you start
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            {prerequisites!.map((p, i) => <li key={i} className="text-sm text-zinc-300">{p}</li>)}
+          </ul>
+        </div>
+      )}
+
       {/* Steps */}
       <div className="flex flex-col gap-2">
         {steps.map((step, i) => {
@@ -111,9 +134,20 @@ export function SopRunner({ sopId, title, body, clientId }: {
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-[11px] font-semibold text-zinc-500">STEP {i + 1}</span>
                   </div>
-                  <p className={cn("text-sm leading-relaxed whitespace-pre-wrap", isDone ? "text-zinc-500 line-through" : "text-zinc-100")}>
-                    {step}
+                  <p className={cn("text-sm font-medium leading-relaxed", isDone ? "text-zinc-500 line-through" : "text-zinc-100")}>
+                    {step.title}
                   </p>
+                  {step.detail && (
+                    <p className={cn("text-sm leading-relaxed whitespace-pre-wrap mt-1", isDone ? "text-zinc-600" : "text-zinc-400")}>
+                      {step.detail}
+                    </p>
+                  )}
+                  {step.tip && (
+                    <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-500/5 border border-amber-500/15 px-2.5 py-1.5">
+                      <Lightbulb className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-200/80 leading-relaxed">{step.tip}</p>
+                    </div>
+                  )}
 
                   <button
                     onClick={() => askHelp(i)}

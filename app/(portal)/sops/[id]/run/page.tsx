@@ -15,12 +15,16 @@ export default async function SopRunPage({ params }: { params: { id: string } })
   const admin = createAdminClient();
   const { data: sop } = await admin
     .from("sops")
-    .select("id, title, body, client_id")
+    .select("id, title, body, client_id, steps, intro, prerequisites")
     .eq("id", params.id)
     .maybeSingle();
 
   if (!sop) notFound();
-  const s = sop as { id: string; title: string; body: string; client_id: string | null };
+  const s = sop as {
+    id: string; title: string; body: string; client_id: string | null;
+    steps: { title: string; detail: string; tip?: string }[] | null;
+    intro: string | null; prerequisites: string[] | null;
+  };
 
   const isGlobal = s.client_id === null;
   const sameClient = !!user.client_id && s.client_id === user.client_id;
@@ -32,7 +36,10 @@ export default async function SopRunPage({ params }: { params: { id: string } })
         <ArrowLeft className="w-4 h-4" />
         Back to SOP
       </Link>
-      <SopRunner sopId={s.id} title={s.title} body={s.body} clientId={user.client_id ?? ""} />
+      <SopRunner
+        sopId={s.id} title={s.title} body={s.body} clientId={user.client_id ?? ""}
+        structured={s.steps ?? undefined} intro={s.intro ?? undefined} prerequisites={s.prerequisites ?? undefined}
+      />
     </div>
   );
 }
