@@ -75,7 +75,11 @@ export function VaContractEditor({ vaId, initial }: { vaId: string; initial: Con
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <div className="flex flex-col gap-1"><label className={lbl}>Rate</label><input type="number" min="0" step="0.01" value={f.rate} onChange={(e) => set("rate", e.target.value)} className={input} /></div>
-        <div className="flex flex-col gap-1"><label className={lbl}>Currency</label><input value={f.currency} onChange={(e) => set("currency", e.target.value)} className={input} maxLength={8} /></div>
+        <div className="flex flex-col gap-1"><label className={lbl}>Currency</label>
+          <select value={f.currency} onChange={(e) => set("currency", e.target.value)} className={input}>
+            {Array.from(new Set([f.currency, "USD", "AUD", "PHP", "EUR", "GBP", "NZD", "CAD", "SGD"])).map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
         <div className="flex flex-col gap-1"><label className={lbl}>Pay period</label>
           <select value={f.pay_period} onChange={(e) => set("pay_period", e.target.value)} className={input}>
             <option value="hourly">Hourly</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option>

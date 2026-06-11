@@ -12,6 +12,8 @@ import { notify } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
+const ISSUE_HREF = "/admin/issues";
+
 export const GET = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   const { data } = await admin.from("va_issues").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
@@ -49,7 +51,30 @@ export const POST = withAuth(async (req, { user }) => {
     type: "issue",
     title: `Issue raised: ${parsed.data.category ?? "other"}`,
     body: `${name}: ${parsed.data.subject}`,
-    href: "/admin/errors",
+    href: ISSUE_HREF,
   });
   return NextResponse.json({ issue: data });
 });
+
+// RapidTal (super_admin) works the issue: open → in_review → resolved.
+const patchSchema = z.object({
+  id: z.string().uuid(),
+  status: z.enum(["open", "in_review", "resolved"]),
+});
+
+export const PATCH = withAuth(async (req) => {
+  let body: unknown;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
+  const parsed = patchSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("va_issues")
+    .update({ status: parsed.data.status })
+    .eq("id", parsed.data.id)
+    .select("id, status")
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ issue: data });
+}, { roles: ["super_admin"] });

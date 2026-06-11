@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { differenceInCalendarMonths, addMonths, format } from "date-fns";
 import {
   Briefcase, CalendarDays, Plane, FileText, AlertTriangle, Clock,
-  Loader2, Plus, Trash2, DollarSign, CalendarClock,
+  Loader2, Plus, Trash2, DollarSign, CalendarClock, Users, Check, X,
 } from "lucide-react";
 import { TimezoneOverlap } from "./TimezoneOverlap";
 import { HolidayCalendars } from "./HolidayCalendars";
@@ -31,6 +31,7 @@ export interface DayRow { id: string; work_date: string; hours: number | null; n
 export interface LeaveRow { id: string; start_date: string; end_date: string; leave_type: string; reason: string | null; status: string }
 export interface IssueRow { id: string; category: string; subject: string; detail: string; status: string; created_at: string }
 export interface ReportRow { id: string; report_month: string; delivered: string | null; challenges: string | null; goals: string | null }
+export interface TeamLeaveRow { id: string; user_id: string; userName: string; start_date: string; end_date: string; leave_type: string; reason: string | null; status: string }
 
 interface Props {
   vaTimezone: string | null;
@@ -39,25 +40,36 @@ interface Props {
   initialLeave: LeaveRow[];
   initialIssues: IssueRow[];
   initialReports: ReportRow[];
+  isAdmin?: boolean;
+  initialTeamLeave?: TeamLeaveRow[];
 }
 
-type Tab = "overview" | "days" | "leave" | "holidays" | "documents" | "reports" | "issues";
-const TABS: { id: Tab; label: string; icon: typeof Briefcase }[] = [
+type Tab = "overview" | "days" | "leave" | "holidays" | "documents" | "reports" | "issues" | "team-leave";
+const TABS: { id: Tab; label: string; icon: typeof Briefcase; admin?: boolean }[] = [
   { id: "overview", label: "Overview", icon: Briefcase },
   { id: "days", label: "Days Worked", icon: CalendarDays },
   { id: "leave", label: "Leave", icon: Plane },
+  { id: "team-leave", label: "Team Leave", icon: Users, admin: true },
   { id: "holidays", label: "Holidays", icon: CalendarDays },
   { id: "documents", label: "Documents", icon: FileText },
   { id: "reports", label: "Self-Reports", icon: FileText },
   { id: "issues", label: "Raise an Issue", icon: AlertTriangle },
 ];
 
-const money = (n: number | null, ccy: string) =>
-  n == null ? "—" : new Intl.NumberFormat(undefined, { style: "currency", currency: ccy || "USD", maximumFractionDigits: 2 }).format(n);
+const money = (n: number | null, ccy: string) => {
+  if (n == null) return "—";
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: (ccy || "USD").toUpperCase(), maximumFractionDigits: 2 }).format(n);
+  } catch {
+    // Free-text / non-ISO currency code — never let it crash the Overview.
+    return `${ccy} ${n.toFixed(2)}`;
+  }
+};
 const niceDate = (iso: string | null) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
 
-export function MyJobHub({ vaTimezone, contract, initialDays, initialLeave, initialIssues, initialReports }: Props) {
+export function MyJobHub({ vaTimezone, contract, initialDays, initialLeave, initialIssues, initialReports, isAdmin = false, initialTeamLeave = [] }: Props) {
   const [tab, setTab] = useState<Tab>("overview");
+  const tabs = TABS.filter((t) => !t.admin || isAdmin);
 
   return (
     <div>
@@ -72,7 +84,7 @@ export function MyJobHub({ vaTimezone, contract, initialDays, initialLeave, init
       </div>
 
       <div className="flex items-center gap-1 border-b border-zinc-800 mb-6 overflow-x-auto">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={cn("inline-flex items-center gap-2 px-4 py-2.5 text-sm border-b-2 -mb-px whitespace-nowrap transition-colors",
               tab === t.id ? "border-emerald-500 text-white font-medium" : "border-transparent text-zinc-400 hover:text-zinc-200")}>
@@ -84,6 +96,7 @@ export function MyJobHub({ vaTimezone, contract, initialDays, initialLeave, init
       {tab === "overview" && <Overview contract={contract} vaTimezone={vaTimezone} />}
       {tab === "days" && <DaysTab initial={initialDays} />}
       {tab === "leave" && <LeaveTab initial={initialLeave} />}
+      {tab === "team-leave" && isAdmin && <TeamLeaveTab initial={initialTeamLeave} />}
       {tab === "holidays" && <HolidayCalendars />}
       {tab === "documents" && <DocumentsTab />}
       {tab === "reports" && <ReportsTab initial={initialReports} />}
@@ -100,11 +113,12 @@ function Overview({ contract, vaTimezone }: { contract: Contract | null; vaTimez
   const nextAnniv = start ? addMonths(start, ((Math.floor((months ?? 0) / 12)) + 1) * 12) : null;
 
   // Rate review nudge: due if next_review_date is set and within 30 days/past,
-  // or (fallback) if we've passed a 3/6/12-month mark without a review date.
+  // or (fallback) at the 6-month mark and every anniversary (12, 24, 36…) when
+  // no review date is set.
   const reviewDate = contract?.next_review_date ? new Date(contract.next_review_date + "T00:00:00") : null;
   const daysToReview = reviewDate ? Math.round((reviewDate.getTime() - Date.now()) / 86_400_000) : null;
   const reviewDue = daysToReview != null && daysToReview <= 30;
-  const milestoneDue = !reviewDate && months != null && [3, 6, 12].includes(months);
+  const milestoneDue = !reviewDate && months != null && (months === 6 || (months >= 12 && months % 12 === 0));
 
   const terms: { icon: typeof DollarSign; label: string; value: string }[] = [
     { icon: DollarSign, label: "Rate", value: `${money(contract?.rate ?? null, contract?.currency ?? "USD")} / ${contract?.pay_period ?? "—"}` },
@@ -333,6 +347,68 @@ function LeaveTab({ initial }: { initial: LeaveRow[] }) {
               <span className={cn("text-[11px] font-semibold rounded-full px-2.5 py-0.5 capitalize", LEAVE_TINT[r.status] ?? "bg-zinc-700 text-zinc-300")}>{r.status}</span>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Team Leave (client_admin) ────────────────────────────────────────────────
+function TeamLeaveTab({ initial }: { initial: TeamLeaveRow[] }) {
+  const [rows, setRows] = useState<TeamLeaveRow[]>(initial);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function decide(row: TeamLeaveRow, status: "approved" | "declined") {
+    if (busy) return;
+    setBusy(row.id);
+    try {
+      await api.patch(ROUTES.myJob.leave(), { id: row.id, status }, { showErrorToast: false });
+      setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, status } : r)));
+      toast.success(`Leave ${status}.`);
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Couldn't update."); }
+    finally { setBusy(null); }
+  }
+
+  const pending = rows.filter((r) => r.status === "pending");
+  const decided = rows.filter((r) => r.status !== "pending");
+
+  function Row({ r }: { r: TeamLeaveRow }) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-zinc-100">{r.userName} · {niceDate(r.start_date)} → {niceDate(r.end_date)}</p>
+          <p className="text-xs text-zinc-500 capitalize">{r.leave_type}{r.reason ? ` · ${r.reason}` : ""}</p>
+        </div>
+        {r.status === "pending" ? (
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => decide(r, "approved")} disabled={busy === r.id}
+              className="inline-flex items-center gap-1 text-xs font-medium rounded-lg bg-green-500/15 text-green-300 hover:bg-green-500/25 px-2.5 py-1 transition-colors disabled:opacity-50">
+              {busy === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Approve
+            </button>
+            <button onClick={() => decide(r, "declined")} disabled={busy === r.id}
+              className="inline-flex items-center gap-1 text-xs font-medium rounded-lg bg-red-500/15 text-red-300 hover:bg-red-500/25 px-2.5 py-1 transition-colors disabled:opacity-50">
+              <X className="w-3.5 h-3.5" /> Decline
+            </button>
+          </div>
+        ) : (
+          <span className={cn("text-[11px] font-semibold rounded-full px-2.5 py-0.5 capitalize shrink-0", LEAVE_TINT[r.status] ?? "bg-zinc-700 text-zinc-300")}>{r.status}</span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h3 className="font-semibold text-zinc-100 mb-3">Pending requests {pending.length > 0 && <span className="text-amber-400">({pending.length})</span>}</h3>
+        {pending.length === 0 ? <p className="text-sm text-zinc-500">No pending leave requests.</p> : (
+          <div className="surface-card divide-y divide-zinc-800/70 overflow-hidden">{pending.map((r) => <Row key={r.id} r={r} />)}</div>
+        )}
+      </div>
+      {decided.length > 0 && (
+        <div>
+          <h3 className="font-semibold text-zinc-100 mb-3">Reviewed</h3>
+          <div className="surface-card divide-y divide-zinc-800/70 overflow-hidden">{decided.map((r) => <Row key={r.id} r={r} />)}</div>
         </div>
       )}
     </div>

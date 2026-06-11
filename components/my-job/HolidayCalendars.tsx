@@ -61,6 +61,14 @@ export function HolidayCalendars() {
         <Column region={PH_REGION} />
       </div>
 
+      {new Date().getFullYear() > HOLIDAY_YEAR && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 mt-3">
+          <CalendarDays className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-200">
+            These dates are for {HOLIDAY_YEAR} and are now out of date. Ask RapidTal to refresh the holiday calendar for {new Date().getFullYear()}.
+          </p>
+        </div>
+      )}
       <p className="text-[11px] text-zinc-600 mt-3">
         Curated for {HOLIDAY_YEAR}. Movable dates (Easter, King&apos;s Birthday, Labour Day, and proclamation-based PH holidays) are refreshed each year.
       </p>

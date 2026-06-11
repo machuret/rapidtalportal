@@ -32,6 +32,7 @@ import {
   Wrench,
   SlidersHorizontal,
   Briefcase,
+  AlertTriangle,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -95,6 +96,7 @@ const adminLinks = [
   { href: "/supervision",      label: "Supervision", icon: Eye },
   { href: "/admin/daily-logs", label: "Daily Logs",  icon: NotebookPen },
   { href: "/admin/prompts",    label: "AI Prompts",  icon: SlidersHorizontal },
+  { href: "/admin/issues",     label: "Issues",      icon: AlertTriangle },
   { href: "/admin/errors",     label: "Errors",      icon: Bug },
 ];
 
