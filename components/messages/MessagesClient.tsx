@@ -40,7 +40,9 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
     sendMessage,
     isSending: sending,
     appendMessage,
-  } = useMessages(clientId);
+    // Poll as a safety net so new messages still arrive if the realtime
+    // channel is blocked (e.g. by RLS on the browser client).
+  } = useMessages(clientId, { refetchInterval: 25_000 });
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const didInitialScroll = useRef(false);

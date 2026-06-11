@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
-import { createClient } from "@/lib/supabase/client";
+import { ROUTES } from "@/lib/api/routes";
 
 export interface Message {
   id: string;
@@ -27,17 +27,14 @@ interface SendMessageInput {
   message: string;
 }
 
-// Fetch messages directly from Supabase
+// Fetch via the server API (admin client, scoped in code) rather than the
+// browser client's RLS query — the latter was failing on /messages.
 async function fetchMessages(clientId: string): Promise<Message[]> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("messages")
-    .select("*")
-    .eq("client_id", clientId)
-    .order("created_at", { ascending: true });
-
-  if (error) throw new Error("Failed to load messages.");
-  return (data as Message[]) ?? [];
+  const { messages } = await api.get<{ messages: Message[] }>(
+    ROUTES.messages.list(clientId),
+    { showErrorToast: false },
+  );
+  return messages ?? [];
 }
 
 // Send message via API

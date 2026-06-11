@@ -89,6 +89,7 @@ export const ROUTES = {
   team: (id: string) => `/api/team/${id}`,
   profile: () => "/api/profile",
   messages: {
+    list: (clientId: string) => `/api/messages?clientId=${clientId}`,
     send: () => "/api/messages/send",
   },
   dailyLog: {
