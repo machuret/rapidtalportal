@@ -49,6 +49,9 @@ export interface Sop {
   category: string;
   body: string;
   order_index: number;
+  version?: number;
+  forked_from?: string | null;
+  forked_version?: number | null;
   created_at: string;
   updated_at: string;
 }

@@ -26,12 +26,15 @@ export const POST = withAuth(
     const admin = createAdminClient();
     const { data: src } = await admin
       .from("sops")
-      .select("title, category, body, client_id")
+      .select("id, title, category, body, client_id, steps, intro, prerequisites, version")
       .eq("id", parsed.data.sopId)
       .maybeSingle();
     if (!src) return NextResponse.json({ error: "SOP not found." }, { status: 404 });
 
-    const source = src as { title: string; category: string; body: string; client_id: string | null };
+    const source = src as {
+      id: string; title: string; category: string; body: string; client_id: string | null;
+      steps: unknown; intro: string | null; prerequisites: string[] | null; version: number;
+    };
     // Only the global library, or the caller's own client, may be forked.
     const readable = source.client_id === null || source.client_id === user.client_id || user.role === "super_admin";
     if (!readable) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
@@ -45,7 +48,13 @@ export const POST = withAuth(
         title:      source.title,
         category:   source.category || "General",
         body:       source.body,
+        steps:      source.steps ?? null,
+        intro:      source.intro ?? null,
+        prerequisites: source.prerequisites ?? null,
         order_index: 0,
+        // Remember the origin + its version at fork time, so drift is visible.
+        forked_from: source.id,
+        forked_version: source.version ?? 1,
         updated_at: new Date().toISOString(),
       })
       .select("id")

@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { SopDetail } from "@/components/sops/SopDetail";
 import type { Sop } from "@/app/(portal)/sops/page";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +44,14 @@ export default async function SopDetailPage({ params }: { params: { id: string }
     new Set((allSops ?? []).map((s: { category: string }) => s.category).filter(Boolean)),
   );
 
+  // Fork drift: has the original moved on since this copy was forked?
+  let driftAhead = 0;
+  if (sop.forked_from && sop.forked_version != null) {
+    const { data: srcRow } = await admin.from("sops").select("version").eq("id", sop.forked_from).maybeSingle();
+    const srcVersion = (srcRow as { version: number } | null)?.version;
+    if (srcVersion != null && srcVersion > sop.forked_version) driftAhead = srcVersion - sop.forked_version;
+  }
+
   const backHref = isGlobal && user.role === "super_admin" ? "/admin/sops" : "/sops";
 
   return (
@@ -58,6 +66,15 @@ export default async function SopDetailPage({ params }: { params: { id: string }
       {isGlobal && (
         <div className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-full px-2.5 py-0.5">
           RapidTal Library — shared with all VAs
+        </div>
+      )}
+      {driftAhead > 0 && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-200">
+            The original has been updated <span className="font-semibold">{driftAhead} time{driftAhead !== 1 ? "s" : ""}</span> since this copy was forked.
+            Review the source SOP to see what changed{canEdit ? " and bring across anything useful." : "."}
+          </p>
         </div>
       )}
       <SopDetail sop={sop} canEdit={canEdit} clientId={sop.client_id} categories={categories} forkToClientId={forkToClientId} />

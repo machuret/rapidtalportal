@@ -184,9 +184,9 @@ export interface Database {
         Relationships: NoRelationships;
       };
       sops: {
-        Row: { id: string; client_id: string | null; title: string; category: string; body: string; order_index: number; created_by: string | null; steps: { title: string; detail: string; tip?: string }[] | null; intro: string | null; prerequisites: string[] | null; created_at: string; updated_at: string };
-        Insert: { id?: string; client_id?: string | null; title: string; category?: string; body?: string; order_index?: number; created_by?: string | null; steps?: { title: string; detail: string; tip?: string }[] | null; intro?: string | null; prerequisites?: string[] | null; created_at?: string; updated_at?: string };
-        Update: { id?: string; client_id?: string | null; title?: string; category?: string; body?: string; order_index?: number; created_by?: string | null; steps?: { title: string; detail: string; tip?: string }[] | null; intro?: string | null; prerequisites?: string[] | null; created_at?: string; updated_at?: string };
+        Row: { id: string; client_id: string | null; title: string; category: string; body: string; order_index: number; created_by: string | null; steps: { title: string; detail: string; tip?: string }[] | null; intro: string | null; prerequisites: string[] | null; version: number; forked_from: string | null; forked_version: number | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id?: string | null; title: string; category?: string; body?: string; order_index?: number; created_by?: string | null; steps?: { title: string; detail: string; tip?: string }[] | null; intro?: string | null; prerequisites?: string[] | null; version?: number; forked_from?: string | null; forked_version?: number | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string | null; title?: string; category?: string; body?: string; order_index?: number; created_by?: string | null; steps?: { title: string; detail: string; tip?: string }[] | null; intro?: string | null; prerequisites?: string[] | null; version?: number; forked_from?: string | null; forked_version?: number | null; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
       content_pieces: {

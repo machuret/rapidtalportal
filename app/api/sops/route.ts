@@ -38,7 +38,7 @@ const deleteSchema = z.object({
   clientId: z.string().uuid().nullable().optional(),
 });
 
-const SELECT = "id, client_id, title, category, body, order_index, steps, intro, prerequisites, created_at, updated_at";
+const SELECT = "id, client_id, title, category, body, order_index, steps, intro, prerequisites, version, forked_from, forked_version, created_at, updated_at";
 
 /** Authorise a write against a SOP's scope. Returns an error response or null. */
 function authorizeScope(user: ApiUser, clientId: string | null): NextResponse | null {
@@ -108,10 +108,11 @@ export async function PATCH(req: NextRequest) {
   const admin = createAdminClient();
 
   // Fetch the SOP and authorise against its ACTUAL scope (never trust the body).
-  const { data: existing } = await admin.from("sops").select("id, client_id").eq("id", parsed.data.id).maybeSingle();
+  const { data: existing } = await admin.from("sops").select("id, client_id, version").eq("id", parsed.data.id).maybeSingle();
   if (!existing) return NextResponse.json({ error: "SOP not found." }, { status: 404 });
 
-  const denied = authorizeScope(user, (existing as { client_id: string | null }).client_id);
+  const cur = existing as { client_id: string | null; version: number };
+  const denied = authorizeScope(user, cur.client_id);
   if (denied) return denied;
 
   const id = parsed.data.id;
@@ -126,6 +127,10 @@ export async function PATCH(req: NextRequest) {
   if (parsed.data.steps !== undefined) updates.steps = parsed.data.steps;
   if (parsed.data.intro !== undefined) updates.intro = parsed.data.intro;
   if (parsed.data.prerequisites !== undefined) updates.prerequisites = parsed.data.prerequisites;
+  // Bump the version when the actual content changes (not just metadata edits).
+  const contentChanged = parsed.data.body !== undefined || parsed.data.steps !== undefined
+    || parsed.data.intro !== undefined || parsed.data.prerequisites !== undefined;
+  if (contentChanged) updates.version = (cur.version ?? 1) + 1;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)

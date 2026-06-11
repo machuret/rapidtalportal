@@ -25,6 +25,10 @@ export const POST = withAuth(async (req, { user }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
 
   const admin = createAdminClient();
+  // Pin the version the VA actually ran, for an accurate audit trail.
+  const { data: sop } = await admin.from("sops").select("version").eq("id", parsed.data.sopId).maybeSingle();
+  const sopVersion = (sop as { version: number } | null)?.version ?? null;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("sop_runs")
@@ -34,6 +38,7 @@ export const POST = withAuth(async (req, { user }) => {
       user_id: user.id,
       status: "started",
       steps_total: parsed.data.stepsTotal,
+      sop_version: sopVersion,
     })
     .select("id")
     .single();
