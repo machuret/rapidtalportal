@@ -6,12 +6,17 @@ import type { Sop } from "@/app/(portal)/sops/page";
 
 const SOPS_KEY = "sops";
 
+interface SopStepInput { title: string; detail: string; tip?: string }
+
 interface CreateSopInput {
   clientId: string | null; // null = global library SOP
   title: string;
   category: string;
   body: string;
   order_index: number;
+  steps?: SopStepInput[];
+  intro?: string;
+  prerequisites?: string[];
 }
 
 interface UpdateSopInput {

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SopNewForm } from "@/components/sops/SopNewForm";
+import { SopStudio } from "@/components/sops/SopStudio";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
@@ -44,7 +44,7 @@ export default async function SopNewPage({ searchParams }: { searchParams: { sco
         <ArrowLeft className="w-4 h-4" />
         {isGlobal ? "Back to SOP Library" : "Back to SOPs"}
       </Link>
-      <SopNewForm clientId={isGlobal ? null : user.client_id!} userId={user.id} categories={categories} />
+      <SopStudio clientId={isGlobal ? null : user.client_id!} userId={user.id} categories={categories} />
     </div>
   );
 }

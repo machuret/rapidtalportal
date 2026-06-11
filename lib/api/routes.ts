@@ -43,6 +43,8 @@ export const ROUTES = {
   sopFork: () => "/api/sops/fork",
   sopRun: () => "/api/sops/run",
   sopReorder: () => "/api/sops/reorder",
+  sopSuggest: () => "/api/sops/suggest",
+  sopGenerate: () => "/api/sops/generate",
   crm: {
     contacts: () => "/api/crm/contacts",
     notes: () => "/api/crm/notes",

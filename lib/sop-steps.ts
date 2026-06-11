@@ -2,6 +2,28 @@
  * Parse an SOP body into ordered, runnable steps.
  * Detects "Step N", "N.", "N)", or bullet markers; falls back to paragraphs.
  */
+export interface SopStep { title: string; detail: string; tip?: string }
+
+/**
+ * Serialize structured steps back into the body text the runner + detail view
+ * already understand ("Step N: title" blocks). Intro and prerequisites are
+ * written as a preamble WITHOUT bullet markers so they don't get parsed as
+ * steps. Keeps structured SOPs fully backward-compatible.
+ */
+export function serializeSteps(intro: string, prerequisites: string[], steps: SopStep[]): string {
+  const parts: string[] = [];
+  if (intro.trim()) parts.push(intro.trim());
+  const prereqs = prerequisites.map((p) => p.trim()).filter(Boolean);
+  if (prereqs.length) parts.push(`Before you start: ${prereqs.join("; ")}`);
+  steps.forEach((s, i) => {
+    let block = `Step ${i + 1}: ${s.title.trim()}`;
+    if (s.detail.trim()) block += `\n${s.detail.trim()}`;
+    if (s.tip?.trim()) block += `\nTip: ${s.tip.trim()}`;
+    parts.push(block);
+  });
+  return parts.join("\n\n");
+}
+
 export function parseSopSteps(body: string): string[] {
   const isStep = (l: string) => /^\s*(step\s*\d+|\d+[.)\]:]|[-*•])\s+/i.test(l);
   const strip = (l: string) => l.replace(/^\s*(step\s*\d+[:.)\]]*|\d+[.)\]:]+|[-*•])\s*/i, "").trim();

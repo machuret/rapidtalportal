@@ -5,12 +5,21 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 // clientId null  → global library SOP (super_admin only)
 // clientId uuid  → client SOP (client_admin for own client, or super_admin)
+const stepSchema = z.object({
+  title: z.string().min(1).max(300),
+  detail: z.string().max(5000).optional().default(""),
+  tip: z.string().max(1000).optional(),
+});
+
 const createSchema = z.object({
-  clientId:    z.string().uuid().nullable().optional(),
-  title:       z.string().min(1).max(300),
-  category:    z.string().max(100).optional().default("General"),
-  body:        z.string().min(1).max(100000),
-  order_index: z.number().int().optional().default(0),
+  clientId:      z.string().uuid().nullable().optional(),
+  title:         z.string().min(1).max(300),
+  category:      z.string().max(100).optional().default("General"),
+  body:          z.string().min(1).max(100000),
+  order_index:   z.number().int().optional().default(0),
+  steps:         z.array(stepSchema).max(40).optional(),
+  intro:         z.string().max(5000).optional(),
+  prerequisites: z.array(z.string().max(500)).max(30).optional(),
 });
 
 const updateSchema = z.object({
@@ -65,11 +74,14 @@ export async function POST(req: NextRequest) {
     .insert({
       client_id:   clientId,
       created_by:  user.id,
-      title:       parsed.data.title.trim(),
-      category:    parsed.data.category.trim() || "General",
-      body:        parsed.data.body,
-      order_index: parsed.data.order_index,
-      updated_at:  new Date().toISOString(),
+      title:         parsed.data.title.trim(),
+      category:      parsed.data.category.trim() || "General",
+      body:          parsed.data.body,
+      order_index:   parsed.data.order_index,
+      steps:         parsed.data.steps ?? null,
+      intro:         parsed.data.intro ?? null,
+      prerequisites: parsed.data.prerequisites ?? null,
+      updated_at:    new Date().toISOString(),
     })
     .select(SELECT)
     .single();
