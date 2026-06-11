@@ -52,8 +52,7 @@ Scoring lenses: depth = thin content vs comprehensive coverage; keyword = natura
   }
 
   const a = result.data;
-  logToolRun("content-auditor", parsed.data.clientId, user.id, parsed.data.keyword || "page copy", result.tokens);
-  return NextResponse.json({
+  const payload = {
     overall: clamp(a.overall),
     subscores: {
       depth: clamp(a.subscores.depth),
@@ -68,5 +67,7 @@ Scoring lenses: depth = thin content vs comprehensive coverage; keyword = natura
     })),
     internalLinks: (a.internalLinks ?? []).slice(0, 6).map((l) => String(l).slice(0, 200)),
     quickWins: (a.quickWins ?? []).slice(0, 6).map((w) => String(w).slice(0, 300)),
-  });
+  };
+  logToolRun("content-auditor", parsed.data.clientId, user.id, parsed.data.keyword || "page copy", result.tokens, payload);
+  return NextResponse.json(payload);
 });

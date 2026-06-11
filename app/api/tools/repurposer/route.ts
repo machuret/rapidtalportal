@@ -52,8 +52,7 @@ Rules: each output must stand alone (don't say "in this blog"). Pull the stronge
   }
 
   const r = result.data;
-  logToolRun("repurposer", parsed.data.clientId, user.id, parsed.data.content.split("\n").find(Boolean)?.slice(0, 80) ?? "blog post", result.tokens);
-  return NextResponse.json({
+  const payload = {
     linkedin: String(r.linkedin).slice(0, 5000),
     facebook: String(r.facebook).slice(0, 5000),
     instagram: String(r.instagram).slice(0, 4000),
@@ -62,5 +61,7 @@ Rules: each output must stand alone (don't say "in this blog"). Pull the stronge
       hook: String(s.hook ?? "").slice(0, 200),
       script: String(s.script ?? "").slice(0, 2500),
     })),
-  });
+  };
+  logToolRun("repurposer", parsed.data.clientId, user.id, parsed.data.content.split("\n").find(Boolean)?.slice(0, 80) ?? "blog post", result.tokens, payload);
+  return NextResponse.json(payload);
 });

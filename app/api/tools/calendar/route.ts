@@ -70,6 +70,6 @@ Rules: vary formats and content pillars (educate / entertain / social proof / be
       hook: String(d.hook ?? "").slice(0, 160),
     }));
 
-  logToolRun("calendar", parsed.data.clientId, user.id, parsed.data.focus || "content calendar", result.tokens);
+  logToolRun("calendar", parsed.data.clientId, user.id, parsed.data.focus || "content calendar", result.tokens, { days });
   return NextResponse.json({ days });
 });

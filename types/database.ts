@@ -272,9 +272,9 @@ export interface Database {
         Relationships: NoRelationships;
       };
       tool_runs: {
-        Row: { id: string; client_id: string; user_id: string | null; tool: string; input_summary: string | null; tokens_used: number; created_at: string };
-        Insert: { id?: string; client_id: string; user_id?: string | null; tool: string; input_summary?: string | null; tokens_used?: number; created_at?: string };
-        Update: { id?: string; client_id?: string; user_id?: string | null; tool?: string; input_summary?: string | null; tokens_used?: number; created_at?: string };
+        Row: { id: string; client_id: string; user_id: string | null; tool: string; input_summary: string | null; tokens_used: number; output: Record<string, unknown> | null; created_at: string };
+        Insert: { id?: string; client_id: string; user_id?: string | null; tool: string; input_summary?: string | null; tokens_used?: number; output?: Record<string, unknown> | null; created_at?: string };
+        Update: { id?: string; client_id?: string; user_id?: string | null; tool?: string; input_summary?: string | null; tokens_used?: number; output?: Record<string, unknown> | null; created_at?: string };
         Relationships: NoRelationships;
       };
       vault_analyses: {

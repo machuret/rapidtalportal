@@ -10,6 +10,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { captureError } from "@/lib/error-tracking";
 
 export const TOOL_MODEL = process.env.TOOLS_MODEL || "openai/gpt-4o";
+// High-frequency, low-complexity tools (hashtags, hooks, replies) run on a
+// mini-class model: ~2-3x faster, ~10x cheaper, quality holds for short-form.
+export const TOOL_MODEL_MINI = process.env.TOOLS_MODEL_MINI || "openai/gpt-4o-mini";
 
 /** Tools are for the working team: VAs + client admins, scoped to their client. */
 export function authorizeTool(user: ApiUser, clientId: string): NextResponse | null {
@@ -49,13 +52,14 @@ export async function companyContext(clientId: string): Promise<CompanyContext> 
   }
 }
 
-/** Fire-and-forget usage record — feeds /tools history + Supervision stats. */
-export function logToolRun(tool: string, clientId: string, userId: string, inputSummary: string, tokens: number): void {
+/** Fire-and-forget usage record — feeds /tools history + Supervision stats.
+ *  Pass the response payload as `output` to make the run reopenable. */
+export function logToolRun(tool: string, clientId: string, userId: string, inputSummary: string, tokens: number, output?: unknown): void {
   try {
     const admin = createAdminClient();
     void admin
       .from("tool_runs")
-      .insert({ client_id: clientId, user_id: userId, tool, input_summary: inputSummary.slice(0, 200), tokens_used: tokens })
+      .insert({ client_id: clientId, user_id: userId, tool, input_summary: inputSummary.slice(0, 200), tokens_used: tokens, output: (output as Record<string, unknown> | undefined) ?? null })
       .then(({ error }) => { if (error) console.warn("[tool_runs]", error.message); });
   } catch { /* never block the tool result */ }
 }
@@ -63,7 +67,7 @@ export function logToolRun(tool: string, clientId: string, userId: string, input
 interface JsonResult<T> { data: T | null; tokens: number; error?: string }
 
 /** OpenRouter call expecting a JSON object; tolerates ```json fences. */
-export async function toolJson<T>(system: string, user: string, maxTokens = 2500): Promise<JsonResult<T>> {
+export async function toolJson<T>(system: string, user: string, maxTokens = 2500, model: string = TOOL_MODEL): Promise<JsonResult<T>> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return { data: null, tokens: 0, error: "OPENROUTER_API_KEY is not configured." };
   try {
@@ -71,7 +75,7 @@ export async function toolJson<T>(system: string, user: string, maxTokens = 2500
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: TOOL_MODEL,
+        model,
         max_tokens: maxTokens,
         temperature: 0.4,
         response_format: { type: "json_object" },

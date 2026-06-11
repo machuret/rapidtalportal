@@ -1,18 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
-import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ClipboardCheck, Loader2, Sparkles, AlertTriangle, Link2, Zap } from "lucide-react";
 import { FetchUrl } from "./FetchUrl";
+import { useToolRun, ToolHeader, LoadingRow } from "./shared";
+import { ClipboardCheck, Loader2, Sparkles, AlertTriangle, Link2, Zap } from "lucide-react";
 
-interface Audit {
+interface Out {
   overall: number;
   subscores: { depth: number; keyword: number; readability: number; structure: number };
   issues: { severity: "high" | "medium" | "low"; issue: string; fix: string }[];
@@ -20,7 +19,7 @@ interface Audit {
   quickWins: string[];
 }
 
-const SUB_LABELS: { key: keyof Audit["subscores"]; label: string }[] = [
+const SUB_LABELS: { key: keyof Out["subscores"]; label: string }[] = [
   { key: "depth", label: "Content depth" },
   { key: "keyword", label: "Keyword usage" },
   { key: "readability", label: "Readability" },
@@ -33,49 +32,18 @@ const SEV: Record<string, string> = {
   low: "text-zinc-300 bg-zinc-800 border-zinc-700",
 };
 
-function scoreColor(n: number): string {
-  if (n >= 75) return "text-green-400";
-  if (n >= 50) return "text-amber-400";
-  return "text-red-400";
-}
-function barColor(n: number): string {
-  if (n >= 75) return "bg-green-500";
-  if (n >= 50) return "bg-amber-500";
-  return "bg-red-500";
-}
+const scoreColor = (n: number) => (n >= 75 ? "text-green-400" : n >= 50 ? "text-amber-400" : "text-red-400");
+const barColor = (n: number) => (n >= 75 ? "bg-green-500" : n >= 50 ? "bg-amber-500" : "bg-red-500");
 
-export function ContentAuditorTool({ clientId }: { clientId: string }) {
+export function ContentAuditorTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [content, setContent] = useState("");
   const [keyword, setKeyword] = useState("");
-  const [audit, setAudit] = useState<Audit | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function run() {
-    if (content.trim().length < 100 || loading) return;
-    setLoading(true);
-    setAudit(null);
-    try {
-      const r = await api.post<Audit>(ROUTES.tools.contentAuditor(),
-        { clientId, content: content.trim(), keyword: keyword.trim() || undefined }, { showErrorToast: false });
-      setAudit(r);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't run the audit.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { result: audit, loading, run } = useToolRun<Out>(ROUTES.tools.contentAuditor(), (initial ?? null) as Out | null);
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-          <ClipboardCheck className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Content Auditor</h1>
-          <p className="text-zinc-400 text-sm mt-1">Paste existing page copy — get an honest scored audit with exact fixes.</p>
-        </div>
-      </div>
+      <ToolHeader icon={ClipboardCheck} title="Content Auditor"
+        subtitle="Paste existing page copy — get an honest scored audit with exact fixes." />
 
       <div className="surface-card p-5 flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
@@ -90,20 +58,16 @@ export function ContentAuditorTool({ clientId }: { clientId: string }) {
             placeholder="Paste the full page content here (at least a few paragraphs)…"
             className="bg-zinc-800 border-zinc-700 text-zinc-100 text-sm" />
         </div>
-        <Button onClick={run} disabled={loading || content.trim().length < 100} className="gap-2 self-start">
+        <Button onClick={() => run({ clientId, content: content.trim(), keyword: keyword.trim() || undefined })}
+          disabled={loading || content.trim().length < 100} className="gap-2 self-start">
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Audit it
         </Button>
       </div>
 
-      {loading && (
-        <div className="flex items-center justify-center py-12 text-sm text-zinc-500">
-          <Loader2 className="w-4 h-4 animate-spin mr-2" /> Auditing the copy…
-        </div>
-      )}
+      {loading && <LoadingRow message="Auditing the copy…" />}
 
       {audit && (
         <div className="flex flex-col gap-4 mt-6">
-          {/* Score */}
           <div className="surface-card p-5 flex flex-col sm:flex-row gap-6">
             <div className="text-center sm:w-36 shrink-0">
               <p className={cn("text-5xl font-bold tabular", scoreColor(audit.overall))}>{audit.overall}</p>
@@ -127,7 +91,6 @@ export function ContentAuditorTool({ clientId }: { clientId: string }) {
             </div>
           </div>
 
-          {/* Issues */}
           {audit.issues.length > 0 && (
             <div className="surface-card p-4">
               <p className="label-section mb-3">Issues, by severity</p>
@@ -144,7 +107,6 @@ export function ContentAuditorTool({ clientId }: { clientId: string }) {
             </div>
           )}
 
-          {/* Quick wins + internal links */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {audit.quickWins.length > 0 && (
               <div className="surface-card p-4">

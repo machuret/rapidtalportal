@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, companyContext, toolJson, logToolRun } from "@/lib/tools/ai";
+import { authorizeTool, companyContext, toolJson, logToolRun, TOOL_MODEL_MINI } from "@/lib/tools/ai";
 
 export const maxDuration = 60;
 
@@ -45,7 +45,7 @@ Rules: sound human, never corporate-robotic. Match the platform register (casual
 
   const userMsg = `Incoming message:\n"""\n${parsed.data.message}\n"""${parsed.data.context ? `\nContext from the VA: ${parsed.data.context}` : ""}`;
 
-  const result = await toolJson<{ replies: ReplyOption[] }>(system, userMsg, 1200);
+  const result = await toolJson<{ replies: ReplyOption[] }>(system, userMsg, 1200, TOOL_MODEL_MINI);
   if (!result.data?.replies?.length) {
     return NextResponse.json({ error: result.error ?? "Couldn't draft replies. Try again." }, { status: 502 });
   }
@@ -55,6 +55,6 @@ Rules: sound human, never corporate-robotic. Match the platform register (casual
     .slice(0, 3)
     .map((r) => ({ style: String(r.style ?? "").slice(0, 60), text: String(r.text).slice(0, 800) }));
 
-  logToolRun("reply-assistant", parsed.data.clientId, user.id, parsed.data.message.slice(0, 80), result.tokens);
+  logToolRun("reply-assistant", parsed.data.clientId, user.id, parsed.data.message.slice(0, 80), result.tokens, { replies });
   return NextResponse.json({ replies });
 });

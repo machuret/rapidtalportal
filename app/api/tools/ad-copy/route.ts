@@ -45,13 +45,14 @@ Rules: respect the character limits strictly, one clear CTA, no fabricated claim
   const result = await toolJson<{ variants: Ad[] }>(system, `Offer: ${parsed.data.offer}`, 1500);
   if (!result.data?.variants?.length) return NextResponse.json({ error: result.error ?? "Couldn't write ad copy." }, { status: 502 });
 
-  logToolRun("ad-copy", parsed.data.clientId, user.id, parsed.data.offer.slice(0, 80), result.tokens);
-  return NextResponse.json({
+  const payload = {
     platform: parsed.data.platform,
     variants: result.data.variants.filter((v) => v.headline?.trim() || v.body?.trim()).slice(0, 5).map((v) => ({
       headline: String(v.headline ?? "").slice(0, 120),
       body: String(v.body ?? "").slice(0, 400),
       angle: String(v.angle ?? "").slice(0, 60),
     })),
-  });
+  };
+  logToolRun("ad-copy", parsed.data.clientId, user.id, parsed.data.offer.slice(0, 80), result.tokens, payload);
+  return NextResponse.json(payload);
 });

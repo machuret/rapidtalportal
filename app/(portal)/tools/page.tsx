@@ -71,7 +71,7 @@ export default async function ToolsPage() {
           <div className="surface-card divide-y divide-zinc-800 overflow-hidden">
             {recent.map((r) => {
               const meta = TOOL_INDEX.get(r.tool);
-              const href = meta ? `/tools/${meta.category}/${r.tool}` : "/tools";
+              const href = meta ? `/tools/${meta.category}/${r.tool}?run=${r.id}` : "/tools";
               return (
                 <Link key={r.id} href={href} className="flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-800/40 transition-colors">
                   <span className="text-sm text-zinc-200 shrink-0">{meta?.title ?? r.tool}</span>

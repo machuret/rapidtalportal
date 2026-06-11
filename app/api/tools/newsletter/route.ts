@@ -40,10 +40,11 @@ Rules: lead with value, one primary CTA, skimmable. If a detail (date, price, li
   const result = await toolJson<Newsletter>(system, parsed.data.topic, 2500);
   if (!result.data?.body) return NextResponse.json({ error: result.error ?? "Couldn't write the newsletter." }, { status: 502 });
 
-  logToolRun("newsletter", parsed.data.clientId, user.id, parsed.data.topic.slice(0, 80), result.tokens);
-  return NextResponse.json({
+  const payload = {
     subject: String(result.data.subject ?? "").slice(0, 120),
     preview: String(result.data.preview ?? "").slice(0, 200),
     body: String(result.data.body).slice(0, 6000),
-  });
+  };
+  logToolRun("newsletter", parsed.data.clientId, user.id, parsed.data.topic.slice(0, 80), result.tokens, payload);
+  return NextResponse.json(payload);
 });

@@ -39,12 +39,13 @@ Rules: 6-9 slides. Slide 1 is a scroll-stopping hook, the last slide is a clear 
   const result = await toolJson<Carousel>(system, parsed.data.topic.slice(0, 16000), 2500);
   if (!result.data?.slides?.length) return NextResponse.json({ error: result.error ?? "Couldn't build the carousel." }, { status: 502 });
 
-  logToolRun("carousel", parsed.data.clientId, user.id, parsed.data.topic.slice(0, 80), result.tokens);
-  return NextResponse.json({
+  const payload = {
     slides: result.data.slides.filter((s) => s.heading?.trim() || s.body?.trim()).slice(0, 12).map((s) => ({
       heading: String(s.heading ?? "").slice(0, 200),
       body: String(s.body ?? "").slice(0, 400),
     })),
     caption: String(result.data.caption ?? "").slice(0, 2200),
-  });
+  };
+  logToolRun("carousel", parsed.data.clientId, user.id, parsed.data.topic.slice(0, 80), result.tokens, payload);
+  return NextResponse.json(payload);
 });

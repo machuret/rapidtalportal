@@ -80,9 +80,7 @@ Rules: 4-7 outline sections, 8-15 entities, 4-6 FAQs with genuinely useful answe
       }, null, 2)
     : null;
 
-  logToolRun("keyword-brief", parsed.data.clientId, user.id, parsed.data.keyword, result.tokens);
-
-  return NextResponse.json({
+  const payload = {
     intent: String(b.intent ?? "").slice(0, 40),
     intentNote: String(b.intentNote ?? "").slice(0, 300),
     title: String(b.title ?? "").slice(0, 120),
@@ -96,5 +94,7 @@ Rules: 4-7 outline sections, 8-15 entities, 4-6 FAQs with genuinely useful answe
     faqs,
     gaps: (b.gaps ?? []).slice(0, 6).map((g) => String(g).slice(0, 300)),
     faqSchema,
-  });
+  };
+  logToolRun("keyword-brief", parsed.data.clientId, user.id, parsed.data.keyword, result.tokens, payload);
+  return NextResponse.json(payload);
 });

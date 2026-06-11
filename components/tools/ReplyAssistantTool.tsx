@@ -1,56 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
-import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { MessageCircle, Loader2, Sparkles, Copy, Check } from "lucide-react";
+import { useToolRun, ToolHeader, CopyButton, LoadingRow } from "./shared";
+import { MessageCircle, Loader2, Sparkles } from "lucide-react";
 
 interface ReplyOption { style: string; text: string }
+interface Out { replies: ReplyOption[] }
 
-export function ReplyAssistantTool({ clientId }: { clientId: string }) {
+export function ReplyAssistantTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [message, setMessage] = useState("");
   const [context, setContext] = useState("");
-  const [replies, setReplies] = useState<ReplyOption[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState<number | null>(null);
-
-  async function run() {
-    if (message.trim().length < 2 || loading) return;
-    setLoading(true);
-    setReplies([]);
-    try {
-      const r = await api.post<{ replies: ReplyOption[] }>(ROUTES.tools.replyAssistant(),
-        { clientId, message: message.trim(), context: context.trim() || undefined }, { showErrorToast: false });
-      setReplies(r.replies);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't draft replies.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function copy(i: number, text: string) {
-    await navigator.clipboard.writeText(text);
-    setCopied(i);
-    setTimeout(() => setCopied((c) => (c === i ? null : c)), 1500);
-  }
+  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.replyAssistant(), (initial ?? null) as Out | null);
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center shadow-lg shadow-pink-500/20">
-          <MessageCircle className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Comment &amp; DM Reply Assistant</h1>
-          <p className="text-zinc-400 text-sm mt-1">Paste what came in — get 3 on-brand reply options to choose from.</p>
-        </div>
-      </div>
+      <ToolHeader icon={MessageCircle} tint="pink" title="Comment & DM Reply Assistant"
+        subtitle="Paste what came in — get 3 on-brand reply options to choose from." />
 
       <div className="surface-card p-5 flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
@@ -64,26 +34,21 @@ export function ReplyAssistantTool({ clientId }: { clientId: string }) {
             placeholder="e.g. they've asked twice already, we're fully booked Saturday…"
             className="bg-zinc-800 border-zinc-700 text-zinc-100" />
         </div>
-        <Button onClick={run} disabled={loading || message.trim().length < 2} className="gap-2 self-start">
+        <Button onClick={() => run({ clientId, message: message.trim(), context: context.trim() || undefined })}
+          disabled={loading || message.trim().length < 2} className="gap-2 self-start">
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Draft 3 replies
         </Button>
       </div>
 
-      {loading && (
-        <div className="flex items-center justify-center py-12 text-sm text-zinc-500">
-          <Loader2 className="w-4 h-4 animate-spin mr-2" /> Writing options…
-        </div>
-      )}
+      {loading && <LoadingRow message="Writing options…" />}
 
-      {replies.length > 0 && (
+      {result && (
         <div className="flex flex-col gap-3 mt-6">
-          {replies.map((r, i) => (
+          {result.replies.map((r, i) => (
             <div key={i} className="surface-card p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] uppercase tracking-wide text-pink-400">{r.style || `Option ${i + 1}`}</span>
-                <button onClick={() => copy(i, r.text)} className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white">
-                  {copied === i ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />} Copy
-                </button>
+                <CopyButton text={r.text} />
               </div>
               <p className="text-sm text-zinc-100 leading-relaxed whitespace-pre-wrap">{r.text}</p>
             </div>
