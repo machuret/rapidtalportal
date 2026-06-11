@@ -39,6 +39,26 @@ Requirements:
 - Use exact text from website when possible
 - Focus on the most important and current information`;
 
+/**
+ * Admin prompt override (/admin/prompts → ai_prompts table). When a row exists
+ * for the slug, it replaces the built-in default — so prompt edits go live
+ * without redeploying. Cached briefly per instance; any failure falls back.
+ */
+const promptCache = new Map<string, { content: string | null; at: number }>();
+// deno-lint-ignore no-explicit-any
+async function promptOverride(admin: any, slug: string, fallback: string): Promise<string> {
+  const hit = promptCache.get(slug);
+  if (hit && Date.now() - hit.at < 30_000) return hit.content ?? fallback;
+  try {
+    const { data } = await admin.from("ai_prompts").select("content").eq("slug", slug).maybeSingle();
+    const content = (data?.content as string | undefined) ?? null;
+    promptCache.set(slug, { content, at: Date.now() });
+    return content ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -180,6 +200,7 @@ Deno.serve(async (req: Request) => {
 
     // ── Step 2: OpenAI extraction ─────────────────────────────────────────────
     console.log("🤖 Calling OpenAI...");
+    const extractionPrompt = await promptOverride(admin, "company-dna.scrape", EXTRACTION_PROMPT);
     const openaiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -192,7 +213,7 @@ Deno.serve(async (req: Request) => {
         max_tokens: 2000,
         temperature: 0.1,
         messages: [
-          { role: "system", content: EXTRACTION_PROMPT },
+          { role: "system", content: extractionPrompt },
           { role: "user", content: websiteContent.slice(0, 15000) },
         ],
       }),

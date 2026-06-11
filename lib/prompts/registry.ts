@@ -456,6 +456,91 @@ Return ONLY valid JSON — no markdown, no explanation:
   ]
 }`,
   },
+  {
+    slug: "content.generate",
+    title: "Content Generator",
+    group: "Content",
+    description: "Compose: brief → email / social / newsletter / blog draft, grounded in Company DNA + Vault. NOTE: served by the content-generate edge function — edits are live once it's deployed with override support.",
+    model: "gpt-4o-mini",
+    variables: [
+      { name: "tone", description: "Tone selected by the user (e.g. professional)." },
+      { name: "length_hint", description: "Length guidance from the short/medium/long selector." },
+      { name: "type_prompt", description: "Format-specific structure block for the chosen content type (email/social/newsletter/blog)." },
+    ],
+    template: `You are an expert content writer for a business.
+Use the company context and reference material provided to write content that is authentic and on-brand.
+Only use facts present in the provided context.
+Tone: [[tone]]. [[length_hint]]
+[[type_prompt]]`,
+  },
+  {
+    slug: "kb.generate",
+    title: "Knowledge Base Generator",
+    group: "Vault",
+    description: "Generates the Q&A knowledge base from Company DNA + Vault docs. The active category list is appended automatically. NOTE: served by the kb-generate edge function — edits are live once it's deployed with override support.",
+    model: "gpt-4o-mini",
+    variables: [],
+    template: `You are generating a comprehensive FAQ knowledge base for a company's virtual assistants based on their Company DNA and Vault documents.
+
+ANALYZE THE PROVIDED SOURCES THOROUGHLY:
+- Company DNA contains core company information (mission, services, contact, policies)
+- Vault contains detailed documents, processes, and additional company information
+
+GENERATE 25–60 high-quality question/answer pairs that would be most useful for VAs:
+
+PRIORITY AREAS (focus on these first):
+1. Company Identity - Who we are, what we do, our mission, values, history
+2. Services & Products - What we offer, features, pricing, benefits
+3. Processes & Workflows - How things work, step-by-step procedures
+4. Contact & Communication - How to reach people, communication protocols
+5. Policies & Guidelines - Rules, best practices, compliance
+6. Common Scenarios - Frequently asked questions, troubleshooting
+
+For each entry, assign ONE of these categories: "Company Info", "Services", "Processes", "Policies", "Contact", "General", "Technical", "Billing", "Support".
+
+Output STRICT JSON: {"entries":[{"question":"...","answer":"...","category":"...","sources":["vault_id1"]}]}.
+
+QUALITY REQUIREMENTS:
+- Questions must sound like real questions VAs would encounter
+- Answers must be accurate, comprehensive yet concise (2-4 sentences typically)
+- Include specific details from sources (names, dates, numbers, URLs)
+- Ensure excellent distribution across all categories
+- Use professional but accessible language
+- Create practical, actionable answers VAs can use immediately
+
+IMPORTANT: Only use information explicitly present in the provided sources. Do not invent facts.`,
+  },
+  {
+    slug: "company-dna.scrape",
+    title: "Company DNA Extractor",
+    group: "Company DNA",
+    description: "Extracts structured company info from a scraped website into the Company DNA fields. NOTE: served by the company-dna-scrape edge function — edits are live once it's deployed with override support.",
+    model: "gpt-4o-mini",
+    variables: [],
+    template: `You are extracting comprehensive company information from a website URL.
+
+Analyze the provided website content and extract structured information about the company.
+
+Return a JSON object with EXACTLY these fields (leave empty string if not found):
+{
+  "company_name": "Full company name",
+  "services": "Main services or products offered (detailed)",
+  "values": "Company values or principles",
+  "phone": "Contact phone number",
+  "email": "Contact email address",
+  "website": "Company website URL",
+  "founders": "Company founders or key leadership names",
+  "target_demographic": "Target customers or market segment",
+  "client_type": "Type of clients they serve"
+}
+
+Requirements:
+- Only extract information that is explicitly stated on the website
+- Be accurate and don't make up information
+- If information is not available, use empty string
+- Use exact text from website when possible
+- Focus on the most important and current information`,
+  },
 ];
 
 const BY_SLUG = new Map(PROMPTS.map((p) => [p.slug, p]));

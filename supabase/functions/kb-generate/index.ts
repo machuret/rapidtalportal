@@ -46,6 +46,26 @@ IMPORTANT: Only use information explicitly present in the provided sources. Do n
 
 const TOKEN_BUDGET = 80000;
 
+/**
+ * Admin prompt override (/admin/prompts → ai_prompts table). When a row exists
+ * for the slug, it replaces the built-in default — so prompt edits go live
+ * without redeploying. Cached briefly per instance; any failure falls back.
+ */
+const promptCache = new Map<string, { content: string | null; at: number }>();
+// deno-lint-ignore no-explicit-any
+async function promptOverride(admin: any, slug: string, fallback: string): Promise<string> {
+  const hit = promptCache.get(slug);
+  if (hit && Date.now() - hit.at < 30_000) return hit.content ?? fallback;
+  try {
+    const { data } = await admin.from("ai_prompts").select("content").eq("slug", slug).maybeSingle();
+    const content = (data?.content as string | undefined) ?? null;
+    promptCache.set(slug, { content, at: Date.now() });
+    return content ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -268,6 +288,7 @@ Deno.serve(async (req: Request) => {
 
     // ── OpenAI generation ─────────────────────────────────────────────────────
     console.log("🤖 Generating KB entries...");
+    const baseSystem = await promptOverride(admin, "kb.generate", SYSTEM_PROMPT);
     const openaiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -280,7 +301,7 @@ Deno.serve(async (req: Request) => {
         max_tokens: 12000,
         temperature: 0.3,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT + `\n\nFor each entry, assign ONE of these categories: ${categoryList.map(c => `"${c}"`).join(", ")}.` },
+          { role: "system", content: baseSystem + `\n\nFor each entry, assign ONE of these categories: ${categoryList.map(c => `"${c}"`).join(", ")}.` },
           { role: "user", content: context.slice(0, TOKEN_BUDGET * 3) },
         ],
       }),

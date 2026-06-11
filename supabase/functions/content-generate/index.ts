@@ -27,6 +27,38 @@ const LENGTH_HINTS: Record<string, string> = {
   long: "Be comprehensive and detailed.",
 };
 
+// Default base system prompt — kept in sync with the "content.generate" entry
+// in lib/prompts/registry.ts so that saving the default in admin resets cleanly.
+const DEFAULT_SYSTEM = `You are an expert content writer for a business.
+Use the company context and reference material provided to write content that is authentic and on-brand.
+Only use facts present in the provided context.
+Tone: [[tone]]. [[length_hint]]
+[[type_prompt]]`;
+
+/**
+ * Admin prompt override (/admin/prompts → ai_prompts table). When a row exists
+ * for the slug, it replaces the built-in default — so prompt edits go live
+ * without redeploying. Cached briefly per instance; any failure falls back.
+ */
+const promptCache = new Map<string, { content: string | null; at: number }>();
+// deno-lint-ignore no-explicit-any
+async function promptOverride(admin: any, slug: string, fallback: string): Promise<string> {
+  const hit = promptCache.get(slug);
+  if (hit && Date.now() - hit.at < 30_000) return hit.content ?? fallback;
+  try {
+    const { data } = await admin.from("ai_prompts").select("content").eq("slug", slug).maybeSingle();
+    const content = (data?.content as string | undefined) ?? null;
+    promptCache.set(slug, { content, at: Date.now() });
+    return content ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function renderTemplate(t: string, vars: Record<string, string>): string {
+  return t.replace(/\[\[(\w+)\]\]/g, (_m, k) => vars[k] ?? "");
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -171,11 +203,12 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── OpenAI generation ─────────────────────────────────────────────────────
-    const systemPrompt = `You are an expert content writer for a business.
-Use the company context and reference material provided to write content that is authentic and on-brand.
-Only use facts present in the provided context.
-Tone: ${tone}. ${LENGTH_HINTS[length] ?? ""}
-${TYPE_PROMPTS[contentType]}`;
+    const baseTemplate = await promptOverride(admin, "content.generate", DEFAULT_SYSTEM);
+    const systemPrompt = renderTemplate(baseTemplate, {
+      tone,
+      length_hint: LENGTH_HINTS[length] ?? "",
+      type_prompt: TYPE_PROMPTS[contentType] ?? "",
+    });
 
     const userPrompt = `${context}\n=== CONTENT REQUEST ===\nType: ${contentType}\nTitle: ${title}\nBrief: ${brief}`;
 
