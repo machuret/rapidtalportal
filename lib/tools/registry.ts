@@ -6,7 +6,7 @@
 import {
   Tag, MapPin, FileSearch, ClipboardCheck, Search, Share2,
   CalendarDays, Recycle, MessageCircle, Zap, Mails, Megaphone,
-  GalleryHorizontalEnd, Hash, type LucideIcon,
+  GalleryHorizontalEnd, Hash, Send, Mail, Repeat, User, Inbox, type LucideIcon,
 } from "lucide-react";
 
 export interface ToolDef {
@@ -45,9 +45,17 @@ const SOCIAL_TOOLS: ToolDef[] = [
   { slug: "hashtags", title: "Hashtag Researcher", description: "A balanced hashtag mix by reach tier.", icon: Hash, ready: true, grounded: true },
 ];
 
+const COLD_TOOLS: ToolDef[] = [
+  { slug: "spintax", title: "Spintax Email Builder", description: "A campaign brief → an on-brand cold email with spintax variations baked in.", icon: Mail, ready: true, grounded: true },
+  { slug: "follow-up", title: "Follow-up Sequence Generator", description: "Paste the initial email, get a 4-touch follow-up sequence.", icon: Repeat, ready: true, grounded: true },
+  { slug: "personalisation", title: "Personalisation Line Writer", description: "Paste a prospect's About text, get 3 custom first lines.", icon: User, ready: true },
+  { slug: "reply-classifier", title: "Reply Classifier + Response Drafter", description: "Paste a reply — it classifies the intent and drafts your response.", icon: Inbox, ready: true, grounded: true },
+];
+
 export const TOOL_CATEGORIES: ToolCategory[] = [
   { id: "seo", title: "SEO", description: "Briefs, metadata, local posts and content audits.", icon: Search, tools: SEO_TOOLS },
   { id: "social", title: "Social Media", description: "Calendars, repurposing, replies and hooks.", icon: Share2, tools: SOCIAL_TOOLS },
+  { id: "outreach", title: "Cold Outreach", description: "Spintax emails, follow-up sequences, personalisation and reply triage.", icon: Send, tools: COLD_TOOLS },
 ];
 
 export function getCategory(id: string): ToolCategory | undefined {

@@ -14,6 +14,23 @@ export const TOOL_MODEL = process.env.TOOLS_MODEL || "openai/gpt-4o";
 // mini-class model: ~2-3x faster, ~10x cheaper, quality holds for short-form.
 export const TOOL_MODEL_MINI = process.env.TOOLS_MODEL_MINI || "openai/gpt-4o-mini";
 
+/**
+ * RapidTal cold-outreach house style — baked into every outreach tool's system
+ * prompt so VAs get on-brand copy by default, not generic AI email.
+ */
+export const OUTREACH_STYLE = `RAPIDTAL COLD-OUTREACH HOUSE STYLE (follow strictly):
+- Short and direct. Most emails are 50-90 words. Every line earns its place.
+- One clear ask / CTA. No multi-paragraph pitches.
+- Conversational, like a real person wrote it. No corporate filler, no buzzwords, no "I hope this email finds you well", no "I wanted to reach out".
+- Use merge tokens where personalization belongs: {{first_name}}, {{company}}, {{role}} — never invent real names.
+- NEVER use em dashes or en dashes. Use commas, periods, or rewrite the sentence.
+- Lead with the prospect, not us. Specific over clever.`;
+
+/** Enforce "no em/en dashes" defensively — the model sometimes ignores it. */
+export function stripDashes(s: string): string {
+  return s.replace(/\s*[—–]\s*/g, ", ").replace(/,\s*,/g, ",");
+}
+
 /** Tools are for the working team: VAs + client admins, scoped to their client. */
 export function authorizeTool(user: ApiUser, clientId: string): NextResponse | null {
   if (!["va", "client_admin", "super_admin"].includes(user.role)) {

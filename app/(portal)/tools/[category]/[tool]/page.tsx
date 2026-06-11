@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getTool } from "@/lib/tools/registry";
+import { getTool, getCategory } from "@/lib/tools/registry";
 import { MetaTool } from "@/components/tools/MetaTool";
 import { GbpTool } from "@/components/tools/GbpTool";
 import { KeywordBriefTool } from "@/components/tools/KeywordBriefTool";
@@ -15,6 +15,10 @@ import { NewsletterTool } from "@/components/tools/NewsletterTool";
 import { AdCopyTool } from "@/components/tools/AdCopyTool";
 import { CarouselTool } from "@/components/tools/CarouselTool";
 import { HashtagsTool } from "@/components/tools/HashtagsTool";
+import { SpintaxTool } from "@/components/tools/SpintaxTool";
+import { FollowUpTool } from "@/components/tools/FollowUpTool";
+import { PersonalisationTool } from "@/components/tools/PersonalisationTool";
+import { ReplyClassifierTool } from "@/components/tools/ReplyClassifierTool";
 import { ArrowLeft, Lightbulb } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -69,7 +73,7 @@ export default async function ToolRunnerPage({
   return (
     <div className="max-w-3xl">
       <Link href={`/tools/${params.category}`} className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white mb-6 transition-colors">
-        <ArrowLeft className="w-4 h-4" /> Back to {params.category === "seo" ? "SEO" : "Social Media"} tools
+        <ArrowLeft className="w-4 h-4" /> Back to {getCategory(params.category)?.title ?? "all"} tools
       </Link>
 
       {dnaMissing.length > 0 && (
@@ -94,6 +98,10 @@ export default async function ToolRunnerPage({
       {params.tool === "ad-copy" && <AdCopyTool clientId={user.client_id} initial={initial} />}
       {params.tool === "carousel" && <CarouselTool clientId={user.client_id} initial={initial} />}
       {params.tool === "hashtags" && <HashtagsTool clientId={user.client_id} initial={initial} />}
+      {params.tool === "spintax" && <SpintaxTool clientId={user.client_id} initial={initial} />}
+      {params.tool === "follow-up" && <FollowUpTool clientId={user.client_id} initial={initial} />}
+      {params.tool === "personalisation" && <PersonalisationTool clientId={user.client_id} initial={initial} />}
+      {params.tool === "reply-classifier" && <ReplyClassifierTool clientId={user.client_id} initial={initial} />}
     </div>
   );
 }
