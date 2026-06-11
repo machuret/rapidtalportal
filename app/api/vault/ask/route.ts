@@ -12,7 +12,7 @@ import { askVaultLimiter, tooManyRequests } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   clientId: z.string().uuid(),
-  question: z.string().min(3).max(2000),
+  question: z.string().min(3).max(8000),
 });
 
 export async function POST(req: NextRequest) {
