@@ -10,7 +10,7 @@ import { useState, type ComponentType } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
-import { Loader2, Copy, Check } from "lucide-react";
+import { Loader2, Copy, Check, Download } from "lucide-react";
 
 /** Run a tool endpoint: loading state, result, error toast — one hook. */
 export function useToolRun<T>(endpoint: string, initial?: T | null) {
@@ -73,9 +73,37 @@ export function CopyButton({ text, label = "Copy", className }: { text: string; 
 }
 
 export function LoadingRow({ message }: { message: string }) {
+  // role=status + aria-live so screen readers announce that work is in progress.
   return (
-    <div className="flex items-center justify-center py-12 text-sm text-zinc-500">
+    <div role="status" aria-live="polite" className="flex items-center justify-center py-12 text-sm text-zinc-500">
       <Loader2 className="w-4 h-4 animate-spin mr-2" /> {message}
+    </div>
+  );
+}
+
+/** Download arbitrary text as a file (e.g. a brief or repurposed pack as .md/.txt). */
+export function DownloadButton({ text, filename, label = "Download", className }: { text: string; filename: string; label?: string; className?: string }) {
+  function download() {
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return (
+    <button onClick={download} className={cn("inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors", className)}>
+      <Download className="w-3.5 h-3.5" /> {label}
+    </button>
+  );
+}
+
+/** Wraps a tool's result so assistive tech announces when output is ready. */
+export function ResultRegion({ children }: { children: React.ReactNode }) {
+  return (
+    <div role="region" aria-label="Result" aria-live="polite" className="mt-6">
+      {children}
     </div>
   );
 }

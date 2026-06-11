@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FetchUrl } from "./FetchUrl";
-import { useToolRun, ToolHeader, CopyButton, LoadingRow, CharCount } from "./shared";
+import { useToolRun, ToolHeader, CopyButton, LoadingRow, CharCount, DownloadButton } from "./shared";
 import { Recycle, Loader2, Sparkles, Briefcase, ThumbsUp, Camera, Clapperboard } from "lucide-react";
 
 interface Out {
@@ -14,6 +14,15 @@ interface Out {
   facebook: string;
   instagram: string;
   scripts: { title: string; hook: string; script: string }[];
+}
+
+function packAsText(r: Out): string {
+  return [
+    "LINKEDIN\n" + r.linkedin,
+    "FACEBOOK\n" + r.facebook,
+    "INSTAGRAM\n" + r.instagram,
+    ...r.scripts.map((s, i) => `SCRIPT ${i + 1}: ${s.title}\nHook: ${s.hook}\n${s.script}`),
+  ].join("\n\n———\n\n");
 }
 
 function Section({ icon: Icon, title, text }: { icon: ComponentType<{ className?: string }>; title: string; text: string }) {
@@ -56,6 +65,10 @@ export function RepurposerTool({ clientId, initial }: { clientId: string; initia
 
       {result && (
         <div className="flex flex-col gap-4 mt-6">
+          <div className="flex items-center justify-end gap-4">
+            <CopyButton text={packAsText(result)} label="Copy all" />
+            <DownloadButton text={packAsText(result)} filename="repurposed-pack.md" />
+          </div>
           <Section icon={Briefcase} title="LinkedIn post" text={result.linkedin} />
           <Section icon={ThumbsUp} title="Facebook post" text={result.facebook} />
           <Section icon={Camera} title="Instagram caption" text={result.instagram} />

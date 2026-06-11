@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FetchUrl } from "./FetchUrl";
-import { useToolRun, ToolHeader, LoadingRow, CharCount } from "./shared";
+import { useToolRun, ToolHeader, LoadingRow, CharCount, CopyButton, DownloadButton } from "./shared";
 import { ClipboardCheck, Loader2, Sparkles, AlertTriangle, Link2, Zap } from "lucide-react";
 
 interface Out {
@@ -34,6 +34,22 @@ const SEV: Record<string, string> = {
 
 const scoreColor = (n: number) => (n >= 75 ? "text-green-400" : n >= 50 ? "text-amber-400" : "text-red-400");
 const barColor = (n: number) => (n >= 75 ? "bg-green-500" : n >= 50 ? "bg-amber-500" : "bg-red-500");
+
+function auditAsText(a: Out): string {
+  return [
+    `CONTENT AUDIT — overall ${a.overall}/100`,
+    ...SUB_LABELS.map(({ key, label }) => `  ${label}: ${a.subscores[key]}`),
+    "",
+    "ISSUES:",
+    ...a.issues.map((i) => `- [${i.severity}] ${i.issue}\n  Fix: ${i.fix}`),
+    "",
+    "QUICK WINS:",
+    ...a.quickWins.map((w) => `- ${w}`),
+    "",
+    "INTERNAL LINK IDEAS:",
+    ...a.internalLinks.map((l) => `- ${l}`),
+  ].join("\n");
+}
 
 export function ContentAuditorTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [content, setContent] = useState("");
@@ -71,6 +87,10 @@ export function ContentAuditorTool({ clientId, initial }: { clientId: string; in
 
       {audit && (
         <div className="flex flex-col gap-4 mt-6">
+          <div className="flex items-center justify-end gap-4">
+            <CopyButton text={auditAsText(audit)} label="Copy audit" />
+            <DownloadButton text={auditAsText(audit)} filename="content-audit.md" />
+          </div>
           <div className="surface-card p-5 flex flex-col sm:flex-row gap-6">
             <div className="text-center sm:w-36 shrink-0">
               <p className={cn("text-5xl font-bold tabular", scoreColor(audit.overall))}>{audit.overall}</p>

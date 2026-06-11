@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { assertClientAccess, type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { captureError } from "@/lib/error-tracking";
+import { salvageJson } from "@/lib/tools/json-salvage";
 
 export const TOOL_MODEL = process.env.TOOLS_MODEL || "openai/gpt-4o";
 // High-frequency, low-complexity tools (hashtags, hooks, replies) run on a
@@ -116,12 +117,22 @@ export async function toolJson<T>(system: string, user: string, maxTokens = 2500
     }
     const raw: string = json.choices?.[0]?.message?.content ?? "";
     const cleaned = raw.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
+    const tokens: number = json.usage?.total_tokens ?? 0;
     try {
-      return { data: JSON.parse(cleaned) as T, tokens: json.usage?.total_tokens ?? 0 };
+      return { data: JSON.parse(cleaned) as T, tokens };
     } catch {
-      // Almost always a truncated response (max_tokens hit mid-JSON).
+      // Almost always a truncated response (max_tokens hit mid-JSON). Try to
+      // salvage the complete elements rather than failing the whole run — a
+      // 28-of-30-day calendar still beats an error.
+      const salvaged = salvageJson(cleaned);
+      if (salvaged) {
+        captureError("api", new Error(`Tool AI JSON truncated, salvaged (${cleaned.length} chars, max_tokens ${maxTokens})`), { url: "tools:llm" });
+        try {
+          return { data: JSON.parse(salvaged) as T, tokens };
+        } catch { /* fall through to the hard error below */ }
+      }
       captureError("api", new Error(`Tool AI returned unparseable JSON (likely truncated; ${cleaned.length} chars, max_tokens ${maxTokens})`), { url: "tools:llm" });
-      return { data: null, tokens: json.usage?.total_tokens ?? 0, error: "The AI response was cut off. Try again — or use a shorter input." };
+      return { data: null, tokens, error: "The AI response was cut off. Try again — or use a shorter input." };
     }
   } catch (err) {
     captureError("api", err, { url: "tools:llm" });

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FetchUrl } from "./FetchUrl";
-import { useToolRun, ToolHeader, CopyButton, LoadingRow, CharCount } from "./shared";
+import { useToolRun, ToolHeader, CopyButton, LoadingRow, CharCount, DownloadButton } from "./shared";
 import { FileSearch, Loader2, Sparkles } from "lucide-react";
 
 interface Out {
@@ -89,7 +89,10 @@ export function KeywordBriefTool({ clientId, initial }: { clientId: string; init
               <p className="label-section">Length</p>
               <p className="text-sm text-zinc-100 font-medium">{brief.wordCount}</p>
             </div>
-            <CopyButton label="Copy whole brief" text={briefAsText(keyword || "keyword", brief)} className="ml-auto" />
+            <div className="ml-auto flex items-center gap-4">
+              <CopyButton label="Copy whole brief" text={briefAsText(keyword || "keyword", brief)} />
+              <DownloadButton text={briefAsText(keyword || "keyword", brief)} filename="content-brief.md" />
+            </div>
           </div>
 
           <div className="surface-card p-4">
