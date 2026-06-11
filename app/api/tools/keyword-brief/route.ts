@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, companyContext, toolJson } from "@/lib/tools/ai";
+import { authorizeTool, companyContext, toolJson, logToolRun } from "@/lib/tools/ai";
 
 export const maxDuration = 60;
 
@@ -79,6 +79,8 @@ Rules: 4-7 outline sections, 8-15 entities, 4-6 FAQs with genuinely useful answe
         })),
       }, null, 2)
     : null;
+
+  logToolRun("keyword-brief", parsed.data.clientId, user.id, parsed.data.keyword, result.tokens);
 
   return NextResponse.json({
     intent: String(b.intent ?? "").slice(0, 40),

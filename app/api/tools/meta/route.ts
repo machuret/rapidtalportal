@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, toolJson } from "@/lib/tools/ai";
+import { authorizeTool, toolJson, logToolRun } from "@/lib/tools/ai";
 
 export const maxDuration = 60;
 
@@ -46,5 +46,6 @@ Rules: title ≤60 characters, description ≤155 characters (count carefully). 
     .slice(0, 5)
     .map((v) => ({ title: String(v.title).slice(0, 120), description: String(v.description ?? "").slice(0, 320), angle: String(v.angle ?? "").slice(0, 80) }));
 
+  logToolRun("meta", parsed.data.clientId, user.id, parsed.data.keyword || "page content", result.tokens);
   return NextResponse.json({ variants });
 });

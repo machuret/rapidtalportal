@@ -45,6 +45,17 @@ export async function companyContext(clientId: string): Promise<CompanyContext> 
   }
 }
 
+/** Fire-and-forget usage record — feeds /tools history + Supervision stats. */
+export function logToolRun(tool: string, clientId: string, userId: string, inputSummary: string, tokens: number): void {
+  try {
+    const admin = createAdminClient();
+    void admin
+      .from("tool_runs")
+      .insert({ client_id: clientId, user_id: userId, tool, input_summary: inputSummary.slice(0, 200), tokens_used: tokens })
+      .then(({ error }) => { if (error) console.warn("[tool_runs]", error.message); });
+  } catch { /* never block the tool result */ }
+}
+
 interface JsonResult<T> { data: T | null; tokens: number; error?: string }
 
 /** OpenRouter call expecting a JSON object; tolerates ```json fences. */

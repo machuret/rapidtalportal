@@ -1,17 +1,32 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { TOOL_CATEGORIES } from "@/lib/tools/registry";
 import { PageIntro } from "@/components/layout/PageIntro";
-import { Wrench, ArrowRight } from "lucide-react";
+import { Wrench, ArrowRight, History } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Tools — RapidTal" };
+
+// slug → { title, category } lookup for the history list.
+const TOOL_INDEX = new Map(
+  TOOL_CATEGORIES.flatMap((c) => c.tools.map((t) => [t.slug, { title: t.title, category: c.id }])),
+);
 
 export default async function ToolsPage() {
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   if (!ctx.user.client_id) redirect("/dashboard");
+
+  const admin = createAdminClient();
+  const { data: runs } = await admin
+    .from("tool_runs")
+    .select("id, tool, input_summary, created_at")
+    .eq("user_id", ctx.user.id)
+    .order("created_at", { ascending: false })
+    .limit(8);
+  const recent = (runs ?? []) as { id: string; tool: string; input_summary: string | null; created_at: string }[];
 
   return (
     <div className="max-w-4xl">
@@ -46,6 +61,30 @@ export default async function ToolsPage() {
           );
         })}
       </div>
+
+      {/* Your recent runs */}
+      {recent.length > 0 && (
+        <div className="mt-8">
+          <p className="label-section mb-2 flex items-center gap-1.5">
+            <History className="w-3.5 h-3.5" /> Your recent runs
+          </p>
+          <div className="surface-card divide-y divide-zinc-800 overflow-hidden">
+            {recent.map((r) => {
+              const meta = TOOL_INDEX.get(r.tool);
+              const href = meta ? `/tools/${meta.category}/${r.tool}` : "/tools";
+              return (
+                <Link key={r.id} href={href} className="flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-800/40 transition-colors">
+                  <span className="text-sm text-zinc-200 shrink-0">{meta?.title ?? r.tool}</span>
+                  {r.input_summary && <span className="text-sm text-zinc-500 truncate flex-1">“{r.input_summary}”</span>}
+                  <span className="text-xs text-zinc-600 shrink-0 ml-auto">
+                    {new Date(r.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

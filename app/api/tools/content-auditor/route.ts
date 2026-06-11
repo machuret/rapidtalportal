@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, toolJson } from "@/lib/tools/ai";
+import { authorizeTool, toolJson, logToolRun } from "@/lib/tools/ai";
 
 export const maxDuration = 60;
 
@@ -52,6 +52,7 @@ Scoring lenses: depth = thin content vs comprehensive coverage; keyword = natura
   }
 
   const a = result.data;
+  logToolRun("content-auditor", parsed.data.clientId, user.id, parsed.data.keyword || "page copy", result.tokens);
   return NextResponse.json({
     overall: clamp(a.overall),
     subscores: {

@@ -44,23 +44,31 @@ export default async function SupervisionPage() {
   }
 
   // Activity in the window
-  const [logsRes, timeRes, runsRes, tasksRes] = vaIds.length
+  const [logsRes, timeRes, runsRes, tasksRes, toolsRes] = vaIds.length
     ? await Promise.all([
         admin.from("daily_logs").select("user_id, log_date, updated_at").in("user_id", vaIds).gte("log_date", sinceDate),
         admin.from("time_entries").select("user_id, started_at, ended_at").in("user_id", vaIds).eq("phase", "work").gte("started_at", sinceIso),
         admin.from("sop_runs").select("user_id, status, created_at").in("user_id", vaIds).gte("created_at", sinceIso),
         admin.from("tasks").select("assigned_to, status, updated_at").in("assigned_to", vaIds),
+        admin.from("tool_runs").select("user_id, created_at").in("user_id", vaIds).gte("created_at", sinceIso),
       ])
-    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
+    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
 
   const logs = (logsRes.data ?? []) as { user_id: string; log_date: string; updated_at: string }[];
   const times = (timeRes.data ?? []) as { user_id: string; started_at: string; ended_at: string | null }[];
   const runs = (runsRes.data ?? []) as { user_id: string; status: string; created_at: string }[];
   const tasks = (tasksRes.data ?? []) as { assigned_to: string | null; status: string; updated_at: string }[];
+  const toolRuns = (toolsRes.data ?? []) as { user_id: string | null; created_at: string }[];
 
-  type Stat = { logs: number; hours: number; runs: number; completed: number; lastActive: number; lastLog: string; openTasks: number; doneTasks: number };
+  type Stat = { logs: number; hours: number; runs: number; completed: number; lastActive: number; lastLog: string; openTasks: number; doneTasks: number; toolRuns: number };
   const stats: Record<string, Stat> = {};
-  const ensure = (id: string) => (stats[id] ??= { logs: 0, hours: 0, runs: 0, completed: 0, lastActive: 0, lastLog: "", openTasks: 0, doneTasks: 0 });
+  const ensure = (id: string) => (stats[id] ??= { logs: 0, hours: 0, runs: 0, completed: 0, lastActive: 0, lastLog: "", openTasks: 0, doneTasks: 0, toolRuns: 0 });
+  for (const t of toolRuns) {
+    if (!t.user_id) continue;
+    const s = ensure(t.user_id);
+    s.toolRuns++;
+    s.lastActive = Math.max(s.lastActive, new Date(t.created_at).getTime());
+  }
   for (const l of logs) { const s = ensure(l.user_id); s.logs++; if (l.log_date > s.lastLog) s.lastLog = l.log_date; s.lastActive = Math.max(s.lastActive, new Date(l.updated_at).getTime()); }
   for (const r of runs) { const s = ensure(r.user_id); s.runs++; if (r.status === "completed") s.completed++; s.lastActive = Math.max(s.lastActive, new Date(r.created_at).getTime()); }
   for (const t of tasks) {
@@ -93,7 +101,7 @@ export default async function SupervisionPage() {
     || (stats[b.id]?.lastActive ?? 0) - (stats[a.id]?.lastActive ?? 0));
 
   const csvRows = sorted.map((va) => {
-    const s = stats[va.id] ?? { logs: 0, hours: 0, runs: 0, completed: 0, openTasks: 0, doneTasks: 0, lastLog: "" };
+    const s = stats[va.id] ?? { logs: 0, hours: 0, runs: 0, completed: 0, openTasks: 0, doneTasks: 0, lastLog: "", toolRuns: 0 };
     return {
       name: va.full_name ?? va.email,
       email: va.email,
@@ -105,6 +113,7 @@ export default async function SupervisionPage() {
       sops_completed: s.completed,
       open_tasks: s.openTasks,
       tasks_done: s.doneTasks,
+      ai_tool_runs: s.toolRuns,
       flags: flagsFor(va.id).join("; "),
     };
   });
@@ -132,7 +141,7 @@ export default async function SupervisionPage() {
       ) : (
         <div className="flex flex-col gap-2">
           {sorted.map((va) => {
-            const s = stats[va.id] ?? { logs: 0, hours: 0, runs: 0, completed: 0, lastActive: 0, lastLog: "", openTasks: 0, doneTasks: 0 };
+            const s = stats[va.id] ?? { logs: 0, hours: 0, runs: 0, completed: 0, lastActive: 0, lastLog: "", openTasks: 0, doneTasks: 0, toolRuns: 0 };
             const flags = flagsFor(va.id);
             return (
               <Link

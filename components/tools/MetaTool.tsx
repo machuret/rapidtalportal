@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tag, Loader2, Sparkles, Copy, Check } from "lucide-react";
+import { FetchUrl } from "./FetchUrl";
 
 interface Variant { title: string; description: string; angle: string }
 
@@ -62,6 +63,7 @@ export function MetaTool({ clientId }: { clientId: string }) {
           <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="e.g. whale watching tours hobart"
             className="bg-zinc-800 border-zinc-700 text-zinc-100" />
         </div>
+        <FetchUrl clientId={clientId} onFetched={setContent} />
         <div className="flex flex-col gap-1.5">
           <Label>Page content</Label>
           <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={8}

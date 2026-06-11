@@ -65,6 +65,7 @@ export const ROUTES = {
     gbp: () => "/api/tools/gbp",
     keywordBrief: () => "/api/tools/keyword-brief",
     contentAuditor: () => "/api/tools/content-auditor",
+    fetchUrl: () => "/api/tools/fetch-url",
   },
   goldenQuestions: () => "/api/golden-questions",
   notifications: () => "/api/notifications",

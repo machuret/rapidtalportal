@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, companyContext, toolJson } from "@/lib/tools/ai";
+import { authorizeTool, companyContext, toolJson, logToolRun } from "@/lib/tools/ai";
 
 export const maxDuration = 60;
 
@@ -56,5 +56,6 @@ Rules: each body ≤1500 characters, engaging and specific, naturally working in
     .slice(0, 3)
     .map((p) => ({ body: String(p.body).slice(0, 1600), cta: String(p.cta ?? "").slice(0, 40), localAngle: String(p.localAngle ?? "").slice(0, 120) }));
 
+  logToolRun("gbp", parsed.data.clientId, user.id, parsed.data.topic, result.tokens);
   return NextResponse.json({ posts, hasContext: !!(ctx.location || ctx.services) });
 });

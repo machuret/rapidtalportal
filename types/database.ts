@@ -270,6 +270,12 @@ export interface Database {
         Update: { id?: string; client_id?: string; question?: string; last_status?: string | null; last_checked_at?: string | null; history?: { s: string; at: string }[]; created_by?: string | null; created_at?: string };
         Relationships: NoRelationships;
       };
+      tool_runs: {
+        Row: { id: string; client_id: string; user_id: string | null; tool: string; input_summary: string | null; tokens_used: number; created_at: string };
+        Insert: { id?: string; client_id: string; user_id?: string | null; tool: string; input_summary?: string | null; tokens_used?: number; created_at?: string };
+        Update: { id?: string; client_id?: string; user_id?: string | null; tool?: string; input_summary?: string | null; tokens_used?: number; created_at?: string };
+        Relationships: NoRelationships;
+      };
       vault_analyses: {
         Row: { id: string; client_id: string; content: string; model: string | null; source_url: string | null; tokens_used: number; created_by: string | null; created_at: string; updated_at: string };
         Insert: { id?: string; client_id: string; content: string; model?: string | null; source_url?: string | null; tokens_used?: number; created_by?: string | null; created_at?: string; updated_at?: string };

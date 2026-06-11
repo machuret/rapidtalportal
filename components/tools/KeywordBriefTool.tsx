@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FileSearch, Loader2, Sparkles, Copy, Check, Code2 } from "lucide-react";
+import { FetchUrl } from "./FetchUrl";
 
 interface Brief {
   intent: string; intentNote: string; title: string; h1: string;
@@ -88,6 +89,7 @@ export function KeywordBriefTool({ clientId }: { clientId: string }) {
           <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void run(); }}
             placeholder="e.g. best time to see whales in hobart" className="bg-zinc-800 border-zinc-700 text-zinc-100" />
         </div>
+        <FetchUrl clientId={clientId} onFetched={setContent} />
         <div className="flex flex-col gap-1.5">
           <Label>Existing page copy <span className="text-zinc-600 font-normal">(optional — the brief will note what&apos;s missing)</span></Label>
           <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={6}

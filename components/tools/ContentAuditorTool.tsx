@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ClipboardCheck, Loader2, Sparkles, AlertTriangle, Link2, Zap } from "lucide-react";
+import { FetchUrl } from "./FetchUrl";
 
 interface Audit {
   overall: number;
@@ -82,6 +83,7 @@ export function ContentAuditorTool({ clientId }: { clientId: string }) {
           <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="e.g. boat tours hobart"
             className="bg-zinc-800 border-zinc-700 text-zinc-100" />
         </div>
+        <FetchUrl clientId={clientId} onFetched={setContent} />
         <div className="flex flex-col gap-1.5">
           <Label>Page copy</Label>
           <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={10}
