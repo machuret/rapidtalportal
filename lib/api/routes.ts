@@ -60,6 +60,10 @@ export const ROUTES = {
   },
   tasks: () => "/api/tasks",
   taskEvents: () => "/api/tasks/events",
+  tools: {
+    meta: () => "/api/tools/meta",
+    gbp: () => "/api/tools/gbp",
+  },
   goldenQuestions: () => "/api/golden-questions",
   notifications: () => "/api/notifications",
   access: () => "/api/access",

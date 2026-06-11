@@ -62,6 +62,10 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
     title: "What is Supervision?",
     body: "Supervision gives a per-VA view of activity — daily logs, hours, SOP runs and tasks — and flags anyone who's gone quiet. Click a VA to see the full detail.",
   },
+  tools: {
+    title: "What are Tools?",
+    body: "A growing kit of AI helpers for everyday client work — SEO metadata, Google Business Profile posts, content briefs and more. Each one is grounded in the client's Vault and brand, so the output is ready to use, not generic.",
+  },
   "daily-log": {
     title: "What is the Daily Log?",
     body: "Your daily log is a quick end-of-day summary — what you did, wins, blockers, and tomorrow's plan. Your client reads these, so it's how your work stays visible. It takes two minutes and builds trust.",

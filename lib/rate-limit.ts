@@ -79,3 +79,6 @@ export const clientErrorLimiter = new SlidingWindowLimiter(10, 5 * 60_000);
 
 // SOP Studio AI (suggest + generate). Admins iterate, so generous.
 export const sopAiLimiter = new SlidingWindowLimiter(30, 10 * 60_000);
+
+// Tools hub (SEO etc.) — each run is a paid LLM call. Generous for real work.
+export const toolsLimiter = new SlidingWindowLimiter(40, 10 * 60_000);
