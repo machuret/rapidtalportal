@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Pencil, Trash2, Copy, Check, Save, X, ListChecks, Tag, Clock, Copy as CopyIcon, Loader2, Play, GitFork } from "lucide-react";
+import { Pencil, Trash2, Copy, Check, Save, X, ListChecks, Tag, Clock, Copy as CopyIcon, Loader2, Play, GitFork, Sparkles } from "lucide-react";
 import { useSops } from "@/hooks/useSops";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
@@ -208,9 +208,16 @@ export function SopDetail({ sop: initial, canEdit, clientId, categories, forkToC
                 {duplicating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CopyIcon className="w-3.5 h-3.5" />}
                 Duplicate
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-                <Pencil className="w-3.5 h-3.5" /> Edit
-              </Button>
+              <Link href={`/sops/${sop.id}/edit`}>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <Pencil className="w-3.5 h-3.5" /> Edit in Studio
+                </Button>
+              </Link>
+              <Link href={`/sops/${sop.id}/edit?improve=1`}>
+                <Button variant="outline" size="sm" className="gap-1.5 border-amber-400/30 text-amber-300 hover:text-amber-200">
+                  <Sparkles className="w-3.5 h-3.5" /> Improve with AI
+                </Button>
+              </Link>
               <Button variant="destructive" size="sm" onClick={deleteSop} disabled={deleting}>
                 {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                 Delete

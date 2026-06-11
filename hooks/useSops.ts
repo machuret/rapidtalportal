@@ -22,9 +22,12 @@ interface CreateSopInput {
 interface UpdateSopInput {
   id: string;
   clientId: string | null;
-  title: string;
-  category: string;
-  body: string;
+  title?: string;
+  category?: string;
+  body?: string;
+  steps?: SopStepInput[];
+  intro?: string;
+  prerequisites?: string[];
 }
 
 interface DeleteSopInput {

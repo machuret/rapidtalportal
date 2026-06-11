@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { useSops } from "@/hooks/useSops";
-import { serializeSteps, type SopStep } from "@/lib/sop-steps";
+import { serializeSteps, parseSopSteps, type SopStep } from "@/lib/sop-steps";
 import type { Sop } from "@/app/(portal)/sops/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,10 +17,22 @@ import {
   ChevronUp, ChevronDown, Lightbulb, PencilLine, X,
 } from "lucide-react";
 
+export interface ExistingSop {
+  id: string;
+  title: string;
+  category: string;
+  body: string;
+  steps: SopStep[] | null;
+  intro: string | null;
+  prerequisites: string[] | null;
+}
+
 interface Props {
   clientId: string | null; // null = global library SOP
   userId: string;
   categories?: string[];
+  existing?: ExistingSop; // present → edit mode (PATCH + "Improve with AI")
+  autoImprove?: boolean;  // open the Improve panel on load (from "Improve with AI")
 }
 
 interface Suggestion { title: string; scope: string; stepCount: number }
@@ -28,16 +40,23 @@ type Stage = "brief" | "suggesting" | "suggestions" | "generating" | "editor";
 type Depth = "quick" | "standard" | "thorough";
 type Audience = "new" | "experienced" | "any";
 
-export function SopStudio({ clientId, categories = [] }: Props) {
+export function SopStudio({ clientId, categories = [], existing, autoImprove = false }: Props) {
   const router = useRouter();
   const isGlobal = clientId === null;
-  const { createSop, isCreating: saving } = useSops(clientId);
+  const isEdit = !!existing;
+  const { createSop, isCreating, updateSop, isUpdating } = useSops(clientId);
+  const saving = isCreating || isUpdating;
 
-  const [stage, setStage] = useState<Stage>("brief");
+  // Editing an old text SOP with no structured steps → seed cards from its body.
+  const seedSteps: SopStep[] = existing
+    ? (existing.steps?.length ? existing.steps : parseSopSteps(existing.body).map((t) => ({ title: t, detail: "" })))
+    : [];
+
+  const [stage, setStage] = useState<Stage>(isEdit ? "editor" : "brief");
 
   // Brief
-  const [topic, setTopic] = useState("");
-  const [category, setCategory] = useState(isGlobal ? "" : "General");
+  const [topic, setTopic] = useState(existing?.title ?? "");
+  const [category, setCategory] = useState(existing?.category ?? (isGlobal ? "" : "General"));
   const [audience, setAudience] = useState<Audience>("any");
   const [depth, setDepth] = useState<Depth>("standard");
 
@@ -45,11 +64,16 @@ export function SopStudio({ clientId, categories = [] }: Props) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
   // Editor state
-  const [title, setTitle] = useState("");
-  const [intro, setIntro] = useState("");
-  const [prereqText, setPrereqText] = useState("");
-  const [steps, setSteps] = useState<SopStep[]>([]);
+  const [title, setTitle] = useState(existing?.title ?? "");
+  const [intro, setIntro] = useState(existing?.intro ?? "");
+  const [prereqText, setPrereqText] = useState((existing?.prerequisites ?? []).join("\n"));
+  const [steps, setSteps] = useState<SopStep[]>(seedSteps);
   const dragIdx = useRef<number | null>(null);
+
+  // "Improve with AI" (edit mode)
+  const [improveOpen, setImproveOpen] = useState(autoImprove && !!existing);
+  const [instruction, setInstruction] = useState("");
+  const [improving, setImproving] = useState(false);
 
   async function suggest() {
     if (topic.trim().length < 3) return;
@@ -117,6 +141,32 @@ export function SopStudio({ clientId, categories = [] }: Props) {
     });
   }
 
+  // Improve the SOP currently in the editor — replaces the working draft only;
+  // the saved SOP is untouched until the admin clicks Save.
+  async function improve() {
+    const current = serializeSteps(intro, prereqText.split("\n").map((l) => l.trim()).filter(Boolean), steps);
+    setImproving(true);
+    try {
+      const res = await api.post<{ title: string; intro: string; prerequisites: string[]; steps: SopStep[] }>(
+        ROUTES.sopGenerate(),
+        { topic: title.trim() || topic.trim() || "this SOP", title: title.trim(), category: category.trim() || undefined,
+          audience, depth, clientId, existing: current, instruction: instruction.trim() || undefined },
+        { showErrorToast: false },
+      );
+      if (res.title) setTitle(res.title);
+      setIntro(res.intro);
+      setPrereqText(res.prerequisites.join("\n"));
+      setSteps(res.steps.length ? res.steps : steps);
+      setImproveOpen(false);
+      setInstruction("");
+      toast.success("Draft improved — review and save when you're happy.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't improve the SOP.");
+    } finally {
+      setImproving(false);
+    }
+  }
+
   async function save() {
     const cleanSteps = steps.map((s) => ({ title: s.title.trim(), detail: s.detail.trim(), ...(s.tip?.trim() ? { tip: s.tip.trim() } : {}) }))
       .filter((s) => s.title);
@@ -125,13 +175,23 @@ export function SopStudio({ clientId, categories = [] }: Props) {
     const prerequisites = prereqText.split("\n").map((l) => l.trim()).filter(Boolean);
     const body = serializeSteps(intro, prerequisites, cleanSteps);
     try {
-      const created = await createSop({
-        clientId, title: title.trim(), category: category.trim() || "General",
-        body, steps: cleanSteps, intro: intro.trim(), prerequisites, order_index: 0,
-      });
-      toast.success("SOP created.");
-      router.push(`/sops/${(created as Sop).id}`);
-      router.refresh();
+      if (isEdit) {
+        await updateSop({
+          id: existing!.id, clientId, title: title.trim(), category: category.trim() || "General",
+          body, steps: cleanSteps, intro: intro.trim(), prerequisites,
+        });
+        toast.success("SOP updated.");
+        router.push(`/sops/${existing!.id}`);
+        router.refresh();
+      } else {
+        const created = await createSop({
+          clientId, title: title.trim(), category: category.trim() || "General",
+          body, steps: cleanSteps, intro: intro.trim(), prerequisites, order_index: 0,
+        });
+        toast.success("SOP created.");
+        router.push(`/sops/${(created as Sop).id}`);
+        router.refresh();
+      }
     } catch { /* api-client toasts */ }
   }
 
@@ -142,9 +202,10 @@ export function SopStudio({ clientId, categories = [] }: Props) {
         <ListChecks className="w-5 h-5 text-amber-400" />
       </div>
       <div>
-        <h1 className="text-2xl font-bold">{isGlobal ? "New Library SOP" : "New SOP"}</h1>
+        <h1 className="text-2xl font-bold">{isEdit ? "Edit SOP" : isGlobal ? "New Library SOP" : "New SOP"}</h1>
         <p className="text-sm text-zinc-400">
-          {isGlobal ? "A generic SOP available to every VA across all clients." : "Build it with AI, then refine."}
+          {isEdit ? "Refine it by hand, or improve it with AI — nothing saves until you click Save."
+            : isGlobal ? "A generic SOP available to every VA across all clients." : "Build it with AI, then refine."}
         </p>
       </div>
     </div>
@@ -325,15 +386,39 @@ export function SopStudio({ clientId, categories = [] }: Props) {
           </button>
         </div>
 
+        {/* Improve with AI (edit mode) */}
+        {isEdit && improveOpen && (
+          <div className="surface-card px-4 py-3 flex flex-col gap-2">
+            <Label htmlFor="instr" className="text-xs">What should the AI focus on? <span className="text-zinc-600 font-normal">(optional)</span></Label>
+            <div className="flex gap-2">
+              <Input id="instr" value={instruction} onChange={(e) => setInstruction(e.target.value)} disabled={improving}
+                placeholder="e.g. add a QA step, make it clearer for beginners…" className="bg-zinc-800 border-zinc-700 text-zinc-100 text-sm" />
+              <Button onClick={() => void improve()} disabled={improving} className="gap-2 shrink-0">
+                {improving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Improve
+              </Button>
+            </div>
+            <p className="text-[11px] text-zinc-600">This rewrites the draft below for review — your saved SOP isn&apos;t touched until you Save.</p>
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
-          <button onClick={() => setStage("brief")} className="text-sm text-zinc-500 hover:text-zinc-300 inline-flex items-center gap-1.5">
-            <ArrowLeft className="w-3.5 h-3.5" /> Start over
-          </button>
-          <Button onClick={() => void generate(title || undefined)} variant="outline" className="ml-auto gap-2 border-zinc-700">
-            <Sparkles className="w-4 h-4" /> Regenerate
+          {isEdit ? (
+            <button onClick={() => router.push(`/sops/${existing!.id}`)} className="text-sm text-zinc-500 hover:text-zinc-300 inline-flex items-center gap-1.5">
+              <ArrowLeft className="w-3.5 h-3.5" /> Cancel
+            </button>
+          ) : (
+            <button onClick={() => setStage("brief")} className="text-sm text-zinc-500 hover:text-zinc-300 inline-flex items-center gap-1.5">
+              <ArrowLeft className="w-3.5 h-3.5" /> Start over
+            </button>
+          )}
+          <Button
+            onClick={() => (isEdit ? setImproveOpen((o) => !o) : void generate(title || undefined))}
+            variant="outline" className="ml-auto gap-2 border-zinc-700"
+          >
+            <Sparkles className="w-4 h-4" /> {isEdit ? "Improve with AI" : "Regenerate"}
           </Button>
           <Button onClick={() => void save()} disabled={saving} className="gap-2">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save SOP
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {isEdit ? "Save changes" : "Save SOP"}
           </Button>
         </div>
       </div>

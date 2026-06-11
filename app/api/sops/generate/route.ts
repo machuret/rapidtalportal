@@ -18,6 +18,9 @@ const schema = z.object({
   audience: z.enum(["new", "experienced", "any"]).optional().default("any"),
   depth: z.enum(["quick", "standard", "thorough"]).optional().default("standard"),
   clientId: z.string().uuid().nullable().optional(),
+  // "Improve with AI" on an existing SOP: the current content + what to change.
+  existing: z.string().max(100000).optional(),
+  instruction: z.string().max(1000).optional(),
 });
 
 interface GenSop {
@@ -52,7 +55,8 @@ export const POST = withAuth(async (req, { user }) => {
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   const ctx = await clientContext(clientId);
-  const system = `You are an expert operations writer creating a Standard Operating Procedure a virtual assistant will follow step by step.
+  const improving = !!parsed.data.existing?.trim();
+  const system = `You are an expert operations writer ${improving ? "improving an existing" : "creating a"} Standard Operating Procedure a virtual assistant will follow step by step.
 
 Return ONLY JSON in this exact shape:
 {"title":"final SOP title","intro":"1-2 sentences on the purpose and outcome","prerequisites":["what's needed before starting"],"steps":[{"title":"short imperative step name","detail":"clear, specific instructions for this step — what to do and how","tip":"optional gotcha or best-practice, omit if none"}]}
@@ -68,6 +72,8 @@ Rules:
     `Topic: ${parsed.data.topic}`,
     parsed.data.title ? `Preferred title/angle: ${parsed.data.title}` : "",
     parsed.data.category ? `Category: ${parsed.data.category}` : "",
+    improving ? `\nImprove this EXISTING SOP — keep what's correct, fix structure, clarity, gaps and ordering:\n"""\n${parsed.data.existing!.slice(0, 40000)}\n"""` : "",
+    improving && parsed.data.instruction?.trim() ? `\nFocus of the improvement: ${parsed.data.instruction.trim()}` : "",
   ].filter(Boolean).join("\n");
 
   const result = await llmJson<GenSop>(GENERATE_MODEL, system, userMsg, 4000);

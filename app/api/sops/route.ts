@@ -23,11 +23,14 @@ const createSchema = z.object({
 });
 
 const updateSchema = z.object({
-  id:       z.string().uuid(),
-  clientId: z.string().uuid().nullable().optional(),
-  title:    z.string().min(1).max(300).optional(),
-  category: z.string().max(100).optional(),
-  body:     z.string().min(1).max(100000).optional(),
+  id:            z.string().uuid(),
+  clientId:      z.string().uuid().nullable().optional(),
+  title:         z.string().min(1).max(300).optional(),
+  category:      z.string().max(100).optional(),
+  body:          z.string().min(1).max(100000).optional(),
+  steps:         z.array(stepSchema).max(40).optional(),
+  intro:         z.string().max(5000).optional(),
+  prerequisites: z.array(z.string().max(500)).max(30).optional(),
 });
 
 const deleteSchema = z.object({
@@ -35,7 +38,7 @@ const deleteSchema = z.object({
   clientId: z.string().uuid().nullable().optional(),
 });
 
-const SELECT = "id, client_id, title, category, body, order_index, created_at, updated_at";
+const SELECT = "id, client_id, title, category, body, order_index, steps, intro, prerequisites, created_at, updated_at";
 
 /** Authorise a write against a SOP's scope. Returns an error response or null. */
 function authorizeScope(user: ApiUser, clientId: string | null): NextResponse | null {
@@ -119,6 +122,10 @@ export async function PATCH(req: NextRequest) {
   }
   if (updates.title === null) delete updates.title;
   if (updates.body === null) delete updates.body;
+  // Structured fields (from the Studio editor) — explicit so they can be set.
+  if (parsed.data.steps !== undefined) updates.steps = parsed.data.steps;
+  if (parsed.data.intro !== undefined) updates.intro = parsed.data.intro;
+  if (parsed.data.prerequisites !== undefined) updates.prerequisites = parsed.data.prerequisites;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
