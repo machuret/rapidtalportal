@@ -11,6 +11,7 @@ export interface DbClient {
   slug: string;
   created_at: string;
   created_by: string | null;
+  archived_at: string | null;
 }
 
 export interface DbUser {
@@ -122,8 +123,8 @@ export interface Database {
   public: {
     Tables: {
       clients: {
-        Row: { id: string; name: string; slug: string; created_at: string; created_by: string | null };
-        Insert: { id?: string; name: string; slug: string; created_at?: string; created_by?: string | null };
+        Row: { id: string; name: string; slug: string; created_at: string; created_by: string | null; archived_at: string | null };
+        Insert: { id?: string; name: string; slug: string; created_at?: string; created_by?: string | null; archived_at?: string | null };
         Update: { id?: string; name?: string; slug?: string; created_at?: string; created_by?: string | null };
         Relationships: NoRelationships;
       };

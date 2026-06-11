@@ -27,7 +27,7 @@ export default async function AdminOverviewPage() {
 
   const since24h = new Date(Date.now() - 86_400_000).toISOString();
   const [{ data: clients }, { data: users }, { data: vault }, { data: tasks }, { data: logs }, { count: errors24h }] = await Promise.all([
-    admin.from("clients").select("id, name, created_at").order("name"),
+    admin.from("clients").select("id, name, created_at").is("archived_at", null).order("name"),
     admin.from("users").select("id, client_id, role"),
     admin.from("vault_items").select("client_id, status, created_at, tags"),
     admin.from("tasks").select("client_id, status, updated_at"),

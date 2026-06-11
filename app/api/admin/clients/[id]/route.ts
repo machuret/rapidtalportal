@@ -6,6 +6,7 @@ import { withSuperAdmin } from "@/lib/api/with-auth";
 const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with dashes").optional(),
+  archived: z.boolean().optional(),
 });
 
 // PATCH /api/admin/clients/[id] — update client name/slug
@@ -23,12 +24,16 @@ export const PATCH = withSuperAdmin<{ id: string }>(async (req, { params }) => {
 
   const admin = createAdminClient();
 
+  const { archived, ...rest } = parsed.data;
+  const updates: Record<string, unknown> = { ...rest };
+  if (archived !== undefined) updates.archived_at = archived ? new Date().toISOString() : null;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("clients")
-    .update(parsed.data)
+    .update(updates)
     .eq("id", params.id)
-    .select("id, name, slug, created_at")
+    .select("id, name, slug, created_at, archived_at")
     .single();
 
   if (error) {

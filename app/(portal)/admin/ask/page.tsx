@@ -19,7 +19,7 @@ export default async function AdminAskPage({ searchParams }: { searchParams: { c
   if (user.role !== "super_admin") redirect("/dashboard");
 
   const admin = createAdminClient();
-  const { data } = await admin.from("clients").select("id, name").order("name");
+  const { data } = await admin.from("clients").select("id, name").is("archived_at", null).order("name");
   const clients = (data ?? []) as { id: string; name: string }[];
 
   const clientId = searchParams.client && clients.some((c) => c.id === searchParams.client)

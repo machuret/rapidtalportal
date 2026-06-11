@@ -8,13 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Users } from "lucide-react";
+import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
+import { cn } from "@/lib/utils";
+import { Plus, Users, Archive, ArchiveRestore } from "lucide-react";
 
 interface Client {
   id: string;
   name: string;
   slug: string;
   created_at: string;
+  archived_at?: string | null;
 }
 
 interface ClientsTableProps {
@@ -29,6 +33,24 @@ export function ClientsTable({ clients: initial, userCounts }: ClientsTableProps
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const archivedCount = clients.filter((c) => c.archived_at).length;
+  const visible = clients.filter((c) => (showArchived ? !!c.archived_at : !c.archived_at));
+
+  async function toggleArchive(c: Client) {
+    const archive = !c.archived_at;
+    if (!confirm(`${archive ? "Archive" : "Restore"} "${c.name}"? ${archive ? "It drops out of active lists and pickers but keeps all data." : "It returns to active clients."}`)) return;
+    setBusy(c.id);
+    try {
+      await api.patch(ROUTES.admin.client(c.id), { archived: archive });
+      setClients((prev) => prev.map((x) => (x.id === c.id ? { ...x, archived_at: archive ? new Date().toISOString() : null } : x)));
+      toast.success(archive ? "Client archived." : "Client restored.");
+    } catch { /* api-client toasts */ } finally {
+      setBusy(null);
+    }
+  }
 
   function toSlug(s: string) {
     return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -55,7 +77,16 @@ export function ClientsTable({ clients: initial, userCounts }: ClientsTableProps
 
   return (
     <div>
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end items-center gap-2 mb-4">
+        {archivedCount > 0 && (
+          <button
+            onClick={() => setShowArchived((s) => !s)}
+            className={cn("inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-medium border transition-colors",
+              showArchived ? "bg-amber-500/15 border-amber-500/40 text-amber-300" : "bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-zinc-200")}
+          >
+            <Archive className="w-3.5 h-3.5" /> {showArchived ? "Back to active" : `Archived (${archivedCount})`}
+          </button>
+        )}
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger>
             <Button><Plus className="w-4 h-4 mr-2" />New Client</Button>
@@ -94,9 +125,9 @@ export function ClientsTable({ clients: initial, userCounts }: ClientsTableProps
         </Dialog>
       </div>
 
-      {clients.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-12 text-center">
-          <p className="text-zinc-400">No clients yet. Create your first one above.</p>
+          <p className="text-zinc-400">{showArchived ? "No archived clients." : "No clients yet. Create your first one above."}</p>
         </div>
       ) : (
         <div className="rounded-xl border border-zinc-800 overflow-hidden">
@@ -111,7 +142,7 @@ export function ClientsTable({ clients: initial, userCounts }: ClientsTableProps
               </TableRow>
             </TableHeader>
             <TableBody>
-              {clients.map((c) => (
+              {visible.map((c) => (
                 <TableRow key={c.id} className="border-zinc-800 hover:bg-zinc-900/50">
                   <TableCell className="font-medium">{c.name}</TableCell>
                   <TableCell className="text-zinc-400 font-mono text-xs">{c.slug}</TableCell>
@@ -123,7 +154,14 @@ export function ClientsTable({ clients: initial, userCounts }: ClientsTableProps
                   </TableCell>
                   <TableCell className="text-zinc-500 text-sm">{new Date(c.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>
-                    <a href={`/admin/clients/${c.id}`} className="text-xs text-zinc-400 hover:text-white underline">Manage</a>
+                    <div className="flex items-center gap-3 justify-end">
+                      <a href={`/admin/clients/${c.id}`} className="text-xs text-zinc-400 hover:text-white underline">Manage</a>
+                      <button onClick={() => toggleArchive(c)} disabled={busy === c.id}
+                        title={c.archived_at ? "Restore client" : "Archive client"}
+                        className="text-zinc-500 hover:text-amber-400 transition-colors disabled:opacity-50">
+                        {c.archived_at ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

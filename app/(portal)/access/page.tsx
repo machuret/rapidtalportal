@@ -28,7 +28,7 @@ export default async function AccessPage({ searchParams }: { searchParams: { cli
   let clients: { id: string; name: string }[] = [];
   let clientId = user.client_id;
   if (isSuperAdmin) {
-    const { data } = await admin.from("clients").select("id, name").order("name");
+    const { data } = await admin.from("clients").select("id, name").is("archived_at", null).order("name");
     clients = (data ?? []) as { id: string; name: string }[];
     clientId = searchParams.client && clients.some((c) => c.id === searchParams.client)
       ? searchParams.client
