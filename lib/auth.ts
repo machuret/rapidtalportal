@@ -8,7 +8,7 @@ import type { DbUser, DbClient } from "@/types/database";
 export const IMPERSONATE_COOKIE = "rt_impersonate";
 
 const USER_COLUMNS =
-  "id, email, full_name, role, client_id, created_at, phone, birthday, avatar_url";
+  "id, email, full_name, role, client_id, created_at, phone, birthday, avatar_url, timezone";
 
 export interface CurrentUserAndClient {
   /** Effective user — the impersonated target when impersonating, else the real user. */

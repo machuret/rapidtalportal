@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Mail, Phone, CalendarDays, UserCircle, NotebookPen, TrendingUp, Clock, DollarSign, CreditCard, MessageCircle, MapPin, Globe, Wrench } from "lucide-react";
 import { VaProfileEditor } from "@/components/team/VaProfileEditor";
+import { VaContractEditor, type ContractInit } from "@/components/team/VaContractEditor";
 
 function fmtMs(ms: number) {
   const h = Math.floor(ms / 3600000);
@@ -68,6 +69,14 @@ export default async function VaDetailPage({ params }: { params: { id: string } 
 
   const logs = rawLogs ?? [];
   const timeEntries = rawTimeEntries ?? [];
+
+  // Job & contract terms (My Job → Overview key terms).
+  const { data: contractRow } = await admin
+    .from("va_job_contracts")
+    .select("rate, currency, pay_period, payment_method, payment_schedule, start_date, weekly_hours, notice_period, next_review_date")
+    .eq("user_id", va.id)
+    .maybeSingle();
+  const contract = (contractRow as ContractInit | null) ?? null;
 
   // Aggregate time per day
   type DaySummary = { work: number; brk: number };
@@ -212,6 +221,11 @@ export default async function VaDetailPage({ params }: { params: { id: string } 
             />
           </div>
         </div>
+      </div>
+
+      {/* Job & contract terms — admin only */}
+      <div className="mb-6">
+        <VaContractEditor vaId={va.id} initial={contract} />
       </div>
 
       {/* Compensation card — admin only */}

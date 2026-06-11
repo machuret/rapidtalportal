@@ -178,6 +178,36 @@ export interface Database {
         Update: { slug?: string; content?: string; updated_by?: string | null; updated_at?: string };
         Relationships: NoRelationships;
       };
+      va_job_contracts: {
+        Row: { user_id: string; client_id: string | null; rate: number | null; currency: string; pay_period: string; payment_method: string | null; payment_schedule: string | null; start_date: string | null; weekly_hours: number | null; notice_period: string | null; next_review_date: string | null; contract_path: string | null; contract_name: string | null; updated_by: string | null; updated_at: string };
+        Insert: { user_id: string; client_id?: string | null; rate?: number | null; currency?: string; pay_period?: string; payment_method?: string | null; payment_schedule?: string | null; start_date?: string | null; weekly_hours?: number | null; notice_period?: string | null; next_review_date?: string | null; contract_path?: string | null; contract_name?: string | null; updated_by?: string | null; updated_at?: string };
+        Update: { user_id?: string; client_id?: string | null; rate?: number | null; currency?: string; pay_period?: string; payment_method?: string | null; payment_schedule?: string | null; start_date?: string | null; weekly_hours?: number | null; notice_period?: string | null; next_review_date?: string | null; contract_path?: string | null; contract_name?: string | null; updated_by?: string | null; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      va_days_worked: {
+        Row: { id: string; user_id: string; client_id: string | null; work_date: string; hours: number | null; note: string | null; created_at: string };
+        Insert: { id?: string; user_id: string; client_id?: string | null; work_date: string; hours?: number | null; note?: string | null; created_at?: string };
+        Update: { id?: string; user_id?: string; client_id?: string | null; work_date?: string; hours?: number | null; note?: string | null; created_at?: string };
+        Relationships: NoRelationships;
+      };
+      va_leave_requests: {
+        Row: { id: string; user_id: string; client_id: string | null; start_date: string; end_date: string; leave_type: string; reason: string | null; status: string; reviewed_by: string | null; reviewed_at: string | null; created_at: string };
+        Insert: { id?: string; user_id: string; client_id?: string | null; start_date: string; end_date: string; leave_type?: string; reason?: string | null; status?: string; reviewed_by?: string | null; reviewed_at?: string | null; created_at?: string };
+        Update: { id?: string; user_id?: string; client_id?: string | null; start_date?: string; end_date?: string; leave_type?: string; reason?: string | null; status?: string; reviewed_by?: string | null; reviewed_at?: string | null; created_at?: string };
+        Relationships: NoRelationships;
+      };
+      va_issues: {
+        Row: { id: string; user_id: string; client_id: string | null; category: string; subject: string; detail: string; status: string; created_at: string };
+        Insert: { id?: string; user_id: string; client_id?: string | null; category?: string; subject: string; detail: string; status?: string; created_at?: string };
+        Update: { id?: string; user_id?: string; client_id?: string | null; category?: string; subject?: string; detail?: string; status?: string; created_at?: string };
+        Relationships: NoRelationships;
+      };
+      va_self_reports: {
+        Row: { id: string; user_id: string; client_id: string | null; report_month: string; delivered: string | null; challenges: string | null; goals: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; user_id: string; client_id?: string | null; report_month: string; delivered?: string | null; challenges?: string | null; goals?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; user_id?: string; client_id?: string | null; report_month?: string; delivered?: string | null; challenges?: string | null; goals?: string | null; created_at?: string; updated_at?: string };
+        Relationships: NoRelationships;
+      };
       ai_prompt_versions: {
         Row: { id: string; slug: string; content: string; saved_by: string | null; created_at: string };
         Insert: { id?: string; slug: string; content: string; saved_by?: string | null; created_at?: string };

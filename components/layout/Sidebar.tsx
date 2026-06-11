@@ -31,6 +31,7 @@ import {
   Bug,
   Wrench,
   SlidersHorizontal,
+  Briefcase,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ const vaLinks = [
   { href: "/compose",        label: "Compose",        icon: Wand2 },
   { href: "/tasks",          label: "Tasks",          icon: KanbanSquare },
   { href: "/tools",          label: "Tools",          icon: Wrench },
+  { href: "/my-job",         label: "My Job",         icon: Briefcase },
   { href: "/access",         label: "Access",         icon: KeyRound },
   { href: "/daily-log",      label: "Daily Log",      icon: NotebookPen },
   { href: "/messages",       label: "Messages",       icon: MessageSquare },
@@ -69,6 +71,7 @@ const clientAdminLinks = [
   { href: "/supervision",    label: "Supervision",     icon: Eye },
   { href: "/tasks",          label: "Tasks",           icon: KanbanSquare },
   { href: "/tools",          label: "Tools",           icon: Wrench },
+  { href: "/my-job",         label: "My Job",          icon: Briefcase },
   { href: "/access",         label: "Access",          icon: KeyRound },
   { href: "/team",           label: "My Team",         icon: UsersRound },
   { href: "/messages",       label: "Messages",       icon: MessageSquare },

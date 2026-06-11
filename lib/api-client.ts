@@ -130,6 +130,13 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+
+  put: <T>(endpoint: string, body: unknown, config?: RequestConfig) =>
+    apiClient<T>(endpoint, {
+      ...config,
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
     
   delete: <T>(endpoint: string, body?: unknown, config?: RequestConfig) =>
     apiClient<T>(endpoint, {

@@ -92,6 +92,13 @@ export const ROUTES = {
     list: (clientId: string) => `/api/messages?clientId=${clientId}`,
     send: () => "/api/messages/send",
   },
+  myJob: {
+    contract: (userId?: string) => `/api/my-job/contract${userId ? `?userId=${userId}` : ""}`,
+    days: () => "/api/my-job/days",
+    leave: () => "/api/my-job/leave",
+    issues: () => "/api/my-job/issues",
+    selfReport: () => "/api/my-job/self-report",
+  },
   dailyLog: {
     upsert: () => "/api/daily-log/upsert",
     notes: () => "/api/daily-log/notes",
