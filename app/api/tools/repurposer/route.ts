@@ -45,7 +45,8 @@ Return JSON exactly:
 
 Rules: each output must stand alone (don't say "in this blog"). Pull the strongest specific points from the post — numbers, contrarian takes, practical tips. Exactly 3 scripts, each a different angle. No markdown formatting symbols.`;
 
-  const result = await toolJson<Repurposed>(system, parsed.data.content.slice(0, 24000), 4000);
+  // 3 posts + 3 scripts need headroom — a tight cap truncates the JSON.
+  const result = await toolJson<Repurposed>(system, parsed.data.content.slice(0, 24000), 5000);
   if (!result.data?.linkedin) {
     return NextResponse.json({ error: result.error ?? "Couldn't repurpose the post. Try again." }, { status: 502 });
   }

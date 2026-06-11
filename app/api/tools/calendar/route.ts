@@ -50,10 +50,11 @@ ${contextBits ? `\nThe client:\n${contextBits}\n` : ""}${parsed.data.platform ? 
 Return JSON: {"days":[{"day":1,"format":"Reel|Carousel|Story|Post|Live|Poll","idea":"one-line post idea, specific to this business","hook":"the scroll-stopping first line to open with"}]} — exactly 30 days.
 Rules: vary formats and content pillars (educate / entertain / social proof / behind-the-scenes / promo ≤20%). Ideas must be concrete and doable by a VA, not vague themes. Hooks are punchy, ≤90 characters, no hashtags. Keep each field short.`;
 
+  // 30 structured days need headroom — a tight cap truncates the JSON mid-array.
   const result = await toolJson<{ days: Day[] }>(
     system,
     `Niche / monthly focus: ${parsed.data.focus?.trim() || ctx.services}`,
-    4000,
+    6000,
   );
   if (!result.data?.days?.length) {
     return NextResponse.json({ error: result.error ?? "Couldn't build the calendar. Try again." }, { status: 502 });
