@@ -91,12 +91,44 @@ const config: Config = {
         input:  "hsl(var(--input))",
         ring:   "hsl(var(--ring))",
 
-        // Portal semantic surface tokens — usable as bg-surface-base etc.
+        // ── zinc scale routed through CSS vars ──────────────────────────────
+        // Every zinc-* utility already used across the app now reads from
+        // --zinc-* in globals.css. <alpha-value> keeps /opacity modifiers
+        // (bg-zinc-900/60) and hover:/gradient variants working. Theme the
+        // whole app by editing the vars — no component changes.
+        zinc: {
+          50:  "rgb(var(--zinc-50) / <alpha-value>)",
+          100: "rgb(var(--zinc-100) / <alpha-value>)",
+          200: "rgb(var(--zinc-200) / <alpha-value>)",
+          300: "rgb(var(--zinc-300) / <alpha-value>)",
+          400: "rgb(var(--zinc-400) / <alpha-value>)",
+          500: "rgb(var(--zinc-500) / <alpha-value>)",
+          600: "rgb(var(--zinc-600) / <alpha-value>)",
+          700: "rgb(var(--zinc-700) / <alpha-value>)",
+          800: "rgb(var(--zinc-800) / <alpha-value>)",
+          900: "rgb(var(--zinc-900) / <alpha-value>)",
+          950: "rgb(var(--zinc-950) / <alpha-value>)",
+        },
+
+        // ── Semantic aliases (prefer these in NEW code) ─────────────────────
+        // Same source of truth as zinc-*; names document intent. e.g.
+        // bg-surface-raised, text-content-secondary, border-hairline.
         surface: {
-          base:    "var(--surface-base)",
-          raised:  "var(--surface-raised)",
-          overlay: "var(--surface-overlay)",
-          subtle:  "var(--surface-subtle)",
+          base:    "rgb(var(--zinc-950) / <alpha-value>)",
+          raised:  "rgb(var(--zinc-900) / <alpha-value>)",
+          overlay: "rgb(var(--zinc-800) / <alpha-value>)",
+          subtle:  "rgb(var(--zinc-700) / <alpha-value>)",
+        },
+        content: {
+          primary:   "rgb(var(--zinc-50) / <alpha-value>)",
+          secondary: "rgb(var(--zinc-400) / <alpha-value>)",
+          tertiary:  "rgb(var(--zinc-500) / <alpha-value>)",
+          faint:     "rgb(var(--zinc-600) / <alpha-value>)",
+        },
+        hairline: {
+          subtle:  "rgb(var(--zinc-800) / <alpha-value>)",
+          DEFAULT: "rgb(var(--zinc-700) / <alpha-value>)",
+          strong:  "rgb(var(--zinc-600) / <alpha-value>)",
         },
       },
 
