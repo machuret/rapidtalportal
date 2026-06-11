@@ -4,6 +4,8 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { getTool } from "@/lib/tools/registry";
 import { MetaTool } from "@/components/tools/MetaTool";
 import { GbpTool } from "@/components/tools/GbpTool";
+import { KeywordBriefTool } from "@/components/tools/KeywordBriefTool";
+import { ContentAuditorTool } from "@/components/tools/ContentAuditorTool";
 import { ArrowLeft } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +29,8 @@ export default async function ToolRunnerPage({ params }: { params: { category: s
 
       {params.tool === "meta" && <MetaTool clientId={user.client_id} />}
       {params.tool === "gbp" && <GbpTool clientId={user.client_id} companyName={companyName} />}
+      {params.tool === "keyword-brief" && <KeywordBriefTool clientId={user.client_id} />}
+      {params.tool === "content-auditor" && <ContentAuditorTool clientId={user.client_id} />}
     </div>
   );
 }

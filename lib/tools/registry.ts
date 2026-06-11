@@ -24,8 +24,8 @@ export interface ToolCategory {
 const SEO_TOOLS: ToolDef[] = [
   { slug: "meta", title: "Meta Title & Description", description: "5 CTR-optimised title/description variants, under the character limits.", icon: Tag, ready: true },
   { slug: "gbp", title: "Google Business Profile Post", description: "Local-SEO posts for the week's topic, in the client's voice.", icon: MapPin, ready: true },
-  { slug: "keyword-brief", title: "Keyword Brief Generator", description: "Full content brief: intent, headings, entities, FAQ schema.", icon: FileSearch, ready: false },
-  { slug: "content-auditor", title: "Content Auditor", description: "Scored audit — thin content, keyword gaps, readability, links.", icon: ClipboardCheck, ready: false },
+  { slug: "keyword-brief", title: "Keyword Brief Generator", description: "Full content brief: intent, headings, entities, FAQ schema.", icon: FileSearch, ready: true },
+  { slug: "content-auditor", title: "Content Auditor", description: "Scored audit — thin content, keyword gaps, readability, links.", icon: ClipboardCheck, ready: true },
 ];
 
 export const TOOL_CATEGORIES: ToolCategory[] = [
