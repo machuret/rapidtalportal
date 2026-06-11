@@ -34,9 +34,12 @@ const config: Config = {
         base: ["var(--text-base)", { lineHeight: "1.6" }],
         lg:   ["var(--text-lg)",   { lineHeight: "1.4" }],
         xl:   ["var(--text-xl)",   { lineHeight: "1.3" }],
-        "2xl": ["var(--text-2xl)", { lineHeight: "1.2" }],
-        "3xl": ["var(--text-3xl)", { lineHeight: "1.15" }],
-        "4xl": ["var(--text-4xl)", { lineHeight: "1.1" }],
+        // Heading-scale (2xl+) is FLUID via clamp() and mirrors the base
+        // h1/h2/h3 rules in globals.css exactly — so a `text-3xl` page title
+        // scales on mobile just like a bare <h1> instead of sitting fixed.
+        "2xl": ["clamp(1.3rem, 1.05rem + 1vw, var(--text-2xl))",   { lineHeight: "1.2" }],
+        "3xl": ["clamp(1.5rem, 1.1rem + 1.8vw, var(--text-3xl))",  { lineHeight: "1.15" }],
+        "4xl": ["clamp(1.875rem, 1.4rem + 2.2vw, var(--text-4xl))", { lineHeight: "1.1" }],
       },
 
       // ── Border radius bridged from CSS token scale ─────────────────────────

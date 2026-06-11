@@ -40,7 +40,7 @@
     --text-primary:   #fafafa; /* zinc-50  — headings, values      */
     --text-secondary: #a1a1aa; /* zinc-400 — 4.6:1 on zinc-900 ✓  */
     --text-tertiary:  #71717a; /* zinc-500 — 4.5:1 on zinc-900 ✓  */
-    --text-disabled:  #52525b; /* zinc-600 — decorative / large only */
+    /* zinc-600 (#52525b) is ~3:1 — decorative only, never a text token.       */
 
     /* ── Border tokens ───────────────────────────────────────────────────── */
     --border-subtle:  #27272a; /* zinc-800 */
@@ -72,15 +72,8 @@
     --text-2xl:  1.5rem;    /* 24px */
     --text-3xl:  1.875rem;  /* 30px */
     --text-4xl:  2.25rem;   /* 36px */
-
-    /* ── Spacing (4pt grid) ──────────────────────────────────────────────── */
-    --space-1:  0.25rem;  /*  4px */
-    --space-2:  0.5rem;   /*  8px */
-    --space-3:  0.75rem;  /* 12px */
-    --space-4:  1rem;     /* 16px */
-    --space-6:  1.5rem;   /* 24px */
-    --space-8:  2rem;     /* 32px */
-    --space-12: 3rem;     /* 48px */
+    /* Spacing intentionally NOT tokenised here — Tailwind's built-in 4pt scale
+       (gap-4, p-6, …) is the single spacing system. Don't reintroduce --space-*. */
 
     /* ── Radius tokens ───────────────────────────────────────────────────── */
     /* Bridged into tailwind.config.ts — rounded-sm/md/lg/xl all use these.  */
@@ -140,15 +133,17 @@
   }
 
   /* ── Headings — fluid scale with clamp() for mobile ─────────────────────── */
+  /* These clamp() expressions are mirrored EXACTLY by the text-2xl/3xl/4xl    */
+  /* utilities in tailwind.config.ts, so a bare <h1> and an explicit           */
+  /* `text-3xl` page title render identically AND both scale on mobile.        */
+  /* One heading system — no more fixed-size titles bypassing the clamp.       */
   h1, h2, h3, h4 {
     @apply tracking-tight text-balance;
     line-height: 1.2;
   }
-
-  /* clamp(min, preferred, max) — scales smoothly from 375px to 1280px+ */
-  h1 { font-size: clamp(1.5rem, 3.5vw, var(--text-3xl)); font-weight: 700; }
-  h2 { font-size: clamp(1.25rem, 2.5vw, var(--text-2xl)); font-weight: 700; }
-  h3 { font-size: clamp(1.1rem, 2vw, var(--text-xl)); font-weight: 600; }
+  h1 { font-size: clamp(1.5rem, 1.1rem + 1.8vw, var(--text-3xl)); font-weight: 700; }  /* matches text-3xl */
+  h2 { font-size: clamp(1.3rem, 1.05rem + 1vw, var(--text-2xl)); font-weight: 700; }   /* matches text-2xl */
+  h3 { font-size: clamp(1.1rem, 1rem + 0.6vw, var(--text-xl)); font-weight: 600; }     /* matches text-xl  */
   h4 { font-size: var(--text-lg); font-weight: 600; }
 
   /* ── Body copy ───────────────────────────────────────────────────────────── */
@@ -172,8 +167,16 @@
   }
 
   /* ── Stat value ───────────────────────────────────────────────────────────  */
+  /* tabular-nums keeps digits monospaced so numbers don't jitter/misalign.    */
   .stat-value {
     @apply text-3xl font-bold leading-none tracking-tight;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Numbers in data tables align in columns. Apply `.tabular` for ad-hoc use. */
+  table,
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 
   /* ── Semantic text helpers ────────────────────────────────────────────────  */
