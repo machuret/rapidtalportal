@@ -96,7 +96,7 @@ export function VaDashboard({ userName, clientName, userId, kbEntries, recentCon
       {/* Stat strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "KB Answers",      value: kbEntries.length,                                              href: "/knowledge-base", color: "text-blue-400"   },
+          { label: "KB Answers",      value: kbEntries.length,                                              href: "/vault/knowledge", color: "text-blue-400"   },
           { label: "Vault Docs",      value: vaultCount,                                                    href: "/vault",          color: "text-purple-400" },
           { label: "SOPs",            value: sopCount,                                                      href: "/sops",           color: "text-amber-400"  },
           { label: "Active Contacts", value: statusCounts.find(s => s.status === "active")?.count ?? 0,     href: "/crm",            color: "text-green-400"  },
@@ -118,7 +118,7 @@ export function VaDashboard({ userName, clientName, userId, kbEntries, recentCon
               <BookOpen className="w-4 h-4 text-blue-400" />
               KB Quick Lookup
             </div>
-            <Link href="/knowledge-base" className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1">
+            <Link href="/vault/knowledge" className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1">
               All answers <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -253,7 +253,7 @@ export function VaDashboard({ userName, clientName, userId, kbEntries, recentCon
         {[
           { href: "/sops",           Icon: ListChecks,   label: "Browse SOPs",    color: "text-amber-400"  },
           { href: "/content",        Icon: PenLine,      label: "Create Content", color: "text-pink-400"   },
-          { href: "/knowledge-base", Icon: BookOpen,     label: "Full KB",        color: "text-blue-400"   },
+          { href: "/vault/knowledge", Icon: BookOpen,    label: "Full KB",        color: "text-blue-400"   },
           { href: "/company-dna",    Icon: Dna,          label: "Company Info",   color: "text-purple-400" },
         ].map(q => (
           <Link

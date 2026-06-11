@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { VaultClient } from "@/components/vault/VaultClient";
+import { VaultTabs } from "@/components/vault/VaultTabs";
 import { PageIntro } from "@/components/layout/PageIntro";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export default async function VaultPage() {
 
   return (
     <div className="max-w-5xl">
+      <VaultTabs active="documents" />
       <PageIntro id="vault" />
       <VaultClient
         clientId={user.client_id}
