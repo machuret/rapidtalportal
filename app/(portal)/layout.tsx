@@ -45,16 +45,18 @@ export default async function PortalLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-zinc-950 text-zinc-50">
+    <div className="flex min-h-screen bg-zinc-950 text-zinc-50 print:bg-white print:min-h-0">
       <ErrorReporter />
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex">
+      {/* Desktop sidebar (hidden when printing, e.g. My Job documents) */}
+      <div className="hidden md:flex print:!hidden">
         <Sidebar user={ctx.user} client={ctx.client} />
       </div>
       {/* Mobile sidebar drawer */}
-      <MobileSidebarTrigger user={ctx.user} client={ctx.client} />
+      <div className="print:hidden">
+        <MobileSidebarTrigger user={ctx.user} client={ctx.client} />
+      </div>
       {/* Main content — pt accounts for mobile menu button */}
-      <main className="flex-1 overflow-auto pt-14 md:pt-0">
+      <main className="flex-1 overflow-auto pt-14 md:pt-0 print:pt-0 print:overflow-visible">
         {ctx.impersonating && ctx.actualUser && (
           <ImpersonationBanner
             viewingName={ctx.user.full_name ?? ctx.user.email}
@@ -62,7 +64,7 @@ export default async function PortalLayout({
             adminEmail={ctx.actualUser.email}
           />
         )}
-        <div className="max-w-6xl mx-auto px-4 py-6 md:p-8">
+        <div className="max-w-6xl mx-auto px-4 py-6 md:p-8 print:p-0 print:max-w-none">
           <QueryProvider>{children}</QueryProvider>
         </div>
       </main>

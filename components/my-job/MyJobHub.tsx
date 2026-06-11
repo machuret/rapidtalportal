@@ -41,12 +41,13 @@ interface Props {
   initialReports: ReportRow[];
 }
 
-type Tab = "overview" | "days" | "leave" | "holidays" | "reports" | "issues";
+type Tab = "overview" | "days" | "leave" | "holidays" | "documents" | "reports" | "issues";
 const TABS: { id: Tab; label: string; icon: typeof Briefcase }[] = [
   { id: "overview", label: "Overview", icon: Briefcase },
   { id: "days", label: "Days Worked", icon: CalendarDays },
   { id: "leave", label: "Leave", icon: Plane },
   { id: "holidays", label: "Holidays", icon: CalendarDays },
+  { id: "documents", label: "Documents", icon: FileText },
   { id: "reports", label: "Self-Reports", icon: FileText },
   { id: "issues", label: "Raise an Issue", icon: AlertTriangle },
 ];
@@ -84,6 +85,7 @@ export function MyJobHub({ vaTimezone, contract, initialDays, initialLeave, init
       {tab === "days" && <DaysTab initial={initialDays} />}
       {tab === "leave" && <LeaveTab initial={initialLeave} />}
       {tab === "holidays" && <HolidayCalendars />}
+      {tab === "documents" && <DocumentsTab />}
       {tab === "reports" && <ReportsTab initial={initialReports} />}
       {tab === "issues" && <IssuesTab initial={initialIssues} />}
     </div>
@@ -333,6 +335,70 @@ function LeaveTab({ initial }: { initial: LeaveRow[] }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Documents ────────────────────────────────────────────────────────────────
+function DocumentsTab() {
+  const now = new Date();
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const defMonth = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, "0")}`;
+  const [invMonth, setInvMonth] = useState(defMonth);
+  const [taxYear, setTaxYear] = useState(String(now.getFullYear()));
+  const [withIncome, setWithIncome] = useState(true);
+  const years = Array.from({ length: 4 }, (_, i) => String(now.getFullYear() - i));
+
+  const card = "surface-card p-5 flex flex-col gap-3";
+  const open = (href: string) => window.open(href, "_blank");
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className={card}>
+        <div>
+          <h3 className="font-semibold text-zinc-100">Invoice</h3>
+          <p className="text-xs text-zinc-500 mt-1">Auto-built from your logged days and contract rate, with the monthly days summary attached. Print or save as PDF.</p>
+        </div>
+        <div className="flex items-center gap-2 mt-auto">
+          <input type="month" value={invMonth} onChange={(e) => setInvMonth(e.target.value)}
+            className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5 flex-1" />
+          <Button onClick={() => open(`/my-job/documents/invoice?month=${invMonth}`)} className="gap-2 shrink-0">
+            <FileText className="w-4 h-4" /> Generate
+          </Button>
+        </div>
+      </div>
+
+      <div className={card}>
+        <div>
+          <h3 className="font-semibold text-zinc-100">Certificate of Employment</h3>
+          <p className="text-xs text-zinc-500 mt-1">Proof of engagement (and optionally income) from your contract and tenure — for loans, credit cards, visas, renting.</p>
+        </div>
+        <div className="flex items-center gap-2 mt-auto">
+          <label className="flex items-center gap-2 text-xs text-zinc-400 flex-1 cursor-pointer">
+            <input type="checkbox" checked={withIncome} onChange={(e) => setWithIncome(e.target.checked)} className="accent-emerald-500" />
+            Include income details
+          </label>
+          <Button onClick={() => open(`/my-job/documents/certificate${withIncome ? "?income=1" : ""}`)} className="gap-2 shrink-0">
+            <FileText className="w-4 h-4" /> Generate
+          </Button>
+        </div>
+      </div>
+
+      <div className={card}>
+        <div>
+          <h3 className="font-semibold text-zinc-100">Yearly income summary</h3>
+          <p className="text-xs text-zinc-500 mt-1">Month-by-month income compiled from your logged days, for your BIR / tax filing.</p>
+        </div>
+        <div className="flex items-center gap-2 mt-auto">
+          <select value={taxYear} onChange={(e) => setTaxYear(e.target.value)}
+            className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5 flex-1">
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <Button onClick={() => open(`/my-job/documents/tax?year=${taxYear}`)} className="gap-2 shrink-0">
+            <FileText className="w-4 h-4" /> Generate
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
