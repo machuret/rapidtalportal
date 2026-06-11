@@ -31,6 +31,7 @@ import {
   KeyRound,
   Bug,
   Wrench,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -93,6 +94,7 @@ const adminLinks = [
   { href: "/access",           label: "Access",      icon: KeyRound },
   { href: "/supervision",      label: "Supervision", icon: Eye },
   { href: "/admin/daily-logs", label: "Daily Logs",  icon: NotebookPen },
+  { href: "/admin/prompts",    label: "AI Prompts",  icon: SlidersHorizontal },
   { href: "/admin/errors",     label: "Errors",      icon: Bug },
 ];
 

@@ -8,6 +8,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { authorizeTool, companyContext, toolJson, logToolRun } from "@/lib/tools/ai";
+import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -40,11 +41,7 @@ export const POST = withAuth(async (req, { user }) => {
     ctx.brandVoice && `Brand voice to match: ${ctx.brandVoice}`,
   ].filter(Boolean).join("\n");
 
-  const system = `You are a local SEO specialist writing Google Business Profile posts for ${company}.
-${contextBits}
-
-Write 3 DISTINCT GBP posts about the topic. Return JSON: {"posts":[{"body":"the post text","cta":"suggested CTA button e.g. Book, Call now, Learn more","localAngle":"the local hook used"}]}.
-Rules: each body ≤1500 characters, engaging and specific, naturally working in the location/area for local relevance. Vary the angle across the three. Include a clear call to action. If a concrete detail (price, date) isn't provided, use a clear [placeholder] rather than inventing it. No markdown.`;
+  const system = await renderPrompt("tools.gbp", { company, context: contextBits });
 
   const result = await toolJson<{ posts: Post[] }>(system, `Topic: ${parsed.data.topic}`, 1800);
   if (!result.data?.posts?.length) {

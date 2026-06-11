@@ -7,6 +7,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { authorizeTool, companyContext, toolJson, logToolRun, TOOL_MODEL_MINI } from "@/lib/tools/ai";
+import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -37,11 +38,7 @@ export const POST = withAuth(async (req, { user }) => {
     ctx.services && `What the business offers: ${ctx.services}`,
   ].filter(Boolean).join("\n");
 
-  const system = `You write social media replies for a business.
-${bits}
-
-Return JSON: {"replies":[{"style":"label e.g. Warm & personal | Short & friendly | Move to DM/booking","text":"the reply"}]} — exactly 3 distinct options.
-Rules: sound human, never corporate-robotic. Match the platform register (casual, emojis only if the inbound uses them). If it's a complaint: acknowledge first, never argue publicly, offer to take it to DM. If a detail (price, date, availability) isn't known, use a [placeholder] rather than inventing it. Each reply ≤500 characters.`;
+  const system = await renderPrompt("tools.reply-assistant", { business_context: bits });
 
   const userMsg = `Incoming message:\n"""\n${parsed.data.message}\n"""${parsed.data.context ? `\nContext from the VA: ${parsed.data.context}` : ""}`;
 

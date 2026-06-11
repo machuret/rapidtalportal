@@ -53,6 +53,27 @@ const SOURCE_LABEL: Record<string, string> = {
   sop: "SOP",
 };
 
+/**
+ * Admin prompt overrides (/admin/prompts → ai_prompts table). When a row
+ * exists for the slug, it replaces the built-in default above — so prompt
+ * edits go live without redeploying this function. Cached briefly per
+ * instance; any failure falls back to the defaults.
+ */
+const promptCache = new Map<string, { content: string | null; at: number }>();
+// deno-lint-ignore no-explicit-any
+async function promptOverride(admin: any, slug: string, fallback: string): Promise<string> {
+  const hit = promptCache.get(slug);
+  if (hit && Date.now() - hit.at < 30_000) return hit.content ?? fallback;
+  try {
+    const { data } = await admin.from("ai_prompts").select("content").eq("slug", slug).maybeSingle();
+    const content = (data?.content as string | undefined) ?? null;
+    promptCache.set(slug, { content, at: Date.now() });
+    return content ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -282,6 +303,10 @@ Deno.serve(async (req: Request) => {
       itemId: b.itemId ?? null,
     }));
 
+    const systemPrompt = deep
+      ? await promptOverride(admin, "vault.ask.deep", DEEP_PROMPT)
+      : await promptOverride(admin, "vault.ask.answer", ANSWER_PROMPT);
+
     const chatRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -296,7 +321,7 @@ Deno.serve(async (req: Request) => {
         temperature: 0.4,
         stream,
         messages: [
-          { role: "system", content: deep ? DEEP_PROMPT : ANSWER_PROMPT },
+          { role: "system", content: systemPrompt },
           ...history.flatMap((h) => {
             const q = (h?.question ?? "").toString().trim();
             const a = (h?.answer ?? "").toString().trim().slice(0, 600);

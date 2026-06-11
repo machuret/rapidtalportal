@@ -8,6 +8,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { authorizeTool, companyContext, toolJson, logToolRun } from "@/lib/tools/ai";
+import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -48,12 +49,9 @@ export const POST = withAuth(async (req, { user }) => {
     ctx.services && `Services: ${ctx.services}`,
   ].filter(Boolean).join("\n");
 
-  const system = `You are a senior SEO content strategist creating a content brief a writer can execute without further research.
-${contextBits ? `\nThe brief is for this business:\n${contextBits}\n` : ""}
-Return JSON exactly:
-{"intent":"informational|commercial|transactional|navigational","intentNote":"one line on what the searcher wants","title":"recommended meta title ≤60 chars","h1":"recommended H1","outline":[{"h2":"section heading","h3s":["sub-points"]}],"entities":["topics, terms and entities the page must cover"],"wordCount":"e.g. 1,200–1,600 words","faqs":[{"question":"People-Also-Ask style question","answer":"concise 1-2 sentence answer"}],"gaps":["angles competitors usually miss that this page should include"]}
-
-Rules: 4-7 outline sections, 8-15 entities, 4-6 FAQs with genuinely useful answers, 2-4 gaps. Be specific to the keyword and business, never generic filler.`;
+  const system = await renderPrompt("tools.keyword-brief", {
+    business_context: contextBits ? `\nThe brief is for this business:\n${contextBits}\n` : "",
+  });
 
   const userMsg = `Target keyword: ${parsed.data.keyword}` +
     (parsed.data.content?.trim()

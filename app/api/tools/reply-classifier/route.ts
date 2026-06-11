@@ -7,7 +7,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, companyContext, toolJson, logToolRun, OUTREACH_STYLE, stripDashes, TOOL_MODEL_MINI } from "@/lib/tools/ai";
+import { authorizeTool, companyContext, toolJson, logToolRun, stripDashes, TOOL_MODEL_MINI } from "@/lib/tools/ai";
+import { renderPrompt, getPromptTemplate } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -42,17 +43,10 @@ export const POST = withAuth(async (req, { user }) => {
   const ctx = await companyContext(parsed.data.clientId);
   const voice = ctx.brandVoice ? `\nMatch this brand voice: ${ctx.brandVoice}` : "";
 
-  const system = `You triage cold-outreach replies for a marketing agency's VA team and draft the response.
-${OUTREACH_STYLE}${voice}
-
-Classify the reply into exactly one of: "interested" (wants to talk / asks for more / books), "objection" (pushback on price, timing, need, trust), "not_now" (soft no, circle back later, unsubscribe-adjacent), "other" (auto-reply, wrong person, referral, anything else). Then draft the best response.
-- interested: move to a concrete next step (a call, a time, the asset they asked for).
-- objection: acknowledge it honestly, reframe, keep the door open. No hard sell.
-- not_now: gracious, low-pressure, leave a clean door to revisit.
-- other: handle appropriately (thank a referral, ask to be pointed to the right person, etc.).
-
-Return JSON exactly: {"classification":"interested|objection|not_now|other","reasoning":"one short sentence on why","draft":"the reply email, 30-70 words, \\n line breaks"}
-Rules: one CTA. No em or en dashes. Keep {{first_name}} merge token, no invented names.`;
+  const system = await renderPrompt("tools.reply-classifier", {
+    outreach_style: await getPromptTemplate("style.outreach"),
+    voice,
+  });
 
   const result = await toolJson<Omit<Classified, "label">>(
     system,

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { sopAiLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { authorizeSopScope, clientContext, llmJson, SUGGEST_MODEL } from "@/lib/sops/ai";
+import { renderPrompt } from "@/lib/prompts/server";
 
 const schema = z.object({
   topic: z.string().min(3).max(300),
@@ -30,7 +31,7 @@ export const POST = withAuth(async (req, { user }) => {
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   const ctx = await clientContext(clientId);
-  const system = `You help an operations lead frame Standard Operating Procedures before writing them. Given a topic, propose 3-5 DISTINCT angles a useful SOP could take — different scopes, not reworded duplicates. Return JSON: {"suggestions":[{"title":"concise SOP title","scope":"one line on what it covers","stepCount":<realistic integer>}]}. Titles are specific and action-oriented. No prose outside the JSON.${ctx}`;
+  const system = await renderPrompt("sops.suggest", { client_context: ctx });
   const result = await llmJson<{ suggestions: Suggestion[] }>(
     SUGGEST_MODEL,
     system,

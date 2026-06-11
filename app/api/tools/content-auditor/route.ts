@@ -8,6 +8,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { authorizeTool, toolJson, logToolRun } from "@/lib/tools/ai";
+import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -39,12 +40,9 @@ export const POST = withAuth(async (req, { user }) => {
   const rl = toolsLimiter.check(`tools:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
-  const system = `You are a rigorous SEO content auditor. Audit the page copy${parsed.data.keyword ? ` against the target keyword "${parsed.data.keyword}"` : ""} and score it honestly — most real pages score 40-75; reserve 85+ for genuinely excellent copy.
-
-Return JSON exactly:
-{"overall":0-100,"subscores":{"depth":0-100,"keyword":0-100,"readability":0-100,"structure":0-100},"issues":[{"severity":"high|medium|low","issue":"what's wrong, specifically","fix":"exactly what to do about it"}],"internalLinks":["anchor-text → suggested target page topics this copy should link to"],"quickWins":["small changes with outsized impact"]}
-
-Scoring lenses: depth = thin content vs comprehensive coverage; keyword = natural usage, placement in headings/intro, related terms; readability = sentence length, jargon, scannability; structure = heading hierarchy, paragraphs, lists, intro/conclusion. 3-8 issues ordered by severity, 2-5 internal link suggestions, 2-4 quick wins. Be specific to THIS copy — quote short phrases where useful.`;
+  const system = await renderPrompt("tools.content-auditor", {
+    keyword_note: parsed.data.keyword ? ` against the target keyword "${parsed.data.keyword}"` : "",
+  });
 
   const result = await toolJson<Audit>(system, parsed.data.content.slice(0, 24000), 2500);
   if (!result.data?.subscores) {

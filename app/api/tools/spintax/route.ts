@@ -8,7 +8,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, companyContext, toolJson, logToolRun, OUTREACH_STYLE, stripDashes } from "@/lib/tools/ai";
+import { authorizeTool, companyContext, toolJson, logToolRun, stripDashes } from "@/lib/tools/ai";
+import { renderPrompt, getPromptTemplate } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -39,13 +40,10 @@ export const POST = withAuth(async (req, { user }) => {
     ctx.brandVoice && `Match this brand voice: ${ctx.brandVoice}`,
   ].filter(Boolean).join("\n");
 
-  const system = `You write cold outreach emails for a marketing agency's VA team.
-${OUTREACH_STYLE}
-${sender ? `\n${sender}\n` : ""}
-SPINTAX: write the subject and body with spintax variation so each send is unique. Use {option a|option b|option c} syntax around words and short phrases that can be swapped without changing meaning. Spin the greeting, 2-4 phrases in the body, and the CTA. Do NOT spin merge tokens. Keep it readable — every combination must be a clean, natural sentence.
-
-Return JSON exactly: {"subject":"spintax subject line","preview":"40-90 char preview/preheader text (no spintax)","body":"spintax email body, 50-90 words, line breaks as \\n, signs off generically"}
-Rules: one clear CTA. No em or en dashes. Use {{first_name}} / {{company}} merge tokens, never invented names.`;
+  const system = await renderPrompt("tools.spintax", {
+    outreach_style: await getPromptTemplate("style.outreach"),
+    sender_context: sender,
+  });
 
   const result = await toolJson<Spintax>(system, `Campaign brief: ${parsed.data.brief}${parsed.data.audience ? `\nTarget audience: ${parsed.data.audience}` : ""}`, 1800);
   if (!result.data?.body) {

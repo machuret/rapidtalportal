@@ -7,7 +7,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, companyContext, toolJson, logToolRun, OUTREACH_STYLE, stripDashes } from "@/lib/tools/ai";
+import { authorizeTool, companyContext, toolJson, logToolRun, stripDashes } from "@/lib/tools/ai";
+import { renderPrompt, getPromptTemplate } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -33,13 +34,10 @@ export const POST = withAuth(async (req, { user }) => {
   const ctx = await companyContext(parsed.data.clientId);
   const voice = ctx.brandVoice ? `\nMatch this brand voice: ${ctx.brandVoice}` : "";
 
-  const system = `You write cold-outreach follow-up sequences for a marketing agency's VA team.
-${OUTREACH_STYLE}${voice}
-
-Given the initial email, write a 4-touch follow-up sequence. Each touch is shorter than the last and tries a different angle so it does not feel like nagging. Reference the original lightly, never guilt-trip ("just bumping this", "did you see my email" are banned). The final touch is a polite break-up email.
-
-Return JSON exactly: {"touches":[{"day":3,"subject":"subject line","body":"email body, 30-70 words, \\n line breaks","purpose":"the angle this touch uses (e.g. add value, social proof, break-up)"}]} — exactly 4 touches, send days roughly 3 / 7 / 12 / 20 after the prior send.
-Rules: one CTA each. No em or en dashes. Keep {{first_name}} / {{company}} merge tokens, no invented names.`;
+  const system = await renderPrompt("tools.follow-up", {
+    outreach_style: await getPromptTemplate("style.outreach"),
+    voice,
+  });
 
   const result = await toolJson<{ touches: Touch[] }>(system, `Initial email:\n${parsed.data.email}`, 2500);
   if (!result.data?.touches?.length) {

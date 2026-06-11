@@ -8,6 +8,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { sopAiLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { authorizeSopScope, clientContext, llmJson, GENERATE_MODEL } from "@/lib/sops/ai";
+import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -56,17 +57,12 @@ export const POST = withAuth(async (req, { user }) => {
 
   const ctx = await clientContext(clientId);
   const improving = !!parsed.data.existing?.trim();
-  const system = `You are an expert operations writer ${improving ? "improving an existing" : "creating a"} Standard Operating Procedure a virtual assistant will follow step by step.
-
-Return ONLY JSON in this exact shape:
-{"title":"final SOP title","intro":"1-2 sentences on the purpose and outcome","prerequisites":["what's needed before starting"],"steps":[{"title":"short imperative step name","detail":"clear, specific instructions for this step — what to do and how","tip":"optional gotcha or best-practice, omit if none"}]}
-
-Rules:
-- Each step is one logical action with a concrete, do-this instruction in "detail" — never vague.
-- ${DEPTH_HINT[parsed.data.depth]}
-- ${AUDIENCE_HINT[parsed.data.audience]}
-- Order steps logically; include verification/QA where it matters.
-- prerequisites is a short list (can be empty). No markdown, no numbering inside fields.${ctx}`;
+  const system = await renderPrompt("sops.generate", {
+    mode: improving ? "improving an existing" : "creating a",
+    depth_hint: DEPTH_HINT[parsed.data.depth],
+    audience_hint: AUDIENCE_HINT[parsed.data.audience],
+    client_context: ctx,
+  });
 
   const userMsg = [
     `Topic: ${parsed.data.topic}`,

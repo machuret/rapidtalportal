@@ -7,7 +7,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, toolJson, logToolRun, OUTREACH_STYLE, stripDashes, TOOL_MODEL_MINI } from "@/lib/tools/ai";
+import { authorizeTool, toolJson, logToolRun, stripDashes, TOOL_MODEL_MINI } from "@/lib/tools/ai";
+import { renderPrompt, getPromptTemplate } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -28,13 +29,9 @@ export const POST = withAuth(async (req, { user }) => {
   const rl = toolsLimiter.check(`tools:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
-  const system = `You write personalised cold-email opening lines for a marketing agency's VA team.
-${OUTREACH_STYLE}
-
-From the prospect's website text, write 3 different opening lines that prove the email was written for them specifically. Reference something concrete from the text (what they do, a value, a recent move, their niche). Each line should flow naturally into a pitch. No flattery for its own sake, no "I came across your website".
-
-Return JSON exactly: {"lines":["opening line 1","opening line 2","opening line 3"]} — exactly 3, each 1-2 sentences, each a different angle.
-Rules: no em or en dashes. Use {{first_name}} / {{company}} merge tokens only if natural; never invent facts not in the text.`;
+  const system = await renderPrompt("tools.personalisation", {
+    outreach_style: await getPromptTemplate("style.outreach"),
+  });
 
   const result = await toolJson<{ lines: string[] }>(system, `Prospect website text:\n${parsed.data.about.slice(0, 5000)}`, 800, TOOL_MODEL_MINI);
   if (!result.data?.lines?.length) {

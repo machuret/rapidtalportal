@@ -172,6 +172,18 @@ export interface Database {
         Update: { id?: string; source?: string; message?: string; stack?: string | null; url?: string | null; user_id?: string | null; client_id?: string | null; created_at?: string };
         Relationships: NoRelationships;
       };
+      ai_prompts: {
+        Row: { slug: string; content: string; updated_by: string | null; updated_at: string };
+        Insert: { slug: string; content: string; updated_by?: string | null; updated_at?: string };
+        Update: { slug?: string; content?: string; updated_by?: string | null; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      ai_prompt_versions: {
+        Row: { id: string; slug: string; content: string; saved_by: string | null; created_at: string };
+        Insert: { id?: string; slug: string; content: string; saved_by?: string | null; created_at?: string };
+        Update: { id?: string; slug?: string; content?: string; saved_by?: string | null; created_at?: string };
+        Relationships: NoRelationships;
+      };
       crm_events: {
         Row: { id: string; contact_id: string; client_id: string; user_id: string | null; body: string; created_at: string };
         Insert: { id?: string; contact_id: string; client_id: string; user_id?: string | null; body: string; created_at?: string };

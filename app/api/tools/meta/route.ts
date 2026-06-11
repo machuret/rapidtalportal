@@ -8,6 +8,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { authorizeTool, toolJson, logToolRun } from "@/lib/tools/ai";
+import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -35,7 +36,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   // Shorten mode: tighten a single variant under the limits, keep its angle.
   if (parsed.data.shorten) {
-    const sys = `You tighten SEO meta tags. Rewrite the given title to ≤60 characters and description to ≤155 characters (count carefully), preserving the meaning and hook. Return JSON: {"variants":[{"title":"","description":"","angle":"shortened"}]}.`;
+    const sys = await renderPrompt("tools.meta-shorten");
     const r = await toolJson<{ variants: Variant[] }>(sys,
       `Title: ${parsed.data.shorten.title}
 Description: ${parsed.data.shorten.description}
@@ -45,10 +46,9 @@ Page context: ${parsed.data.content.slice(0, 2000)}`, 400);
     return NextResponse.json({ variants: [{ title: String(v.title).slice(0, 120), description: String(v.description ?? "").slice(0, 320), angle: String(v.angle ?? "shortened").slice(0, 80) }] });
   }
 
-  const system = `You are an SEO copywriter. From the page content${parsed.data.keyword ? ` (target keyword: "${parsed.data.keyword}")` : ""}, write 5 DISTINCT meta title + description variants optimised for click-through.
-
-Return JSON: {"variants":[{"title":"≤60 chars","description":"≤155 chars","angle":"the hook used"}]}.
-Rules: title ≤60 characters, description ≤155 characters (count carefully). Each variant a different angle — e.g. benefit-led, question hook, urgency, authority/social-proof, specificity/numbers. Work the keyword in naturally where it fits; never keyword-stuff. No quotes around the output values.`;
+  const system = await renderPrompt("tools.meta", {
+    keyword_note: parsed.data.keyword ? ` (target keyword: "${parsed.data.keyword}")` : "",
+  });
 
   const result = await toolJson<{ variants: Variant[] }>(system, parsed.data.content.slice(0, 16000), 1500);
   if (!result.data?.variants?.length) {

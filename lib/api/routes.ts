@@ -13,6 +13,7 @@ export const ROUTES = {
     usersLoginLink: () => "/api/admin/users/login-link",
     client: (id: string) => `/api/admin/clients/${id}`,
     impersonate: () => "/api/admin/impersonate",
+    prompts: () => "/api/admin/prompts",
   },
   kb: {
     generate: () => "/api/kb/generate",

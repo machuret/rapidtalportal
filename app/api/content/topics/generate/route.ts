@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { renderPrompt } from "@/lib/prompts/server";
 
 const bodySchema = z.object({
   client_id: z.string().uuid(),
@@ -45,28 +46,7 @@ function checkRateLimit(clientId: string): { allowed: boolean; remaining: number
   return { allowed: true, remaining: MAX_REQUESTS_PER_WINDOW - entry.count, resetAt: entry.resetAt };
 }
 
-const SYSTEM_PROMPT = `You are a senior content strategist generating content topic ideas for a company's marketing and communications team.
-
-You will be given the company's DNA (mission, services, values) and excerpts from their Vault (documents, processes, SOPs, references).
-
-Generate diverse, high-quality content topic ideas that:
-- Are grounded in the actual company information provided
-- Cover multiple content angles: thought leadership, educational, promotional, storytelling, how-to
-- Are specific and actionable, not generic
-- Span a mix of content types (blog, email, social, newsletter)
-- Would genuinely attract and help their target audience
-
-Return ONLY valid JSON — no markdown, no explanation:
-{
-  "topics": [
-    {
-      "title": "Short compelling topic title (max 100 chars)",
-      "description": "2–3 sentence brief: what this piece covers, who it's for, key angle or hook",
-      "content_type": "blog" | "email" | "social" | "newsletter",
-      "rationale": "One sentence on why this topic is relevant given the company's content"
-    }
-  ]
-}`;
+// System prompt lives in the prompt registry ("content.topics") — admin-editable.
 
 type VaultRow = {
   id: string;
@@ -194,6 +174,7 @@ export async function POST(req: NextRequest) {
   const count = parsed.data.count;
 
   const userPrompt = `Based on the company information below, generate exactly ${count} content topic ideas.\n\n${context}`;
+  const systemPrompt = await renderPrompt("content.topics");
 
   let openaiRes: Response;
   try {
@@ -209,7 +190,7 @@ export async function POST(req: NextRequest) {
         max_tokens: 3000,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           { role: "user",   content: userPrompt },
         ],
       }),

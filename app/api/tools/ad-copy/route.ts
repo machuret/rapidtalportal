@@ -8,6 +8,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { authorizeTool, companyContext, toolJson, logToolRun } from "@/lib/tools/ai";
+import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -37,10 +38,11 @@ export const POST = withAuth(async (req, { user }) => {
     ? `Google Search ads: "headline" ≤30 characters, "body" is the description ≤90 characters. Count carefully.`
     : `Facebook/Instagram ads: "headline" ≤40 characters, "body" is the primary text (1-3 punchy sentences with a hook and CTA).`;
 
-  const system = `You are a direct-response ad copywriter${ctx.companyName ? ` for ${ctx.companyName}` : ""}.${ctx.location ? ` Location: ${ctx.location}.` : ""}
-${spec}
-Return JSON: {"variants":[{"headline":"","body":"","angle":"the appeal used"}]} — exactly 5, each a different angle (benefit, urgency/scarcity, social proof, problem-agitate, curiosity).
-Rules: respect the character limits strictly, one clear CTA, no fabricated claims/figures (use a [placeholder] if needed).`;
+  const system = await renderPrompt("tools.ad-copy", {
+    for_company: ctx.companyName ? ` for ${ctx.companyName}` : "",
+    location_note: ctx.location ? ` Location: ${ctx.location}.` : "",
+    platform_spec: spec,
+  });
 
   const result = await toolJson<{ variants: Ad[] }>(system, `Offer: ${parsed.data.offer}`, 1500);
   if (!result.data?.variants?.length) return NextResponse.json({ error: result.error ?? "Couldn't write ad copy." }, { status: 502 });

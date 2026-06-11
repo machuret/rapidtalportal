@@ -15,6 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { deepAnalysisLimiter, tooManyRequests } from "@/lib/rate-limit";
+import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -23,38 +24,7 @@ const MODEL = process.env.VAULT_EXPAND_MODEL || "anthropic/claude-3.5-sonnet";
 
 const schema = z.object({ clientId: z.string().uuid() });
 
-const SYSTEM_PROMPT = `You are a senior brand and market strategist. You are given everything known about a company from a full crawl of its website (a factual dossier, a product catalog, and per-page summaries). Produce a DEEP strategic analysis for the team that supports this company day to day.
-
-Write rich, specific markdown (1200-2500 words) with these sections:
-
-## Industry & Market Context
-What industry/sub-segment is this, what are the relevant market dynamics and trends, and where does this company sit within them.
-
-## Positioning & Differentiation
-How the company positions itself, its likely value proposition, what sets it apart (or where it blends in).
-
-## Brand Identity & Voice
-Tone, aesthetic, values signalled, the personality a VA should match when writing as this brand. Quote phrases from the site that reveal voice.
-
-## Target Audience
-Who they're for — demographics, psychographics, buying motivations, price sensitivity.
-
-## Pricing & Market Tier
-Budget / mid-market / premium / luxury, with evidence from the observed prices.
-
-## Competitive Landscape
-The kinds of competitors they face and how they likely compare. Be clear this is informed inference.
-
-## Strengths, Gaps & Opportunities
-Honest assessment: what's strong, what's missing or weak on the site, concrete opportunities.
-
-## Recommendations
-Actionable suggestions for the support team — content angles, customer-service framing, things to clarify.
-
-RULES:
-- Anchor brand/positioning/pricing claims to the actual site content; quote where useful.
-- Industry and competitive observations are informed ANALYSIS — present them as reasoned inference, never as facts scraped from the site, and never invent specific competitor names, figures, or partnerships as if confirmed.
-- Be specific and useful, not generic. No filler, no restating the brief.`;
+// System prompt lives in the prompt registry ("vault.expand") — admin-editable.
 
 export const GET = withAuth(async (req, { user }) => {
   const clientId = req.nextUrl.searchParams.get("clientId");
@@ -111,6 +81,8 @@ export const POST = withAuth(async (req, { user }) => {
     summaries ? `# PAGE SUMMARIES\n${summaries}` : "",
   ].filter(Boolean).join("\n\n").slice(0, 60000);
 
+  const systemPrompt = await renderPrompt("vault.expand");
+
   let content = ""; let tokens = 0;
   try {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -121,7 +93,7 @@ export const POST = withAuth(async (req, { user }) => {
         max_tokens: 4000,
         temperature: 0.4,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           { role: "user", content: corpus },
         ],
       }),

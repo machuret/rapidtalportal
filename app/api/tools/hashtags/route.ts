@@ -8,6 +8,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { authorizeTool, companyContext, toolJson, logToolRun, TOOL_MODEL_MINI } from "@/lib/tools/ai";
+import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -33,10 +34,11 @@ export const POST = withAuth(async (req, { user }) => {
   const ctx = await companyContext(parsed.data.clientId);
   const locality = ctx.location ? `Use this location for local tags: ${ctx.location}.` : "";
 
-  const system = `You are a social media strategist researching hashtags for ${parsed.data.platform}.
-${ctx.companyName ? `Business: ${ctx.companyName}.` : ""} ${locality}
-Return JSON: {"broad":["high-volume tags"],"niche":["lower-competition, specific tags more likely to rank"],"local":["location-based tags"],"branded":["brand/campaign tags to own"],"note":"one line on how to mix them"}
-Rules: include the # in each tag. 6-10 broad, 8-12 niche, 4-8 local (empty if no location), 2-4 branded. Realistic, not invented vanity tags.`;
+  const system = await renderPrompt("tools.hashtags", {
+    platform: parsed.data.platform,
+    business_note: ctx.companyName ? `Business: ${ctx.companyName}.` : "",
+    locality,
+  });
 
   const result = await toolJson<Groups>(system, `Topic / niche: ${parsed.data.topic}`, 1200, TOOL_MODEL_MINI);
   if (!result.data) return NextResponse.json({ error: result.error ?? "Couldn't research hashtags." }, { status: 502 });

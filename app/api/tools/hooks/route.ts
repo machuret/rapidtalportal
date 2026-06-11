@@ -8,6 +8,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { authorizeTool, companyContext, toolJson, logToolRun, TOOL_MODEL_MINI } from "@/lib/tools/ai";
+import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
 
@@ -33,10 +34,7 @@ export const POST = withAuth(async (req, { user }) => {
   const ctx = await companyContext(parsed.data.clientId);
   const voice = ctx.brandVoice ? `\nKeep hooks compatible with this brand voice: ${ctx.brandVoice}` : "";
 
-  const system = `You are a direct-response copywriter. Rewrite the opening of a flat social post into 10 scroll-stopping first lines.${voice}
-
-Return JSON: {"hooks":[{"hook":"the first line","technique":"pattern used"}]} — exactly 10, all different techniques. Use a spread of: bold claim, contrarian take, specific number/result, open question, curiosity gap, mistake/warning, story opener, direct callout ("If you…"), before/after, social proof.
-Rules: each hook ≤100 characters, concrete (pull specifics from the post), no clickbait that the post can't pay off, no hashtags, no emojis unless the original used them.`;
+  const system = await renderPrompt("tools.hooks", { voice });
 
   const result = await toolJson<{ hooks: Hook[] }>(system, parsed.data.content.slice(0, 6000), 1500, TOOL_MODEL_MINI);
   if (!result.data?.hooks?.length) {
