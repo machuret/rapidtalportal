@@ -34,6 +34,9 @@ export function NotificationsBell({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(false);
   const supabaseRef = useRef(createClient());
   const panelRef = useRef<HTMLDivElement>(null);
+  // The sidebar mounts twice (desktop + mobile drawer), so each bell needs its
+  // own channel topic — Supabase rejects a second subscribe() on the same topic.
+  const channelId = useRef(Math.random().toString(36).slice(2));
 
   const load = useCallback(async () => {
     try {
@@ -53,7 +56,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
 
     const supabase = supabaseRef.current;
     const channel = supabase
-      .channel(`notifications:${userId}`)
+      .channel(`notifications:${userId}:${channelId.current}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
