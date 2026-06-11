@@ -27,6 +27,8 @@ const fields: { key: keyof DbCompanyDna; label: string; multiline?: boolean }[] 
   { key: "target_demographic", label: "Target Demographic" },
   { key: "values", label: "Company Values", multiline: true },
   { key: "services", label: "Services Offered", multiline: true },
+  { key: "brand_voice", label: "Brand Voice & Tone", multiline: true },
+  { key: "sign_off", label: "Default Sign-off" },
 ];
 
 export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {

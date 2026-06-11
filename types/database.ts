@@ -60,6 +60,8 @@ export interface DbCompanyDna {
   services: string | null;
   target_demographic: string | null;
   client_type: string | null;
+  brand_voice: string | null;
+  sign_off: string | null;
   extra: Record<string, unknown>;
   updated_at: string;
 }
@@ -134,9 +136,9 @@ export interface Database {
         ];
       };
       company_dna: {
-        Row: { id: string; client_id: string; company_name: string | null; founders: string | null; location: string | null; phone: string | null; email: string | null; website: string | null; values: string | null; services: string | null; target_demographic: string | null; client_type: string | null; extra: Record<string, unknown>; updated_at: string };
-        Insert: { id?: string; client_id: string; company_name?: string | null; founders?: string | null; location?: string | null; phone?: string | null; email?: string | null; website?: string | null; values?: string | null; services?: string | null; target_demographic?: string | null; client_type?: string | null; extra?: Record<string, unknown>; updated_at?: string };
-        Update: { id?: string; client_id?: string; company_name?: string | null; founders?: string | null; location?: string | null; phone?: string | null; email?: string | null; website?: string | null; values?: string | null; services?: string | null; target_demographic?: string | null; client_type?: string | null; extra?: Record<string, unknown>; updated_at?: string };
+        Row: { id: string; client_id: string; company_name: string | null; founders: string | null; location: string | null; phone: string | null; email: string | null; website: string | null; values: string | null; services: string | null; target_demographic: string | null; client_type: string | null; brand_voice: string | null; sign_off: string | null; extra: Record<string, unknown>; updated_at: string };
+        Insert: { id?: string; client_id: string; company_name?: string | null; founders?: string | null; location?: string | null; phone?: string | null; email?: string | null; website?: string | null; values?: string | null; services?: string | null; target_demographic?: string | null; client_type?: string | null; brand_voice?: string | null; sign_off?: string | null; extra?: Record<string, unknown>; updated_at?: string };
+        Update: { id?: string; client_id?: string; company_name?: string | null; founders?: string | null; location?: string | null; phone?: string | null; email?: string | null; website?: string | null; values?: string | null; services?: string | null; target_demographic?: string | null; client_type?: string | null; brand_voice?: string | null; sign_off?: string | null; extra?: Record<string, unknown>; updated_at?: string };
         Relationships: NoRelationships;
       };
       vault_items: {

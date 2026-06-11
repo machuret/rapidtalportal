@@ -10,14 +10,29 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   Wand2, Loader2, Copy, Check, RefreshCw, Reply, Mail, MessageSquare, Megaphone,
-  FileText, Bookmark, Trash2, Sparkles,
+  FileText, Bookmark, Trash2, Sparkles, Users, ChevronDown, X,
 } from "lucide-react";
+
+export interface ComposeContact { id: string; name: string; company: string | null; email: string | null }
 
 interface Source { n: number; kind: string; kindLabel: string; title: string; itemId: string | null }
 interface AskResponse { answer: string; sources: Source[] }
 
 type Channel = "email" | "message" | "social" | "other";
 type Mode = "new" | "reply";
+
+// Built-in starting points — one click pre-fills channel, tone and a brief.
+const TEMPLATES: { id: string; label: string; channel: Channel; tone: string; task: string }[] = [
+  { id: "booking", label: "Booking confirmation", channel: "email", tone: "Warm", task: "Confirm a customer's booking. Thank them, restate the key details (what, date, people, price), and add what happens next." },
+  { id: "refund", label: "Refund / apology", channel: "email", tone: "Professional", task: "Apologise for an issue and explain the refund or resolution clearly and reassuringly." },
+  { id: "followup", label: "Follow-up", channel: "email", tone: "Friendly", task: "Follow up with a prospect who enquired but hasn't booked yet — gentle nudge, offer to help, restate the value." },
+  { id: "quote", label: "Quote / proposal", channel: "email", tone: "Professional", task: "Send a clear quote for the requested service, including what's included and the next step to proceed." },
+  { id: "review", label: "Review request", channel: "message", tone: "Friendly", task: "Ask a happy customer to leave a review, briefly and warmly, with a clear link placeholder." },
+  { id: "welcome", label: "Welcome / onboarding", channel: "email", tone: "Warm", task: "Welcome a new customer, set expectations, and tell them how to get started or reach us." },
+  { id: "announce", label: "Social announcement", channel: "social", tone: "Playful", task: "Announce a new offer or update in an engaging social post." },
+];
+
+const LANGUAGES = ["Auto", "English", "Spanish", "French", "Portuguese", "German", "Italian", "Dutch"] as const;
 
 const CHANNELS: { id: Channel; label: string; icon: typeof Mail }[] = [
   { id: "email", label: "Email", icon: Mail },
@@ -90,17 +105,31 @@ async function streamDraft(
   }
 }
 
-export function ComposeClient({ clientId, companyName }: { clientId: string; companyName: string }) {
+export function ComposeClient({
+  clientId, companyName, brandVoice, signOff, contacts = [],
+}: {
+  clientId: string;
+  companyName: string;
+  brandVoice?: string | null;
+  signOff?: string | null;
+  contacts?: ComposeContact[];
+}) {
   const [mode, setMode] = useState<Mode>("new");
   const [channel, setChannel] = useState<Channel>("email");
   const [platform, setPlatform] = useState(PLATFORMS[0].id);
   const [tone, setTone] = useState<string>("Professional");
   const [length, setLength] = useState("standard");
+  const [language, setLanguage] = useState<string>("Auto");
   const [count, setCount] = useState<1 | 3>(1);
 
   const [task, setTask] = useState("");
   const [inbound, setInbound] = useState("");
   const [guidance, setGuidance] = useState("");
+
+  // Recipient personalization (optional; can pick from CRM).
+  const [recipient, setRecipient] = useState<ComposeContact | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
 
   const [variants, setVariants] = useState<Variant[]>([]);
   const [active, setActive] = useState(0);
@@ -132,6 +161,14 @@ export function ComposeClient({ clientId, companyName }: { clientId: string; com
     if (channel === "email") parts.push("Start with a single line 'Subject: <concise subject>', then a blank line, then the email body.");
     if (channel === "social") parts.push(`Keep it under ${limit} characters. Add 2–4 relevant hashtags at the end.`);
     if (channel === "message") parts.push("Keep it conversational and brief, suitable for a chat/WhatsApp message.");
+    if (language === "Auto") {
+      if (mode === "reply") parts.push("Reply in the same language the customer wrote in.");
+    } else {
+      parts.push(`Write it in ${language}.`);
+    }
+    if (recipient?.name) parts.push(`Address the recipient by name: ${recipient.name}${recipient.company ? ` (${recipient.company})` : ""}.`);
+    if (brandVoice?.trim()) parts.push(`Match this brand voice: ${brandVoice.trim()}`);
+    if (signOff?.trim()) parts.push(`Sign off as: ${signOff.trim()}`);
     return parts.join(" ");
   }
   function baseInstruction(): string {
@@ -224,6 +261,17 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
     setActive(0);
   }
 
+  function applyTemplate(t: typeof TEMPLATES[number]) {
+    setMode("new");
+    setChannel(t.channel);
+    setTone(t.tone);
+    setTask(t.task);
+  }
+
+  const filteredContacts = pickerQuery.trim()
+    ? contacts.filter((c) => `${c.name} ${c.company ?? ""}`.toLowerCase().includes(pickerQuery.toLowerCase())).slice(0, 8)
+    : contacts.slice(0, 8);
+
   const current = variants[active];
   const email = current && channel === "email" ? splitEmail(current.text) : null;
   const charCount = current ? (email?.body ?? current.text).length : 0;
@@ -279,8 +327,8 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
         </div>
       )}
 
-      {/* Tone + length + count */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      {/* Tone + length + language + count */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
         <div>
           <p className="label-section mb-1.5">Tone</p>
           <select value={tone} onChange={(e) => setTone(e.target.value)} className="w-full h-9 rounded-md border border-zinc-700 bg-zinc-800 text-zinc-100 px-3 text-sm">
@@ -294,18 +342,73 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
           </select>
         </div>
         <div>
+          <p className="label-section mb-1.5">Language</p>
+          <select value={language} onChange={(e) => setLanguage(e.target.value)} className="w-full h-9 rounded-md border border-zinc-700 bg-zinc-800 text-zinc-100 px-3 text-sm">
+            {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+        </div>
+        <div>
           <p className="label-section mb-1.5">Options</p>
           <div className="flex gap-1.5">
             {([1, 3] as const).map((n) => (
               <button key={n} onClick={() => setCount(n)}
                 className={cn("flex-1 h-9 rounded-md border text-sm font-medium transition-colors",
                   count === n ? "bg-zinc-700 text-white border-zinc-700" : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200")}>
-                {n === 1 ? "1 draft" : "3 options"}
+                {n === 1 ? "1" : "3"}
               </button>
             ))}
           </div>
         </div>
       </div>
+
+      {/* Recipient (optional, personalizes the draft) */}
+      <div className="relative mb-4">
+        {recipient ? (
+          <div className="inline-flex items-center gap-2 px-3 h-9 rounded-md border border-zinc-700 bg-zinc-800 text-sm text-zinc-200">
+            <Users className="w-3.5 h-3.5 text-zinc-400" />
+            To: {recipient.name}{recipient.company ? ` · ${recipient.company}` : ""}
+            <button onClick={() => setRecipient(null)} className="text-zinc-500 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+          </div>
+        ) : contacts.length > 0 ? (
+          <>
+            <button onClick={() => setPickerOpen((o) => !o)}
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md border border-zinc-700 bg-zinc-800 text-sm text-zinc-400 hover:text-zinc-200">
+              <Users className="w-3.5 h-3.5" /> Personalize for a contact <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+            {pickerOpen && (
+              <div className="absolute z-10 mt-1 w-72 rounded-lg border border-zinc-700 bg-zinc-900 shadow-lg p-2">
+                <Input value={pickerQuery} onChange={(e) => setPickerQuery(e.target.value)} placeholder="Search contacts…"
+                  className="bg-zinc-800 border-zinc-700 h-8 text-sm mb-1.5" />
+                <div className="max-h-56 overflow-y-auto flex flex-col">
+                  {filteredContacts.length === 0 ? (
+                    <p className="text-xs text-zinc-500 px-2 py-3 text-center">No matches.</p>
+                  ) : filteredContacts.map((c) => (
+                    <button key={c.id} onClick={() => { setRecipient(c); setPickerOpen(false); setPickerQuery(""); }}
+                      className="text-left px-2 py-1.5 rounded hover:bg-zinc-800 text-sm text-zinc-200">
+                      {c.name}{c.company ? <span className="text-zinc-500"> · {c.company}</span> : ""}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : null}
+      </div>
+
+      {/* Templates (new draft only) */}
+      {mode === "new" && (
+        <div className="mb-3">
+          <p className="label-section mb-1.5">Start from a template</p>
+          <div className="flex gap-1.5 flex-wrap">
+            {TEMPLATES.map((t) => (
+              <button key={t.id} onClick={() => applyTemplate(t)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-600 hover:text-white transition-colors">
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       {mode === "new" ? (

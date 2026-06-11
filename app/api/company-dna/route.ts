@@ -15,6 +15,8 @@ const bodySchema = z.object({
   target_demographic: z.string().max(500).optional().nullable(),
   values:             z.string().max(2000).optional().nullable(),
   services:           z.string().max(2000).optional().nullable(),
+  brand_voice:        z.string().max(2000).optional().nullable(),
+  sign_off:           z.string().max(300).optional().nullable(),
   // extra is a NOT NULL JSONB column — must be present on first INSERT
   extra:              z.record(z.string(), z.unknown()).optional().default({}),
 });
