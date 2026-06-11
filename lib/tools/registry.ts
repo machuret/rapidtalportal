@@ -5,7 +5,8 @@
  */
 import {
   Tag, MapPin, FileSearch, ClipboardCheck, Search, Share2,
-  CalendarDays, Recycle, MessageCircle, Zap, type LucideIcon,
+  CalendarDays, Recycle, MessageCircle, Zap, Mails, Megaphone,
+  GalleryHorizontalEnd, Hash, type LucideIcon,
 } from "lucide-react";
 
 export interface ToolDef {
@@ -36,6 +37,10 @@ const SOCIAL_TOOLS: ToolDef[] = [
   { slug: "repurposer", title: "Post Repurposer", description: "One blog post → LinkedIn, Facebook, IG caption + 3 video scripts.", icon: Recycle, ready: true },
   { slug: "reply-assistant", title: "Comment & DM Replies", description: "Paste what came in, get 3 on-brand reply options.", icon: MessageCircle, ready: true },
   { slug: "hooks", title: "Hook Rewriter", description: "Paste a flat post, get 10 scroll-stopping first lines.", icon: Zap, ready: true },
+  { slug: "newsletter", title: "Email Newsletter", description: "Subject, preview text and a ready-to-send body.", icon: Mails, ready: true },
+  { slug: "ad-copy", title: "Ad Copy Generator", description: "5 ad variants within Google/Meta character limits.", icon: Megaphone, ready: true },
+  { slug: "carousel", title: "Carousel Breakdown", description: "A topic or article → slide-by-slide carousel + caption.", icon: GalleryHorizontalEnd, ready: true },
+  { slug: "hashtags", title: "Hashtag Researcher", description: "A balanced hashtag mix by reach tier.", icon: Hash, ready: true },
 ];
 
 export const TOOL_CATEGORIES: ToolCategory[] = [

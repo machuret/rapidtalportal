@@ -10,6 +10,10 @@ import { CalendarTool } from "@/components/tools/CalendarTool";
 import { RepurposerTool } from "@/components/tools/RepurposerTool";
 import { ReplyAssistantTool } from "@/components/tools/ReplyAssistantTool";
 import { HooksTool } from "@/components/tools/HooksTool";
+import { NewsletterTool } from "@/components/tools/NewsletterTool";
+import { AdCopyTool } from "@/components/tools/AdCopyTool";
+import { CarouselTool } from "@/components/tools/CarouselTool";
+import { HashtagsTool } from "@/components/tools/HashtagsTool";
 import { ArrowLeft } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +43,10 @@ export default async function ToolRunnerPage({ params }: { params: { category: s
       {params.tool === "repurposer" && <RepurposerTool clientId={user.client_id} />}
       {params.tool === "reply-assistant" && <ReplyAssistantTool clientId={user.client_id} />}
       {params.tool === "hooks" && <HooksTool clientId={user.client_id} />}
+      {params.tool === "newsletter" && <NewsletterTool clientId={user.client_id} />}
+      {params.tool === "ad-copy" && <AdCopyTool clientId={user.client_id} />}
+      {params.tool === "carousel" && <CarouselTool clientId={user.client_id} />}
+      {params.tool === "hashtags" && <HashtagsTool clientId={user.client_id} />}
     </div>
   );
 }
