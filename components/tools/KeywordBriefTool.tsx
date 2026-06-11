@@ -60,7 +60,10 @@ export function KeywordBriefTool({ clientId, initial }: { clientId: string; init
         </div>
         <FetchUrl clientId={clientId} onFetched={setContent} />
         <div className="flex flex-col gap-1.5">
-          <Label>Existing page copy <span className="text-zinc-600 font-normal">(optional — the brief will note what&apos;s missing)</span></Label>
+          <div className="flex items-center justify-between">
+            <Label>Existing page copy <span className="text-zinc-600 font-normal">(optional — the brief will note what&apos;s missing)</span></Label>
+            {content.length > 0 && <CharCount len={content.length} limit={30000} />}
+          </div>
           <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={6}
             placeholder="Paste the current page content if one exists…" className="bg-zinc-800 border-zinc-700 text-zinc-100 text-sm" />
         </div>

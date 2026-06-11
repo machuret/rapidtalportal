@@ -22,6 +22,12 @@ export function stripDashes(s: string): string {
   return s.replace(/\s*[—–]\s*/g, ", ").replace(/,\s*,/g, ",");
 }
 
+/** Clamp a model-returned value to a safe string of at most `max` chars. */
+export const clampStr = (v: unknown, max: number): string => String(v ?? "").slice(0, max);
+/** Coerce to an array (model may omit it) and cap its length. */
+export const clampArr = <T>(v: T[] | undefined | null, max: number): T[] =>
+  (Array.isArray(v) ? v : []).slice(0, max);
+
 /** Tools are for the working team: VAs + client admins, scoped to their client. */
 export function authorizeTool(user: ApiUser, clientId: string): NextResponse | null {
   if (!["va", "client_admin", "super_admin"].includes(user.role)) {
@@ -37,7 +43,15 @@ export interface CompanyContext {
   brandVoice: string | null;
 }
 
+// Company DNA changes rarely; a short TTL cache spares every tool call a DB
+// round-trip while still picking up edits within ~30s (same approach as the
+// prompt cache). Per serverless instance — a speed-up, not a correctness need.
+const CTX_TTL_MS = 30_000;
+const ctxCache = new Map<string, { ctx: CompanyContext; at: number }>();
+
 export async function companyContext(clientId: string): Promise<CompanyContext> {
+  const hit = ctxCache.get(clientId);
+  if (hit && Date.now() - hit.at < CTX_TTL_MS) return hit.ctx;
   try {
     const admin = createAdminClient();
     const { data } = await admin
@@ -49,13 +63,16 @@ export async function companyContext(clientId: string): Promise<CompanyContext> 
     // cast read camelCase keys off a snake_case row, silently nulling
     // companyName/brandVoice in every tool — never cast across casings.)
     const d = data as { company_name: string | null; location: string | null; services: string | null; brand_voice: string | null } | null;
-    return {
+    const ctx: CompanyContext = {
       companyName: d?.company_name ?? null,
       location: d?.location ?? null,
       services: d?.services ?? null,
       brandVoice: d?.brand_voice ?? null,
     };
+    ctxCache.set(clientId, { ctx, at: Date.now() });
+    return ctx;
   } catch {
+    // Don't cache failures — let the next call retry.
     return { companyName: null, location: null, services: null, brandVoice: null };
   }
 }

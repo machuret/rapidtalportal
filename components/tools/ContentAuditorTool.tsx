@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FetchUrl } from "./FetchUrl";
-import { useToolRun, ToolHeader, LoadingRow } from "./shared";
+import { useToolRun, ToolHeader, LoadingRow, CharCount } from "./shared";
 import { ClipboardCheck, Loader2, Sparkles, AlertTriangle, Link2, Zap } from "lucide-react";
 
 interface Out {
@@ -53,7 +53,10 @@ export function ContentAuditorTool({ clientId, initial }: { clientId: string; in
         </div>
         <FetchUrl clientId={clientId} onFetched={setContent} />
         <div className="flex flex-col gap-1.5">
-          <Label>Page copy</Label>
+          <div className="flex items-center justify-between">
+            <Label>Page copy</Label>
+            <CharCount len={content.length} limit={30000} />
+          </div>
           <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={10}
             placeholder="Paste the full page content here (at least a few paragraphs)…"
             className="bg-zinc-800 border-zinc-700 text-zinc-100 text-sm" />

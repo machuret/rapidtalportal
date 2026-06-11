@@ -5,9 +5,8 @@
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { withAuth } from "@/lib/api/with-auth";
-import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, toolJson, logToolRun, stripDashes, TOOL_MODEL_MINI } from "@/lib/tools/ai";
+import { withTool } from "@/lib/tools/handler";
+import { toolJson, logToolRun, stripDashes, clampArr, TOOL_MODEL_MINI } from "@/lib/tools/ai";
 import { renderPrompt, getPromptTemplate } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
@@ -17,31 +16,22 @@ const schema = z.object({
   about: z.string().min(40).max(6000),
 });
 
-export const POST = withAuth(async (req, { user }) => {
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: "Paste the prospect's About / homepage text." }, { status: 422 });
+export const POST = withTool(
+  { slug: "personalisation", schema, invalid: "Paste the prospect's About / homepage text." },
+  async ({ data, user }) => {
+    const system = await renderPrompt("tools.personalisation", {
+      outreach_style: await getPromptTemplate("style.outreach"),
+    });
 
-  const denied = authorizeTool(user, parsed.data.clientId);
-  if (denied) return denied;
+    const result = await toolJson<{ lines: string[] }>(system, `Prospect website text:\n${data.about}`, 800, TOOL_MODEL_MINI);
+    if (!result.data?.lines?.length) {
+      return NextResponse.json({ error: result.error ?? "Couldn't write the lines. Try again." }, { status: 502 });
+    }
 
-  const rl = toolsLimiter.check(`tools:${user.id}`);
-  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
-
-  const system = await renderPrompt("tools.personalisation", {
-    outreach_style: await getPromptTemplate("style.outreach"),
-  });
-
-  const result = await toolJson<{ lines: string[] }>(system, `Prospect website text:\n${parsed.data.about.slice(0, 5000)}`, 800, TOOL_MODEL_MINI);
-  if (!result.data?.lines?.length) {
-    return NextResponse.json({ error: result.error ?? "Couldn't write the lines. Try again." }, { status: 502 });
-  }
-
-  const lines = result.data.lines
-    .filter((l) => typeof l === "string" && l.trim())
-    .slice(0, 3)
-    .map((l) => stripDashes(String(l)).slice(0, 600));
-  logToolRun("personalisation", parsed.data.clientId, user.id, parsed.data.about.slice(0, 80), result.tokens, { lines });
-  return NextResponse.json({ lines });
-});
+    const lines = clampArr(result.data.lines, 3)
+      .filter((l) => typeof l === "string" && l.trim())
+      .map((l) => stripDashes(String(l)).slice(0, 600));
+    logToolRun("personalisation", data.clientId, user.id, data.about.slice(0, 80), result.tokens, { lines });
+    return NextResponse.json({ lines });
+  },
+);

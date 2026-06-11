@@ -54,7 +54,10 @@ export function MetaTool({ clientId, initial }: { clientId: string; initial?: un
         </div>
         <FetchUrl clientId={clientId} onFetched={setContent} />
         <div className="flex flex-col gap-1.5">
-          <Label>Page content</Label>
+          <div className="flex items-center justify-between">
+            <Label>Page content</Label>
+            <CharCount len={content.length} limit={20000} />
+          </div>
           <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={8}
             placeholder="Paste the page's main copy here…" className="bg-zinc-800 border-zinc-700 text-zinc-100 text-sm" />
         </div>

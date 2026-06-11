@@ -5,9 +5,8 @@
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { withAuth } from "@/lib/api/with-auth";
-import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, companyContext, toolJson, logToolRun } from "@/lib/tools/ai";
+import { withTool } from "@/lib/tools/handler";
+import { companyContext, toolJson, logToolRun, clampStr, clampArr } from "@/lib/tools/ai";
 import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
@@ -21,40 +20,33 @@ const schema = z.object({
 
 interface Ad { headline: string; body: string; angle: string }
 
-export const POST = withAuth(async (req, { user }) => {
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: "Describe the product or offer." }, { status: 422 });
+export const POST = withTool(
+  { slug: "ad-copy", schema, invalid: "Describe the product or offer." },
+  async ({ data, user }) => {
+    const ctx = await companyContext(data.clientId);
+    const isGoogle = data.platform === "google";
+    const spec = isGoogle
+      ? `Google Search ads: "headline" ≤30 characters, "body" is the description ≤90 characters. Count carefully.`
+      : `Facebook/Instagram ads: "headline" ≤40 characters, "body" is the primary text (1-3 punchy sentences with a hook and CTA).`;
 
-  const denied = authorizeTool(user, parsed.data.clientId);
-  if (denied) return denied;
-  const rl = toolsLimiter.check(`tools:${user.id}`);
-  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
+    const system = await renderPrompt("tools.ad-copy", {
+      for_company: ctx.companyName ? ` for ${ctx.companyName}` : "",
+      location_note: ctx.location ? ` Location: ${ctx.location}.` : "",
+      platform_spec: spec,
+    });
 
-  const ctx = await companyContext(parsed.data.clientId);
-  const isGoogle = parsed.data.platform === "google";
-  const spec = isGoogle
-    ? `Google Search ads: "headline" ≤30 characters, "body" is the description ≤90 characters. Count carefully.`
-    : `Facebook/Instagram ads: "headline" ≤40 characters, "body" is the primary text (1-3 punchy sentences with a hook and CTA).`;
+    const result = await toolJson<{ variants: Ad[] }>(system, `Offer: ${data.offer}`, 1500);
+    if (!result.data?.variants?.length) return NextResponse.json({ error: result.error ?? "Couldn't write ad copy." }, { status: 502 });
 
-  const system = await renderPrompt("tools.ad-copy", {
-    for_company: ctx.companyName ? ` for ${ctx.companyName}` : "",
-    location_note: ctx.location ? ` Location: ${ctx.location}.` : "",
-    platform_spec: spec,
-  });
-
-  const result = await toolJson<{ variants: Ad[] }>(system, `Offer: ${parsed.data.offer}`, 1500);
-  if (!result.data?.variants?.length) return NextResponse.json({ error: result.error ?? "Couldn't write ad copy." }, { status: 502 });
-
-  const payload = {
-    platform: parsed.data.platform,
-    variants: result.data.variants.filter((v) => v.headline?.trim() || v.body?.trim()).slice(0, 5).map((v) => ({
-      headline: String(v.headline ?? "").slice(0, 120),
-      body: String(v.body ?? "").slice(0, 400),
-      angle: String(v.angle ?? "").slice(0, 60),
-    })),
-  };
-  logToolRun("ad-copy", parsed.data.clientId, user.id, parsed.data.offer.slice(0, 80), result.tokens, payload);
-  return NextResponse.json(payload);
-});
+    const payload = {
+      platform: data.platform,
+      variants: clampArr(result.data.variants, 5).filter((v) => v.headline?.trim() || v.body?.trim()).map((v) => ({
+        headline: clampStr(v.headline, 120),
+        body: clampStr(v.body, 400),
+        angle: clampStr(v.angle, 60),
+      })),
+    };
+    logToolRun("ad-copy", data.clientId, user.id, data.offer.slice(0, 80), result.tokens, payload);
+    return NextResponse.json(payload);
+  },
+);

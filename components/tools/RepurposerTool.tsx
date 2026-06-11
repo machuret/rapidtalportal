@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FetchUrl } from "./FetchUrl";
-import { useToolRun, ToolHeader, CopyButton, LoadingRow } from "./shared";
+import { useToolRun, ToolHeader, CopyButton, LoadingRow, CharCount } from "./shared";
 import { Recycle, Loader2, Sparkles, Briefcase, ThumbsUp, Camera, Clapperboard } from "lucide-react";
 
 interface Out {
@@ -40,7 +40,10 @@ export function RepurposerTool({ clientId, initial }: { clientId: string; initia
       <div className="surface-card p-5 flex flex-col gap-4">
         <FetchUrl clientId={clientId} onFetched={setContent} />
         <div className="flex flex-col gap-1.5">
-          <Label>Blog post</Label>
+          <div className="flex items-center justify-between">
+            <Label>Blog post</Label>
+            <CharCount len={content.length} limit={30000} />
+          </div>
           <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={10}
             placeholder="Paste the full blog post here…" className="bg-zinc-800 border-zinc-700 text-zinc-100 text-sm" />
         </div>

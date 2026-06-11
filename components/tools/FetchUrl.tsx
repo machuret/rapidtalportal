@@ -34,6 +34,8 @@ export function FetchUrl({ clientId, onFetched }: { clientId: string; onFetched:
         <Globe className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
         <Input value={url} onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void fetchIt(); } }}
+          aria-label="Fetch page content from a URL"
+          type="url" inputMode="url"
           placeholder="…or fetch from a URL: https://client-site.com/page"
           className="bg-zinc-800 border-zinc-700 text-zinc-100 pl-9 h-8 text-sm" />
       </div>

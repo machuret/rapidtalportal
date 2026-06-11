@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FetchUrl } from "./FetchUrl";
-import { useToolRun, ToolHeader, CopyButton, LoadingRow } from "./shared";
+import { useToolRun, ToolHeader, CopyButton, LoadingRow, CharCount } from "./shared";
 import { GalleryHorizontalEnd, Loader2, Sparkles } from "lucide-react";
 
 interface Out { slides: { heading: string; body: string }[]; caption: string }
@@ -23,7 +23,10 @@ export function CarouselTool({ clientId, initial }: { clientId: string; initial?
       <div className="surface-card p-5 flex flex-col gap-4">
         <FetchUrl clientId={clientId} onFetched={setTopic} />
         <div className="flex flex-col gap-1.5">
-          <Label>Topic or content</Label>
+          <div className="flex items-center justify-between">
+            <Label>Topic or content</Label>
+            {topic.length > 200 && <CharCount len={topic.length} limit={20000} />}
+          </div>
           <Textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={6}
             placeholder="e.g. 5 mistakes people make booking a whale tour — or paste an article."
             className="bg-zinc-800 border-zinc-700 text-zinc-100 text-sm" />

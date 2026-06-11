@@ -4,9 +4,8 @@
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { withAuth } from "@/lib/api/with-auth";
-import { toolsLimiter, tooManyRequests } from "@/lib/rate-limit";
-import { authorizeTool, companyContext, toolJson, logToolRun, TOOL_MODEL_MINI } from "@/lib/tools/ai";
+import { withTool } from "@/lib/tools/handler";
+import { companyContext, toolJson, logToolRun, clampStr, clampArr, TOOL_MODEL_MINI } from "@/lib/tools/ai";
 import { renderPrompt } from "@/lib/prompts/server";
 
 export const maxDuration = 60;
@@ -19,39 +18,30 @@ const schema = z.object({
 
 interface ReplyOption { style: string; text: string }
 
-export const POST = withAuth(async (req, { user }) => {
-  let body: unknown;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: "Paste the comment or DM." }, { status: 422 });
+export const POST = withTool(
+  { slug: "reply-assistant", schema, invalid: "Paste the comment or DM." },
+  async ({ data, user }) => {
+    const ctx = await companyContext(data.clientId);
+    const bits = [
+      ctx.companyName && `You reply as ${ctx.companyName}.`,
+      ctx.brandVoice && `Brand voice: ${ctx.brandVoice}`,
+      ctx.services && `What the business offers: ${ctx.services}`,
+    ].filter(Boolean).join("\n");
 
-  const denied = authorizeTool(user, parsed.data.clientId);
-  if (denied) return denied;
+    const system = await renderPrompt("tools.reply-assistant", { business_context: bits });
 
-  const rl = toolsLimiter.check(`tools:${user.id}`);
-  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
+    const userMsg = `Incoming message:\n"""\n${data.message}\n"""${data.context ? `\nContext from the VA: ${data.context}` : ""}`;
 
-  const ctx = await companyContext(parsed.data.clientId);
-  const bits = [
-    ctx.companyName && `You reply as ${ctx.companyName}.`,
-    ctx.brandVoice && `Brand voice: ${ctx.brandVoice}`,
-    ctx.services && `What the business offers: ${ctx.services}`,
-  ].filter(Boolean).join("\n");
+    const result = await toolJson<{ replies: ReplyOption[] }>(system, userMsg, 1200, TOOL_MODEL_MINI);
+    if (!result.data?.replies?.length) {
+      return NextResponse.json({ error: result.error ?? "Couldn't draft replies. Try again." }, { status: 502 });
+    }
 
-  const system = await renderPrompt("tools.reply-assistant", { business_context: bits });
+    const replies = clampArr(result.data.replies, 3)
+      .filter((r) => r.text?.trim())
+      .map((r) => ({ style: clampStr(r.style, 60), text: clampStr(r.text, 800) }));
 
-  const userMsg = `Incoming message:\n"""\n${parsed.data.message}\n"""${parsed.data.context ? `\nContext from the VA: ${parsed.data.context}` : ""}`;
-
-  const result = await toolJson<{ replies: ReplyOption[] }>(system, userMsg, 1200, TOOL_MODEL_MINI);
-  if (!result.data?.replies?.length) {
-    return NextResponse.json({ error: result.error ?? "Couldn't draft replies. Try again." }, { status: 502 });
-  }
-
-  const replies = result.data.replies
-    .filter((r) => r.text?.trim())
-    .slice(0, 3)
-    .map((r) => ({ style: String(r.style ?? "").slice(0, 60), text: String(r.text).slice(0, 800) }));
-
-  logToolRun("reply-assistant", parsed.data.clientId, user.id, parsed.data.message.slice(0, 80), result.tokens, { replies });
-  return NextResponse.json({ replies });
-});
+    logToolRun("reply-assistant", data.clientId, user.id, data.message.slice(0, 80), result.tokens, { replies });
+    return NextResponse.json({ replies });
+  },
+);
