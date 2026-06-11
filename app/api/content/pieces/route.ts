@@ -17,6 +17,51 @@ const updateSchema = z.object({
   body: z.string().max(50000).optional().nullable(),
 });
 
+const createSchema = z.object({
+  client_id: z.string().uuid(),
+  content_type: z.string().min(1).max(50).optional().default("other"),
+  title: z.string().min(1).max(300),
+  brief: z.string().max(2000).optional().nullable(),
+  body: z.string().max(50000).optional().nullable(),
+});
+
+// POST /api/content/pieces — create a draft piece (e.g. promoted from Compose)
+export async function POST(req: NextRequest) {
+  const result = await requireApiAuth();
+  if ("error" in result) return result.error;
+  const { user } = result;
+
+  let body: unknown;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
+  const parsed = createSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
+
+  const denied = assertClientAccess(user, parsed.data.client_id);
+  if (denied) return denied;
+
+  const admin = createAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (admin as any)
+    .from("content_pieces")
+    .insert({
+      client_id: parsed.data.client_id,
+      content_type: parsed.data.content_type,
+      title: parsed.data.title.trim(),
+      brief: parsed.data.brief ?? null,
+      body: parsed.data.body ?? null,
+      status: "draft",
+      created_by: user.id,
+    })
+    .select("id, content_type, title, status, created_at")
+    .single();
+
+  if (error) {
+    console.error("[content/pieces POST]", error.code, error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json(data, { status: 201 });
+}
+
 // GET /api/content/pieces?client_id=xxx           → list
 // GET /api/content/pieces?client_id=xxx&id=yyy    → single (includes body)
 export async function GET(req: NextRequest) {

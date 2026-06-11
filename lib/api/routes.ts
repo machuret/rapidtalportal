@@ -32,6 +32,7 @@ export const ROUTES = {
     upload: () => "/api/vault/upload",
     delete: () => "/api/vault/delete",
     ask: () => "/api/vault/ask",
+    verify: () => "/api/vault/verify",
     feedback: () => "/api/vault/feedback",
     promoteKb: () => "/api/vault/promote-kb",
     teach: () => "/api/vault/teach",

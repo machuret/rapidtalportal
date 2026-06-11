@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   Wand2, Loader2, Copy, Check, RefreshCw, Reply, Mail, MessageSquare, Megaphone,
-  FileText, Bookmark, Trash2, Sparkles, Users, ChevronDown, X,
+  FileText, Bookmark, Trash2, Sparkles, Users, ChevronDown, X, ShieldCheck, AlertTriangle,
 } from "lucide-react";
 
 export interface ComposeContact { id: string; name: string; company: string | null; email: string | null }
@@ -140,6 +140,11 @@ export function ComposeClient({
   const [saved, setSaved] = useState<SavedDraft[]>([]);
   const storeKey = `compose-drafts:${clientId}`;
 
+  // Fact-safety check (per active variant index → result)
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<{ idx: number; unverified: string[] } | null>(null);
+  const [promoting, setPromoting] = useState(false);
+
   useEffect(() => {
     try { setSaved(JSON.parse(localStorage.getItem(storeKey) ?? "[]")); } catch { /* ignore */ }
   }, [storeKey]);
@@ -259,6 +264,40 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
   function restore(d: SavedDraft) {
     setVariants([{ text: d.text, loading: false, sources: [] }]);
     setActive(0);
+  }
+
+  async function checkDraft() {
+    const cur = variants[active];
+    if (!cur?.text || checking) return;
+    setChecking(true);
+    setCheckResult(null);
+    try {
+      const context = [task, inbound, guidance].filter(Boolean).join("\n");
+      const r = await api.post<{ unverified: string[] }>(ROUTES.vault.verify(),
+        { clientId, text: cur.text, context }, { showErrorToast: false });
+      setCheckResult({ idx: active, unverified: r.unverified });
+    } catch {
+      toast.error("Couldn't run the check.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function promoteToContent() {
+    const cur = variants[active];
+    if (!cur?.text || promoting) return;
+    setPromoting(true);
+    try {
+      const e = channel === "email" ? splitEmail(cur.text) : null;
+      const title = e?.subject ?? cur.text.split("\n").find(Boolean)?.slice(0, 120) ?? "Untitled draft";
+      const content_type = channel === "social" ? "social" : channel === "email" ? "email" : "other";
+      await api.post(ROUTES.content.pieces(), {
+        client_id: clientId, content_type, title, brief: task || guidance || null, body: cur.text,
+      });
+      toast.success("Saved to Content as a draft — review & approve it there.");
+    } catch { /* api-client toasts */ } finally {
+      setPromoting(false);
+    }
   }
 
   function applyTemplate(t: typeof TEMPLATES[number]) {
@@ -453,9 +492,17 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
               <p className="label-section">Draft</p>
               <div className="flex items-center gap-3">
                 {current?.text && !current.loading && (
-                  <button onClick={saveDraft} className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
-                    <Bookmark className="w-3.5 h-3.5" /> Save
-                  </button>
+                  <>
+                    <button onClick={checkDraft} disabled={checking} className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
+                      {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />} Check facts
+                    </button>
+                    <button onClick={promoteToContent} disabled={promoting} className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
+                      {promoting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} Save to Content
+                    </button>
+                    <button onClick={saveDraft} className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
+                      <Bookmark className="w-3.5 h-3.5" /> Save
+                    </button>
+                  </>
                 )}
                 <button onClick={() => copyText("all", email ? `${email.subject ? `Subject: ${email.subject}\n\n` : ""}${email.body}` : current?.text ?? "")}
                   className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
@@ -486,6 +533,26 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
               <p className={cn("text-xs mt-2 text-right", limit && charCount > limit ? "text-red-400" : "text-zinc-500")}>
                 {charCount}{limit ? ` / ${limit}` : ""} characters
               </p>
+            )}
+
+            {/* Fact-safety result */}
+            {checkResult && checkResult.idx === active && (
+              checkResult.unverified.length === 0 ? (
+                <div className="mt-3 flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2 text-xs text-green-300">
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" /> Every figure in this draft was found in your Vault.
+                </div>
+              ) : (
+                <div className="mt-3 rounded-lg bg-amber-500/10 border border-amber-500/25 px-3 py-2">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-amber-300 mb-1">
+                    <AlertTriangle className="w-3.5 h-3.5" /> Verify before sending — these figures aren&apos;t in your Vault:
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {checkResult.unverified.map((f, i) => (
+                      <span key={i} className="text-[11px] font-mono text-amber-200 bg-amber-500/10 rounded px-1.5 py-0.5">{f}</span>
+                    ))}
+                  </div>
+                </div>
+              )
             )}
 
             {/* Refine */}
