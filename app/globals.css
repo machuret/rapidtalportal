@@ -114,6 +114,16 @@
     --z-overlay: 40;
     --z-modal:   50;
     --z-toast:   60;
+
+    /* ── Motion tokens ───────────────────────────────────────────────────── */
+    /* Bridged into tailwind.config.ts as duration-fast/base/slow and         */
+    /* ease-standard. One motion vocabulary so transitions feel consistent.   */
+    --duration-fast: 120ms; /* hovers, taps, small state flips */
+    --duration-base: 200ms; /* default UI transitions          */
+    --duration-slow: 320ms; /* panels, drawers, progress fills */
+    --ease-standard: cubic-bezier(0.4, 0, 0.2, 1); /* enter + exit */
+    --ease-out:      cubic-bezier(0, 0, 0.2, 1);   /* enter        */
+    --ease-in:       cubic-bezier(0.4, 0, 1, 1);   /* exit         */
   }
 
   /* ── Reset ──────────────────────────────────────────────────────────────── */
@@ -166,6 +176,17 @@
 
   /* ── Body copy ───────────────────────────────────────────────────────────── */
   p { line-height: 1.6; }
+
+  /* ── Reduced motion ────────────────────────────────────────────────────────  */
+  /* Respect the OS setting — near-instant transitions, no looping animation.   */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer components {

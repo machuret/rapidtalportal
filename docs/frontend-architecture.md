@@ -31,6 +31,7 @@ Tailwind via **`tailwind.config.ts`**, so `text-sm`, `rounded-lg`, `shadow-md`,
 | Radius | `--radius-sm/md/lg/xl/full` | `rounded-sm/md/lg/xl/full` |
 | Shadows | `--shadow-sm/md/lg` | `shadow-sm/md/lg` |
 | Z-index | `--z-base/raised/overlay/modal/toast` | the `.overlay-backdrop` / `.modal-panel` classes, or `z-[var(--z-*)]` |
+| Motion | `--duration-fast/base/slow`, `--ease-standard/out/in` | `duration-fast/base/slow`, `ease-standard` (reduced-motion honoured globally) |
 
 ## When to use which approach
 

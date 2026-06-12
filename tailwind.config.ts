@@ -140,6 +140,18 @@ const config: Config = {
         raised:  "var(--shadow-md)",
         modal:   "var(--shadow-lg)",
       },
+
+      // ── Motion — token-bridged durations + easing ─────────────────────────
+      // Use duration-fast/base/slow and ease-standard so transitions share one
+      // vocabulary. (Tailwind's built-in ease-in/out are left intact.)
+      transitionDuration: {
+        fast: "var(--duration-fast)",
+        base: "var(--duration-base)",
+        slow: "var(--duration-slow)",
+      },
+      transitionTimingFunction: {
+        standard: "var(--ease-standard)",
+      },
     },
   },
   plugins: [],
