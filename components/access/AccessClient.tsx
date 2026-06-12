@@ -200,6 +200,7 @@ export function AccessClient({ initialItems, clientId, isAdmin, members, encrypt
                           <button
                             onClick={() => void copyValue(`user:${entry.id}`, entry.username)}
                             title="Copy username"
+                            aria-label="Copy username"
                             className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
                           >
                             {copied === `user:${entry.id}` ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -215,6 +216,7 @@ export function AccessClient({ initialItems, clientId, isAdmin, members, encrypt
                         <button
                           onClick={() => void toggleReveal(entry.id)}
                           title={pw ? "Hide password" : "Show password"}
+                          aria-label={pw ? "Hide password" : "Show password"}
                           className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
                         >
                           {revealBusy === entry.id
@@ -224,6 +226,7 @@ export function AccessClient({ initialItems, clientId, isAdmin, members, encrypt
                         <button
                           onClick={() => void copyPassword(entry.id)}
                           title="Copy password"
+                          aria-label="Copy password"
                           className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
                         >
                           {copied === `pw:${entry.id}` ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -235,6 +238,7 @@ export function AccessClient({ initialItems, clientId, isAdmin, members, encrypt
                           <button
                             onClick={() => setAuditing(entry)}
                             title="Who viewed this password"
+                            aria-label="Who viewed this password"
                             className="p-1.5 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
                           >
                             <History className="w-3.5 h-3.5" />
@@ -242,6 +246,7 @@ export function AccessClient({ initialItems, clientId, isAdmin, members, encrypt
                           <button
                             onClick={() => setEditing(entry)}
                             title="Edit"
+                            aria-label="Edit login"
                             className="p-1.5 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
                           >
                             <Pencil className="w-3.5 h-3.5" />

@@ -66,7 +66,7 @@ export function HashtagsTool({ clientId, initial }: { clientId: string; initial?
               <p className="label-section mb-2">{label} <span className="text-zinc-600">· {result[key].length}</span></p>
               <div className="flex flex-wrap gap-1.5">
                 {result[key].map((t, i) => (
-                  <button key={i} onClick={() => copyTag(t)} title="Copy"
+                  <button key={i} onClick={() => copyTag(t)} title="Copy" aria-label={`Copy ${t}`}
                     className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors">
                     {copiedTag === t && <Check className="w-3 h-3 text-green-400" />}{t}
                   </button>

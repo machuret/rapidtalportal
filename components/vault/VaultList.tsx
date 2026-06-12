@@ -194,6 +194,8 @@ export function VaultList({ items: initialItems, canDelete }: VaultListProps) {
                       onClick={() => setExpanded(isExpanded ? null : item.id)}
                       className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
                       title={isExpanded ? "Collapse" : "Preview"}
+                      aria-label={isExpanded ? "Collapse" : "Preview"}
+                      aria-expanded={isExpanded}
                     >
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
@@ -206,6 +208,7 @@ export function VaultList({ items: initialItems, canDelete }: VaultListProps) {
                       disabled={deleting === item.id}
                       className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-600 hover:text-red-400 transition-colors disabled:opacity-40"
                       title="Delete"
+                      aria-label="Delete item"
                     >
                       {deleting === item.id
                         ? <RefreshCw className="w-4 h-4 animate-spin" />

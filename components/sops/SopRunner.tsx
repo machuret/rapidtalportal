@@ -126,7 +126,7 @@ export function SopRunner({ sopId, title, body, clientId, structured, intro, pre
           return (
             <div key={i} className={cn("rounded-xl border bg-zinc-900 p-4 transition-colors", isDone ? "border-green-500/30 bg-green-500/5" : "border-zinc-800")}>
               <div className="flex items-start gap-3">
-                <button onClick={() => toggle(i)} className="shrink-0 mt-0.5" title={isDone ? "Mark not done" : "Mark done"}>
+                <button onClick={() => toggle(i)} className="shrink-0 mt-0.5" title={isDone ? "Mark not done" : "Mark done"} aria-label={isDone ? `Mark step ${i + 1} not done` : `Mark step ${i + 1} done`} aria-pressed={isDone}>
                   {isDone ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : <Circle className="w-5 h-5 text-zinc-600 hover:text-zinc-400" />}
                 </button>
                 <div className="min-w-0 flex-1">

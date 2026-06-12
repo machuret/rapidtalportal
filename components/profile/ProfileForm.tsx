@@ -124,6 +124,7 @@ export function ProfileForm({ user }: Props) {
             onClick={() => fileRef.current?.click()}
             className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-zinc-600 border border-zinc-500 flex items-center justify-center hover:bg-zinc-500 transition-colors"
             title="Change photo"
+            aria-label="Change profile photo"
           >
             {uploadingPhoto
               ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />

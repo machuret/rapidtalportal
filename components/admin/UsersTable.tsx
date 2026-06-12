@@ -419,6 +419,7 @@ export function UsersTable({
                             onClick={saveEdit}
                             disabled={saving}
                             title="Save changes"
+                            aria-label="Save changes"
                             className="p-1.5 rounded-lg text-green-400 hover:bg-green-500/10 transition-colors disabled:opacity-40"
                           >
                             {saving ? (
@@ -430,6 +431,7 @@ export function UsersTable({
                           <button
                             onClick={cancelEdit}
                             title="Cancel"
+                            aria-label="Cancel editing"
                             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
                           >
                             <X className="w-3.5 h-3.5" />
@@ -442,6 +444,7 @@ export function UsersTable({
                               onClick={() => handleImpersonate(u)}
                               disabled={impersonatingId === u.id}
                               title="Log in as this user"
+                              aria-label={`Log in as ${u.full_name ?? u.email}`}
                               className="p-1.5 rounded-lg text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors disabled:opacity-40"
                             >
                               {impersonatingId === u.id ? (
@@ -455,6 +458,7 @@ export function UsersTable({
                             onClick={() => copyLoginLink(u)}
                             disabled={linkBusy === u.id}
                             title="Copy one-time login link (for onboarding — signs them straight in)"
+                            aria-label="Copy one-time login link"
                             className="p-1.5 rounded-lg text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-40"
                           >
                             {linkBusy === u.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
@@ -464,6 +468,7 @@ export function UsersTable({
                               onClick={() => toggleSuspend(u)}
                               disabled={suspendBusy === u.id}
                               title={suspended[u.id] ? "Reinstate user" : "Suspend user (keeps data, blocks sign-in)"}
+                              aria-label={suspended[u.id] ? "Reinstate user" : "Suspend user"}
                               className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${
                                 suspended[u.id]
                                   ? "text-red-400 bg-red-500/10 hover:bg-red-500/20"
@@ -476,6 +481,7 @@ export function UsersTable({
                           <button
                             onClick={() => startEdit(u)}
                             title="Edit user"
+                            aria-label="Edit user"
                             className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-700 transition-colors"
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -483,6 +489,7 @@ export function UsersTable({
                           <button
                             onClick={() => handleDelete(u.id)}
                             title="Delete user"
+                            aria-label="Delete user"
                             className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />

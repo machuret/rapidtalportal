@@ -99,28 +99,28 @@ export function VaultItemRow({
         </span>
 
         {canWrite && (item.status === "error" || item.status === "ready") && (
-          <button onClick={onReprocess} disabled={reprocessing} title="Re-run AI processing"
+          <button onClick={onReprocess} disabled={reprocessing} title="Re-run AI processing" aria-label="Re-run AI processing"
             className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-blue-400 transition-colors disabled:opacity-40">
             {reprocessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
           </button>
         )}
 
         {(canWrite || item.created_by === userId) && (
-          <button onClick={onEdit} title="Edit item"
+          <button onClick={onEdit} title="Edit item" aria-label="Edit item"
             className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
             <Pencil className="w-3.5 h-3.5" />
           </button>
         )}
 
         {(item.raw_content || item.source_url || item.ai_summary) && (
-          <button onClick={onToggleExpand}
+          <button onClick={onToggleExpand} aria-label={isExpanded ? "Collapse" : "Expand"} aria-expanded={isExpanded}
             className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
         )}
 
         {canWrite && (
-          <button onClick={onDelete} title="Delete"
+          <button onClick={onDelete} title="Delete" aria-label="Delete item"
             className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-600 hover:text-red-400 transition-colors">
             <Trash2 className="w-3.5 h-3.5" />
           </button>

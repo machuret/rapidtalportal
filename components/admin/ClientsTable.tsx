@@ -158,6 +158,7 @@ export function ClientsTable({ clients: initial, userCounts }: ClientsTableProps
                       <a href={`/admin/clients/${c.id}`} className="text-xs text-zinc-400 hover:text-white underline">Manage</a>
                       <button onClick={() => toggleArchive(c)} disabled={busy === c.id}
                         title={c.archived_at ? "Restore client" : "Archive client"}
+                        aria-label={c.archived_at ? `Restore ${c.name}` : `Archive ${c.name}`}
                         className="text-zinc-500 hover:text-amber-400 transition-colors disabled:opacity-50">
                         {c.archived_at ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
                       </button>

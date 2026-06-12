@@ -513,6 +513,7 @@ export function ClientDetail({
                         <button
                           onClick={() => handleRemoveFromClient(u.id)}
                           title="Remove from client"
+                          aria-label="Remove from client"
                           className="p-1.5 rounded-lg text-zinc-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
                         >
                           <ArrowLeftRight className="w-3.5 h-3.5" />
@@ -520,6 +521,7 @@ export function ClientDetail({
                         <button
                           onClick={() => handleDeleteUser(u.id)}
                           title="Delete user permanently"
+                          aria-label="Delete user permanently"
                           className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

@@ -103,19 +103,19 @@ export function GoldenQuestions({ clientId, onAsk }: { clientId: string; onAsk: 
                       </div>
                       <p className="text-sm text-zinc-300 flex-1 min-w-0 truncate" title={q.question}>{q.question}</p>
                       <div className="flex items-center gap-0.5 shrink-0">
-                        <button onClick={() => onAsk(q.question)} title="Ask now"
+                        <button onClick={() => onAsk(q.question)} title="Ask now" aria-label="Ask now"
                           className="p-1.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
                           <Play className="w-3.5 h-3.5" />
                         </button>
-                        <button onClick={() => void record(q.id, "pass")} disabled={busy === q.id} title="Record pass"
+                        <button onClick={() => void record(q.id, "pass")} disabled={busy === q.id} title="Record pass" aria-label="Record pass"
                           className="p-1.5 rounded text-zinc-500 hover:text-green-400 hover:bg-zinc-800 transition-colors">
                           <Check className="w-3.5 h-3.5" />
                         </button>
-                        <button onClick={() => void record(q.id, "fail")} disabled={busy === q.id} title="Record fail"
+                        <button onClick={() => void record(q.id, "fail")} disabled={busy === q.id} title="Record fail" aria-label="Record fail"
                           className="p-1.5 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors">
                           <X className="w-3.5 h-3.5" />
                         </button>
-                        <button onClick={() => void remove(q.id)} disabled={busy === q.id} title="Delete"
+                        <button onClick={() => void remove(q.id)} disabled={busy === q.id} title="Delete" aria-label="Delete question"
                           className="p-1.5 rounded text-zinc-600 hover:text-red-400 hover:bg-zinc-800 transition-colors">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
