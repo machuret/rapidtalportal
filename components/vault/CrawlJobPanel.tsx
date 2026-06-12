@@ -7,6 +7,7 @@ import { ROUTES } from "@/lib/api/routes";
 import { vaultListKeys } from "@/hooks/useVaultList";
 import { cn } from "@/lib/utils";
 import { Globe, Loader2, CheckCircle2, AlertTriangle, X, Sparkles } from "lucide-react";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 export interface CrawlJob {
   id: string;
@@ -116,9 +117,7 @@ export function CrawlJobPanel({ clientId, startedJob }: { clientId: string; star
       </div>
 
       {job.status === "crawling" && (
-        <div className="mt-3 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-          <div className="h-full bg-blue-500 transition-all duration-700" style={{ width: `${Math.max(pct, 4)}%` }} />
-        </div>
+        <ProgressBar value={pct} min={4} trackClassName="mt-3 h-1.5 w-full" barClassName="bg-blue-500 duration-700" />
       )}
 
       {isActive && (

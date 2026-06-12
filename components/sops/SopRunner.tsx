@@ -6,6 +6,7 @@ import { ROUTES } from "@/lib/api/routes";
 import { parseSopSteps, type SopStep } from "@/lib/sop-steps";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, Circle, RotateCcw, Sparkles, Loader2, PartyPopper, Lightbulb, ClipboardList } from "lucide-react";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 interface AskResponse { answer: string }
 
@@ -93,9 +94,7 @@ export function SopRunner({ sopId, title, body, clientId, structured, intro, pre
           <span className="text-sm text-zinc-400 shrink-0 ml-3">{completed}/{steps.length} done</span>
         </div>
         {intro && <p className="text-sm text-zinc-400 leading-relaxed mb-3">{intro}</p>}
-        <div className="h-2.5 w-full rounded-full bg-zinc-800 overflow-hidden">
-          <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-green-500 transition-all" style={{ width: `${pct}%` }} />
-        </div>
+        <ProgressBar value={pct} trackClassName="h-2.5 w-full" barClassName="bg-gradient-to-r from-blue-500 to-green-500" />
         {allDone && (
           <div className="mt-3 flex items-center gap-2 text-sm text-green-400">
             <PartyPopper className="w-4 h-4" /> All steps complete — nice work.

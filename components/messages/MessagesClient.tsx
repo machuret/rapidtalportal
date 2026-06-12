@@ -231,8 +231,7 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
             onKeyDown={handleKeyDown}
             placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
             rows={1}
-            className="flex-1 bg-transparent text-sm text-zinc-100 placeholder-zinc-500 resize-none outline-none leading-relaxed max-h-32 overflow-y-auto"
-            style={{ minHeight: "1.5rem" }}
+            className="flex-1 bg-transparent text-sm text-zinc-100 placeholder-zinc-500 resize-none outline-none leading-relaxed min-h-6 max-h-32 overflow-y-auto"
             disabled={sending}
           />
           <Button

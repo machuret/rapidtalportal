@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FetchUrl } from "./FetchUrl";
 import { useToolRun, ToolHeader, LoadingRow, CharCount, CopyButton, DownloadButton } from "./shared";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { ClipboardCheck, Loader2, Sparkles, AlertTriangle, Link2, Zap } from "lucide-react";
 
 interface Out {
@@ -105,9 +106,7 @@ export function ContentAuditorTool({ clientId, initial }: { clientId: string; in
                       <span className="text-xs text-zinc-400">{label}</span>
                       <span className={cn("text-xs font-semibold tabular", scoreColor(v))}>{v}</span>
                     </div>
-                    <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                      <div className={cn("h-full rounded-full transition-all", barColor(v))} style={{ width: `${v}%` }} />
-                    </div>
+                    <ProgressBar value={v} trackClassName="h-1.5 w-full" barClassName={barColor(v)} />
                   </div>
                 );
               })}

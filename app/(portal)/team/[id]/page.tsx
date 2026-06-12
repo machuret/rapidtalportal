@@ -7,6 +7,7 @@ import Image from "next/image";
 import { ArrowLeft, Mail, Phone, CalendarDays, UserCircle, NotebookPen, TrendingUp, Clock, DollarSign, CreditCard, MessageCircle, MapPin, Globe, Wrench } from "lucide-react";
 import { VaProfileEditor } from "@/components/team/VaProfileEditor";
 import { VaContractEditor, type ContractInit } from "@/components/team/VaContractEditor";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 function fmtMs(ms: number) {
   const h = Math.floor(ms / 3600000);
@@ -294,9 +295,7 @@ export default async function VaDetailPage({ params }: { params: { id: string } 
               return (
                 <div key={mood} className="flex items-center gap-3">
                   <span className="w-20 text-xs text-zinc-400 shrink-0">{meta.emoji} {meta.label}</span>
-                  <div className="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${meta.bar}`} style={{ width: `${pct}%` }} />
-                  </div>
+                  <ProgressBar value={pct} trackClassName="flex-1 h-2" barClassName={meta.bar} />
                   <span className="text-xs text-zinc-500 w-14 text-right shrink-0">{count} ({pct}%)</span>
                 </div>
               );

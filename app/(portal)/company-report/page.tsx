@@ -10,6 +10,7 @@ import {
   VAULT_CATEGORIES, VAULT_CATEGORY_ORDER, isVaultCategory,
 } from "@/lib/taxonomy/vault-categories";
 import { KnowledgeGaps } from "@/components/vault/KnowledgeGaps";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { HealthGroupActions } from "@/components/vault/VaultHealthActions";
 
@@ -174,12 +175,7 @@ export default async function CompanyReportPage() {
           <h2 className="text-lg font-semibold text-white">Knowledge coverage</h2>
           <span className="text-sm text-zinc-400">{covered} of {areas.length} areas</span>
         </div>
-        <div className="h-2.5 w-full rounded-full bg-zinc-800 overflow-hidden mb-5">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
+        <ProgressBar value={pct} trackClassName="h-2.5 w-full mb-5" barClassName="bg-gradient-to-r from-blue-500 to-purple-500" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2.5">
           {areas.map((a) => (
             <div key={a.label} className="flex items-start gap-2.5">
