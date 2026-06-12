@@ -34,17 +34,18 @@ Accuracy:
 - If the answer isn't in the context, say so plainly and suggest what document would help.
 - Prefer specifics (names, prices, durations, steps) when they're in the context.`;
 
-const DEEP_PROMPT = `You are the company's friendly in-house expert. Answer the virtual assistant's question THOROUGHLY using ONLY the company knowledge in the context below.
+const DEEP_PROMPT = `You are the company's most knowledgeable in-house expert. The user asked to "go deeper", so give a genuinely THOROUGH answer that teaches them everything the documents actually say — not a summary, and never just a restated list.
 
 How to write:
-- Natural and conversational, like a knowledgeable colleague taking the time to explain it properly.
-- Give the full picture: relevant details, options, steps, prices/durations, and any useful URLs written inline as plain text.
-- Plain text only. NO markdown: no **bold**, no headings, no markdown links. Short plain lists are fine when you're listing several things.
-- Do NOT put citation markers like [1] in your answer. Sources are shown separately.
+- Natural and conversational, like a senior colleague taking the time to explain it properly and completely.
+- Structure a long answer: a short opening sentence, then cover each relevant point as its own short paragraph led by a plain-text label on its own line (e.g. "Refinance and rate review") followed by 2-4 explaining sentences. NO markdown symbols at all — no #, no **, no bullet characters.
+- For every point, pull the SPECIFICS out of the context: who it's for, how it actually works, the steps involved, conditions, eligibility, numbers, timeframes, names, and any useful URLs (written inline as plain text). Explain each item — do not merely name it.
+- Synthesise across multiple documents into one coherent answer.
 
-Accuracy:
-- Use ONLY the provided context. Never invent facts.
-- If something isn't covered, say so plainly and suggest what document would fill the gap.`;
+Depth & honesty:
+- Use ONLY the provided context, but use ALL of it that's relevant — the context contains full documents, so there is real detail to draw on.
+- A deep answer must be noticeably richer and longer than a quick one. If you catch yourself about to just list items with no explanation, stop and dig the detail behind each one out of the context.
+- If part of the question genuinely isn't covered, say so plainly and name the document that would fill the gap. Never invent facts.`;
 
 const SOURCE_LABEL: Record<string, string> = {
   dna: "Company DNA",
@@ -152,6 +153,12 @@ Deno.serve(async (req: Request) => {
     const question: string = (body.question ?? "").toString().trim();
     const deep = body.mode === "deep";
     const matchCount: number = deep ? 12 : 8;
+    // Deep mode is document-centric: it feeds the model whole documents (capped),
+    // more of them, and a bigger output budget — so the stronger model has real
+    // material to synthesise instead of rephrasing the same short snippet.
+    const ftsDocLimit = deep ? 6 : 5;
+    const ftsChunkLimit = deep ? 8 : 3;
+    const rawDocChars = deep ? 8000 : 3000;
 
     // Conversation memory: recent turns make follow-ups ("what about pricing?")
     // work. We use the last couple of questions to broaden retrieval, and replay
@@ -215,7 +222,7 @@ Deno.serve(async (req: Request) => {
         .eq("client_id", clientId)
         .eq("status", "ready")
         .textSearch("fts", ftsQuery, { type: "websearch", config: "english" })
-        .limit(8),
+        .limit(deep ? 10 : 8),
     ]);
 
     const blocks: Block[] = [];
@@ -240,14 +247,21 @@ Deno.serve(async (req: Request) => {
     const matches = (vaultRes.error ? [] : (vaultRes.data ?? [])) as Match[];
     if (matches.length) {
       const itemIds = [...new Set(matches.map((c) => c.item_id))];
-      const { data: itemRows } = await admin.from("vault_items").select("id, title").in("id", itemIds);
-      const titleById = new Map<string, string>();
-      for (const r of (itemRows ?? []) as { id: string; title: string }[]) titleById.set(r.id, r.title);
+      // Deep mode also pulls raw_content so it can expand on the matched snippets.
+      const { data: itemRows } = await admin
+        .from("vault_items").select(deep ? "id, title, raw_content" : "id, title").in("id", itemIds);
+      const rowById = new Map<string, { title: string; raw_content?: string | null }>();
+      for (const r of (itemRows ?? []) as { id: string; title: string; raw_content?: string | null }[]) rowById.set(r.id, r);
       const orderedIds: string[] = [];
       for (const c of matches) if (!orderedIds.includes(c.item_id)) orderedIds.push(c.item_id);
       for (const id of orderedIds) {
-        const text = matches.filter((c) => c.item_id === id).map((c) => c.content.trim()).join("\n…\n");
-        blocks.push({ kind: "vault", title: titleById.get(id) ?? "Untitled", text, itemId: id });
+        const row = rowById.get(id);
+        // Concise: just the matched chunks. Deep: the whole document (capped),
+        // so the answer can go beyond the few sentences that happened to match.
+        const text = deep && row?.raw_content
+          ? row.raw_content.slice(0, rawDocChars).trim()
+          : matches.filter((c) => c.item_id === id).map((c) => c.content.trim()).join("\n…\n");
+        blocks.push({ kind: "vault", title: row?.title ?? "Untitled", text, itemId: id });
       }
     }
 
@@ -257,21 +271,26 @@ Deno.serve(async (req: Request) => {
       const vectorItemIds = new Set(matches.map((c) => c.item_id));
       const ftsItems = ((ftsRes.data ?? []) as { id: string; title: string; ai_summary: string | null; raw_content: string | null }[])
         .filter((it) => !vectorItemIds.has(it.id))
-        .slice(0, 5);
+        .slice(0, ftsDocLimit);
       for (const it of ftsItems) {
         try {
-          const { data: cks } = await admin
-            .from("vault_chunks")
-            .select("content")
-            .eq("item_id", it.id)
-            .order("chunk_index", { ascending: true })
-            .limit(3);
-          let text = ((cks ?? []) as { content: string }[]).map((c) => c.content.trim()).join("\n…\n");
-          // Resilience: a keyword-matched doc that was never embedded has no
-          // chunks. Fall back to its raw content (then summary) so the document
-          // still reaches the model instead of contributing nothing — this is
-          // what was making Ask say "not in the context" for docs that exist.
-          if (!text) text = (it.raw_content ?? it.ai_summary ?? "").slice(0, 3000).trim();
+          // Deep: the whole document (capped). Concise: leading chunks, falling
+          // back to raw content if the doc was never embedded — so a keyword-
+          // matched document always reaches the model instead of contributing
+          // nothing (what made Ask say "not in the context" for docs that exist).
+          let text = "";
+          if (deep && it.raw_content) {
+            text = it.raw_content.slice(0, rawDocChars).trim();
+          } else {
+            const { data: cks } = await admin
+              .from("vault_chunks")
+              .select("content")
+              .eq("item_id", it.id)
+              .order("chunk_index", { ascending: true })
+              .limit(ftsChunkLimit);
+            text = ((cks ?? []) as { content: string }[]).map((c) => c.content.trim()).join("\n…\n");
+            if (!text) text = (it.raw_content ?? it.ai_summary ?? "").slice(0, rawDocChars).trim();
+          }
           if (text) blocks.push({ kind: "vault", title: it.title, text, itemId: it.id });
         } catch (_e) { /* best-effort */ }
       }
@@ -330,7 +349,7 @@ Deno.serve(async (req: Request) => {
         // on the fast/cheap model (it answers most questions well once the
         // retrieval above hands it the right context).
         model: deep ? "openai/gpt-4o" : "openai/gpt-4o-mini",
-        max_tokens: deep ? 1100 : 550,
+        max_tokens: deep ? 1800 : 550,
         temperature: 0.4,
         stream,
         messages: [
