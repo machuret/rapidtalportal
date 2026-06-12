@@ -22,6 +22,7 @@ const createSchema = z.object({
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   status: z.enum(STATUSES).optional().default("todo"),
   priority: z.number().int().min(1).max(4).optional().default(2),
+  categoryId: z.string().uuid().nullable().optional(),
 });
 
 const patchSchema = z.object({
@@ -33,11 +34,18 @@ const patchSchema = z.object({
   status: z.enum(STATUSES).optional(),
   orderIndex: z.number().int().min(0).max(100000).optional(),
   priority: z.number().int().min(1).max(4).optional(),
+  categoryId: z.string().uuid().nullable().optional(),
 });
+
+/** A category may only be attached if it belongs to the same client. */
+async function categoryOk(admin: ReturnType<typeof createAdminClient>, categoryId: string, clientId: string): Promise<boolean> {
+  const { data } = await admin.from("task_categories").select("id").eq("id", categoryId).eq("client_id", clientId).maybeSingle();
+  return !!data;
+}
 
 const deleteSchema = z.object({ id: z.string().uuid() });
 
-const SELECT = "id, client_id, assigned_to, created_by, title, description, status, order_index, due_date, priority, completed_at, created_at, updated_at";
+const SELECT = "id, client_id, assigned_to, created_by, title, description, status, order_index, due_date, priority, completed_at, category_id, created_at, updated_at";
 
 const isAdmin = (role: string) => role === "client_admin" || role === "super_admin";
 
@@ -67,6 +75,9 @@ export const POST = withAuth(async (req, { user }) => {
   const assignedTo = isAdmin(user.role) ? (parsed.data.assignedTo ?? null) : user.id;
 
   const admin = createAdminClient();
+  if (parsed.data.categoryId && !(await categoryOk(admin, parsed.data.categoryId, parsed.data.clientId))) {
+    return NextResponse.json({ error: "Unknown category." }, { status: 422 });
+  }
   const { data, error } = await admin
     .from("tasks")
     .insert({
@@ -78,6 +89,7 @@ export const POST = withAuth(async (req, { user }) => {
       status: parsed.data.status,
       due_date: parsed.data.dueDate ?? null,
       priority: parsed.data.priority,
+      category_id: parsed.data.categoryId ?? null,
       // A card created straight into "done" still counts as achieved.
       completed_at: parsed.data.status === "done" ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
@@ -135,6 +147,12 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (parsed.data.assignedTo !== undefined) updates.assigned_to = parsed.data.assignedTo;
   if (parsed.data.dueDate !== undefined) updates.due_date = parsed.data.dueDate;
   if (parsed.data.priority !== undefined) updates.priority = parsed.data.priority;
+  if (parsed.data.categoryId !== undefined) {
+    if (parsed.data.categoryId && !(await categoryOk(admin, parsed.data.categoryId, task.client_id))) {
+      return NextResponse.json({ error: "Unknown category." }, { status: 422 });
+    }
+    updates.category_id = parsed.data.categoryId;
+  }
   if (parsed.data.status !== undefined) {
     updates.status = parsed.data.status;
     // Stamp the completion time entering "done"; clear it when leaving.

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { TaskBoard, type Task, type BoardMember } from "@/components/tasks/TaskBoard";
+import { TaskBoard, type Task, type BoardMember, type TaskCategory } from "@/components/tasks/TaskBoard";
 import { AchievedStrip } from "@/components/tasks/AchievedStrip";
 import { computeAchieved } from "@/lib/tasks/achieved";
 import { PageIntro } from "@/components/layout/PageIntro";
@@ -17,11 +17,13 @@ export default async function TasksPage() {
   if (!user.client_id) redirect("/dashboard");
 
   const admin = createAdminClient();
-  const [{ data: tasks }, { data: people }, { data: commentRows }] = await Promise.all([
+  const [{ data: tasks }, { data: people }, { data: commentRows }, { data: cats }] = await Promise.all([
     admin.from("tasks").select("*").eq("client_id", user.client_id)
       .order("status").order("order_index").order("created_at"),
     admin.from("users").select("id, full_name, email, role").eq("client_id", user.client_id),
     admin.from("task_events").select("task_id").eq("client_id", user.client_id).eq("kind", "comment"),
+    admin.from("task_categories").select("id, name, color").eq("client_id", user.client_id)
+      .order("order_index").order("name"),
   ]);
 
   const commentCounts: Record<string, number> = {};
@@ -65,6 +67,7 @@ export default async function TasksPage() {
         userId={user.id}
         isAdmin={isAdmin}
         members={members}
+        categories={(cats ?? []) as TaskCategory[]}
         commentCounts={commentCounts}
       />
     </div>

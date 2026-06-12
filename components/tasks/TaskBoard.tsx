@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { categoryColor } from "@/lib/tasks/category-colors";
+import { CategoryManager, type TaskCategory } from "./CategoryManager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, CalendarDays, Loader2, Trash2, Save, MessageSquare } from "lucide-react";
+import { Plus, CalendarDays, Loader2, Trash2, Save, MessageSquare, Settings2 } from "lucide-react";
 import { TaskActivity } from "./TaskActivity";
 
 export type TaskStatus = "todo" | "in_progress" | "review" | "done";
@@ -30,11 +33,15 @@ export interface Task {
   due_date: string | null;
   priority: number;
   completed_at: string | null;
+  category_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface BoardMember { id: string; name: string }
+export type { TaskCategory };
+
+const UNCATEGORIZED = "__none__";
 
 const COLUMNS: { key: TaskStatus; label: string; accent: string }[] = [
   { key: "todo",        label: "To Do",       accent: "border-t-zinc-500" },
@@ -57,14 +64,18 @@ interface TaskBoardProps {
   userId: string;
   isAdmin: boolean; // client_admin or super_admin
   members: BoardMember[]; // assignable people (VAs + admins of the client)
+  categories?: TaskCategory[];
   commentCounts?: Record<string, number>;
 }
 
-export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, commentCounts }: TaskBoardProps) {
+export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, categories = [], commentCounts }: TaskBoardProps) {
+  const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [counts, setCounts] = useState<Record<string, number>>(commentCounts ?? {});
   const [editing, setEditing] = useState<Task | null>(null);
   const [creatingIn, setCreatingIn] = useState<TaskStatus | null>(null);
+  const [filterCat, setFilterCat] = useState<string | null>(null);
+  const [managingCats, setManagingCats] = useState(false);
   const [live, setLive] = useState(false);
   const dragId = useRef<string | null>(null);
   const supabaseRef = useRef(createClient());
@@ -106,10 +117,15 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, co
   }, [clientId]);
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.name ?? null;
+  const categoryById = (id: string | null) => (id ? categories.find((c) => c.id === id) ?? null : null);
   const canMove = (t: Task) => isAdmin || t.assigned_to === userId || t.created_by === userId;
 
+  const matchesFilter = (t: Task) =>
+    filterCat === null ? true : filterCat === UNCATEGORIZED ? !t.category_id : t.category_id === filterCat;
+
   const byCol = (col: TaskStatus) =>
-    tasks.filter((t) => t.status === col).sort((a, b) => a.order_index - b.order_index || a.created_at.localeCompare(b.created_at));
+    tasks.filter((t) => t.status === col && matchesFilter(t))
+      .sort((a, b) => a.order_index - b.order_index || a.created_at.localeCompare(b.created_at));
 
   async function moveTo(taskId: string, status: TaskStatus) {
     const t = tasks.find((x) => x.id === taskId);
@@ -126,17 +142,54 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, co
     }
   }
 
+  const pill = (active: boolean) => cn(
+    "inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 transition-colors border",
+    active ? "bg-zinc-100 text-zinc-900 border-zinc-100" : "text-zinc-400 bg-zinc-900 border-zinc-700 hover:text-white hover:border-zinc-500",
+  );
+
   return (
     <>
-      <div className="flex items-center justify-end mb-3 -mt-2">
+      <div className="flex items-start justify-between gap-3 mb-3 -mt-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {(categories.length > 0 || isAdmin) && (
+            <>
+              <button onClick={() => setFilterCat(null)} className={pill(filterCat === null)}>All</button>
+              {categories.map((c) => (
+                <button key={c.id} onClick={() => setFilterCat(c.id)} className={pill(filterCat === c.id)}>
+                  <span className={cn("w-2 h-2 rounded-full", categoryColor(c.color).swatch)} />
+                  {c.name}
+                </button>
+              ))}
+              {categories.length > 0 && (
+                <button onClick={() => setFilterCat(UNCATEGORIZED)} className={pill(filterCat === UNCATEGORIZED)}>None</button>
+              )}
+              {isAdmin && (
+                <button onClick={() => setManagingCats(true)}
+                  className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-white transition-colors px-2 py-1">
+                  <Settings2 className="w-3.5 h-3.5" /> Manage
+                </button>
+              )}
+            </>
+          )}
+        </div>
         <span className={cn(
-          "inline-flex items-center gap-1.5 text-[11px] font-medium rounded-full px-2.5 py-1 transition-colors",
+          "inline-flex items-center gap-1.5 text-[11px] font-medium rounded-full px-2.5 py-1 transition-colors shrink-0",
           live ? "text-green-400 bg-green-500/10" : "text-zinc-500 bg-zinc-800",
         )}>
           <span className={cn("w-1.5 h-1.5 rounded-full", live ? "bg-green-400 animate-pulse" : "bg-zinc-500")} />
           {live ? "Live" : "Connecting…"}
         </span>
       </div>
+
+      {isAdmin && (
+        <CategoryManager
+          clientId={clientId}
+          categories={categories}
+          open={managingCats}
+          onClose={() => setManagingCats(false)}
+          onChanged={() => router.refresh()}
+        />
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
         {COLUMNS.map((col) => {
           const items = byCol(col.key);
@@ -167,6 +220,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, co
                 {items.map((t) => {
                   const name = memberName(t.assigned_to);
                   const overdue = t.due_date && t.status !== "done" && new Date(t.due_date) < new Date(new Date().toDateString());
+                  const cat = categoryById(t.category_id);
                   return (
                     <div
                       key={t.id}
@@ -186,8 +240,14 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, co
                       {t.description.trim() && (
                         <p className="text-xs text-zinc-500 mt-1 line-clamp-2 whitespace-pre-wrap">{t.description}</p>
                       )}
-                      {(name || t.due_date || (counts[t.id] ?? 0) > 0 || t.priority > 2) && (
+                      {(name || t.due_date || (counts[t.id] ?? 0) > 0 || t.priority > 2 || cat) && (
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          {cat && (
+                            <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5", categoryColor(cat.color).chip)}>
+                              <span className={cn("w-1.5 h-1.5 rounded-full", categoryColor(cat.color).dot)} />
+                              {cat.name}
+                            </span>
+                          )}
                           {t.priority > 2 && t.status !== "done" && (
                             <span className={cn("inline-flex items-center text-[11px] font-medium rounded-full px-2 py-0.5", PRIORITY[t.priority].chip)}>
                               {PRIORITY[t.priority].label}
@@ -235,6 +295,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, co
           clientId={clientId}
           isAdmin={isAdmin}
           members={members}
+          categories={categories}
           onClose={() => setCreatingIn(null)}
           onSaved={(t) => { setTasks((p) => [...p, t]); setCreatingIn(null); }}
         />
@@ -248,6 +309,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, co
           isAdmin={isAdmin}
           canWrite={canMove(editing)}
           members={members}
+          categories={categories}
           onClose={() => setEditing(null)}
           onSaved={(t) => { setTasks((p) => p.map((x) => (x.id === t.id ? t : x))); setEditing(null); }}
           onDeleted={(id) => { setTasks((p) => p.filter((x) => x.id !== id)); setEditing(null); }}
@@ -259,7 +321,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, co
 }
 
 function TaskDialog({
-  mode, task, status, clientId, isAdmin, canWrite = true, members, onClose, onSaved, onDeleted, onCommented,
+  mode, task, status, clientId, isAdmin, canWrite = true, members, categories, onClose, onSaved, onDeleted, onCommented,
 }: {
   mode: "create" | "edit";
   task?: Task;
@@ -268,6 +330,7 @@ function TaskDialog({
   isAdmin: boolean;
   canWrite?: boolean;
   members: BoardMember[];
+  categories: TaskCategory[];
   onClose: () => void;
   onSaved: (t: Task) => void;
   onDeleted?: (id: string) => void;
@@ -278,6 +341,7 @@ function TaskDialog({
   const [assignedTo, setAssignedTo] = useState(task?.assigned_to ?? "");
   const [dueDate, setDueDate] = useState(task?.due_date ?? "");
   const [priority, setPriority] = useState(task?.priority ?? 2);
+  const [categoryId, setCategoryId] = useState(task?.category_id ?? "");
   const [busy, setBusy] = useState(false);
 
   async function save() {
@@ -291,6 +355,7 @@ function TaskDialog({
           description,
           status,
           priority,
+          categoryId: categoryId || null,
           ...(isAdmin ? { assignedTo: assignedTo || null } : {}),
           dueDate: dueDate || null,
         });
@@ -302,6 +367,7 @@ function TaskDialog({
           title: title.trim(),
           description,
           priority,
+          categoryId: categoryId || null,
           ...(isAdmin ? { assignedTo: assignedTo || null } : {}),
           dueDate: dueDate || null,
         });
@@ -369,6 +435,16 @@ function TaskDialog({
                 <option value={4}>Urgent</option>
               </select>
             </div>
+            {categories.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Category</Label>
+                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} disabled={!canWrite}
+                  className="bg-zinc-800 border border-zinc-700 rounded-md px-3 h-9 text-sm text-zinc-300">
+                  <option value="">None</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            )}
           </div>
           {/* Comments + activity trail (existing cards only) */}
           {mode === "edit" && task && (
