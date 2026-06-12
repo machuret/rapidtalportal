@@ -36,6 +36,7 @@ import {
   Briefcase,
   AlertTriangle,
   Activity,
+  FileBarChart,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -81,6 +82,7 @@ const clientAdminLinks: NavItem[] = [
   { href: "/messages",       label: "Messages",        icon: MessageSquare },
   { href: "/supervision",    label: "Supervision",     icon: Eye },
   { href: "/team",           label: "My Team",         icon: UsersRound },
+  { href: "/reports",        label: "Reports",         icon: FileBarChart },
   { href: "/brain-analytics",label: "Brain Analytics", icon: BarChart3 },
   { section: "Workspace" },
   { href: "/ask",            label: "Ask the Vault",   icon: Sparkles },

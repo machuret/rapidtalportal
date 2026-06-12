@@ -274,3 +274,19 @@
   .notebook-prose ul[data-type="taskList"] li > div { @apply flex-1; }
   .notebook-prose ul[data-type="taskList"] li[data-checked="true"] > div { @apply text-zinc-500 line-through; }
 }
+
+/* ── Print: client report → a clean document ──────────────────────────────── */
+/* The Monthly Report renders as a white sheet; for print/PDF we drop the dark  */
+/* chrome (sidebar + page controls) so only the document comes out.             */
+@media print {
+  aside,
+  .no-print { display: none !important; }
+  body { background: white !important; }
+  .report-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
