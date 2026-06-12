@@ -94,7 +94,6 @@ const clientAdminLinks: NavItem[] = [
   { href: "/vault",          label: "Vault",           icon: Archive },
   { href: "/access",         label: "Access",          icon: KeyRound },
   { href: "/daily-log",      label: "Daily Log",       icon: NotebookPen },
-  { href: "/my-job",         label: "My Job",          icon: Briefcase },
   { section: "Account" },
   { href: "/profile",        label: "My Profile",      icon: UserCircle },
 ];

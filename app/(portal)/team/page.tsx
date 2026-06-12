@@ -5,6 +5,7 @@ import { format, subDays } from "date-fns";
 import Link from "next/link";
 import Image from "next/image";
 import { Users, NotebookPen, CalendarDays, Mail, Phone, ArrowRight } from "lucide-react";
+import { TeamLeaveApprovals, type PendingLeave } from "@/components/team/TeamLeaveApprovals";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "My Team — RapidTal" };
@@ -51,6 +52,18 @@ export default async function TeamPage() {
     summaryMap[l.user_id].push(l);
   }
 
+  // Pending leave for the client (relocated here from My Job, which is an
+  // employee page a client shouldn't have to visit).
+  const nameById = new Map(vaList.map((v) => [v.id, v.full_name ?? v.email]));
+  const { data: leaveRows } = await admin
+    .from("va_leave_requests")
+    .select("id, user_id, start_date, end_date, leave_type, reason, status")
+    .eq("client_id", user.client_id)
+    .eq("status", "pending")
+    .order("start_date");
+  const pendingLeave: PendingLeave[] = ((leaveRows ?? []) as { id: string; user_id: string; start_date: string; end_date: string; leave_type: string | null; reason: string | null }[])
+    .map((r) => ({ id: r.id, userName: nameById.get(r.user_id) ?? "VA", start_date: r.start_date, end_date: r.end_date, leave_type: r.leave_type, reason: r.reason }));
+
   return (
     <div>
       {/* Header */}
@@ -65,6 +78,8 @@ export default async function TeamPage() {
           </p>
         </div>
       </div>
+
+      <TeamLeaveApprovals initial={pendingLeave} />
 
       {vaList.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-16 text-center">

@@ -4,7 +4,7 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ExportCsv } from "@/components/supervision/ExportCsv";
 import { PageIntro } from "@/components/layout/PageIntro";
-import { Eye, NotebookPen, Clock, ListChecks, ChevronRight, KanbanSquare, AlertTriangle } from "lucide-react";
+import { Eye, Clock, ChevronRight, CheckCircle2, Target, Inbox, AlertTriangle, NotebookPen } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Supervision — RapidTal" };
@@ -36,85 +36,88 @@ export default async function SupervisionPage() {
   const vas = (vaRows ?? []) as { id: string; full_name: string | null; email: string; client_id: string | null }[];
   const vaIds = vas.map((v) => v.id);
 
-  // Client names (for super_admin labels)
   const clientNames: Record<string, string> = {};
   if (isSuper && vas.some((v) => v.client_id)) {
     const { data: clients } = await admin.from("clients").select("id, name");
     for (const c of (clients ?? []) as { id: string; name: string }[]) clientNames[c.id] = c.name;
   }
 
-  // Activity in the window
-  const [logsRes, timeRes, runsRes, tasksRes, toolsRes] = vaIds.length
+  const [logsRes, timeRes, tasksRes] = vaIds.length
     ? await Promise.all([
         admin.from("daily_logs").select("user_id, log_date, updated_at").in("user_id", vaIds).gte("log_date", sinceDate),
         admin.from("time_entries").select("user_id, started_at, ended_at").in("user_id", vaIds).eq("phase", "work").gte("started_at", sinceIso),
-        admin.from("sop_runs").select("user_id, status, created_at").in("user_id", vaIds).gte("created_at", sinceIso),
-        admin.from("tasks").select("assigned_to, status, updated_at").in("assigned_to", vaIds),
-        admin.from("tool_runs").select("user_id, created_at").in("user_id", vaIds).gte("created_at", sinceIso),
+        admin.from("tasks").select("assigned_to, status, updated_at, completed_at, due_date").in("assigned_to", vaIds).is("archived_at", null),
       ])
-    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
+    : [{ data: [] }, { data: [] }, { data: [] }];
 
   const logs = (logsRes.data ?? []) as { user_id: string; log_date: string; updated_at: string }[];
   const times = (timeRes.data ?? []) as { user_id: string; started_at: string; ended_at: string | null }[];
-  const runs = (runsRes.data ?? []) as { user_id: string; status: string; created_at: string }[];
-  const tasks = (tasksRes.data ?? []) as { assigned_to: string | null; status: string; updated_at: string }[];
-  const toolRuns = (toolsRes.data ?? []) as { user_id: string | null; created_at: string }[];
+  const tasks = (tasksRes.data ?? []) as { assigned_to: string | null; status: string; updated_at: string; completed_at: string | null; due_date: string | null }[];
 
-  type Stat = { logs: number; hours: number; runs: number; completed: number; lastActive: number; lastLog: string; openTasks: number; doneTasks: number; toolRuns: number };
+  // Outcome-first stats per VA.
+  type Stat = {
+    delivered: number; onTimeNum: number; onTimeDen: number; reviewing: number; inProgress: number;
+    hours: number; logs: number; lastLog: string; lastActive: number;
+  };
   const stats: Record<string, Stat> = {};
-  const ensure = (id: string) => (stats[id] ??= { logs: 0, hours: 0, runs: 0, completed: 0, lastActive: 0, lastLog: "", openTasks: 0, doneTasks: 0, toolRuns: 0 });
-  for (const t of toolRuns) {
-    if (!t.user_id) continue;
-    const s = ensure(t.user_id);
-    s.toolRuns++;
-    s.lastActive = Math.max(s.lastActive, new Date(t.created_at).getTime());
-  }
+  const blank = (): Stat => ({ delivered: 0, onTimeNum: 0, onTimeDen: 0, reviewing: 0, inProgress: 0, hours: 0, logs: 0, lastLog: "", lastActive: 0 });
+  const ensure = (id: string) => (stats[id] ??= blank());
+
   for (const l of logs) { const s = ensure(l.user_id); s.logs++; if (l.log_date > s.lastLog) s.lastLog = l.log_date; s.lastActive = Math.max(s.lastActive, new Date(l.updated_at).getTime()); }
-  for (const r of runs) { const s = ensure(r.user_id); s.runs++; if (r.status === "completed") s.completed++; s.lastActive = Math.max(s.lastActive, new Date(r.created_at).getTime()); }
+
   for (const t of tasks) {
     if (!t.assigned_to) continue;
     const s = ensure(t.assigned_to);
-    if (t.status === "done") { if (t.updated_at >= sinceIso) s.doneTasks++; }
-    else s.openTasks++;
+    if (t.status === "done") {
+      if (t.completed_at && t.completed_at >= sinceIso) {
+        s.delivered++;
+        if (t.due_date) {
+          s.onTimeDen++;
+          if (new Date(t.completed_at).getTime() <= new Date(t.due_date + "T23:59:59").getTime()) s.onTimeNum++;
+        }
+      }
+    } else if (t.status === "review") {
+      s.reviewing++;
+    } else {
+      s.inProgress++;
+    }
     s.lastActive = Math.max(s.lastActive, new Date(t.updated_at).getTime());
   }
+
   const timesByUser: Record<string, typeof times> = {};
   for (const t of times) { (timesByUser[t.user_id] ??= []).push(t); const s = ensure(t.user_id); s.lastActive = Math.max(s.lastActive, new Date(t.started_at).getTime()); }
   for (const [uid, ts] of Object.entries(timesByUser)) ensure(uid).hours = hours(ts);
 
-  // Needs-attention flags — judgment, not just numbers.
+  const onTimePct = (s: Stat) => (s.onTimeDen ? Math.round((s.onTimeNum / s.onTimeDen) * 100) : null);
+
+  // Flags lead with the client's action item (work awaiting them), then VA hygiene.
   const today = new Date().toISOString().slice(0, 10);
   const daysBetween = (a: string, b: string) => Math.floor((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000);
-  const flagsFor = (id: string): string[] => {
-    const s = stats[id];
-    const f: string[] = [];
-    if (!s || !s.lastLog) f.push("No daily log this month");
-    else if (daysBetween(s.lastLog, today) >= 3) f.push(`No log for ${daysBetween(s.lastLog, today)} days`);
-    if (s && s.openTasks > 0 && s.doneTasks === 0) f.push("Open tasks, none completed");
-    if (!s || s.hours === 0) f.push("No hours tracked");
+  const flagsFor = (id: string): { text: string; action?: boolean }[] => {
+    const s = stats[id]; const f: { text: string; action?: boolean }[] = [];
+    if (s && s.reviewing > 0) f.push({ text: `${s.reviewing} awaiting your review`, action: true });
+    if (!s || !s.lastLog) f.push({ text: "No daily log this month" });
+    else if (daysBetween(s.lastLog, today) >= 3) f.push({ text: `No log for ${daysBetween(s.lastLog, today)} days` });
+    if (s && s.inProgress > 0 && s.delivered === 0) f.push({ text: "Active tasks, nothing delivered yet" });
     return f;
   };
 
-  // Flagged VAs first, then by most recently active.
-  const sorted = [...vas].sort((a, b) =>
-    flagsFor(b.id).length - flagsFor(a.id).length
-    || (stats[b.id]?.lastActive ?? 0) - (stats[a.id]?.lastActive ?? 0));
+  // Action items first, then most recently active.
+  const sorted = [...vas].sort((a, b) => flagsFor(b.id).length - flagsFor(a.id).length || (stats[b.id]?.lastActive ?? 0) - (stats[a.id]?.lastActive ?? 0));
 
   const csvRows = sorted.map((va) => {
-    const s = stats[va.id] ?? { logs: 0, hours: 0, runs: 0, completed: 0, openTasks: 0, doneTasks: 0, lastLog: "", toolRuns: 0 };
+    const s = stats[va.id] ?? blank();
     return {
       name: va.full_name ?? va.email,
       email: va.email,
       ...(isSuper ? { client: va.client_id ? (clientNames[va.client_id] ?? "") : "" } : {}),
+      delivered_30d: s.delivered,
+      on_time_pct: onTimePct(s) ?? "",
+      awaiting_review: s.reviewing,
+      in_progress: s.inProgress,
+      hours_worked: Number(s.hours.toFixed(1)),
       daily_logs: s.logs,
       last_log: s.lastLog || "never",
-      hours_worked: Number(s.hours.toFixed(1)),
-      sop_runs: s.runs,
-      sops_completed: s.completed,
-      open_tasks: s.openTasks,
-      tasks_done: s.doneTasks,
-      ai_tool_runs: s.toolRuns,
-      flags: flagsFor(va.id).join("; "),
     };
   });
 
@@ -126,7 +129,7 @@ export default async function SupervisionPage() {
         </div>
         <div className="flex-1">
           <h1 className="text-3xl font-bold text-white tracking-tight">Supervision</h1>
-          <p className="text-zinc-400 text-sm mt-1">What your VAs have been doing — last {WINDOW_DAYS} days.</p>
+          <p className="text-zinc-400 text-sm mt-1">What your team delivered — last {WINDOW_DAYS} days.</p>
         </div>
         <ExportCsv rows={csvRows} filename={`supervision-${new Date().toISOString().slice(0, 10)}.csv`} />
       </div>
@@ -136,19 +139,17 @@ export default async function SupervisionPage() {
       {sorted.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-12 text-center">
           <p className="text-zinc-300 font-semibold mb-1">No VAs yet</p>
-          <p className="text-zinc-500 text-sm">Assign VAs to {isSuper ? "clients" : "your team"} and their activity shows up here.</p>
+          <p className="text-zinc-500 text-sm">Assign VAs to {isSuper ? "clients" : "your team"} and their work shows up here.</p>
         </div>
       ) : (
         <div className="flex flex-col gap-2">
           {sorted.map((va) => {
-            const s = stats[va.id] ?? { logs: 0, hours: 0, runs: 0, completed: 0, lastActive: 0, lastLog: "", openTasks: 0, doneTasks: 0, toolRuns: 0 };
+            const s = stats[va.id] ?? blank();
+            const pct = onTimePct(s);
             const flags = flagsFor(va.id);
             return (
-              <Link
-                key={va.id}
-                href={`/supervision/${va.id}`}
-                className="surface-card group block px-5 py-4 hover:border-zinc-700 hover:bg-zinc-800/60 transition-all"
-              >
+              <Link key={va.id} href={`/supervision/${va.id}`}
+                className="surface-card group block px-5 py-4 hover:border-zinc-700 hover:bg-zinc-800/60 transition-all">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-300 shrink-0">
                     {(va.full_name ?? va.email).slice(0, 1).toUpperCase()}
@@ -160,23 +161,32 @@ export default async function SupervisionPage() {
                       {s.lastActive ? `Active ${new Date(s.lastActive).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : "No recent activity"}
                     </p>
                   </div>
-                  <div className="hidden sm:flex items-center gap-5 text-xs text-zinc-400 shrink-0">
-                    <span className="inline-flex items-center gap-1.5"><NotebookPen className="w-3.5 h-3.5 text-zinc-500" />{s.logs} logs</span>
-                    <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-zinc-500" />{s.hours.toFixed(1)}h</span>
-                    <span className="inline-flex items-center gap-1.5"><ListChecks className="w-3.5 h-3.5 text-zinc-500" />{s.runs} SOPs</span>
-                    <span className="inline-flex items-center gap-1.5"><KanbanSquare className="w-3.5 h-3.5 text-zinc-500" />{s.openTasks} open · {s.doneTasks} done</span>
+                  {/* Outcomes first; hours are secondary context. */}
+                  <div className="hidden sm:flex items-center gap-5 text-xs shrink-0">
+                    <span className="inline-flex items-center gap-1.5 text-zinc-200"><CheckCircle2 className="w-3.5 h-3.5 text-green-400" />{s.delivered} delivered</span>
+                    <span className="inline-flex items-center gap-1.5 text-zinc-200"><Target className="w-3.5 h-3.5 text-blue-400" />{pct === null ? "—" : `${pct}%`} on time</span>
+                    {s.reviewing > 0 && <span className="inline-flex items-center gap-1.5 text-amber-300"><Inbox className="w-3.5 h-3.5" />{s.reviewing} for you</span>}
+                    <span className="inline-flex items-center gap-1.5 text-zinc-500"><Clock className="w-3.5 h-3.5" />{s.hours.toFixed(1)}h</span>
                   </div>
                   <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0" />
                 </div>
                 {flags.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-3 pl-14">
                     {flags.map((f) => (
-                      <span key={f} className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-300 bg-amber-500/10 rounded-full px-2 py-0.5">
-                        <AlertTriangle className="w-3 h-3" /> {f}
+                      <span key={f.text} className={f.action
+                        ? "inline-flex items-center gap-1 text-[11px] font-medium text-blue-300 bg-blue-500/10 rounded-full px-2 py-0.5"
+                        : "inline-flex items-center gap-1 text-[11px] font-medium text-amber-300 bg-amber-500/10 rounded-full px-2 py-0.5"}>
+                        {f.action ? <Inbox className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />} {f.text}
                       </span>
                     ))}
                   </div>
                 )}
+                {/* Mobile: a compact outcome line. */}
+                <div className="sm:hidden flex items-center gap-4 mt-2 pl-14 text-xs text-zinc-400">
+                  <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-400" />{s.delivered}</span>
+                  <span className="inline-flex items-center gap-1"><Target className="w-3 h-3 text-blue-400" />{pct === null ? "—" : `${pct}%`}</span>
+                  <span className="inline-flex items-center gap-1"><NotebookPen className="w-3 h-3" />{s.logs}</span>
+                </div>
               </Link>
             );
           })}

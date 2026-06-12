@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MyJobHub, type Contract, type DayRow, type LeaveRow, type IssueRow, type ReportRow, type TeamLeaveRow } from "@/components/my-job/MyJobHub";
+import { MyJobHub, type Contract, type DayRow, type LeaveRow, type IssueRow, type ReportRow } from "@/components/my-job/MyJobHub";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "My Job — RapidTal" };
@@ -10,8 +10,10 @@ export default async function MyJobPage() {
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;
-  // "My Job" is the working team's own employment hub.
-  if (!["va", "client_admin"].includes(user.role)) redirect("/dashboard");
+  // "My Job" is the VA's own employment hub. Clients don't have a "job" here —
+  // their only need (approving VA leave) now lives on the Team page.
+  if (user.role === "client_admin") redirect("/team");
+  if (user.role !== "va") redirect("/dashboard");
 
   const admin = createAdminClient();
   const [{ data: contract }, { data: days }, { data: leave }, { data: issues }, { data: reports }] = await Promise.all([
@@ -22,19 +24,7 @@ export default async function MyJobPage() {
     admin.from("va_self_reports").select("id, report_month, delivered, challenges, goals").eq("user_id", user.id).order("report_month", { ascending: false }),
   ]);
 
-  // Client admins also manage their team's leave requests in a dedicated tab.
-  const isAdmin = user.role === "client_admin" && !!user.client_id;
-  let teamLeave: TeamLeaveRow[] = [];
-  if (isAdmin && user.client_id) {
-    const [{ data: rows }, { data: members }] = await Promise.all([
-      admin.from("va_leave_requests").select("id, user_id, start_date, end_date, leave_type, reason, status")
-        .eq("client_id", user.client_id).order("start_date", { ascending: false }).limit(200),
-      admin.from("users").select("id, full_name, email").eq("client_id", user.client_id),
-    ]);
-    const name = new Map(((members ?? []) as { id: string; full_name: string | null; email: string }[]).map((m) => [m.id, m.full_name ?? m.email]));
-    teamLeave = ((rows ?? []) as Omit<TeamLeaveRow, "userName">[]).map((r) => ({ ...r, userName: name.get(r.user_id) ?? "Unknown" }));
-  }
-
+  // Client-admin leave approvals moved to the Team page; this hub is VA-only now.
   return (
     <div className="max-w-5xl">
       <MyJobHub
@@ -44,8 +34,8 @@ export default async function MyJobPage() {
         initialLeave={(leave ?? []) as LeaveRow[]}
         initialIssues={(issues ?? []) as IssueRow[]}
         initialReports={(reports ?? []) as ReportRow[]}
-        isAdmin={isAdmin}
-        initialTeamLeave={teamLeave}
+        isAdmin={false}
+        initialTeamLeave={[]}
       />
     </div>
   );
