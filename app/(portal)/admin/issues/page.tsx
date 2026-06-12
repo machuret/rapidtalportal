@@ -2,6 +2,7 @@ import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { IssueStatusControl } from "@/components/my-job/IssueStatusControl";
 
 export const dynamic = "force-dynamic";
@@ -35,15 +36,8 @@ export default async function AdminIssuesPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-          <AlertTriangle className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Issues</h1>
-          <p className="text-zinc-400 text-sm mt-1">Concerns raised by the team for RapidTal to mediate. {openCount} open.</p>
-        </div>
-      </div>
+      <AdminPageHeader icon={AlertTriangle} gradient="from-amber-500 to-orange-600 shadow-amber-500/20"
+        title="Issues" subtitle={`Concerns raised by the team for RapidTal to mediate. ${openCount} open.`} />
 
       {rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">

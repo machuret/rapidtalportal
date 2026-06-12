@@ -110,7 +110,9 @@ export function ExpensesClient({ initial }: { initial: Expense[] }) {
               const overdue = e.status === "active" && e.next_due_date && e.next_due_date < today;
               return (
                 <tr key={e.id} onClick={() => setEditing(e)}
-                  className={cn("border-b border-zinc-800/60 last:border-0 cursor-pointer hover:bg-zinc-800/40 transition-colors", e.status === "cancelled" && "opacity-50")}>
+                  role="button" tabIndex={0} aria-label={`Edit ${e.name}`}
+                  onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); setEditing(e); } }}
+                  className={cn("border-b border-zinc-800/60 last:border-0 cursor-pointer hover:bg-zinc-800/40 focus:bg-zinc-800/40 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500 transition-colors", e.status === "cancelled" && "opacity-50")}>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
                       <span className="text-zinc-100 font-medium">{e.name}</span>

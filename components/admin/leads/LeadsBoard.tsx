@@ -89,7 +89,9 @@ export function LeadsBoard({ initialLeads, owners, currentUserId }: { initialLea
                   const overdue = l.next_action_date && l.stage !== "won" && l.stage !== "lost" && l.next_action_date < new Date().toISOString().slice(0, 10);
                   return (
                     <div key={l.id} draggable onDragStart={() => { dragId.current = l.id; }} onClick={() => setEditing(l)}
-                      className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 cursor-grab active:cursor-grabbing hover:border-zinc-600 transition-colors">
+                      role="button" tabIndex={0} aria-label={`Open ${l.name}`}
+                      onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); setEditing(l); } }}
+                      className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 cursor-grab active:cursor-grabbing hover:border-zinc-600 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500 transition-colors">
                       <p className="text-sm font-medium text-zinc-100 leading-snug">{l.name}</p>
                       {l.company && <p className="text-xs text-zinc-500 mt-0.5 truncate">{l.company}</p>}
                       <div className="flex items-center gap-2 mt-2 flex-wrap">

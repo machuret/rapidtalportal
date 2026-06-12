@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { PROMPTS } from "@/lib/prompts/registry";
 import { PromptsManager, type PromptRow } from "@/components/admin/PromptsManager";
 import { SlidersHorizontal } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "AI Prompts — RapidTal" };
@@ -38,17 +39,9 @@ export default async function AdminPromptsPage() {
 
   return (
     <div className="max-w-6xl">
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
-          <SlidersHorizontal className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">AI Prompts</h1>
-          <p className="text-zinc-400 text-sm mt-1">
-            Every system prompt behind the VA features. Edit one and it goes live within seconds — no deploy. Reset returns to the built-in default.
-          </p>
-        </div>
-      </div>
+      <AdminPageHeader icon={SlidersHorizontal} gradient="from-violet-500 to-purple-600 shadow-violet-500/20"
+        title="AI Prompts"
+        subtitle="Every system prompt behind the VA features. Edit one and it goes live within seconds — no deploy. Reset returns to the built-in default." />
 
       <PromptsManager initial={prompts} />
     </div>

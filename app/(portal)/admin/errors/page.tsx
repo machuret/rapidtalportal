@@ -2,6 +2,7 @@ import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cn } from "@/lib/utils";
 import { Bug, CheckCircle2 } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Errors — RapidTal" };
@@ -34,20 +35,15 @@ export default async function AdminErrorsPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center shadow-lg shadow-red-500/20">
-          <Bug className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Errors</h1>
-          <p className="text-zinc-400 text-sm mt-1">
+      <AdminPageHeader icon={Bug} gradient="from-red-500 to-rose-600 shadow-red-500/20" title="Errors"
+        subtitle={
+          <>
             {(count24h ?? 0) > 0
               ? <span className="text-red-400">{count24h} error{count24h !== 1 ? "s" : ""} in the last 24 hours</span>
               : "Nothing in the last 24 hours."}{" "}
             Latest 100 shown.
-          </p>
-        </div>
-      </div>
+          </>
+        } />
 
       {rows.length === 0 ? (
         <div className="surface-card rounded-xl p-12 text-center">

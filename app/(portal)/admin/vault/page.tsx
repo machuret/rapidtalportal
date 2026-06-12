@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { VaultClient } from "@/components/vault/VaultClient";
 import { cn } from "@/lib/utils";
 import { Archive } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Client Vaults — RapidTal" };
@@ -27,15 +28,8 @@ export default async function AdminVaultPage({ searchParams }: { searchParams: {
   if (clients.length === 0) {
     return (
       <div>
-        <div className="flex items-center gap-4 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-            <Archive className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Client Vaults</h1>
-            <p className="text-zinc-400 text-sm mt-1">Feed any client&apos;s Business Brain.</p>
-          </div>
-        </div>
+        <AdminPageHeader icon={Archive} gradient="from-emerald-500 to-teal-600 shadow-emerald-500/20"
+          title="Client Vaults" subtitle="Feed any client's Business Brain." />
         <div className="surface-card rounded-xl p-10 text-center text-zinc-400 text-sm">
           No clients yet. Create a client first, then feed its Vault here.
         </div>
@@ -45,17 +39,8 @@ export default async function AdminVaultPage({ searchParams }: { searchParams: {
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-          <Archive className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Client Vaults</h1>
-          <p className="text-zinc-400 text-sm mt-1">
-            Add documents, URLs, and notes to any client&apos;s Business Brain.
-          </p>
-        </div>
-      </div>
+      <AdminPageHeader icon={Archive} gradient="from-emerald-500 to-teal-600 shadow-emerald-500/20"
+        title="Client Vaults" subtitle="Add documents, URLs, and notes to any client's Business Brain." />
 
       {/* Client picker */}
       <div className="flex flex-wrap gap-2 mb-8">
