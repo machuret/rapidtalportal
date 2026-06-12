@@ -11,6 +11,8 @@ import {
   LogIn,
   Ban,
   Link2,
+  KeyRound,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
@@ -178,6 +180,19 @@ export function UsersTable({
       toast.success("One-time login link copied — send it to the user; it signs them straight in.");
     } catch { /* api-client toasts */ } finally {
       setLinkBusy(null);
+    }
+  }, []);
+
+  const [resetBusy, setResetBusy] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{ email: string; password: string } | null>(null);
+  const resetPassword = useCallback(async (u: UserRow) => {
+    if (!confirm(`Set a new password for ${u.email}? Their current password stops working immediately, and you'll need to send them the new one.`)) return;
+    setResetBusy(u.id);
+    try {
+      const res = await api.post<{ email: string; password: string }>(ROUTES.admin.usersResetPassword(), { id: u.id });
+      setResetResult(res);
+    } catch { /* api-client toasts */ } finally {
+      setResetBusy(null);
     }
   }, []);
 
@@ -463,6 +478,15 @@ export function UsersTable({
                           >
                             {linkBusy === u.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
                           </button>
+                          <button
+                            onClick={() => resetPassword(u)}
+                            disabled={resetBusy === u.id}
+                            title="Reset password (set a new one to send the user)"
+                            aria-label="Reset password"
+                            className="p-1.5 rounded-lg text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 transition-colors disabled:opacity-40"
+                          >
+                            {resetBusy === u.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+                          </button>
                           {u.id !== currentUserId && (
                             <button
                               onClick={() => toggleSuspend(u)}
@@ -508,6 +532,32 @@ export function UsersTable({
       <p className="text-xs text-zinc-600">
         {users.length} user{users.length !== 1 ? "s" : ""} total
       </p>
+
+      {/* New-password result — shown once; we never store it. */}
+      {resetResult && (
+        <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setResetResult(null)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-[26rem] max-w-[90vw] shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-1">
+              <KeyRound className="w-4 h-4 text-purple-400" />
+              <h2 className="font-semibold text-white">Password reset</h2>
+            </div>
+            <p className="text-sm text-zinc-400 mb-4">New password for <span className="text-zinc-200">{resetResult.email}</span>. Copy it now — it won&apos;t be shown again.</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm text-zinc-100 font-mono break-all">{resetResult.password}</code>
+              <button
+                onClick={() => { void navigator.clipboard.writeText(resetResult.password); toast.success("Password copied."); }}
+                className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white transition-colors"
+              >
+                <Copy className="w-4 h-4" /> Copy
+              </button>
+            </div>
+            <p className="text-xs text-zinc-500 mt-3">Send this to the user over your usual channel. They can change it later from their profile.</p>
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setResetResult(null)} className="text-sm text-zinc-400 hover:text-white px-3 py-1.5">Done</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -37,6 +37,7 @@ import {
   AlertTriangle,
   Activity,
   FileBarChart,
+  TrendingUp,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -104,6 +105,7 @@ const adminLinks: NavItem[] = [
   { href: "/admin",            label: "Overview",    icon: LayoutDashboard },
   { href: "/admin/clients",    label: "Clients",     icon: Building2 },
   { href: "/admin/users",      label: "All Users",   icon: Users },
+  { href: "/admin/leads",      label: "Leads",       icon: TrendingUp },
   { href: "/admin/placements", label: "Placements",  icon: Handshake },
   { href: "/admin/sops",       label: "SOP Library", icon: ListChecks },
   { href: "/admin/vault",      label: "Client Vaults", icon: Archive },

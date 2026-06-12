@@ -65,4 +65,5 @@ export const MIGRATIONS = [
   "057_vault_dedupe.sql",
   "058_search_catchup.sql",
   "059_observability.sql",
+  "060_leads.sql",
 ] as const;

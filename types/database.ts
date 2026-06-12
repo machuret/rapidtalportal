@@ -156,6 +156,18 @@ export interface Database {
         Update: { name?: string; ran_at?: string; detail?: Json };
         Relationships: NoRelationships;
       };
+      leads: {
+        Row: { id: string; name: string; company: string | null; contact_name: string | null; email: string | null; phone: string | null; source: string | null; stage: string; value: number | null; owner_id: string | null; next_action: string | null; next_action_date: string | null; notes: string | null; sort_order: number; created_by: string | null; created_at: string; updated_at: string; archived_at: string | null };
+        Insert: { id?: string; name: string; company?: string | null; contact_name?: string | null; email?: string | null; phone?: string | null; source?: string | null; stage?: string; value?: number | null; owner_id?: string | null; next_action?: string | null; next_action_date?: string | null; notes?: string | null; sort_order?: number; created_by?: string | null; created_at?: string; updated_at?: string; archived_at?: string | null };
+        Update: { id?: string; name?: string; company?: string | null; contact_name?: string | null; email?: string | null; phone?: string | null; source?: string | null; stage?: string; value?: number | null; owner_id?: string | null; next_action?: string | null; next_action_date?: string | null; notes?: string | null; sort_order?: number; created_by?: string | null; created_at?: string; updated_at?: string; archived_at?: string | null };
+        Relationships: NoRelationships;
+      };
+      lead_events: {
+        Row: { id: string; lead_id: string; user_id: string | null; kind: string; body: string; created_at: string };
+        Insert: { id?: string; lead_id: string; user_id?: string | null; kind?: string; body: string; created_at?: string };
+        Update: { id?: string; lead_id?: string; user_id?: string | null; kind?: string; body?: string; created_at?: string };
+        Relationships: NoRelationships;
+      };
       kb_entries: {
         Row: { id: string; client_id: string; question: string; answer: string; source_vault_ids: string[]; category: string | null; generated_at: string; is_pinned: boolean };
         Insert: { id?: string; client_id: string; question: string; answer: string; source_vault_ids: string[]; category?: string | null; generated_at?: string; is_pinned?: boolean };

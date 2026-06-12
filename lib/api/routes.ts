@@ -11,10 +11,13 @@ export const ROUTES = {
     users: () => "/api/admin/users",
     usersSuspend: () => "/api/admin/users/suspend",
     usersLoginLink: () => "/api/admin/users/login-link",
+    usersResetPassword: () => "/api/admin/users/reset-password",
     client: (id: string) => `/api/admin/clients/${id}`,
     impersonate: () => "/api/admin/impersonate",
     prompts: () => "/api/admin/prompts",
     placements: () => "/api/admin/placements",
+    leads: () => "/api/admin/leads",
+    leadEvents: () => "/api/admin/leads/events",
   },
   notebook: {
     pages: () => "/api/notebook/pages",
