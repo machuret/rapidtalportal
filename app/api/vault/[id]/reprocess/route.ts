@@ -9,7 +9,10 @@ import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { z } from "zod";
 
-const schema = z.object({ clientId: z.string().uuid() });
+// rebuild=true clears existing chunks and re-embeds from scratch (manual
+// "re-run AI" / content edit). Default false = resume: keep finished chunks and
+// only embed what's missing, so the backfill makes incremental progress.
+const schema = z.object({ clientId: z.string().uuid(), rebuild: z.boolean().optional().default(false) });
 
 export async function POST(
   req: NextRequest,
@@ -31,5 +34,6 @@ export async function POST(
   return proxyToEdgeFunction("vault-process", {
     itemId: params.id,
     clientId: parsed.data.clientId,
+    rebuild: parsed.data.rebuild,
   });
 }

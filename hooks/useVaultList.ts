@@ -85,7 +85,8 @@ export function useVaultList(clientId: string, filters: VaultListFilters = {}) {
 
   const reprocessMutation = useMutation({
     mutationFn: (input: { id: string; clientId: string }) =>
-      api.post(ROUTES.vault.reprocess(input.id), { clientId: input.clientId }),
+      // Manual "re-run AI" → rebuild (refresh summary + re-embed from scratch).
+      api.post(ROUTES.vault.reprocess(input.id), { clientId: input.clientId, rebuild: true }),
     onSettled: invalidate,
   });
 

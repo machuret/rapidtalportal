@@ -125,62 +125,88 @@ function chunkText(text: string, title: string, maxLen = 1200, maxChunks = 200):
   return out;
 }
 
+/** Max chunks embedded per invocation. gte-small runs ON-CPU in the edge
+ * runtime, so a long document embedded in one shot blows the function's
+ * CPU/time budget and gets killed — losing everything, because the old code
+ * inserted only at the very end. We embed a capped batch, INSERT AS WE GO so
+ * progress survives a kill, and let the /api/cron/vault-index sweep resume the
+ * rest (it re-triggers any ready item whose indexed_at is still null). */
+const EMBED_BUDGET = Number(Deno.env.get("VAULT_EMBED_BUDGET") ?? 40);
+const INSERT_BATCH = 20;
+
+interface EmbedOutcome { count: number; total: number; complete: boolean; error: string | null }
+
 /**
- * Chunk + embed the full document and (re)write its vault_chunks rows. Existing
- * chunks are cleared first so reprocess/edits never leave stale vectors.
- *
- * Returns a precise outcome — { count, error } — which the caller persists to
- * vault_items.indexed_at / index_error. The previous version swallowed every
- * failure into console.warn, which is how production ran for weeks with ~7
- * embeddings and nobody knew. The summary/category remain the primary result;
- * this still never THROWS, it just reports honestly.
+ * Resumable, incremental embedding. Embeds only the chunks not already stored
+ * (so repeated invocations make forward progress), up to EMBED_BUDGET per call,
+ * inserting in small batches. `rebuild` clears existing chunks first (content
+ * edits / manual reprocess). Never throws — reports a precise outcome that the
+ * caller persists to vault_items.indexed_at / index_error.
  */
 // deno-lint-ignore no-explicit-any
-async function embedAndStoreChunks(admin: any, itemId: string, clientId: string, title: string, rawContent: string): Promise<{ count: number; error: string | null }> {
-  // Clear stale chunks regardless of outcome below.
-  await admin.from("vault_chunks").delete().eq("item_id", itemId);
-
+async function embedAndStoreChunks(admin: any, itemId: string, clientId: string, title: string, rawContent: string, rebuild: boolean): Promise<EmbedOutcome> {
   const chunks = chunkText(rawContent, title);
-  if (!chunks.length) return { count: 0, error: "no chunks produced from content" };
+  const total = chunks.length;
+  if (!total) {
+    await admin.from("vault_chunks").delete().eq("item_id", itemId);
+    return { count: 0, total: 0, complete: true, error: "no embeddable content" };
+  }
 
-  // Supabase's built-in gte-small model (384-dim) — runs in the Edge Runtime
-  // with no API key. Accessed via globalThis so it compiles whether or not the
-  // Supabase global is typed. Embeds one chunk at a time.
+  if (rebuild) await admin.from("vault_chunks").delete().eq("item_id", itemId);
+
+  // Which chunk indexes already exist? (resume support)
+  const { data: existing } = await admin.from("vault_chunks").select("chunk_index").eq("item_id", itemId);
+  const have = new Set<number>(((existing ?? []) as { chunk_index: number }[]).map((r) => r.chunk_index));
+  // If the doc shrank (more stored than current chunking), restart clean.
+  if (have.size > total) {
+    await admin.from("vault_chunks").delete().eq("item_id", itemId);
+    have.clear();
+  }
+  const missing: number[] = [];
+  for (let i = 0; i < total; i++) if (!have.has(i)) missing.push(i);
+  if (!missing.length) return { count: total, total, complete: true, error: null };
+
   // deno-lint-ignore no-explicit-any
   let session: any;
   try {
     // deno-lint-ignore no-explicit-any
     session = new (globalThis as any).Supabase.ai.Session("gte-small");
   } catch (e) {
-    return { count: 0, error: `gte-small session unavailable: ${e instanceof Error ? e.message : String(e)}` };
+    return { count: have.size, total, complete: false, error: `gte-small session unavailable: ${e instanceof Error ? e.message : String(e)}` };
   }
 
-  const rows: Record<string, unknown>[] = [];
-  let firstEmbedError: string | null = null;
-  for (let i = 0; i < chunks.length; i++) {
+  const todo = missing.slice(0, EMBED_BUDGET);
+  let stored = have.size;
+  let buffer: Record<string, unknown>[] = [];
+  let firstErr: string | null = null;
+
+  const flush = async () => {
+    if (!buffer.length) return;
+    const { error } = await admin.from("vault_chunks").insert(buffer);
+    if (error) { if (!firstErr) firstErr = `insert failed: ${error.message}`; }
+    else stored += buffer.length;
+    buffer = [];
+  };
+
+  for (const i of todo) {
     try {
       const emb = (await session.run(chunks[i], { mean_pool: true, normalize: true })) as number[];
-      rows.push({
-        item_id: itemId,
-        client_id: clientId,
-        chunk_index: i,
-        content: chunks[i],
-        // pgvector expects the text form "[1,2,3]"; stringify the array.
-        embedding: JSON.stringify(emb),
-      });
+      buffer.push({ item_id: itemId, client_id: clientId, chunk_index: i, content: chunks[i], embedding: JSON.stringify(emb) });
+      if (buffer.length >= INSERT_BATCH) await flush(); // persist progress as we go
     } catch (e) {
-      if (!firstEmbedError) firstEmbedError = `chunk ${i}: ${e instanceof Error ? e.message : String(e)}`;
-      console.warn(`⚠️ vault-process: embedding chunk ${i} failed for ${itemId}:`, e);
+      if (!firstErr) firstErr = `chunk ${i}: ${e instanceof Error ? e.message : String(e)}`;
     }
   }
-  if (!rows.length) return { count: 0, error: firstEmbedError ?? "all chunks failed to embed" };
+  await flush();
 
-  const { error } = await admin.from("vault_chunks").insert(rows);
-  if (error) return { count: 0, error: `chunk insert failed: ${error.message}` };
-
-  // Partial success is still success, but note what was dropped.
-  const dropped = chunks.length - rows.length;
-  return { count: rows.length, error: dropped > 0 ? `${dropped} of ${chunks.length} chunks failed (first: ${firstEmbedError})` : null };
+  const complete = stored >= total;
+  const remaining = total - stored;
+  return {
+    count: stored,
+    total,
+    complete,
+    error: complete ? firstErr : (firstErr ?? `indexed ${stored}/${total} — ${remaining} pending (will resume)`),
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -259,6 +285,9 @@ Deno.serve(async (req: Request) => {
     // ── Validate input ────────────────────────────────────────────────────────
     const body = await req.json();
     const { itemId, clientId } = body;
+    // rebuild = clear & re-embed from scratch (content edited / manual reprocess).
+    // Default false so sweep/resume runs make incremental forward progress.
+    const rebuild = body.rebuild === true;
 
     if (!itemId || !clientId) {
       return new Response(JSON.stringify({ error: "Missing itemId or clientId." }), {
@@ -279,7 +308,7 @@ Deno.serve(async (req: Request) => {
     // ── Fetch vault item ──────────────────────────────────────────────────────
     const { data: item, error: fetchErr } = await admin
       .from("vault_items")
-      .select("id, client_id, title, raw_content, status, meta_curated, category, tags")
+      .select("id, client_id, title, raw_content, status, meta_curated, category, tags, ai_summary")
       .eq("id", itemId)
       .eq("client_id", clientId) // Double-check ownership — never trust clientId alone
       .maybeSingle();
@@ -291,7 +320,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const itemRow = item as { raw_content: string | null; title: string; meta_curated?: boolean; category: string | null; tags: string[] | null };
+    const itemRow = item as { raw_content: string | null; title: string; meta_curated?: boolean; category: string | null; tags: string[] | null; ai_summary: string | null };
+    // Skip the OpenAI metadata pass on resume runs (summary already exists) so
+    // re-indexing a long doc across several invocations doesn't re-bill OpenAI
+    // each time. A rebuild always refreshes it.
+    const needsMeta = rebuild || !itemRow.ai_summary;
     const rawContent = itemRow.raw_content ?? "";
     const itemTitle = itemRow.title ?? "Untitled";
     const metaCurated = itemRow.meta_curated === true;
@@ -306,13 +339,19 @@ Deno.serve(async (req: Request) => {
 
     // ── Env check ─────────────────────────────────────────────────────────────
     const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
-    if (!openrouterKey) {
+    if (needsMeta && !openrouterKey) {
       return new Response(JSON.stringify({ error: "OpenRouter not configured." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // deno-lint-ignore no-explicit-any
+    let updated: any = item;
+    let tokensUsed = 0;
+    let category: string | null = itemRow.category;
+
+    if (needsMeta) {
     // Mark as processing before calling OpenAI — UI can show live status via Realtime
     await admin
       .from("vault_items")
@@ -359,7 +398,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const tokensUsed: number = openaiJson.usage?.total_tokens ?? 0;
+    tokensUsed = openaiJson.usage?.total_tokens ?? 0;
     const raw: string = openaiJson.choices?.[0]?.message?.content ?? "{}";
 
     let extracted: { ai_summary?: string; category?: string; tags?: string[] };
@@ -382,13 +421,13 @@ Deno.serve(async (req: Request) => {
 
     // Respect human curation: if a person set category/tags, AI must not
     // overwrite them — only the summary (and embeddings) refresh.
-    const category = metaCurated ? (itemRow.category ?? aiCategory) : aiCategory;
+    category = metaCurated ? (itemRow.category ?? aiCategory) : aiCategory;
     const tags = metaCurated
       ? (itemRow.tags ?? [])
       : (Array.isArray(extracted.tags) ? extracted.tags.slice(0, 10) : []);
 
     // ── Persist results ───────────────────────────────────────────────────────
-    const { data: updated, error: updateErr } = await admin
+    const { data: u, error: updateErr } = await admin
       .from("vault_items")
       .update({
         ai_summary: extracted.ai_summary ?? null,
@@ -409,6 +448,18 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    updated = u;
+    } else {
+      // Metadata already present (a resume run) — keep summary/category/tags as
+      // they are; just ensure the item is marked ready and skip the OpenAI call.
+      const { data: u } = await admin
+        .from("vault_items")
+        .update({ status: "ready", error_message: null, updated_at: new Date().toISOString(), updated_by: actorId })
+        .eq("id", itemId)
+        .select()
+        .single();
+      updated = u ?? item;
+    }
 
     // ── Embed for semantic search ─────────────────────────────────────────────
     // Best-effort: chunks power "Ask the Vault" (RAG). A failure here must not
@@ -416,32 +467,37 @@ Deno.serve(async (req: Request) => {
     // OUTCOME is persisted to vault_items (indexed_at / index_error) so a
     // failing embedding pipeline is visible in /admin/health instead of silent.
     let chunksStored = 0;
+    let indexComplete = false;
     let indexError: string | null = null;
     try {
-      const outcome = await embedAndStoreChunks(admin, itemId, clientId, itemTitle, rawContent);
+      const outcome = await embedAndStoreChunks(admin, itemId, clientId, itemTitle, rawContent, rebuild);
       chunksStored = outcome.count;
+      indexComplete = outcome.complete;
       indexError = outcome.error;
-      console.log(`🧠 vault-process: stored ${chunksStored} embedding chunks for ${itemId}${indexError ? ` (warn: ${indexError})` : ""}`);
+      console.log(`🧠 vault-process: ${chunksStored}/${outcome.total} chunks for ${itemId} (${indexComplete ? "complete" : "partial — sweep resumes"})${indexError ? ` · ${indexError}` : ""}`);
     } catch (embErr) {
       indexError = embErr instanceof Error ? embErr.message : String(embErr);
       console.warn(`⚠️ vault-process: embedding step errored for ${itemId}:`, embErr);
     }
     try {
+      // indexed_at is set ONLY when fully embedded — while it's null, the
+      // /api/cron/vault-index sweep re-triggers the item to finish the rest.
       await admin
         .from("vault_items")
-        .update(chunksStored > 0
+        .update(indexComplete
           ? { indexed_at: new Date().toISOString(), index_error: indexError }
-          : { index_error: indexError ?? "indexing produced no chunks" })
+          : { indexed_at: null, index_error: indexError ?? "indexing incomplete" })
         .eq("id", itemId);
     } catch (_e) { /* columns ship in 059; tolerate older schemas */ }
 
-    console.log(`✅ vault-process complete: ${itemId} → category=${category}, tokens=${tokensUsed}, chunks=${chunksStored}`);
+    console.log(`✅ vault-process: ${itemId} → category=${category}, tokens=${tokensUsed}, chunks=${chunksStored}, complete=${indexComplete}`);
 
     return new Response(JSON.stringify({
       success: true,
       data: updated,
       tokensUsed,
       chunksStored,
+      indexComplete,
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

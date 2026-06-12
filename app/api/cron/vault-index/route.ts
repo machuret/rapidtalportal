@@ -29,12 +29,15 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
 
   // Candidate items: have content (ready/error) and aren't actively processing.
-  // Oldest-touched first so nothing starves. We over-scan, then filter to those
-  // genuinely missing chunks.
+  // Candidates = ready/error docs not yet fully indexed. vault-process sets
+  // indexed_at ONLY when every chunk is embedded, so `indexed_at IS NULL` covers
+  // both never-indexed AND partially-indexed (resumed across runs) documents.
+  // Oldest-touched first so nothing starves.
   const { data: candidates } = await admin
     .from("vault_items")
     .select("id, client_id")
     .in("status", ["ready", "error"])
+    .is("indexed_at", null)
     .order("updated_at", { ascending: true })
     .limit(SCAN_LIMIT);
 
@@ -45,14 +48,7 @@ export async function GET(req: NextRequest) {
 
   if (rows.length === 0) { await beat({ scanned: 0, indexed: 0 }); return NextResponse.json({ ok: true, scanned: 0, indexed: 0 }); }
 
-  // Which already have embeddings? One query, then set membership.
-  const { data: chunked } = await admin
-    .from("vault_chunks")
-    .select("item_id")
-    .in("item_id", rows.map((r) => r.id));
-  const indexed = new Set((chunked ?? []).map((c) => (c as { item_id: string }).item_id));
-
-  const todo = rows.filter((r) => !indexed.has(r.id)).slice(0, INDEX_LIMIT);
+  const todo = rows.slice(0, INDEX_LIMIT);
   if (todo.length === 0) { await beat({ scanned: rows.length, indexed: 0 }); return NextResponse.json({ ok: true, scanned: rows.length, indexed: 0 }); }
 
   // Re-index in small concurrent batches; tolerate individual failures.

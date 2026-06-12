@@ -86,7 +86,8 @@ export async function PATCH(
   // The client sees the save immediately; Realtime pushes the AI metadata
   // update when vault-process writes its results back to vault_items.
   if (updates.raw_content) {
-    void proxyToEdgeFunction("vault-process", { itemId: params.id, clientId })
+    // Content changed → rebuild embeddings from scratch (old chunks are stale).
+    void proxyToEdgeFunction("vault-process", { itemId: params.id, clientId, rebuild: true })
       .catch(err => console.error("[vault/[id]] vault-process background error:", err));
   }
 
