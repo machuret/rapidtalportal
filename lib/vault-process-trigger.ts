@@ -13,6 +13,26 @@
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+/**
+ * Schedule indexing for a freshly-ingested item from inside a route handler.
+ *
+ * Plain fire-and-forget breaks on Vercel: once the HTTP response is sent the
+ * function can be frozen, so an un-awaited edge call may never finish — items
+ * end up "ready" with no embeddings. `waitUntil` keeps the function alive until
+ * the indexing promise settles. Falls back to a bare promise off-Vercel (local
+ * dev, tests). The /api/cron/vault-index sweep is the backstop for the rest.
+ */
+export function scheduleVaultProcess(itemId: string, clientId: string): void {
+  const p = triggerVaultProcess(itemId, clientId);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { waitUntil } = require("@vercel/functions") as { waitUntil: (p: Promise<unknown>) => void };
+    waitUntil(p);
+  } catch {
+    void p;
+  }
+}
+
 export async function triggerVaultProcess(itemId: string, clientId: string): Promise<void> {
   const edgeUrl = `${SUPABASE_URL}/functions/v1/vault-process`;
 

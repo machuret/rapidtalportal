@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/tasks",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/vault-index",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

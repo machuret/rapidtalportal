@@ -92,7 +92,7 @@ function isHeading(line: string): boolean {
  * with the document title + section heading — so each embedded vector knows
  * what it is about ("the price is $450" → "[KB v4 › Tours] the price is $450").
  */
-function chunkText(text: string, title: string, maxLen = 1200, maxChunks = 80): string[] {
+function chunkText(text: string, title: string, maxLen = 1200, maxChunks = 200): string[] {
   const clean = text.replace(/\r\n/g, "\n").trim();
   if (!clean) return [];
 
@@ -324,7 +324,7 @@ Deno.serve(async (req: Request) => {
         temperature: 0.1, // Low temp = consistent categorisation
         messages: [
           { role: "system", content: PROCESS_PROMPT },
-          { role: "user", content: rawContent.slice(0, 15000) }, // Cap input tokens
+          { role: "user", content: rawContent.slice(0, 30000) }, // Cap input tokens
         ],
       }),
     });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
-import { triggerVaultProcess } from "@/lib/vault-process-trigger";
+import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import { safeKeyName } from "@/lib/storage-keys";
 
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
@@ -150,8 +150,8 @@ export async function POST(req: NextRequest) {
       throw new Error(hashError.message);
     }
 
-    // Fire-and-forget AI processing — extracts ai_summary, category, tags
-    triggerVaultProcess(itemId, clientId);
+    // Index for AI search — survives past the response via waitUntil.
+    scheduleVaultProcess(itemId, clientId);
   } catch (err) {
     await supabase
       .from("vault_items")

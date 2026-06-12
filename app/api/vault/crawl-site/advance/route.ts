@@ -20,7 +20,8 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
-import { triggerVaultProcess } from "@/lib/vault-process-trigger";
+import { createHash } from "crypto";
+import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import {
   classifyPage, extractPrices, buildCatalogMarkdown, verifyFigures, type CatalogEntry,
 } from "@/lib/crawl/classify";
@@ -202,6 +203,7 @@ export const POST = withAuth(async (req, { user }) => {
             title: (page.metadata?.title ?? pageUrl).slice(0, 200),
             source_url: pageUrl,
             raw_content: markdown,
+            content_hash: createHash("sha256").update(markdown).digest("hex"),
             status: "processing",
             created_by: user.id,
           })
@@ -210,7 +212,7 @@ export const POST = withAuth(async (req, { user }) => {
         if (item) {
           created++;
           (meta.kept = meta.kept ?? []).push((item as { id: string }).id);
-          void triggerVaultProcess((item as { id: string }).id, job.client_id);
+          scheduleVaultProcess((item as { id: string }).id, job.client_id);
         }
       }
 
@@ -236,6 +238,7 @@ export const POST = withAuth(async (req, { user }) => {
               source_type: "text",
               title: `Product Catalog — ${host}`,
               raw_content: md,
+              content_hash: createHash("sha256").update(md).digest("hex"),
               status: "processing",
               created_by: user.id,
             })
@@ -243,7 +246,7 @@ export const POST = withAuth(async (req, { user }) => {
             .single();
           if (item) {
             patch.items_created = job.items_created + 1;
-            void triggerVaultProcess((item as { id: string }).id, job.client_id);
+            scheduleVaultProcess((item as { id: string }).id, job.client_id);
           }
         }
         meta.syn_step = "map";
@@ -330,7 +333,7 @@ export const POST = withAuth(async (req, { user }) => {
         if (dossierItem) {
           patch.dossier_item_id = (dossierItem as { id: string }).id;
           patch.items_created = job.items_created + 1;
-          void triggerVaultProcess((dossierItem as { id: string }).id, job.client_id);
+          scheduleVaultProcess((dossierItem as { id: string }).id, job.client_id);
         }
 
         // Company DNA: fill ONLY fields that are still empty — never overwrite

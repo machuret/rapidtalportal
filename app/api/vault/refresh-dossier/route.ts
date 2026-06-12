@@ -13,7 +13,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
-import { triggerVaultProcess } from "@/lib/vault-process-trigger";
+import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import { dossierSystemPrompt } from "@/lib/crawl/prompts";
 import { verifyFigures } from "@/lib/crawl/classify";
 import { briefingLimiter, tooManyRequests } from "@/lib/rate-limit";
@@ -132,7 +132,7 @@ export const POST = withAuth(async (req, { user }) => {
     dossierId = (created as { id: string }).id;
   }
 
-  void triggerVaultProcess(dossierId, parsed.data.clientId);
+  scheduleVaultProcess(dossierId, parsed.data.clientId);
 
   return NextResponse.json({ ok: true, dossierId, unverified, tokensUsed: tokens, itemsSummarized: sources.length });
 }, { roles: ADMIN_ROLES });

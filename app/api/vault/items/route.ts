@@ -52,7 +52,18 @@ export const GET = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const items = data ?? [];
+  const rawItems = data ?? [];
+
+  // Flag which items already have embeddings (searchable by AI). Cheap — only
+  // the current page's ids. Powers a "not indexed for AI" badge so a silent
+  // blind spot (ready but never embedded) becomes visible.
+  const pageIds = rawItems.map((i) => (i as { id: string }).id);
+  let indexedIds = new Set<string>();
+  if (pageIds.length) {
+    const { data: ch } = await admin.from("vault_chunks").select("item_id").in("item_id", pageIds);
+    indexedIds = new Set((ch ?? []).map((c) => (c as { item_id: string }).item_id));
+  }
+  const items = rawItems.map((i) => ({ ...(i as Record<string, unknown>), indexed: indexedIds.has((i as { id: string }).id) }));
 
   // Status counts (overall vault health) — only needed once, on the first page.
   // Fast via the (client_id, status) index. Skipped on subsequent pages.

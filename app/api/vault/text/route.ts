@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
-import { triggerVaultProcess } from "@/lib/vault-process-trigger";
+import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import { z } from "zod";
 
 const schema = z.object({
@@ -85,8 +85,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message ?? "Insert failed" }, { status: 500 });
   }
 
-  // Fire-and-forget AI processing — extracts ai_summary, category, tags
-  triggerVaultProcess((item as { id: string }).id, clientId);
+  // Index for AI search — survives past the response via waitUntil.
+  scheduleVaultProcess((item as { id: string }).id, clientId);
 
   return NextResponse.json({ success: true });
 }

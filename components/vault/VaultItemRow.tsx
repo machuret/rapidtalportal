@@ -24,7 +24,7 @@ const STATUS_META = {
 } as const;
 
 interface VaultItemRowProps {
-  item: DbVaultItem;
+  item: DbVaultItem & { indexed?: boolean };
   userId: string;
   canWrite: boolean;
   isExpanded: boolean;
@@ -68,6 +68,14 @@ export function VaultItemRow({
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", src?.bgCls, src?.iconCls)}>{src?.label}</span>
             {item.category && <CategoryBadge category={item.category} />}
+            {item.status === "ready" && item.indexed === false && (
+              <span
+                title="Saved, but not yet searchable by AI — the indexer runs every 15 min, or use “Index for AI search”."
+                className="text-xs font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400"
+              >
+                Not indexed
+              </span>
+            )}
             <span className="text-xs text-zinc-600">
               {new Date(item.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
             </span>
