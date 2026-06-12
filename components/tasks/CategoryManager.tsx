@@ -28,6 +28,8 @@ function ColorPicker({ value, onChange, disabled }: { value: string; onChange: (
           disabled={disabled}
           onClick={() => onChange(key)}
           title={key}
+          aria-label={`Colour: ${key}`}
+          aria-pressed={value === key}
           className={cn(
             "w-5 h-5 rounded-full transition-transform",
             categoryColor(key).swatch,
@@ -74,7 +76,7 @@ function Row({ cat, onChanged }: { cat: TaskCategory; onChanged: () => void }) {
         className="bg-zinc-800 border-zinc-700 h-8 flex-1"
       />
       <ColorPicker value={cat.color} onChange={(c) => void patch({ color: c })} disabled={busy} />
-      <button onClick={remove} disabled={busy} title="Delete category"
+      <button onClick={remove} disabled={busy} title="Delete category" aria-label={`Delete category ${cat.name}`}
         className="p-1.5 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors disabled:opacity-50">
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
       </button>

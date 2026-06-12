@@ -241,7 +241,8 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
           )}
         >
           {depth === 0 && kids.length > 0 ? (
-            <button onClick={(e) => { e.stopPropagation(); setExpanded((x) => ({ ...x, [page.id]: !isOpen })); }}
+            <button aria-label={isOpen ? "Collapse sub-pages" : "Expand sub-pages"} aria-expanded={isOpen}
+              onClick={(e) => { e.stopPropagation(); setExpanded((x) => ({ ...x, [page.id]: !isOpen })); }}
               className="text-zinc-500 hover:text-white shrink-0">
               <ChevronRight className={cn("w-3.5 h-3.5 transition-transform", isOpen && "rotate-90")} />
             </button>
@@ -250,7 +251,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
           <FileText className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate flex-1">{page.title || "Untitled"}</span>
           {depth === 0 && (
-            <button title="Add sub-page" onClick={(e) => { e.stopPropagation(); void newPage(page.id); }}
+            <button title="Add sub-page" aria-label="Add sub-page" onClick={(e) => { e.stopPropagation(); void newPage(page.id); }}
               className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-white shrink-0">
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -271,6 +272,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
           <div className="p-2 border-b border-zinc-800">
             <select
               value={activePlacementId}
+              aria-label="Switch placement"
               onChange={async (e) => { await flushRef.current(); router.push(`/notebook?placement=${e.target.value}`); }}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-2 h-8 text-sm text-zinc-200"
             >
@@ -281,10 +283,10 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
         <div className="p-2 flex items-center gap-2 border-b border-zinc-800">
           <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2 top-1/2 -translate-y-1/2" />
-            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter pages…"
+            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter pages…" aria-label="Filter pages"
               className="w-full bg-zinc-800 border border-zinc-700 rounded-md pl-7 pr-2 h-8 text-sm text-zinc-200 placeholder:text-zinc-500" />
           </div>
-          <button title="New page" onClick={() => void newPage(null)}
+          <button title="New page" aria-label="New page" onClick={() => void newPage(null)}
             className="w-8 h-8 flex items-center justify-center rounded-md bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 shrink-0">
             <Plus className="w-4 h-4" />
           </button>
@@ -304,7 +306,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
                 <div key={p.id} className="group flex items-center gap-1.5 pl-6 pr-1.5 py-1.5 text-sm text-zinc-500">
                   <FileText className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate flex-1 line-through">{p.title || "Untitled"}</span>
-                  <button title="Restore" onClick={() => void setArchived(p.id, false)}
+                  <button title="Restore" aria-label={`Restore ${p.title || "Untitled"}`} onClick={() => void setArchived(p.id, false)}
                     className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-green-400 shrink-0">
                     <ArchiveRestore className="w-3.5 h-3.5" />
                   </button>
@@ -329,6 +331,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
                   scheduleSave();
                 }}
                 placeholder="Untitled"
+                aria-label="Page title"
                 className="flex-1 bg-transparent text-2xl font-bold text-white outline-none placeholder:text-zinc-600"
               />
               <div className="flex items-center gap-1 text-xs text-zinc-500 shrink-0 w-16 justify-end">
@@ -336,11 +339,11 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
                 {saveState === "saved" && <><Check className="w-3.5 h-3.5 text-green-400" /> Saved</>}
                 {saveState === "error" && <span className="text-red-400">Error</span>}
               </div>
-              <button title="Revision history" onClick={() => setDrawerOpen(true)}
+              <button title="Revision history" aria-label="Revision history" onClick={() => setDrawerOpen(true)}
                 className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 shrink-0">
                 <History className="w-4 h-4" />
               </button>
-              <button title="Archive page" onClick={() => void setArchived(selected.id, true)}
+              <button title="Archive page" aria-label="Archive page" onClick={() => void setArchived(selected.id, true)}
                 className="p-1.5 rounded-md text-zinc-400 hover:text-red-400 hover:bg-zinc-800 shrink-0">
                 <Archive className="w-4 h-4" />
               </button>

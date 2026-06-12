@@ -53,12 +53,12 @@ function Row({ rec, memberName, onChanged }: { rec: TaskRecurrence; memberName: 
         </p>
       </div>
       <button onClick={() => call(() => api.patch(ROUTES.taskRecurrences(), { id: rec.id, active: !rec.active }))}
-        disabled={busy} title={rec.active ? "Pause" : "Resume"}
+        disabled={busy} title={rec.active ? "Pause" : "Resume"} aria-label={`${rec.active ? "Pause" : "Resume"} ${rec.title}`}
         className="p-1.5 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors disabled:opacity-50">
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : rec.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
       </button>
       <button onClick={() => { if (confirm(`Delete recurring task "${rec.title}"? Already-created cards stay.`)) void call(async () => { await api.delete(ROUTES.taskRecurrences(), { id: rec.id }); toast.success("Recurring task deleted."); }); }}
-        disabled={busy} title="Delete"
+        disabled={busy} title="Delete" aria-label={`Delete recurring task ${rec.title}`}
         className="p-1.5 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors disabled:opacity-50">
         <Trash2 className="w-4 h-4" />
       </button>

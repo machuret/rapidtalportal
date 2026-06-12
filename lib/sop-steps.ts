@@ -25,7 +25,11 @@ export function serializeSteps(intro: string, prerequisites: string[], steps: So
 }
 
 export function parseSopSteps(body: string): string[] {
-  const isStep = (l: string) => /^\s*(step\s*\d+|\d+[.)\]:]|[-*•])\s+/i.test(l);
+  // A line starts a step if it opens with "Step N", "N.", "N)", "N:" or a
+  // bullet. The "step" branch allows trailing punctuation ("Step 1:") so the
+  // parser recognises exactly what serializeSteps() writes — otherwise those
+  // headers leak into the displayed step text.
+  const isStep = (l: string) => /^\s*(step\s*\d+[:.)\]]*|\d+[.)\]:]|[-*•])\s+/i.test(l);
   const strip = (l: string) => l.replace(/^\s*(step\s*\d+[:.)\]]*|\d+[.)\]:]+|[-*•])\s*/i, "").trim();
 
   const steps: string[] = [];

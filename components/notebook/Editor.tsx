@@ -24,7 +24,7 @@ function Btn({ on, active, disabled, title, children }: {
   on: () => void; active?: boolean; disabled?: boolean; title: string; children: React.ReactNode;
 }) {
   return (
-    <button type="button" title={title} onMouseDown={(e) => e.preventDefault()} onClick={on} disabled={disabled}
+    <button type="button" title={title} aria-label={title} onMouseDown={(e) => e.preventDefault()} onClick={on} disabled={disabled}
       className={cn(
         "w-8 h-8 flex items-center justify-center rounded-md transition-colors shrink-0",
         active ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-white hover:bg-zinc-800",

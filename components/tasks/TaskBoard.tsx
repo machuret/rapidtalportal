@@ -234,6 +234,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
                 <button
                   onClick={() => setCreatingIn(col.key)}
                   title="Add task"
+                  aria-label={`Add task to ${col.label}`}
                   className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
