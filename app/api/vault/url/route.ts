@@ -133,10 +133,23 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      await supabase
+      const { error: hashError } = await supabase
         .from("vault_items")
         .update({ raw_content: content, content_hash: contentHash, status: "ready" })
         .eq("id", itemId);
+
+      // Unique-index violation = this page's content is already indexed (a race
+      // the SELECT above missed). Drop the placeholder row and report it.
+      if (hashError) {
+        if (hashError.code === "23505") {
+          await supabase.from("vault_items").delete().eq("id", itemId);
+          return NextResponse.json(
+            { error: "Duplicate content. This page is already in the Vault." },
+            { status: 409 },
+          );
+        }
+        throw new Error(hashError.message);
+      }
 
       // Fire-and-forget AI processing — extracts ai_summary, category, tags
       triggerVaultProcess(itemId, clientId);

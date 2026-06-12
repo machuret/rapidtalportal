@@ -2,6 +2,19 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
+  // Canonical domain. Vercel always serves the auto-assigned production URL and
+  // won't let you redirect it from the dashboard, so force page navigations to
+  // the custom domain. Scoped to that EXACT host (previews/localhost unaffected);
+  // the matcher below excludes /api, so API calls are never redirected
+  // cross-origin (which would CORS-fail in the browser as "Failed to fetch").
+  if (request.headers.get("host") === "rapidtalportal.vercel.app") {
+    const url = new URL(request.url);
+    url.protocol = "https:";
+    url.host = "rapidtal.online";
+    url.port = "";
+    return NextResponse.redirect(url, 308);
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 

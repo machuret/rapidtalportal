@@ -128,10 +128,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    await supabase
+    const { error: hashError } = await supabase
       .from("vault_items")
       .update({ raw_content: text, content_hash: contentHash, status: "ready" })
       .eq("id", itemId);
+
+    // Unique-index violation = another item with this exact content already
+    // exists (a race the SELECT above couldn't catch). Treat as a duplicate:
+    // roll back this upload so content is never indexed twice.
+    if (hashError) {
+      if (hashError.code === "23505") {
+        await Promise.all([
+          supabase.from("vault_items").delete().eq("id", itemId),
+          supabase.storage.from("vault").remove([storagePath]),
+        ]);
+        return NextResponse.json(
+          { error: "Duplicate content. This document is already in the Vault." },
+          { status: 409 },
+        );
+      }
+      throw new Error(hashError.message);
+    }
 
     // Fire-and-forget AI processing — extracts ai_summary, category, tags
     triggerVaultProcess(itemId, clientId);

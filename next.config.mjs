@@ -44,21 +44,11 @@ const nextConfig = {
     ];
   },
 
-  // Canonical domain. Vercel always serves the auto-assigned production URL
-  // (rapidtalportal.vercel.app) and won't let you redirect it from the
-  // dashboard, so force it here. Scoped to that EXACT host so preview
-  // deployments (rapidtalportal-git-*, hashed *.vercel.app previews) and
-  // localhost are unaffected. The path and query string are carried over.
-  async redirects() {
-    return [
-      {
-        source: '/:path*',
-        has: [{ type: 'host', value: 'rapidtalportal.vercel.app' }],
-        destination: 'https://rapidtal.online/:path*',
-        permanent: true,
-      },
-    ];
-  },
+  // NOTE: canonical-domain redirect (rapidtalportal.vercel.app → rapidtal.online)
+  // lives in middleware.ts, NOT here. A next.config redirect matches /api too,
+  // so an API call from the .vercel.app host got 308'd cross-origin and the
+  // browser blocked it (CORS) → "Failed to fetch". The middleware matcher
+  // already excludes /api, so page navigations canonicalise but API calls don't.
 
   // Webpack tweaks. NOTE: do not override optimization.splitChunks here — a
   // previous "vendors" override merged ALL of node_modules into one 442 kB

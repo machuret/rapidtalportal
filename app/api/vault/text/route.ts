@@ -74,6 +74,14 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error || !item) {
+    // Unique-index violation = identical content already indexed for this
+    // client (race the SELECT above missed). Surface as a clean duplicate.
+    if (error?.code === "23505") {
+      return NextResponse.json(
+        { error: "Duplicate content. This text is already in the Vault." },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: error?.message ?? "Insert failed" }, { status: 500 });
   }
 
