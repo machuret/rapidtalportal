@@ -151,7 +151,7 @@ Deno.serve(async (req: Request) => {
     const clientId: string = body.clientId;
     const question: string = (body.question ?? "").toString().trim();
     const deep = body.mode === "deep";
-    const matchCount: number = deep ? 10 : 5;
+    const matchCount: number = deep ? 12 : 8;
 
     // Conversation memory: recent turns make follow-ups ("what about pricing?")
     // work. We use the last couple of questions to broaden retrieval, and replay
@@ -206,11 +206,11 @@ Deno.serve(async (req: Request) => {
       queryEmbedding.length
         ? admin.rpc("match_vault_chunks", { p_client_id: clientId, p_query_embedding: queryEmbedding, p_match_count: matchCount })
         : Promise.resolve({ data: [], error: null }),
-      admin.from("vault_items").select("id, title")
+      admin.from("vault_items").select("id, title, ai_summary, raw_content")
         .eq("client_id", clientId)
         .eq("status", "ready")
         .textSearch("fts", retrievalQuery, { type: "websearch", config: "english" })
-        .limit(3),
+        .limit(8),
     ]);
 
     const blocks: Block[] = [];
@@ -250,9 +250,9 @@ Deno.serve(async (req: Request) => {
     //     leading chunks so exact-term hits still reach the answer.
     if (!ftsRes.error) {
       const vectorItemIds = new Set(matches.map((c) => c.item_id));
-      const ftsItems = ((ftsRes.data ?? []) as { id: string; title: string }[])
+      const ftsItems = ((ftsRes.data ?? []) as { id: string; title: string; ai_summary: string | null; raw_content: string | null }[])
         .filter((it) => !vectorItemIds.has(it.id))
-        .slice(0, 2);
+        .slice(0, 5);
       for (const it of ftsItems) {
         try {
           const { data: cks } = await admin
@@ -260,8 +260,13 @@ Deno.serve(async (req: Request) => {
             .select("content")
             .eq("item_id", it.id)
             .order("chunk_index", { ascending: true })
-            .limit(2);
-          const text = ((cks ?? []) as { content: string }[]).map((c) => c.content.trim()).join("\n…\n");
+            .limit(3);
+          let text = ((cks ?? []) as { content: string }[]).map((c) => c.content.trim()).join("\n…\n");
+          // Resilience: a keyword-matched doc that was never embedded has no
+          // chunks. Fall back to its raw content (then summary) so the document
+          // still reaches the model instead of contributing nothing — this is
+          // what was making Ask say "not in the context" for docs that exist.
+          if (!text) text = (it.raw_content ?? it.ai_summary ?? "").slice(0, 3000).trim();
           if (text) blocks.push({ kind: "vault", title: it.title, text, itemId: it.id });
         } catch (_e) { /* best-effort */ }
       }
@@ -316,7 +321,10 @@ Deno.serve(async (req: Request) => {
         "X-Title": "RapidTal Portal",
       },
       body: JSON.stringify({
-        model: "openai/gpt-4o-mini",
+        // Deep mode uses a stronger model for harder synthesis; concise stays
+        // on the fast/cheap model (it answers most questions well once the
+        // retrieval above hands it the right context).
+        model: deep ? "openai/gpt-4o" : "openai/gpt-4o-mini",
         max_tokens: deep ? 1100 : 550,
         temperature: 0.4,
         stream,
