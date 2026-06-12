@@ -51,14 +51,31 @@ export async function GET(req: NextRequest) {
   const todo = rows.slice(0, INDEX_LIMIT);
   if (todo.length === 0) { await beat({ scanned: rows.length, indexed: 0 }); return NextResponse.json({ ok: true, scanned: rows.length, indexed: 0 }); }
 
-  // Re-index in small concurrent batches; tolerate individual failures.
-  let done = 0;
-  for (let i = 0; i < todo.length; i += CONCURRENCY) {
-    const batch = todo.slice(i, i + CONCURRENCY);
-    const results = await Promise.allSettled(batch.map((r) => triggerVaultProcess(r.id, r.client_id)));
-    done += results.filter((x) => x.status === "fulfilled").length;
+  // Multiple ROUNDS per sweep: each edge invocation gets a fresh CPU budget but
+  // only manages a few embeddings before the runtime kills it (vault-process
+  // banks progress in small batches). Re-triggering still-incomplete items
+  // several times per sweep multiplies throughput, so a long manual finishes in
+  // a couple of sweeps instead of a day. Between rounds we re-check indexed_at
+  // so finished docs drop out.
+  const ROUNDS = 4;
+  let calls = 0;
+  let remaining = todo;
+  for (let round = 0; round < ROUNDS && remaining.length > 0; round++) {
+    for (let i = 0; i < remaining.length; i += CONCURRENCY) {
+      const batch = remaining.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(batch.map((r) => triggerVaultProcess(r.id, r.client_id)));
+      calls += results.filter((x) => x.status === "fulfilled").length;
+    }
+    if (round < ROUNDS - 1) {
+      const { data: still } = await admin
+        .from("vault_items")
+        .select("id, client_id")
+        .in("id", remaining.map((r) => r.id))
+        .is("indexed_at", null);
+      remaining = (still ?? []) as { id: string; client_id: string }[];
+    }
   }
 
-  await beat({ scanned: rows.length, candidates: todo.length, indexed: done });
-  return NextResponse.json({ ok: true, scanned: rows.length, candidates: todo.length, indexed: done });
+  await beat({ scanned: rows.length, candidates: todo.length, indexed: calls });
+  return NextResponse.json({ ok: true, scanned: rows.length, candidates: todo.length, calls });
 }

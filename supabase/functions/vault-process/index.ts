@@ -132,7 +132,11 @@ function chunkText(text: string, title: string, maxLen = 1200, maxChunks = 200):
  * progress survives a kill, and let the /api/cron/vault-index sweep resume the
  * rest (it re-triggers any ready item whose indexed_at is still null). */
 const EMBED_BUDGET = Number(Deno.env.get("VAULT_EMBED_BUDGET") ?? 40);
-const INSERT_BATCH = 20;
+// Flush every few chunks. Production showed the CPU cap kills the isolate after
+// only ~a handful of embeddings (every doc that completed had ≤4 chunks; every
+// bigger doc had 0 — death before the first flush). Small batches mean each
+// invocation banks whatever it managed before being killed.
+const INSERT_BATCH = 4;
 
 interface EmbedOutcome { count: number; total: number; complete: boolean; error: string | null }
 
