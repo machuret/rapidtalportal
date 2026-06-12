@@ -82,6 +82,46 @@ function json(body: unknown, status = 200) {
   });
 }
 
+/**
+ * Multi-query retrieval: one cheap LLM call rewrites the question into a few
+ * different search angles (synonyms, adjacent phrasings, concrete nouns), so
+ * retrieval also catches documents that describe the answer in different words
+ * than the user happened to use ("services" → "loan products", "what we offer").
+ * Best-effort with a hard timeout — on any failure we just search the raw question.
+ */
+async function expandQuery(key: string, question: string): Promise<string[]> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2500);
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+      body: JSON.stringify({
+        model: "openai/gpt-4o-mini",
+        response_format: { type: "json_object" },
+        max_tokens: 120,
+        temperature: 0.3,
+        messages: [
+          {
+            role: "system",
+            content: 'Rewrite the user\'s question as 3 SHORT, mutually different search queries for a company knowledge base. Use synonyms, adjacent angles, and concrete nouns; do not repeat the original wording. Return JSON exactly as {"queries":["q1","q2","q3"]}.',
+          },
+          { role: "user", content: question.slice(0, 500) },
+        ],
+      }),
+    });
+    clearTimeout(timer);
+    const j = await res.json();
+    const parsed = JSON.parse(j.choices?.[0]?.message?.content ?? "{}");
+    return (Array.isArray(parsed.queries) ? parsed.queries : [])
+      .filter((q: unknown) => typeof q === "string" && (q as string).trim().length > 0)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
 /** Base64(UTF-8) so source titles with non-Latin chars survive the header. */
 function encodeSources(s: unknown): string {
   return btoa(unescape(encodeURIComponent(JSON.stringify(s))));
@@ -193,11 +233,21 @@ Deno.serve(async (req: Request) => {
 
     // ── Embed the question (gte-small) — non-fatal: if it fails we still answer
     //    from DNA/KB/SOPs. ─────────────────────────────────────────────────────
-    let queryEmbedding: number[] = [];
+    // ── Query expansion (multi-query retrieval) ───────────────────────────────
+    // One cheap LLM call turns the question into extra search angles; we then
+    // embed AND keyword-search every angle and merge. This is what catches the
+    // documents that answer the question in different words.
+    const variants = await expandQuery(openrouterKey, question);
+    const embedQueries = [retrievalQuery, ...variants];      // history-aware first
+    const ftsQueries = [ftsQuery, ...variants].slice(0, 4);  // current question first
+
+    let embeddings: number[][] = [];
     try {
       // deno-lint-ignore no-explicit-any
       const session = new (globalThis as any).Supabase.ai.Session("gte-small");
-      queryEmbedding = (await session.run(retrievalQuery, { mean_pool: true, normalize: true })) as number[];
+      embeddings = (await Promise.all(
+        embedQueries.map((q) => session.run(q, { mean_pool: true, normalize: true })),
+      )) as number[][];
     } catch (e) {
       console.warn("vault-ask: question embedding failed, continuing without vector search:", e);
     }
@@ -205,7 +255,8 @@ Deno.serve(async (req: Request) => {
     // ── Retrieve from all sources in parallel ───────────────────────────────────
     // Hybrid: vector search over chunks PLUS keyword (FTS) search over documents,
     // so exact terms (product names, codes) are caught even when vectors miss.
-    const [dnaRes, kbRes, sopRes, vaultRes, ftsRes] = await Promise.all([
+    const perEmbed = Math.max(4, Math.ceil(matchCount / Math.max(1, embeddings.length)));
+    const [dnaRes, kbRes, sopRes, vaultResults, ftsResults] = await Promise.all([
       admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
       admin.from("kb_entries").select("question, answer")
         .eq("client_id", clientId)
@@ -215,14 +266,16 @@ Deno.serve(async (req: Request) => {
         .eq("client_id", clientId)
         .textSearch("fts", ftsQuery, { type: "websearch", config: "english" })
         .limit(2),
-      queryEmbedding.length
-        ? admin.rpc("match_vault_chunks", { p_client_id: clientId, p_query_embedding: queryEmbedding, p_match_count: matchCount })
-        : Promise.resolve({ data: [], error: null }),
-      admin.from("vault_items").select("id, title, ai_summary, raw_content")
-        .eq("client_id", clientId)
-        .eq("status", "ready")
-        .textSearch("fts", ftsQuery, { type: "websearch", config: "english" })
-        .limit(deep ? 10 : 8),
+      Promise.all(embeddings.map((e) =>
+        admin.rpc("match_vault_chunks", { p_client_id: clientId, p_query_embedding: e, p_match_count: perEmbed }),
+      )),
+      Promise.all(ftsQueries.map((q) =>
+        admin.from("vault_items").select("id, title, ai_summary, raw_content")
+          .eq("client_id", clientId)
+          .eq("status", "ready")
+          .textSearch("fts", q, { type: "websearch", config: "english" })
+          .limit(deep ? 10 : 8),
+      )),
     ]);
 
     const blocks: Block[] = [];
@@ -242,34 +295,83 @@ Deno.serve(async (req: Request) => {
       if (lines.length) blocks.push({ kind: "dna", title: "Company DNA", text: lines.join("\n") });
     }
 
-    // 2. Vault docs — semantic matches, grouped one block per document.
+    // 2. Vault docs — semantic matches across ALL query variants, merged and
+    //    deduped by chunk (best similarity wins), grouped one block per document.
     type Match = { id: string; item_id: string; content: string; chunk_index: number; similarity: number };
-    const matches = (vaultRes.error ? [] : (vaultRes.data ?? [])) as Match[];
+    const byChunk = new Map<string, Match>();
+    for (const r of vaultResults) {
+      if (r.error) continue;
+      for (const m of (r.data ?? []) as Match[]) {
+        const prev = byChunk.get(m.id);
+        if (!prev || m.similarity > prev.similarity) byChunk.set(m.id, m);
+      }
+    }
+    const matches = [...byChunk.values()].sort((a, b) => b.similarity - a.similarity).slice(0, matchCount);
+
     if (matches.length) {
       const itemIds = [...new Set(matches.map((c) => c.item_id))];
-      // Deep mode also pulls raw_content so it can expand on the matched snippets.
+      // Deep mode also pulls raw_content as a fallback for un-chunked docs.
       const { data: itemRows } = await admin
         .from("vault_items").select(deep ? "id, title, raw_content" : "id, title").in("id", itemIds);
       const rowById = new Map<string, { title: string; raw_content?: string | null }>();
       for (const r of (itemRows ?? []) as { id: string; title: string; raw_content?: string | null }[]) rowById.set(r.id, r);
       const orderedIds: string[] = [];
       for (const c of matches) if (!orderedIds.includes(c.item_id)) orderedIds.push(c.item_id);
+
+      // Deep mode reads the RELEVANT SECTIONS: each matched chunk plus its
+      // neighbours (±2), stitched in document order. The first-N-chars approach
+      // fed the model front-matter/TOC boilerplate from long manuals; this
+      // targets where the answer actually lives.
+      const chunksByItem = new Map<string, { chunk_index: number; content: string }[]>();
+      if (deep && orderedIds.length) {
+        const { data: allCks } = await admin
+          .from("vault_chunks")
+          .select("item_id, chunk_index, content")
+          .in("item_id", orderedIds)
+          .order("chunk_index", { ascending: true });
+        for (const c of (allCks ?? []) as { item_id: string; chunk_index: number; content: string }[]) {
+          const arr = chunksByItem.get(c.item_id) ?? [];
+          arr.push({ chunk_index: c.chunk_index, content: c.content });
+          chunksByItem.set(c.item_id, arr);
+        }
+      }
+
       for (const id of orderedIds) {
         const row = rowById.get(id);
-        // Concise: just the matched chunks. Deep: the whole document (capped),
-        // so the answer can go beyond the few sentences that happened to match.
-        const text = deep && row?.raw_content
-          ? row.raw_content.slice(0, rawDocChars).trim()
-          : matches.filter((c) => c.item_id === id).map((c) => c.content.trim()).join("\n…\n");
+        let text = "";
+        if (deep) {
+          const all = chunksByItem.get(id) ?? [];
+          if (all.length) {
+            const wanted = new Set<number>();
+            for (const m of matches.filter((c) => c.item_id === id)) {
+              for (let i = m.chunk_index - 2; i <= m.chunk_index + 2; i++) wanted.add(i);
+            }
+            text = all
+              .filter((c) => wanted.has(c.chunk_index))
+              .map((c) => c.content.trim())
+              .join("\n…\n")
+              .slice(0, rawDocChars);
+          }
+          if (!text) text = (row?.raw_content ?? "").slice(0, rawDocChars).trim();
+        }
+        if (!text) text = matches.filter((c) => c.item_id === id).map((c) => c.content.trim()).join("\n…\n");
         blocks.push({ kind: "vault", title: row?.title ?? "Untitled", text, itemId: id });
       }
     }
 
-    // 2b. Hybrid: docs found by keyword search that vectors missed — pull their
-    //     leading chunks so exact-term hits still reach the answer.
-    if (!ftsRes.error) {
+    // 2b. Hybrid: docs found by keyword search (any variant) that vectors
+    //     missed — merged + deduped across variants, first-seen order.
+    {
       const vectorItemIds = new Set(matches.map((c) => c.item_id));
-      const ftsItems = ((ftsRes.data ?? []) as { id: string; title: string; ai_summary: string | null; raw_content: string | null }[])
+      const ftsSeen = new Set<string>();
+      const ftsMerged: { id: string; title: string; ai_summary: string | null; raw_content: string | null }[] = [];
+      for (const r of ftsResults) {
+        if (r.error) continue;
+        for (const it of (r.data ?? []) as { id: string; title: string; ai_summary: string | null; raw_content: string | null }[]) {
+          if (!ftsSeen.has(it.id)) { ftsSeen.add(it.id); ftsMerged.push(it); }
+        }
+      }
+      const ftsItems = ftsMerged
         .filter((it) => !vectorItemIds.has(it.id))
         .slice(0, ftsDocLimit);
       for (const it of ftsItems) {
