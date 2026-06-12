@@ -266,9 +266,15 @@ export interface Database {
         Relationships: NoRelationships;
       };
       tasks: {
-        Row: { id: string; client_id: string; assigned_to: string | null; created_by: string | null; title: string; description: string; status: string; order_index: number; due_date: string | null; priority: number; completed_at: string | null; category_id: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; client_id: string; assigned_to?: string | null; created_by?: string | null; title: string; description?: string; status?: string; order_index?: number; due_date?: string | null; priority?: number; completed_at?: string | null; category_id?: string | null; created_at?: string; updated_at?: string };
-        Update: { id?: string; client_id?: string; assigned_to?: string | null; created_by?: string | null; title?: string; description?: string; status?: string; order_index?: number; due_date?: string | null; priority?: number; completed_at?: string | null; category_id?: string | null; created_at?: string; updated_at?: string };
+        Row: { id: string; client_id: string; assigned_to: string | null; created_by: string | null; title: string; description: string; status: string; order_index: number; due_date: string | null; priority: number; completed_at: string | null; category_id: string | null; archived_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; assigned_to?: string | null; created_by?: string | null; title: string; description?: string; status?: string; order_index?: number; due_date?: string | null; priority?: number; completed_at?: string | null; category_id?: string | null; archived_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; assigned_to?: string | null; created_by?: string | null; title?: string; description?: string; status?: string; order_index?: number; due_date?: string | null; priority?: number; completed_at?: string | null; category_id?: string | null; archived_at?: string | null; created_at?: string; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      task_recurrences: {
+        Row: { id: string; client_id: string; created_by: string | null; assigned_to: string | null; category_id: string | null; title: string; description: string; priority: number; frequency: string; interval: number; next_run_on: string; last_spawned_at: string | null; active: boolean; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; created_by?: string | null; assigned_to?: string | null; category_id?: string | null; title: string; description?: string; priority?: number; frequency: string; interval?: number; next_run_on: string; last_spawned_at?: string | null; active?: boolean; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; created_by?: string | null; assigned_to?: string | null; category_id?: string | null; title?: string; description?: string; priority?: number; frequency?: string; interval?: number; next_run_on?: string; last_spawned_at?: string | null; active?: boolean; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
       task_categories: {

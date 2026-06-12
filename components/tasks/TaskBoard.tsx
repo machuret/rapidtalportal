@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { categoryColor } from "@/lib/tasks/category-colors";
 import { CategoryManager, type TaskCategory } from "./CategoryManager";
+import { RecurrenceManager, type TaskRecurrence } from "./RecurrenceManager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, CalendarDays, Loader2, Trash2, Save, MessageSquare, Settings2 } from "lucide-react";
+import { Plus, CalendarDays, Loader2, Trash2, Save, MessageSquare, Settings2, Repeat } from "lucide-react";
 import { TaskActivity } from "./TaskActivity";
 
 export type TaskStatus = "todo" | "in_progress" | "review" | "done";
@@ -34,12 +35,13 @@ export interface Task {
   priority: number;
   completed_at: string | null;
   category_id: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface BoardMember { id: string; name: string }
-export type { TaskCategory };
+export type { TaskCategory, TaskRecurrence };
 
 const UNCATEGORIZED = "__none__";
 
@@ -65,10 +67,11 @@ interface TaskBoardProps {
   isAdmin: boolean; // client_admin or super_admin
   members: BoardMember[]; // assignable people (VAs + admins of the client)
   categories?: TaskCategory[];
+  recurrences?: TaskRecurrence[];
   commentCounts?: Record<string, number>;
 }
 
-export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, categories = [], commentCounts }: TaskBoardProps) {
+export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, categories = [], recurrences = [], commentCounts }: TaskBoardProps) {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [counts, setCounts] = useState<Record<string, number>>(commentCounts ?? {});
@@ -76,6 +79,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
   const [creatingIn, setCreatingIn] = useState<TaskStatus | null>(null);
   const [filterCat, setFilterCat] = useState<string | null>(null);
   const [managingCats, setManagingCats] = useState(false);
+  const [managingRecur, setManagingRecur] = useState(false);
   const [live, setLive] = useState(false);
   const dragId = useRef<string | null>(null);
   const supabaseRef = useRef(createClient());
@@ -92,6 +96,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
         { event: "INSERT", schema: "public", table: "tasks", filter: `client_id=eq.${clientId}` },
         (payload) => {
           const t = payload.new as Task;
+          if (t.archived_at) return; // archived cards never join the live board
           setTasks((p) => (p.some((x) => x.id === t.id) ? p.map((x) => (x.id === t.id ? t : x)) : [...p, t]));
         },
       )
@@ -100,7 +105,8 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
         { event: "UPDATE", schema: "public", table: "tasks", filter: `client_id=eq.${clientId}` },
         (payload) => {
           const t = payload.new as Task;
-          setTasks((p) => p.map((x) => (x.id === t.id ? t : x)));
+          // An archive sweep removes the card from the board in real time.
+          setTasks((p) => (t.archived_at ? p.filter((x) => x.id !== t.id) : p.map((x) => (x.id === t.id ? t : x))));
         },
       )
       .on(
@@ -166,7 +172,13 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
               {isAdmin && (
                 <button onClick={() => setManagingCats(true)}
                   className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-white transition-colors px-2 py-1">
-                  <Settings2 className="w-3.5 h-3.5" /> Manage
+                  <Settings2 className="w-3.5 h-3.5" /> Categories
+                </button>
+              )}
+              {isAdmin && (
+                <button onClick={() => setManagingRecur(true)}
+                  className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-white transition-colors px-2 py-1">
+                  <Repeat className="w-3.5 h-3.5" /> Recurring
                 </button>
               )}
             </>
@@ -187,6 +199,17 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
           categories={categories}
           open={managingCats}
           onClose={() => setManagingCats(false)}
+          onChanged={() => router.refresh()}
+        />
+      )}
+      {isAdmin && (
+        <RecurrenceManager
+          clientId={clientId}
+          recurrences={recurrences}
+          members={members}
+          categories={categories}
+          open={managingRecur}
+          onClose={() => setManagingRecur(false)}
           onChanged={() => router.refresh()}
         />
       )}

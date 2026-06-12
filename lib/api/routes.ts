@@ -62,6 +62,7 @@ export const ROUTES = {
   tasks: () => "/api/tasks",
   taskEvents: () => "/api/tasks/events",
   taskCategories: () => "/api/tasks/categories",
+  taskRecurrences: () => "/api/tasks/recurrences",
   tools: {
     meta: () => "/api/tools/meta",
     gbp: () => "/api/tools/gbp",

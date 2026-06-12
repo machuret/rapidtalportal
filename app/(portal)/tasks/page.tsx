@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { TaskBoard, type Task, type BoardMember, type TaskCategory } from "@/components/tasks/TaskBoard";
+import { TaskBoard, type Task, type BoardMember, type TaskCategory, type TaskRecurrence } from "@/components/tasks/TaskBoard";
 import { AchievedStrip } from "@/components/tasks/AchievedStrip";
-import { computeAchieved } from "@/lib/tasks/achieved";
+import { computeAchieved, type AchievedTask } from "@/lib/tasks/achieved";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { KanbanSquare } from "lucide-react";
 
@@ -16,14 +16,25 @@ export default async function TasksPage() {
   const { user, client } = ctx;
   if (!user.client_id) redirect("/dashboard");
 
+  const isAdmin = user.role === "client_admin" || user.role === "super_admin";
+
   const admin = createAdminClient();
-  const [{ data: tasks }, { data: people }, { data: commentRows }, { data: cats }] = await Promise.all([
-    admin.from("tasks").select("*").eq("client_id", user.client_id)
+  const [{ data: tasks }, { data: people }, { data: commentRows }, { data: cats }, { data: doneRows }, { data: recRows }] = await Promise.all([
+    // The live board excludes archived cards.
+    admin.from("tasks").select("*").eq("client_id", user.client_id).is("archived_at", null)
       .order("status").order("order_index").order("created_at"),
     admin.from("users").select("id, full_name, email, role").eq("client_id", user.client_id),
     admin.from("task_events").select("task_id").eq("client_id", user.client_id).eq("kind", "comment"),
     admin.from("task_categories").select("id, name, color").eq("client_id", user.client_id)
       .order("order_index").order("name"),
+    // Achieved stats read ALL done cards (incl. archived) so the totals survive archiving.
+    admin.from("tasks").select("title, status, completed_at, due_date, assigned_to")
+      .eq("client_id", user.client_id).eq("status", "done"),
+    // Recurrences only matter to admins (who manage them).
+    isAdmin
+      ? admin.from("task_recurrences").select("id, assigned_to, category_id, title, priority, frequency, interval, next_run_on, active")
+          .eq("client_id", user.client_id).order("active", { ascending: false }).order("next_run_on")
+      : Promise.resolve({ data: [] as TaskRecurrence[] }),
   ]);
 
   const commentCounts: Record<string, number> = {};
@@ -34,13 +45,12 @@ export default async function TasksPage() {
   const members: BoardMember[] = ((people ?? []) as { id: string; full_name: string | null; email: string }[])
     .map((p) => ({ id: p.id, name: p.full_name ?? p.email }));
 
-  const isAdmin = user.role === "client_admin" || user.role === "super_admin";
-
   // "Achieved" summary: a VA sees their own completed work; an admin sees the team's.
   const allTasks = (tasks ?? []) as Task[];
+  const doneTasks = (doneRows ?? []) as (AchievedTask & { assigned_to: string | null })[];
   const achievedScope: "mine" | "team" = isAdmin ? "team" : "mine";
   const achieved = computeAchieved(
-    isAdmin ? allTasks : allTasks.filter((t) => t.assigned_to === user.id),
+    isAdmin ? doneTasks : doneTasks.filter((t) => t.assigned_to === user.id),
   );
 
   return (
@@ -68,6 +78,7 @@ export default async function TasksPage() {
         isAdmin={isAdmin}
         members={members}
         categories={(cats ?? []) as TaskCategory[]}
+        recurrences={(recRows ?? []) as TaskRecurrence[]}
         commentCounts={commentCounts}
       />
     </div>
