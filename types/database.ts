@@ -111,6 +111,8 @@ export interface DbKbGenerationRun {
   completed_at: string | null;
 }
 
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+
 type NoRelationships = {
   foreignKeyName: string;
   columns: string[];
@@ -281,6 +283,30 @@ export interface Database {
         Row: { id: string; client_id: string; name: string; color: string; order_index: number; created_at: string };
         Insert: { id?: string; client_id: string; name: string; color?: string; order_index?: number; created_at?: string };
         Update: { id?: string; client_id?: string; name?: string; color?: string; order_index?: number; created_at?: string };
+        Relationships: NoRelationships;
+      };
+      placements: {
+        Row: { id: string; client_id: string; va_user_id: string; client_user_id: string; status: string; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; va_user_id: string; client_user_id: string; status?: string; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; va_user_id?: string; client_user_id?: string; status?: string; created_at?: string; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      notebook_pages: {
+        Row: { id: string; placement_id: string; parent_page_id: string | null; title: string; content: Json; sort_order: number; created_by: string | null; last_edited_by: string | null; is_archived: boolean; created_at: string; updated_at: string };
+        Insert: { id?: string; placement_id: string; parent_page_id?: string | null; title?: string; content?: Json; sort_order?: number; created_by?: string | null; last_edited_by?: string | null; is_archived?: boolean; created_at?: string; updated_at?: string };
+        Update: { id?: string; placement_id?: string; parent_page_id?: string | null; title?: string; content?: Json; sort_order?: number; created_by?: string | null; last_edited_by?: string | null; is_archived?: boolean; created_at?: string; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      notebook_page_revisions: {
+        Row: { id: string; page_id: string; content: Json; title: string; edited_by: string | null; created_at: string };
+        Insert: { id?: string; page_id: string; content: Json; title: string; edited_by?: string | null; created_at?: string };
+        Update: { id?: string; page_id?: string; content?: Json; title?: string; edited_by?: string | null; created_at?: string };
+        Relationships: NoRelationships;
+      };
+      notebook_activity: {
+        Row: { id: string; placement_id: string; event: string; actor_role: string; created_at: string };
+        Insert: { id?: string; placement_id: string; event: string; actor_role: string; created_at?: string };
+        Update: { id?: string; placement_id?: string; event?: string; actor_role?: string; created_at?: string };
         Relationships: NoRelationships;
       };
       access_credentials: {

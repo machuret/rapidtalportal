@@ -14,6 +14,13 @@ export const ROUTES = {
     client: (id: string) => `/api/admin/clients/${id}`,
     impersonate: () => "/api/admin/impersonate",
     prompts: () => "/api/admin/prompts",
+    placements: () => "/api/admin/placements",
+  },
+  notebook: {
+    pages: () => "/api/notebook/pages",
+    pagesReorder: () => "/api/notebook/pages/reorder",
+    revisions: () => "/api/notebook/revisions",
+    images: () => "/api/notebook/images",
   },
   kb: {
     generate: () => "/api/kb/generate",

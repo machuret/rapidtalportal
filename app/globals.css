@@ -239,4 +239,38 @@
     box-shadow: var(--shadow-lg); /* shadow-modal in Tailwind */
     z-index: var(--z-modal);
   }
+
+  /* ── Notebook TipTap content ──────────────────────────────────────────────  */
+  /* Rich-text rendering for the Notebook editor + read-only revision preview.  */
+  .notebook-prose {
+    @apply text-zinc-200 text-[15px] leading-relaxed;
+  }
+  .notebook-prose h1 { @apply text-2xl font-bold text-white mt-5 mb-2; }
+  .notebook-prose h2 { @apply text-xl font-bold text-white mt-4 mb-2; }
+  .notebook-prose h3 { @apply text-lg font-semibold text-white mt-3 mb-1.5; }
+  .notebook-prose p { @apply my-2; }
+  .notebook-prose ul { @apply list-disc pl-6 my-2; }
+  .notebook-prose ol { @apply list-decimal pl-6 my-2; }
+  .notebook-prose li { @apply my-0.5; }
+  .notebook-prose a { @apply text-blue-400 underline underline-offset-2; }
+  .notebook-prose strong { @apply font-semibold text-white; }
+  .notebook-prose code { @apply bg-zinc-800 text-zinc-200 rounded px-1 py-0.5 text-sm; }
+  .notebook-prose pre { @apply bg-zinc-900 border border-zinc-800 rounded-lg p-3 my-3 overflow-x-auto; }
+  .notebook-prose pre code { @apply bg-transparent p-0; }
+  .notebook-prose hr { @apply border-zinc-700 my-4; }
+  .notebook-prose img { @apply max-w-full rounded-lg my-3; }
+  .notebook-prose blockquote { @apply border-l-2 border-zinc-700 pl-3 text-zinc-400 my-2; }
+
+  /* Tables */
+  .notebook-prose table { @apply w-full border-collapse my-3; }
+  .notebook-prose th,
+  .notebook-prose td { @apply border border-zinc-700 px-2.5 py-1.5 text-left align-top; }
+  .notebook-prose th { @apply bg-zinc-800/60; }
+
+  /* Task lists (checkboxes) */
+  .notebook-prose ul[data-type="taskList"] { @apply list-none pl-0; }
+  .notebook-prose ul[data-type="taskList"] li { @apply flex items-start gap-2; }
+  .notebook-prose ul[data-type="taskList"] li > label { @apply mt-1 select-none; }
+  .notebook-prose ul[data-type="taskList"] li > div { @apply flex-1; }
+  .notebook-prose ul[data-type="taskList"] li[data-checked="true"] > div { @apply text-zinc-500 line-through; }
 }

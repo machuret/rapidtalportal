@@ -70,4 +70,8 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
     title: "What is the Daily Log?",
     body: "Your daily log is a quick end-of-day summary — what you did, wins, blockers, and tomorrow's plan. Your client reads these, so it's how your work stays visible. It takes two minutes and builds trust.",
   },
+  notebook: {
+    title: "What is the Notebook?",
+    body: "The Notebook is the shared home for your placement — SOPs, account registers, content calendars, weekly reports and meeting notes, all in one place instead of scattered across email and chat. Both you and your counterpart can read and edit every page, and it starts pre-loaded with useful templates. RapidTal admins cannot see anything you write here.",
+  },
 };
