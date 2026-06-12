@@ -39,7 +39,11 @@ export async function GET(req: NextRequest) {
     .limit(SCAN_LIMIT);
 
   const rows = (candidates ?? []) as { id: string; client_id: string }[];
-  if (rows.length === 0) return NextResponse.json({ ok: true, scanned: 0, indexed: 0 });
+  // Heartbeat first: even a no-op run proves the cron is alive (/admin/health).
+  const beat = (detail: Record<string, number>) =>
+    admin.from("cron_heartbeats").upsert({ name: "vault-index", ran_at: new Date().toISOString(), detail });
+
+  if (rows.length === 0) { await beat({ scanned: 0, indexed: 0 }); return NextResponse.json({ ok: true, scanned: 0, indexed: 0 }); }
 
   // Which already have embeddings? One query, then set membership.
   const { data: chunked } = await admin
@@ -49,7 +53,7 @@ export async function GET(req: NextRequest) {
   const indexed = new Set((chunked ?? []).map((c) => (c as { item_id: string }).item_id));
 
   const todo = rows.filter((r) => !indexed.has(r.id)).slice(0, INDEX_LIMIT);
-  if (todo.length === 0) return NextResponse.json({ ok: true, scanned: rows.length, indexed: 0 });
+  if (todo.length === 0) { await beat({ scanned: rows.length, indexed: 0 }); return NextResponse.json({ ok: true, scanned: rows.length, indexed: 0 }); }
 
   // Re-index in small concurrent batches; tolerate individual failures.
   let done = 0;
@@ -59,5 +63,6 @@ export async function GET(req: NextRequest) {
     done += results.filter((x) => x.status === "fulfilled").length;
   }
 
+  await beat({ scanned: rows.length, candidates: todo.length, indexed: done });
   return NextResponse.json({ ok: true, scanned: rows.length, candidates: todo.length, indexed: done });
 }

@@ -145,9 +145,15 @@ export interface Database {
         Relationships: NoRelationships;
       };
       vault_items: {
-        Row: { id: string; client_id: string; source_type: string; title: string; source_url: string | null; storage_path: string | null; raw_content: string | null; status: string; error_message: string | null; created_at: string; created_by: string | null; category: string | null; tags: string[]; ai_summary: string | null; updated_at: string | null; updated_by: string | null; content_hash: string | null; meta_curated: boolean };
-        Insert: { id?: string; client_id: string; source_type: string; title: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null; meta_curated?: boolean };
-        Update: { id?: string; client_id?: string; source_type?: string; title?: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null; meta_curated?: boolean };
+        Row: { id: string; client_id: string; source_type: string; title: string; source_url: string | null; storage_path: string | null; raw_content: string | null; status: string; error_message: string | null; created_at: string; created_by: string | null; category: string | null; tags: string[]; ai_summary: string | null; updated_at: string | null; updated_by: string | null; content_hash: string | null; meta_curated: boolean; indexed_at: string | null; index_error: string | null };
+        Insert: { id?: string; client_id: string; source_type: string; title: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null; meta_curated?: boolean; indexed_at?: string | null; index_error?: string | null };
+        Update: { id?: string; client_id?: string; source_type?: string; title?: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null; meta_curated?: boolean; indexed_at?: string | null; index_error?: string | null };
+        Relationships: NoRelationships;
+      };
+      cron_heartbeats: {
+        Row: { name: string; ran_at: string; detail: Json };
+        Insert: { name: string; ran_at?: string; detail?: Json };
+        Update: { name?: string; ran_at?: string; detail?: Json };
         Relationships: NoRelationships;
       };
       kb_entries: {
@@ -369,6 +375,10 @@ export interface Database {
       get_contact_status_counts: {
         Args: { p_client_id: string };
         Returns: { status: string; count: number }[];
+      };
+      health_schema_check: {
+        Args: Record<string, never>;
+        Returns: Json;
       };
     };
     Enums: Record<string, never>;

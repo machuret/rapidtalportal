@@ -126,26 +126,37 @@ function chunkText(text: string, title: string, maxLen = 1200, maxChunks = 200):
 }
 
 /**
- * Chunk + embed the full document and (re)write its vault_chunks rows. Best-effort:
- * existing chunks are cleared first so reprocess/edits never leave stale vectors.
- * Returns the number of chunks stored. Failures are logged, not thrown — the
- * AI summary/category are the primary result and must not be blocked by this.
+ * Chunk + embed the full document and (re)write its vault_chunks rows. Existing
+ * chunks are cleared first so reprocess/edits never leave stale vectors.
+ *
+ * Returns a precise outcome — { count, error } — which the caller persists to
+ * vault_items.indexed_at / index_error. The previous version swallowed every
+ * failure into console.warn, which is how production ran for weeks with ~7
+ * embeddings and nobody knew. The summary/category remain the primary result;
+ * this still never THROWS, it just reports honestly.
  */
 // deno-lint-ignore no-explicit-any
-async function embedAndStoreChunks(admin: any, itemId: string, clientId: string, title: string, rawContent: string): Promise<number> {
+async function embedAndStoreChunks(admin: any, itemId: string, clientId: string, title: string, rawContent: string): Promise<{ count: number; error: string | null }> {
   // Clear stale chunks regardless of outcome below.
   await admin.from("vault_chunks").delete().eq("item_id", itemId);
 
   const chunks = chunkText(rawContent, title);
-  if (!chunks.length) return 0;
+  if (!chunks.length) return { count: 0, error: "no chunks produced from content" };
 
   // Supabase's built-in gte-small model (384-dim) — runs in the Edge Runtime
   // with no API key. Accessed via globalThis so it compiles whether or not the
   // Supabase global is typed. Embeds one chunk at a time.
   // deno-lint-ignore no-explicit-any
-  const session = new (globalThis as any).Supabase.ai.Session("gte-small");
+  let session: any;
+  try {
+    // deno-lint-ignore no-explicit-any
+    session = new (globalThis as any).Supabase.ai.Session("gte-small");
+  } catch (e) {
+    return { count: 0, error: `gte-small session unavailable: ${e instanceof Error ? e.message : String(e)}` };
+  }
 
   const rows: Record<string, unknown>[] = [];
+  let firstEmbedError: string | null = null;
   for (let i = 0; i < chunks.length; i++) {
     try {
       const emb = (await session.run(chunks[i], { mean_pool: true, normalize: true })) as number[];
@@ -158,17 +169,18 @@ async function embedAndStoreChunks(admin: any, itemId: string, clientId: string,
         embedding: JSON.stringify(emb),
       });
     } catch (e) {
+      if (!firstEmbedError) firstEmbedError = `chunk ${i}: ${e instanceof Error ? e.message : String(e)}`;
       console.warn(`⚠️ vault-process: embedding chunk ${i} failed for ${itemId}:`, e);
     }
   }
-  if (!rows.length) return 0;
+  if (!rows.length) return { count: 0, error: firstEmbedError ?? "all chunks failed to embed" };
 
   const { error } = await admin.from("vault_chunks").insert(rows);
-  if (error) {
-    console.warn(`⚠️ vault-process: chunk insert failed for ${itemId}: ${error.message}`);
-    return 0;
-  }
-  return rows.length;
+  if (error) return { count: 0, error: `chunk insert failed: ${error.message}` };
+
+  // Partial success is still success, but note what was dropped.
+  const dropped = chunks.length - rows.length;
+  return { count: rows.length, error: dropped > 0 ? `${dropped} of ${chunks.length} chunks failed (first: ${firstEmbedError})` : null };
 }
 
 Deno.serve(async (req: Request) => {
@@ -400,14 +412,28 @@ Deno.serve(async (req: Request) => {
 
     // ── Embed for semantic search ─────────────────────────────────────────────
     // Best-effort: chunks power "Ask the Vault" (RAG). A failure here must not
-    // fail the request — the summary/category are already saved above.
+    // fail the request — the summary/category are already saved above. But the
+    // OUTCOME is persisted to vault_items (indexed_at / index_error) so a
+    // failing embedding pipeline is visible in /admin/health instead of silent.
     let chunksStored = 0;
+    let indexError: string | null = null;
     try {
-      chunksStored = await embedAndStoreChunks(admin, itemId, clientId, itemTitle, rawContent);
-      console.log(`🧠 vault-process: stored ${chunksStored} embedding chunks for ${itemId}`);
+      const outcome = await embedAndStoreChunks(admin, itemId, clientId, itemTitle, rawContent);
+      chunksStored = outcome.count;
+      indexError = outcome.error;
+      console.log(`🧠 vault-process: stored ${chunksStored} embedding chunks for ${itemId}${indexError ? ` (warn: ${indexError})` : ""}`);
     } catch (embErr) {
+      indexError = embErr instanceof Error ? embErr.message : String(embErr);
       console.warn(`⚠️ vault-process: embedding step errored for ${itemId}:`, embErr);
     }
+    try {
+      await admin
+        .from("vault_items")
+        .update(chunksStored > 0
+          ? { indexed_at: new Date().toISOString(), index_error: indexError }
+          : { index_error: indexError ?? "indexing produced no chunks" })
+        .eq("id", itemId);
+    } catch (_e) { /* columns ship in 059; tolerate older schemas */ }
 
     console.log(`✅ vault-process complete: ${itemId} → category=${category}, tokens=${tokensUsed}, chunks=${chunksStored}`);
 

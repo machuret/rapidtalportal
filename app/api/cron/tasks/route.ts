@@ -97,5 +97,12 @@ export async function GET(req: NextRequest) {
 
   const archived = (archivedRows ?? []).length;
 
+  // Heartbeat: /admin/health flags a cron that hasn't run on schedule.
+  await admin.from("cron_heartbeats").upsert({
+    name: "tasks",
+    ran_at: now.toISOString(),
+    detail: { spawned, archived },
+  });
+
   return NextResponse.json({ ok: true, today, spawned, archived });
 }

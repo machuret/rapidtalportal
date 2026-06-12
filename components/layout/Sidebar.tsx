@@ -35,6 +35,7 @@ import {
   SlidersHorizontal,
   Briefcase,
   AlertTriangle,
+  Activity,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -103,6 +104,7 @@ const adminLinks = [
   { href: "/admin/prompts",    label: "AI Prompts",  icon: SlidersHorizontal },
   { href: "/admin/issues",     label: "Issues",      icon: AlertTriangle },
   { href: "/admin/errors",     label: "Errors",      icon: Bug },
+  { href: "/admin/health",     label: "Health",      icon: Activity },
 ];
 
 export function Sidebar({ user, client, onNavigate }: SidebarProps) {

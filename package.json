@@ -12,6 +12,9 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "db:status": "node scripts/apply-migrations.mjs --status",
+    "db:baseline": "node scripts/apply-migrations.mjs --baseline",
+    "db:apply": "node scripts/apply-migrations.mjs --apply",
     "gen:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > types/database.ts"
   },
   "dependencies": {
@@ -60,6 +63,7 @@
     "eslint-config-next": "14.2.35",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
+    "pg": "^8.21.0",
     "postcss": "^8",
     "shadcn": "^4.6.0",
     "tailwindcss": "^3.4.1",
