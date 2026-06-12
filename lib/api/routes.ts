@@ -68,6 +68,7 @@ export const ROUTES = {
   },
   tasks: () => "/api/tasks",
   taskEvents: () => "/api/tasks/events",
+  taskReview: () => "/api/tasks/review",
   taskCategories: () => "/api/tasks/categories",
   taskRecurrences: () => "/api/tasks/recurrences",
   tools: {

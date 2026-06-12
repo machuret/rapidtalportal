@@ -3,6 +3,8 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { VaDashboard } from "@/components/dashboard/VaDashboard";
 import { VaDayStrip, AdminTeamStrip } from "@/components/dashboard/DayStrips";
+import { ClientDashboard } from "@/components/dashboard/ClientDashboard";
+import { renderClientDashboard } from "./client-dashboard";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard — RapidTal" };
@@ -14,6 +16,13 @@ export default async function DashboardPage() {
   const { user, client } = ctx;
 
   if (user.role === "super_admin") redirect("/admin");
+
+  // Clients get a purpose-built home (request / approve / value delivered),
+  // not the VA workspace dashboard.
+  if (user.role === "client_admin" && user.client_id) {
+    const data = await renderClientDashboard(user.client_id, user.full_name ?? user.email);
+    return <ClientDashboard {...data} clientName={client?.name ?? ""} />;
+  }
 
   const supabase = createAdminClient();
   const clientId = user.client_id!;

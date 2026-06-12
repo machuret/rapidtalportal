@@ -37,9 +37,12 @@ import {
   AlertTriangle,
   Activity,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "./NotificationsBell";
+
+type NavItem = { href: string; label: string; icon: LucideIcon } | { section: string };
 
 interface SidebarProps {
   user: DbUser;
@@ -47,7 +50,7 @@ interface SidebarProps {
   onNavigate?: () => void;
 }
 
-const vaLinks = [
+const vaLinks: NavItem[] = [
   { href: "/dashboard",      label: "Dashboard",      icon: LayoutDashboard },
   { href: "/company-report", label: "Company Report", icon: Brain },
   { href: "/ask",            label: "Ask the Vault",  icon: Sparkles },
@@ -67,30 +70,36 @@ const vaLinks = [
   { href: "/profile",        label: "My Profile",     icon: UserCircle },
 ];
 
-const clientAdminLinks = [
+// Client-first: the things a client does — see progress, oversee the team,
+// communicate — lead. The VA/AI work tools (which a client *can* open but their
+// VA mostly drives) are grouped under "Workspace" so the top level reads like a
+// client product, not the VA's.
+const clientAdminLinks: NavItem[] = [
   { href: "/dashboard",      label: "Dashboard",       icon: LayoutDashboard },
-  { href: "/company-report", label: "Company Report",  icon: Brain },
-  { href: "/ask",            label: "Ask the Vault",   icon: Sparkles },
-  { href: "/compose",        label: "Compose",         icon: Wand2 },
-  { href: "/brain-analytics",label: "Brain Analytics", icon: BarChart3 },
-  { href: "/supervision",    label: "Supervision",     icon: Eye },
   { href: "/tasks",          label: "Tasks",           icon: KanbanSquare },
   { href: "/notebook",       label: "Notebook",        icon: Notebook },
-  { href: "/tools",          label: "Tools",           icon: Wrench },
-  { href: "/my-job",         label: "My Job",          icon: Briefcase },
-  { href: "/access",         label: "Access",          icon: KeyRound },
+  { href: "/messages",       label: "Messages",        icon: MessageSquare },
+  { href: "/supervision",    label: "Supervision",     icon: Eye },
   { href: "/team",           label: "My Team",         icon: UsersRound },
-  { href: "/messages",       label: "Messages",       icon: MessageSquare },
-  { href: "/daily-log",      label: "Daily Log",      icon: NotebookPen },
-  { href: "/crm",            label: "CRM",            icon: ContactRound },
-  { href: "/content",        label: "Content",        icon: PenLine },
-  { href: "/sops",           label: "SOPs",           icon: ListChecks },
-  { href: "/company-dna",    label: "Company DNA",    icon: Dna },
-  { href: "/vault",          label: "Vault",          icon: Archive },
-  { href: "/profile",        label: "My Profile",     icon: UserCircle },
+  { href: "/brain-analytics",label: "Brain Analytics", icon: BarChart3 },
+  { section: "Workspace" },
+  { href: "/ask",            label: "Ask the Vault",   icon: Sparkles },
+  { href: "/company-report", label: "Company Report",  icon: Brain },
+  { href: "/compose",        label: "Compose",         icon: Wand2 },
+  { href: "/tools",          label: "Tools",           icon: Wrench },
+  { href: "/content",        label: "Content",         icon: PenLine },
+  { href: "/sops",           label: "SOPs",            icon: ListChecks },
+  { href: "/crm",            label: "CRM",             icon: ContactRound },
+  { href: "/company-dna",    label: "Company DNA",     icon: Dna },
+  { href: "/vault",          label: "Vault",           icon: Archive },
+  { href: "/access",         label: "Access",          icon: KeyRound },
+  { href: "/daily-log",      label: "Daily Log",       icon: NotebookPen },
+  { href: "/my-job",         label: "My Job",          icon: Briefcase },
+  { section: "Account" },
+  { href: "/profile",        label: "My Profile",      icon: UserCircle },
 ];
 
-const adminLinks = [
+const adminLinks: NavItem[] = [
   { href: "/admin",            label: "Overview",    icon: LayoutDashboard },
   { href: "/admin/clients",    label: "Clients",     icon: Building2 },
   { href: "/admin/users",      label: "All Users",   icon: Users },
@@ -150,24 +159,30 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
         </div>
 
         {/* Nav */}
-        <nav className="flex flex-col gap-1 flex-1">
-          {links.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              onClick={onNavigate}
-              className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                // "/admin" is exact-only, otherwise it would highlight on every /admin/* page.
-                pathname === href || (href !== "/admin" && pathname.startsWith(href + "/"))
-                  ? "bg-zinc-700 text-white"
-                  : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-              )}
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              {label}
-            </Link>
-          ))}
+        <nav className="flex flex-col gap-1 flex-1 overflow-y-auto">
+          {links.map((item) =>
+            "section" in item ? (
+              <p key={`s-${item.section}`} className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                {item.section}
+              </p>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavigate}
+                className={cn(
+                  "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                  // "/admin" is exact-only, otherwise it would highlight on every /admin/* page.
+                  pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href + "/"))
+                    ? "bg-zinc-700 text-white"
+                    : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                )}
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                {item.label}
+              </Link>
+            )
+          )}
         </nav>
 
         {/* User footer */}
