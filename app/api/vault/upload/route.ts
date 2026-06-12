@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
 import { triggerVaultProcess } from "@/lib/vault-process-trigger";
+import { safeKeyName } from "@/lib/storage-keys";
 
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
 
@@ -31,8 +32,8 @@ export async function POST(req: NextRequest) {
   const sourceType = ext === "pdf" ? "pdf" : ext === "docx" ? "docx" : "text";
   const supabase = createAdminClient();
 
-  // Save to Supabase Storage
-  const storagePath = `vault/${clientId}/${Date.now()}-${file.name}`;
+  // Save to Supabase Storage (key must be sanitised; title keeps the real name)
+  const storagePath = `vault/${clientId}/${Date.now()}-${safeKeyName(file.name)}`;
   const { error: storageError } = await supabase.storage
     .from("vault")
     .upload(storagePath, file, { contentType: file.type });
