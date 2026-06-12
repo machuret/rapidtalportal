@@ -158,7 +158,12 @@ Deno.serve(async (req: Request) => {
     // the turns to the model so it understands the thread.
     const history: { question?: string; answer?: string }[] = Array.isArray(body.history) ? body.history.slice(-4) : [];
     const recentQs = history.map((h) => (h?.question ?? "").toString()).filter(Boolean).slice(-2);
+    // Embedding query carries recent turns so follow-ups stay on-topic…
     const retrievalQuery = [...recentQs, question].join(" ").trim();
+    // …but keyword (websearch) FTS must use ONLY the current question:
+    // websearch_to_tsquery ANDs every term, so concatenated history makes the
+    // query stricter with each follow-up until it matches nothing.
+    const ftsQuery = question;
 
     if (!clientId || !question) return json({ error: "Missing clientId or question." }, 400);
     if (question.length < 3) return json({ error: "Question too short." }, 422);
@@ -197,11 +202,11 @@ Deno.serve(async (req: Request) => {
       admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
       admin.from("kb_entries").select("question, answer")
         .eq("client_id", clientId)
-        .textSearch("fts", retrievalQuery, { type: "websearch", config: "english" })
+        .textSearch("fts", ftsQuery, { type: "websearch", config: "english" })
         .limit(3),
       admin.from("sops").select("title, body")
         .eq("client_id", clientId)
-        .textSearch("fts", retrievalQuery, { type: "websearch", config: "english" })
+        .textSearch("fts", ftsQuery, { type: "websearch", config: "english" })
         .limit(2),
       queryEmbedding.length
         ? admin.rpc("match_vault_chunks", { p_client_id: clientId, p_query_embedding: queryEmbedding, p_match_count: matchCount })
@@ -209,7 +214,7 @@ Deno.serve(async (req: Request) => {
       admin.from("vault_items").select("id, title, ai_summary, raw_content")
         .eq("client_id", clientId)
         .eq("status", "ready")
-        .textSearch("fts", retrievalQuery, { type: "websearch", config: "english" })
+        .textSearch("fts", ftsQuery, { type: "websearch", config: "english" })
         .limit(8),
     ]);
 
