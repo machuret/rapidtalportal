@@ -94,6 +94,7 @@ export const ROUTES = {
   },
   myJob: {
     contract: (userId?: string) => `/api/my-job/contract${userId ? `?userId=${userId}` : ""}`,
+    contractDocument: (userId?: string) => `/api/my-job/contract/document${userId ? `?userId=${userId}` : ""}`,
     days: () => "/api/my-job/days",
     leave: () => "/api/my-job/leave",
     issues: () => "/api/my-job/issues",

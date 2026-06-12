@@ -1,0 +1,14 @@
+{
+  "rawHexFiles": [
+    "components/daily-log/DailyLogAnalytics.tsx"
+  ],
+  "inlineStyleFiles": [
+    "app/(portal)/company-report/page.tsx",
+    "app/(portal)/team/[id]/page.tsx",
+    "components/daily-log/DailyLogAnalytics.tsx",
+    "components/messages/MessagesClient.tsx",
+    "components/sops/SopRunner.tsx",
+    "components/tools/ContentAuditorTool.tsx",
+    "components/vault/CrawlJobPanel.tsx"
+  ]
+}

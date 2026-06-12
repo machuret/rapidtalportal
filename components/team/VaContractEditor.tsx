@@ -5,18 +5,19 @@
  * hours, notice, next review). Saves to /api/my-job/contract; the VA sees
  * these on their My Job → Overview as read-only key terms.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
-import { Loader2, Save, FileSignature } from "lucide-react";
+import { Loader2, Save, FileSignature, Upload, FileText, Trash2, Download } from "lucide-react";
 
 export interface ContractInit {
   rate: number | null; currency: string | null; pay_period: string | null;
   payment_method: string | null; payment_schedule: string | null;
   start_date: string | null; weekly_hours: number | null;
   notice_period: string | null; next_review_date: string | null;
+  contract_name: string | null;
 }
 
 export function VaContractEditor({ vaId, initial }: { vaId: string; initial: ContractInit | null }) {
@@ -35,6 +36,48 @@ export function VaContractEditor({ vaId, initial }: { vaId: string; initial: Con
   });
 
   function set<K extends keyof typeof f>(k: K, v: string) { setF((p) => ({ ...p, [k]: v })); }
+
+  // ── Signed contract PDF ────────────────────────────────────────────────────
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [docName, setDocName] = useState<string | null>(initial?.contract_name ?? null);
+  const [busy, setBusy] = useState<"" | "upload" | "download" | "remove">("");
+
+  async function upload(file: File) {
+    if (busy) return;
+    setBusy("upload");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("userId", vaId);
+      const res = await fetch(ROUTES.myJob.contractDocument(), { method: "POST", body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Upload failed.");
+      setDocName(json.contract_name ?? file.name);
+      toast.success("Contract PDF uploaded.");
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Upload failed."); }
+    finally { setBusy(""); if (fileRef.current) fileRef.current.value = ""; }
+  }
+
+  async function download() {
+    if (busy) return;
+    setBusy("download");
+    try {
+      const { url } = await api.get<{ url: string }>(ROUTES.myJob.contractDocument(vaId), { showErrorToast: false });
+      window.open(url, "_blank");
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Couldn't open the file."); }
+    finally { setBusy(""); }
+  }
+
+  async function removeDoc() {
+    if (busy) return;
+    setBusy("remove");
+    try {
+      await api.delete(ROUTES.myJob.contractDocument(vaId), undefined, { showErrorToast: false });
+      setDocName(null);
+      toast.success("Contract PDF removed.");
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Couldn't remove the file."); }
+    finally { setBusy(""); }
+  }
 
   async function save() {
     if (saving) return;
@@ -92,6 +135,32 @@ export function VaContractEditor({ vaId, initial }: { vaId: string; initial: Con
         <div className="flex flex-col gap-1"><label className={lbl}>Notice period</label><input value={f.notice_period} onChange={(e) => set("notice_period", e.target.value)} placeholder="30 days" className={input} /></div>
         <div className="flex flex-col gap-1"><label className={lbl}>Next review date</label><input type="date" value={f.next_review_date} onChange={(e) => set("next_review_date", e.target.value)} className={input} /></div>
       </div>
+
+      {/* Signed contract PDF */}
+      <div className="mt-5 pt-4 border-t border-zinc-800">
+        <p className={lbl + " mb-2"}>Signed contract (PDF)</p>
+        <input ref={fileRef} type="file" accept="application/pdf" className="hidden"
+          onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload(file); }} />
+        {docName ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 text-sm text-zinc-200"><FileText className="w-4 h-4 text-emerald-400" /> {docName}</span>
+            <button onClick={download} disabled={!!busy} className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-white transition-colors disabled:opacity-50">
+              {busy === "download" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Download
+            </button>
+            <button onClick={() => fileRef.current?.click()} disabled={!!busy} className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-white transition-colors disabled:opacity-50">
+              {busy === "upload" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Replace
+            </button>
+            <button onClick={removeDoc} disabled={!!busy} className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-red-400 transition-colors disabled:opacity-50">
+              {busy === "remove" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />} Remove
+            </button>
+          </div>
+        ) : (
+          <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={!!busy} className="gap-2">
+            {busy === "upload" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} Upload PDF
+          </Button>
+        )}
+      </div>
+
       <div className="flex items-center gap-2 mt-4">
         <Button onClick={save} disabled={saving} className="gap-2">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save terms</Button>
         <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>

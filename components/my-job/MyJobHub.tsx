@@ -26,6 +26,7 @@ export interface Contract {
   payment_method: string | null; payment_schedule: string | null;
   start_date: string | null; weekly_hours: number | null;
   notice_period: string | null; next_review_date: string | null;
+  contract_path: string | null; contract_name: string | null;
 }
 export interface DayRow { id: string; work_date: string; hours: number | null; note: string | null }
 export interface LeaveRow { id: string; start_date: string; end_date: string; leave_type: string; reason: string | null; status: string }
@@ -164,6 +165,7 @@ function Overview({ contract, vaTimezone }: { contract: Contract | null; vaTimez
               </div>
             ))}
           </dl>
+          {contract?.contract_path && <ContractDownload name={contract.contract_name} />}
         </div>
 
         {/* Tenure */}
@@ -190,6 +192,27 @@ function Overview({ contract, vaTimezone }: { contract: Contract | null; vaTimez
 
       <TimezoneOverlap defaultVaZone={vaTimezone} />
     </div>
+  );
+}
+
+/** VA-facing "download my signed contract" — fetches a short-lived signed URL. */
+function ContractDownload({ name }: { name: string | null }) {
+  const [loading, setLoading] = useState(false);
+  async function open() {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const { url } = await api.get<{ url: string }>(ROUTES.myJob.contractDocument(), { showErrorToast: false });
+      window.open(url, "_blank");
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Couldn't open the contract."); }
+    finally { setLoading(false); }
+  }
+  return (
+    <button onClick={open} disabled={loading}
+      className="mt-4 inline-flex items-center gap-2 text-sm rounded-lg border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-200 px-3 py-1.5 transition-colors disabled:opacity-50">
+      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4 text-emerald-400" />}
+      {name || "Signed contract"} <span className="text-zinc-500">— download</span>
+    </button>
   );
 }
 

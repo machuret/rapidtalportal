@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "styles:check": "node scripts/styles-guard.mjs",
+    "styles:baseline": "node scripts/styles-guard.mjs --update",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

@@ -73,7 +73,7 @@ export default async function VaDetailPage({ params }: { params: { id: string } 
   // Job & contract terms (My Job → Overview key terms).
   const { data: contractRow } = await admin
     .from("va_job_contracts")
-    .select("rate, currency, pay_period, payment_method, payment_schedule, start_date, weekly_hours, notice_period, next_review_date")
+    .select("rate, currency, pay_period, payment_method, payment_schedule, start_date, weekly_hours, notice_period, next_review_date, contract_name")
     .eq("user_id", va.id)
     .maybeSingle();
   const contract = (contractRow as ContractInit | null) ?? null;
