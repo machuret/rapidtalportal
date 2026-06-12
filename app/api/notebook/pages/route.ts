@@ -56,8 +56,12 @@ export const POST = withAuth(async (req, { user }) => {
       .select("id, parent_page_id, placement_id")
       .eq("id", parsed.data.parentPageId)
       .maybeSingle();
-    if (!parent) return NextResponse.json({ error: "Parent page not found." }, { status: 404 });
-    if ((parent as { parent_page_id: string | null }).parent_page_id) {
+    const pr = parent as { parent_page_id: string | null; placement_id: string } | null;
+    if (!pr) return NextResponse.json({ error: "Parent page not found." }, { status: 404 });
+    if (pr.placement_id !== parsed.data.placementId) {
+      return NextResponse.json({ error: "Parent belongs to a different placement." }, { status: 422 });
+    }
+    if (pr.parent_page_id) {
       return NextResponse.json({ error: "Pages can only be nested one level deep." }, { status: 422 });
     }
   }

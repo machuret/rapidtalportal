@@ -26,13 +26,28 @@ export const POST = withAuth(async (req) => {
   const sb = createClient();
   const { items } = parsed.data;
 
-  // A target parent must itself be top-level.
+  // Fetch every page touched (items + their target parents) in one go. RLS
+  // already scopes this to pages the caller can see; we additionally require
+  // them all to share ONE placement so a multi-placement user can't move a
+  // page across notebooks or parent it under another engagement's page.
   const newParents = Array.from(new Set(items.map((i) => i.parentPageId).filter(Boolean))) as string[];
-  if (newParents.length) {
-    const { data: parents } = await sb.from("notebook_pages").select("id, parent_page_id").in("id", newParents);
-    if ((parents ?? []).some((p) => (p as { parent_page_id: string | null }).parent_page_id)) {
-      return NextResponse.json({ error: "Pages can only be nested one level deep." }, { status: 422 });
-    }
+  const involved = Array.from(new Set([...items.map((i) => i.id), ...newParents]));
+  const { data: rows } = await sb
+    .from("notebook_pages")
+    .select("id, parent_page_id, placement_id")
+    .in("id", involved);
+  const fetched = (rows ?? []) as { id: string; parent_page_id: string | null; placement_id: string }[];
+  const byId = new Map(fetched.map((r) => [r.id, r]));
+
+  if (fetched.length !== involved.length) {
+    return NextResponse.json({ error: "Unknown page in reorder set." }, { status: 404 });
+  }
+  if (new Set(fetched.map((r) => r.placement_id)).size > 1) {
+    return NextResponse.json({ error: "Pages must belong to the same placement." }, { status: 422 });
+  }
+  // A target parent must itself be top-level.
+  if (newParents.some((id) => byId.get(id)?.parent_page_id)) {
+    return NextResponse.json({ error: "Pages can only be nested one level deep." }, { status: 422 });
   }
   // A page that has children cannot become a child itself.
   const becomingChild = items.filter((i) => i.parentPageId).map((i) => i.id);

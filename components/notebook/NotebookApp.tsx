@@ -62,6 +62,9 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
   const titleRef = useRef<string>(selected?.title ?? "");
   const updatedAtRef = useRef<string>(selected?.updated_at ?? "");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Always points at the latest flush logic so any handler can drain a pending
+  // save before changing context (avoids losing edits inside the debounce window).
+  const flushRef = useRef<() => Promise<void>>(async () => {});
 
   const nameFor = useCallback((uid: string | null) => {
     if (uid === participants.vaUserId) return participants.vaName;
@@ -70,8 +73,8 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
   }, [participants]);
 
   // ---- selection ----
-  const selectPage = useCallback((id: string) => {
-    if (timer.current) clearTimeout(timer.current);
+  const selectPage = useCallback(async (id: string) => {
+    await flushRef.current(); // persist any pending edits to the page we're leaving
     const p = pages.find((x) => x.id === id);
     setSelectedId(id);
     setStale(false);
@@ -112,7 +115,13 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
     timer.current = setTimeout(() => { void doSave(); }, 1500);
   }, [doSave, stale]);
 
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  // Drain a queued save immediately. Kept in a ref so stable callbacks (and the
+  // unmount cleanup) can flush without depending on the latest doSave identity.
+  flushRef.current = async () => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; await doSave(); }
+  };
+
+  useEffect(() => () => { void flushRef.current(); }, []);
 
   // ---- realtime: reflect the other party's changes ----
   useEffect(() => {
@@ -140,7 +149,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
       const page = await api.post<NotebookPage>(ROUTES.notebook.pages(), { placementId: activePlacementId, parentPageId, title: "Untitled" });
       setPages((p) => [...p, page]);
       if (parentPageId) setExpanded((e) => ({ ...e, [parentPageId]: true }));
-      selectPage(page.id);
+      void selectPage(page.id);
     } catch { /* api-client toasts */ }
   }
 
@@ -150,7 +159,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
       setPages((p) => p.map((x) => (x.id === id ? { ...x, is_archived: updated.is_archived, updated_at: updated.updated_at } : x)));
       if (value && id === selectedId) {
         const next = pages.find((p) => !p.is_archived && p.id !== id);
-        if (next) selectPage(next.id); else setSelectedId(null);
+        if (next) void selectPage(next.id); else setSelectedId(null);
       }
       toast.success(value ? "Page archived." : "Page restored.");
     } catch { /* toasts */ }
@@ -224,7 +233,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
           onDragStart={() => { dragId.current = page.id; }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); void dropOn(page.id); }}
-          onClick={() => selectPage(page.id)}
+          onClick={() => void selectPage(page.id)}
           className={cn(
             "group flex items-center gap-1 pr-1.5 py-1.5 rounded-md cursor-pointer text-sm transition-colors",
             depth === 0 ? "pl-1.5" : "pl-5",
@@ -262,7 +271,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
           <div className="p-2 border-b border-zinc-800">
             <select
               value={activePlacementId}
-              onChange={(e) => router.push(`/notebook?placement=${e.target.value}`)}
+              onChange={async (e) => { await flushRef.current(); router.push(`/notebook?placement=${e.target.value}`); }}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-2 h-8 text-sm text-zinc-200"
             >
               {placements.map((pl) => <option key={pl.id} value={pl.id}>{pl.counterpartName}{pl.clientName ? ` · ${pl.clientName}` : ""}</option>)}
