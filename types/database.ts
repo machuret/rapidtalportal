@@ -168,6 +168,12 @@ export interface Database {
         Update: { id?: string; lead_id?: string; user_id?: string | null; kind?: string; body?: string; created_at?: string };
         Relationships: NoRelationships;
       };
+      expenses: {
+        Row: { id: string; name: string; vendor: string | null; category: string; amount: number; currency: string; cadence: string; status: string; next_due_date: string | null; url: string | null; started_on: string | null; owner_id: string | null; notes: string | null; created_by: string | null; created_at: string; updated_at: string; archived_at: string | null };
+        Insert: { id?: string; name: string; vendor?: string | null; category?: string; amount?: number; currency?: string; cadence?: string; status?: string; next_due_date?: string | null; url?: string | null; started_on?: string | null; owner_id?: string | null; notes?: string | null; created_by?: string | null; created_at?: string; updated_at?: string; archived_at?: string | null };
+        Update: { id?: string; name?: string; vendor?: string | null; category?: string; amount?: number; currency?: string; cadence?: string; status?: string; next_due_date?: string | null; url?: string | null; started_on?: string | null; owner_id?: string | null; notes?: string | null; created_by?: string | null; created_at?: string; updated_at?: string; archived_at?: string | null };
+        Relationships: NoRelationships;
+      };
       kb_entries: {
         Row: { id: string; client_id: string; question: string; answer: string; source_vault_ids: string[]; category: string | null; generated_at: string; is_pinned: boolean };
         Insert: { id?: string; client_id: string; question: string; answer: string; source_vault_ids: string[]; category?: string | null; generated_at?: string; is_pinned?: boolean };
