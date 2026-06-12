@@ -84,33 +84,58 @@ $$;
 GRANT EXECUTE ON FUNCTION match_vault_chunks(UUID, VECTOR, INT) TO authenticated, service_role;
 
 -- ── Full-text search columns (020 + 023) ─────────────────────────────────────
-ALTER TABLE vault_items
-  ADD COLUMN IF NOT EXISTS fts tsvector
-  GENERATED ALWAYS AS (
-    to_tsvector(
-      'english',
-      coalesce(title, '') || ' ' ||
-      coalesce(ai_summary, '') || ' ' ||
-      coalesce(array_to_string(tags, ' '), '') || ' ' ||
-      coalesce(raw_content, '')
-    )
-  ) STORED;
+-- Maintained by triggers, NOT GENERATED columns: to_tsvector('english', …) is
+-- only STABLE on some PG versions, which a generated column rejects with
+-- "generation expression is not immutable". Triggers have no such requirement.
+
+-- vault_items.fts
+ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS fts tsvector;
+CREATE OR REPLACE FUNCTION vault_items_fts_update() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.fts := to_tsvector('english',
+    coalesce(NEW.title, '') || ' ' ||
+    coalesce(NEW.ai_summary, '') || ' ' ||
+    coalesce(array_to_string(NEW.tags, ' '), '') || ' ' ||
+    coalesce(NEW.raw_content, ''));
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS vault_items_fts_trg ON vault_items;
+CREATE TRIGGER vault_items_fts_trg BEFORE INSERT OR UPDATE ON vault_items
+  FOR EACH ROW EXECUTE FUNCTION vault_items_fts_update();
+UPDATE vault_items SET fts = to_tsvector('english',
+  coalesce(title, '') || ' ' || coalesce(ai_summary, '') || ' ' ||
+  coalesce(array_to_string(tags, ' '), '') || ' ' || coalesce(raw_content, ''));
 CREATE INDEX IF NOT EXISTS vault_items_fts_idx ON vault_items USING gin (fts);
 CREATE INDEX IF NOT EXISTS vault_items_client_created_idx
   ON vault_items (client_id, created_at DESC);
 
-ALTER TABLE kb_entries
-  ADD COLUMN IF NOT EXISTS fts tsvector
-  GENERATED ALWAYS AS (
-    to_tsvector('english', coalesce(question, '') || ' ' || coalesce(answer, ''))
-  ) STORED;
+-- kb_entries.fts
+ALTER TABLE kb_entries ADD COLUMN IF NOT EXISTS fts tsvector;
+CREATE OR REPLACE FUNCTION kb_entries_fts_update() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.fts := to_tsvector('english', coalesce(NEW.question, '') || ' ' || coalesce(NEW.answer, ''));
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS kb_entries_fts_trg ON kb_entries;
+CREATE TRIGGER kb_entries_fts_trg BEFORE INSERT OR UPDATE ON kb_entries
+  FOR EACH ROW EXECUTE FUNCTION kb_entries_fts_update();
+UPDATE kb_entries SET fts = to_tsvector('english', coalesce(question, '') || ' ' || coalesce(answer, ''));
 CREATE INDEX IF NOT EXISTS kb_entries_fts_idx ON kb_entries USING gin (fts);
 
-ALTER TABLE sops
-  ADD COLUMN IF NOT EXISTS fts tsvector
-  GENERATED ALWAYS AS (
-    to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
-  ) STORED;
+-- sops.fts
+ALTER TABLE sops ADD COLUMN IF NOT EXISTS fts tsvector;
+CREATE OR REPLACE FUNCTION sops_fts_update() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.fts := to_tsvector('english', coalesce(NEW.title, '') || ' ' || coalesce(NEW.body, ''));
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS sops_fts_trg ON sops;
+CREATE TRIGGER sops_fts_trg BEFORE INSERT OR UPDATE ON sops
+  FOR EACH ROW EXECUTE FUNCTION sops_fts_update();
+UPDATE sops SET fts = to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''));
 CREATE INDEX IF NOT EXISTS sops_fts_idx ON sops USING gin (fts);
 
 INSERT INTO schema_migrations (version) VALUES
