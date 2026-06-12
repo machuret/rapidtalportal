@@ -183,18 +183,8 @@ export function UsersTable({
     }
   }, []);
 
-  const [resetBusy, setResetBusy] = useState<string | null>(null);
+  const [resetUser, setResetUser] = useState<UserRow | null>(null);
   const [resetResult, setResetResult] = useState<{ email: string; password: string } | null>(null);
-  const resetPassword = useCallback(async (u: UserRow) => {
-    if (!confirm(`Set a new password for ${u.email}? Their current password stops working immediately, and you'll need to send them the new one.`)) return;
-    setResetBusy(u.id);
-    try {
-      const res = await api.post<{ email: string; password: string }>(ROUTES.admin.usersResetPassword(), { id: u.id });
-      setResetResult(res);
-    } catch { /* api-client toasts */ } finally {
-      setResetBusy(null);
-    }
-  }, []);
 
   const relTime = (iso: string | null | undefined) => {
     if (!iso) return "never";
@@ -479,13 +469,12 @@ export function UsersTable({
                             {linkBusy === u.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
                           </button>
                           <button
-                            onClick={() => resetPassword(u)}
-                            disabled={resetBusy === u.id}
+                            onClick={() => setResetUser(u)}
                             title="Reset password (set a new one to send the user)"
                             aria-label="Reset password"
                             className="p-1.5 rounded-lg text-zinc-500 hover:text-purple-400 hover:bg-purple-500/10 transition-colors disabled:opacity-40"
                           >
-                            {resetBusy === u.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+                            <KeyRound className="w-3.5 h-3.5" />
                           </button>
                           {u.id !== currentUserId && (
                             <button
@@ -533,6 +522,19 @@ export function UsersTable({
         {users.length} user{users.length !== 1 ? "s" : ""} total
       </p>
 
+      {/* Set a new password — type your own or generate one. */}
+      {resetUser && (
+        <SetPasswordDialog
+          email={resetUser.email}
+          onClose={() => setResetUser(null)}
+          onDone={(password) => { setResetResult({ email: resetUser.email, password }); setResetUser(null); }}
+          submit={async (password) => {
+            const res = await api.post<{ email: string; password: string }>(ROUTES.admin.usersResetPassword(), { id: resetUser.id, password });
+            return res.password;
+          }}
+        />
+      )}
+
       {/* New-password result — shown once; we never store it. */}
       {resetResult && (
         <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setResetResult(null)}>
@@ -558,6 +560,69 @@ export function UsersTable({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function genPassword(): string {
+  const alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint32Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+}
+
+function SetPasswordDialog({ email, onClose, onDone, submit }: {
+  email: string;
+  onClose: () => void;
+  onDone: (password: string) => void;
+  submit: (password: string) => Promise<string>;
+}) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const tooShort = password.trim().length > 0 && password.trim().length < 8;
+
+  async function go() {
+    const pw = password.trim();
+    if (pw.length < 8 || busy) return;
+    setBusy(true);
+    try {
+      const set = await submit(pw);
+      onDone(set);
+    } catch { /* api-client toasts */ } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-[26rem] max-w-[90vw] shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-1">
+          <KeyRound className="w-4 h-4 text-purple-400" />
+          <h2 className="font-semibold text-white">Set a new password</h2>
+        </div>
+        <p className="text-sm text-zinc-400 mb-4">For <span className="text-zinc-200">{email}</span>. Their current password stops working immediately.</p>
+        <label className="text-xs text-zinc-500">New password</label>
+        <div className="flex items-center gap-2 mt-1">
+          <Input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void go(); }}
+            autoFocus
+            placeholder="At least 8 characters"
+            className="bg-zinc-800 border-zinc-700 font-mono"
+          />
+          <button onClick={() => setPassword(genPassword())} type="button"
+            className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-zinc-700 text-sm text-zinc-200 hover:bg-zinc-800 transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" /> Generate
+          </button>
+        </div>
+        {tooShort && <p className="text-xs text-red-400 mt-1.5">Must be at least 8 characters.</p>}
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="text-sm text-zinc-400 hover:text-white px-3 py-1.5">Cancel</button>
+          <button onClick={go} disabled={busy || password.trim().length < 8}
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white transition-colors disabled:opacity-50">
+            {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />} Set password
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
