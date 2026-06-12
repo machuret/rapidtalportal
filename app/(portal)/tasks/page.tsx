@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TaskBoard, type Task, type BoardMember } from "@/components/tasks/TaskBoard";
+import { AchievedStrip } from "@/components/tasks/AchievedStrip";
+import { computeAchieved } from "@/lib/tasks/achieved";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { KanbanSquare } from "lucide-react";
 
@@ -32,6 +34,13 @@ export default async function TasksPage() {
 
   const isAdmin = user.role === "client_admin" || user.role === "super_admin";
 
+  // "Achieved" summary: a VA sees their own completed work; an admin sees the team's.
+  const allTasks = (tasks ?? []) as Task[];
+  const achievedScope: "mine" | "team" = isAdmin ? "team" : "mine";
+  const achieved = computeAchieved(
+    isAdmin ? allTasks : allTasks.filter((t) => t.assigned_to === user.id),
+  );
+
   return (
     <div>
       <div className="flex items-center gap-4 mb-8">
@@ -48,8 +57,10 @@ export default async function TasksPage() {
 
       <PageIntro id="tasks" />
 
+      <AchievedStrip summary={achieved} scope={achievedScope} />
+
       <TaskBoard
-        initialTasks={(tasks ?? []) as Task[]}
+        initialTasks={allTasks}
         clientId={user.client_id}
         userId={user.id}
         isAdmin={isAdmin}

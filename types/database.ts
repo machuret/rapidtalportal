@@ -266,9 +266,9 @@ export interface Database {
         Relationships: NoRelationships;
       };
       tasks: {
-        Row: { id: string; client_id: string; assigned_to: string | null; created_by: string | null; title: string; description: string; status: string; order_index: number; due_date: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; client_id: string; assigned_to?: string | null; created_by?: string | null; title: string; description?: string; status?: string; order_index?: number; due_date?: string | null; created_at?: string; updated_at?: string };
-        Update: { id?: string; client_id?: string; assigned_to?: string | null; created_by?: string | null; title?: string; description?: string; status?: string; order_index?: number; due_date?: string | null; created_at?: string; updated_at?: string };
+        Row: { id: string; client_id: string; assigned_to: string | null; created_by: string | null; title: string; description: string; status: string; order_index: number; due_date: string | null; priority: number; completed_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; assigned_to?: string | null; created_by?: string | null; title: string; description?: string; status?: string; order_index?: number; due_date?: string | null; priority?: number; completed_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; assigned_to?: string | null; created_by?: string | null; title?: string; description?: string; status?: string; order_index?: number; due_date?: string | null; priority?: number; completed_at?: string | null; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
       access_credentials: {

@@ -28,6 +28,8 @@ export interface Task {
   status: TaskStatus;
   order_index: number;
   due_date: string | null;
+  priority: number;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +42,14 @@ const COLUMNS: { key: TaskStatus; label: string; accent: string }[] = [
   { key: "review",      label: "Review",      accent: "border-t-amber-500" },
   { key: "done",        label: "Done",        accent: "border-t-green-500" },
 ];
+
+// 1 low · 2 normal · 3 high · 4 urgent. Only high/urgent get a card accent.
+const PRIORITY: Record<number, { label: string; border: string; chip: string }> = {
+  1: { label: "Low",    border: "",                  chip: "text-zinc-400 bg-zinc-800" },
+  2: { label: "Normal", border: "",                  chip: "text-zinc-400 bg-zinc-800" },
+  3: { label: "High",   border: "border-l-2 border-l-amber-500", chip: "text-amber-300 bg-amber-500/10" },
+  4: { label: "Urgent", border: "border-l-2 border-l-red-500",   chip: "text-red-300 bg-red-500/10" },
+};
 
 interface TaskBoardProps {
   initialTasks: Task[];
@@ -167,6 +177,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, co
                         "rounded-lg border border-zinc-800 bg-zinc-900 p-3 transition-colors hover:border-zinc-600",
                         canMove(t) ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                         t.status === "done" && "opacity-70",
+                        t.status !== "done" && (PRIORITY[t.priority]?.border ?? ""),
                       )}
                     >
                       <p className={cn("text-sm font-medium text-zinc-100 leading-snug", t.status === "done" && "line-through text-zinc-400")}>
@@ -175,8 +186,13 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, co
                       {t.description.trim() && (
                         <p className="text-xs text-zinc-500 mt-1 line-clamp-2 whitespace-pre-wrap">{t.description}</p>
                       )}
-                      {(name || t.due_date || (counts[t.id] ?? 0) > 0) && (
-                        <div className="flex items-center gap-2 mt-2">
+                      {(name || t.due_date || (counts[t.id] ?? 0) > 0 || t.priority > 2) && (
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          {t.priority > 2 && t.status !== "done" && (
+                            <span className={cn("inline-flex items-center text-[11px] font-medium rounded-full px-2 py-0.5", PRIORITY[t.priority].chip)}>
+                              {PRIORITY[t.priority].label}
+                            </span>
+                          )}
                           {(counts[t.id] ?? 0) > 0 && (
                             <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400 bg-zinc-800 rounded-full px-2 py-0.5">
                               <MessageSquare className="w-3 h-3" />
@@ -261,6 +277,7 @@ function TaskDialog({
   const [description, setDescription] = useState(task?.description ?? "");
   const [assignedTo, setAssignedTo] = useState(task?.assigned_to ?? "");
   const [dueDate, setDueDate] = useState(task?.due_date ?? "");
+  const [priority, setPriority] = useState(task?.priority ?? 2);
   const [busy, setBusy] = useState(false);
 
   async function save() {
@@ -273,6 +290,7 @@ function TaskDialog({
           title: title.trim(),
           description,
           status,
+          priority,
           ...(isAdmin ? { assignedTo: assignedTo || null } : {}),
           dueDate: dueDate || null,
         });
@@ -283,6 +301,7 @@ function TaskDialog({
           id: task!.id,
           title: title.trim(),
           description,
+          priority,
           ...(isAdmin ? { assignedTo: assignedTo || null } : {}),
           dueDate: dueDate || null,
         });
@@ -339,6 +358,16 @@ function TaskDialog({
               <Label>Due date</Label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} disabled={!canWrite}
                 className="bg-zinc-800 border-zinc-700" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Priority</Label>
+              <select value={priority} onChange={(e) => setPriority(Number(e.target.value))} disabled={!canWrite}
+                className="bg-zinc-800 border border-zinc-700 rounded-md px-3 h-9 text-sm text-zinc-300">
+                <option value={1}>Low</option>
+                <option value={2}>Normal</option>
+                <option value={3}>High</option>
+                <option value={4}>Urgent</option>
+              </select>
             </div>
           </div>
           {/* Comments + activity trail (existing cards only) */}

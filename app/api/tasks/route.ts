@@ -21,6 +21,7 @@ const createSchema = z.object({
   assignedTo: z.string().uuid().nullable().optional(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   status: z.enum(STATUSES).optional().default("todo"),
+  priority: z.number().int().min(1).max(4).optional().default(2),
 });
 
 const patchSchema = z.object({
@@ -31,11 +32,12 @@ const patchSchema = z.object({
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   status: z.enum(STATUSES).optional(),
   orderIndex: z.number().int().min(0).max(100000).optional(),
+  priority: z.number().int().min(1).max(4).optional(),
 });
 
 const deleteSchema = z.object({ id: z.string().uuid() });
 
-const SELECT = "id, client_id, assigned_to, created_by, title, description, status, order_index, due_date, created_at, updated_at";
+const SELECT = "id, client_id, assigned_to, created_by, title, description, status, order_index, due_date, priority, completed_at, created_at, updated_at";
 
 const isAdmin = (role: string) => role === "client_admin" || role === "super_admin";
 
@@ -75,6 +77,9 @@ export const POST = withAuth(async (req, { user }) => {
       description: parsed.data.description,
       status: parsed.data.status,
       due_date: parsed.data.dueDate ?? null,
+      priority: parsed.data.priority,
+      // A card created straight into "done" still counts as achieved.
+      completed_at: parsed.data.status === "done" ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     })
     .select(SELECT)
@@ -106,12 +111,12 @@ export const PATCH = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   const { data: existing } = await admin
     .from("tasks")
-    .select("id, client_id, assigned_to, created_by")
+    .select("id, client_id, assigned_to, created_by, status")
     .eq("id", parsed.data.id)
     .maybeSingle();
   if (!existing) return NextResponse.json({ error: "Task not found." }, { status: 404 });
 
-  const task = existing as { client_id: string; assigned_to: string | null; created_by: string | null };
+  const task = existing as { client_id: string; assigned_to: string | null; created_by: string | null; status: string };
   const denied = assertClientAccess(user, task.client_id);
   if (denied) return denied;
 
@@ -129,7 +134,13 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (parsed.data.description !== undefined) updates.description = parsed.data.description;
   if (parsed.data.assignedTo !== undefined) updates.assigned_to = parsed.data.assignedTo;
   if (parsed.data.dueDate !== undefined) updates.due_date = parsed.data.dueDate;
-  if (parsed.data.status !== undefined) updates.status = parsed.data.status;
+  if (parsed.data.priority !== undefined) updates.priority = parsed.data.priority;
+  if (parsed.data.status !== undefined) {
+    updates.status = parsed.data.status;
+    // Stamp the completion time entering "done"; clear it when leaving.
+    if (parsed.data.status === "done" && task.status !== "done") updates.completed_at = new Date().toISOString();
+    else if (parsed.data.status !== "done" && task.status === "done") updates.completed_at = null;
+  }
   if (parsed.data.orderIndex !== undefined) updates.order_index = parsed.data.orderIndex;
 
   const { data, error } = await admin
