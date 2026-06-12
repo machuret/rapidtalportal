@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { getCurrentUserAndClient } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UsersTable } from "@/components/admin/UsersTable";
 import type { UserRole } from "@/types/database";
@@ -7,9 +6,7 @@ import type { UserRole } from "@/types/database";
 export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage() {
-  const ctx = await getCurrentUserAndClient();
-  if (!ctx) redirect("/login");
-  if (ctx.user.role !== "super_admin") redirect("/dashboard");
+  const ctx = await requireSuperAdmin();
 
   const admin = createAdminClient();
   const [{ data: users }, { data: clients }, authList] = await Promise.all([

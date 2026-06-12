@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getCurrentUserAndClient } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cn } from "@/lib/utils";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   LayoutDashboard, Brain, KanbanSquare, NotebookPen, AlertTriangle, CheckCircle2,
   Archive, Sparkles, Eye, ArrowRight, Users,
@@ -11,73 +11,47 @@ import {
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Overview — RapidTal" };
 
+interface OverviewRow {
+  client_id: string; client_name: string; user_count: number; va_count: number;
+  vault_total: number; vault_ready: number; vault_error: number; has_dossier: boolean;
+  open_tasks: number; done_recently: number; vas_logged: number; last_activity: string | null;
+}
+
 /**
- * Super-admin home: one health row per client, so problems surface instead of
- * waiting to be noticed. All reads via the service-role client, aggregated in
- * memory — fine at agency scale (tens of clients), revisit if that changes.
+ * Super-admin home: one health row per client. The per-client aggregation runs
+ * in Postgres (admin_client_overview, migration 062) instead of pulling whole
+ * tables into Node — scales as vault/tasks grow.
  */
 export default async function AdminOverviewPage() {
-  const ctx = await getCurrentUserAndClient();
-  if (!ctx) redirect("/login");
-  if (ctx.user.role !== "super_admin") redirect("/dashboard");
+  await requireSuperAdmin();
 
   const admin = createAdminClient();
-  const since7d = new Date(Date.now() - 7 * 86400_000).toISOString();
-  const logSince = new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10);
-
   const since24h = new Date(Date.now() - 86_400_000).toISOString();
-  const [{ data: clients }, { data: users }, { data: vault }, { data: tasks }, { data: logs }, { count: errors24h }] = await Promise.all([
-    admin.from("clients").select("id, name, created_at").is("archived_at", null).order("name"),
-    admin.from("users").select("id, client_id, role"),
-    admin.from("vault_items").select("client_id, status, created_at, tags"),
-    admin.from("tasks").select("client_id, status, updated_at"),
-    admin.from("daily_logs").select("client_id, user_id, log_date").gte("log_date", logSince),
+  const [{ data: agg }, { count: errors24h }] = await Promise.all([
+    admin.rpc("admin_client_overview"),
     admin.from("app_errors").select("id", { count: "exact", head: true }).gte("created_at", since24h),
   ]);
 
-  type U = { id: string; client_id: string | null; role: string };
-  type V = { client_id: string; status: string; created_at: string; tags: string[] | null };
-  type T = { client_id: string; status: string; updated_at: string };
-  type L = { client_id: string; user_id: string; log_date: string };
-
-  const rows = ((clients ?? []) as { id: string; name: string; created_at: string }[]).map((c) => {
-    const cUsers = ((users ?? []) as U[]).filter((u) => u.client_id === c.id);
-    const vas = cUsers.filter((u) => u.role === "va");
-    const cVault = ((vault ?? []) as V[]).filter((v) => v.client_id === c.id);
-    const cTasks = ((tasks ?? []) as T[]).filter((t) => t.client_id === c.id);
-    const cLogs = ((logs ?? []) as L[]).filter((l) => l.client_id === c.id);
-
-    const ready = cVault.filter((v) => v.status === "ready").length;
-    const errors = cVault.filter((v) => v.status === "error").length;
-    const hasDossier = cVault.some((v) => (v.tags ?? []).includes("dossier"));
-    const openTasks = cTasks.filter((t) => t.status !== "done").length;
-    const doneRecently = cTasks.filter((t) => t.status === "done" && t.updated_at >= since7d).length;
-    const vasLogged = new Set(cLogs.map((l) => l.user_id)).size;
-
-    const lastActivity = [
-      ...cVault.map((v) => v.created_at),
-      ...cTasks.map((t) => t.updated_at),
-    ].sort().pop() ?? null;
-
-    // Needs-attention flags — judgment, not just data.
+  const rows = ((agg ?? []) as OverviewRow[]).map((c) => {
     const flags: string[] = [];
-    if (cVault.length === 0) flags.push("Brain is empty");
-    else if (!hasDossier) flags.push("No dossier yet");
-    if (errors > 0) flags.push(`${errors} vault item${errors !== 1 ? "s" : ""} failed indexing`);
-    if (vas.length > 0 && vasLogged === 0) flags.push("No VA has logged in 2 days");
-    if (vas.length === 0) flags.push("No VA assigned");
+    if (c.vault_total === 0) flags.push("Brain is empty");
+    else if (!c.has_dossier) flags.push("No dossier yet");
+    if (c.vault_error > 0) flags.push(`${c.vault_error} vault item${c.vault_error !== 1 ? "s" : ""} failed indexing`);
+    if (c.va_count > 0 && c.vas_logged === 0) flags.push("No VA has logged in 2 days");
+    if (c.va_count === 0) flags.push("No VA assigned");
 
     return {
-      ...c,
-      vaCount: vas.length,
-      adminCount: cUsers.length - vas.length,
-      vaultTotal: cVault.length,
-      ready,
-      hasDossier,
-      openTasks,
-      doneRecently,
-      vasLogged,
-      lastActivity,
+      id: c.client_id,
+      name: c.client_name,
+      vaCount: c.va_count,
+      adminCount: c.user_count - c.va_count,
+      vaultTotal: c.vault_total,
+      ready: c.vault_ready,
+      hasDossier: c.has_dossier,
+      openTasks: c.open_tasks,
+      doneRecently: c.done_recently,
+      vasLogged: c.vas_logged,
+      lastActivity: c.last_activity,
       flags,
     };
   });
@@ -101,21 +75,20 @@ export default async function AdminOverviewPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-          <LayoutDashboard className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Overview</h1>
-          <p className="text-zinc-400 text-sm mt-1">
+      <AdminPageHeader
+        icon={LayoutDashboard}
+        gradient="from-amber-500 to-orange-600 shadow-amber-500/20"
+        title="Overview"
+        subtitle={
+          <>
             {totals.clients} client{totals.clients !== 1 ? "s" : ""} · {totals.vas} VA{totals.vas !== 1 ? "s" : ""}
             {totals.attention > 0 && <span className="text-amber-400"> · {totals.attention} need{totals.attention === 1 ? "s" : ""} attention</span>}
             {(errors24h ?? 0) > 0 && (
               <Link href="/admin/errors" className="text-red-400 hover:text-red-300"> · {errors24h} app error{errors24h !== 1 ? "s" : ""} · 24h</Link>
             )}
-          </p>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {rows.length === 0 ? (
         <div className="surface-card rounded-xl p-12 text-center">

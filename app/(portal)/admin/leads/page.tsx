@@ -1,16 +1,14 @@
-import { redirect } from "next/navigation";
-import { getCurrentUserAndClient } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LeadsBoard, type Lead, type LeadOwner } from "@/components/admin/leads/LeadsBoard";
-import { Handshake } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { TrendingUp } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Leads — RapidTal Admin" };
 
 export default async function AdminLeadsPage() {
-  const ctx = await getCurrentUserAndClient();
-  if (!ctx) redirect("/login");
-  if (ctx.user.role !== "super_admin") redirect("/dashboard");
+  const ctx = await requireSuperAdmin();
 
   const admin = createAdminClient();
   const [{ data: leads }, { data: admins }] = await Promise.all([
@@ -25,15 +23,8 @@ export default async function AdminLeadsPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center shadow-lg shadow-pink-500/20">
-          <Handshake className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Leads</h1>
-          <p className="text-zinc-400 text-sm mt-1">Your sales pipeline. Internal to RapidTal — clients and VAs never see this.</p>
-        </div>
-      </div>
+      <AdminPageHeader icon={TrendingUp} gradient="from-pink-500 to-rose-600 shadow-pink-500/20"
+        title="Leads" subtitle="Your sales pipeline. Internal to RapidTal — clients and VAs never see this." />
 
       <LeadsBoard initialLeads={(leads ?? []) as Lead[]} owners={owners} currentUserId={ctx.user.id} />
     </div>

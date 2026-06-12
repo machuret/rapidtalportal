@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { DbUser, DbClient } from "@/types/database";
@@ -95,4 +96,16 @@ export async function requireRole(
   if (!result) throw new Error("UNAUTHENTICATED");
   if (!allowedRoles.includes(result.user.role)) throw new Error("FORBIDDEN");
   return result;
+}
+
+/**
+ * Page guard for /admin/* — redirects unauthenticated users to login and
+ * non-super-admins to their dashboard. Replaces the 3-line guard copy-pasted
+ * at the top of every admin page. Returns the (non-null) context.
+ */
+export async function requireSuperAdmin(): Promise<CurrentUserAndClient> {
+  const ctx = await getCurrentUserAndClient();
+  if (!ctx) redirect("/login");
+  if (ctx.user.role !== "super_admin") redirect("/dashboard");
+  return ctx;
 }

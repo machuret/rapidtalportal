@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { getCurrentUserAndClient } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -17,9 +16,7 @@ const STATUS_CLS: Record<string, string> = {
 };
 
 export default async function AdminIssuesPage() {
-  const ctx = await getCurrentUserAndClient();
-  if (!ctx) redirect("/login");
-  if (ctx.user.role !== "super_admin") redirect("/dashboard");
+  await requireSuperAdmin();
 
   const admin = createAdminClient();
   const [{ data: issues }, { data: users }, { data: clients }] = await Promise.all([

@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getCurrentUserAndClient } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { VaultClient } from "@/components/vault/VaultClient";
 import { cn } from "@/lib/utils";
@@ -14,10 +13,7 @@ export const metadata = { title: "Client Vaults — RapidTal" };
 // assertClientAccess, so this simply points the existing VaultClient at a
 // chosen client_id.
 export default async function AdminVaultPage({ searchParams }: { searchParams: { client?: string } }) {
-  const ctx = await getCurrentUserAndClient();
-  if (!ctx) redirect("/login");
-  const { user } = ctx;
-  if (user.role !== "super_admin") redirect("/dashboard");
+  const { user } = await requireSuperAdmin();
 
   const admin = createAdminClient();
   const { data } = await admin.from("clients").select("id, name").is("archived_at", null).order("name");

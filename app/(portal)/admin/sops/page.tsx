@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { getCurrentUserAndClient } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SopsLibrary } from "@/components/sops/SopsLibrary";
 import type { Sop } from "@/app/(portal)/sops/page";
@@ -8,9 +7,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "SOP Library — RapidTal" };
 
 export default async function AdminSopsPage() {
-  const ctx = await getCurrentUserAndClient();
-  if (!ctx) redirect("/login");
-  if (ctx.user.role !== "super_admin") redirect("/dashboard");
+  const ctx = await requireSuperAdmin();
 
   const admin = createAdminClient();
   const { data: sops } = await admin

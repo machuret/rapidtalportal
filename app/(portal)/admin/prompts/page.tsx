@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { getCurrentUserAndClient } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PROMPTS } from "@/lib/prompts/registry";
 import { PromptsManager, type PromptRow } from "@/components/admin/PromptsManager";
@@ -9,9 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "AI Prompts — RapidTal" };
 
 export default async function AdminPromptsPage() {
-  const ctx = await getCurrentUserAndClient();
-  if (!ctx) redirect("/login");
-  if (ctx.user.role !== "super_admin") redirect("/dashboard");
+  await requireSuperAdmin();
 
   const admin = createAdminClient();
   const [{ data: overrides }, { data: users }] = await Promise.all([

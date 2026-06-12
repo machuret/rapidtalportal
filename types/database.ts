@@ -398,6 +398,14 @@ export interface Database {
         Args: Record<string, never>;
         Returns: Json;
       };
+      admin_client_overview: {
+        Args: Record<string, never>;
+        Returns: {
+          client_id: string; client_name: string; client_created_at: string;
+          user_count: number; va_count: number; vault_total: number; vault_ready: number; vault_error: number;
+          has_dossier: boolean; open_tasks: number; done_recently: number; vas_logged: number; last_activity: string | null;
+        }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

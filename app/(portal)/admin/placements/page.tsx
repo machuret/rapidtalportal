@@ -1,16 +1,14 @@
-import { redirect } from "next/navigation";
-import { getCurrentUserAndClient } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminPlacements, type AdminPlacementRow } from "@/components/admin/AdminPlacements";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Handshake } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Placements — RapidTal Admin" };
 
 export default async function AdminPlacementsPage() {
-  const ctx = await getCurrentUserAndClient();
-  if (!ctx) redirect("/login");
-  if (ctx.user.role !== "super_admin") redirect("/dashboard");
+  await requireSuperAdmin();
 
   const admin = createAdminClient();
   const [{ data: placementRows }, { data: clients }, { data: users }] = await Promise.all([
@@ -54,15 +52,8 @@ export default async function AdminPlacementsPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-          <Handshake className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Placements</h1>
-          <p className="text-zinc-400 text-sm mt-1">VA–client engagements and their Notebook activity. Content is private to participants.</p>
-        </div>
-      </div>
+      <AdminPageHeader icon={Handshake} gradient="from-emerald-500 to-teal-600 shadow-emerald-500/20"
+        title="Placements" subtitle="VA–client engagements and their Notebook activity. Content is private to participants." />
       <AdminPlacements placements={rows} clients={(clients ?? []) as { id: string; name: string }[]} vas={vas} clientContacts={clientContacts} />
     </div>
   );

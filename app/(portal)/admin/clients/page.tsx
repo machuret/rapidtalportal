@@ -1,14 +1,11 @@
-import { redirect } from "next/navigation";
-import { getCurrentUserAndClient } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ClientsTable } from "@/components/admin/ClientsTable";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminClientsPage() {
-  const ctx = await getCurrentUserAndClient();
-  if (!ctx) redirect("/login");
-  if (ctx.user.role !== "super_admin") redirect("/dashboard");
+  await requireSuperAdmin();
 
   const admin = createAdminClient();
   const { data: clients } = await admin
