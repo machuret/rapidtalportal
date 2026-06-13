@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess } from "@/lib/api-auth";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 
 const bodySchema = z.object({
@@ -8,11 +9,7 @@ const bodySchema = z.object({
   customCategories: z.array(z.string()).optional(),
 });
 
-export async function POST(req: NextRequest) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const POST = withAuth(async (req, { user }) => {
   // Only client_admin and super_admin can trigger KB generation
   if (user.role === "va") {
     return NextResponse.json({ error: "Forbidden. Only admins can regenerate the knowledge base." }, { status: 403 });
@@ -31,4 +28,4 @@ export async function POST(req: NextRequest) {
   if (accessError) return accessError;
 
   return proxyToEdgeFunction("kb-generate", { clientId: parsed.data.clientId, customCategories: parsed.data.customCategories });
-}
+});

@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiAuth } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notifications";
 
@@ -9,11 +9,7 @@ const schema = z.object({
   feedback: z.string().min(1).max(5000),
 });
 
-export async function POST(req: NextRequest) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const POST = withAuth(async (req, { user }) => {
   if (!["client_admin", "super_admin"].includes(user.role)) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
@@ -52,4 +48,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(data);
-}
+});

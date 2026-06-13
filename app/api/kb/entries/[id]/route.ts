@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const patchSchema = z.object({
@@ -12,14 +13,7 @@ const patchSchema = z.object({
 
 const deleteSchema = z.object({ clientId: z.string().uuid() });
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
   if (user.role === "va") {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
@@ -50,16 +44,9 @@ export async function PATCH(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ success: true });
-}
+});
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const DELETE = withAuth<{ id: string }>(async (req, { user, params }) => {
   if (user.role === "va") {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
@@ -86,4 +73,4 @@ export async function DELETE(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ success: true });
-}
+});

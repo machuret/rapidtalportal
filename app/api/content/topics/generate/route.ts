@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderPrompt } from "@/lib/prompts/server";
 
@@ -109,11 +110,7 @@ function buildContext(dna: DnaRow | null, vaultItems: VaultRow[]): string {
   return ctx;
 }
 
-export async function POST(req: NextRequest) {
-  const result = await requireApiAuth();
-  if ("error" in result) return result.error;
-  const { user } = result;
-
+export const POST = withAuth(async (req, { user }) => {
   let body: unknown;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
@@ -220,4 +217,4 @@ export async function POST(req: NextRequest) {
   const topics = Array.isArray(parsed2.topics) ? parsed2.topics : [];
 
   return NextResponse.json({ topics });
-}
+});

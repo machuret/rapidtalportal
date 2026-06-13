@@ -1,14 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { requireApiAuth } from "@/lib/api-auth";
+import { NextResponse } from "next/server";
+import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { date: string } }
-) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
+export const GET = withAuth<{ date: string }>(async (req, { user, params }) => {
   if (!user.client_id) return NextResponse.json({ error: "No client." }, { status: 403 });
 
   const { date } = params;
@@ -47,4 +41,4 @@ export async function GET(
   );
 
   return NextResponse.json({ log: logData, notes: sortedNotes });
-}
+});
