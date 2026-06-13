@@ -59,6 +59,7 @@ export const ROUTES = {
   sopSuggest: () => "/api/sops/suggest",
   sopGenerate: () => "/api/sops/generate",
   sopSuggestions: () => "/api/sops/suggestions",
+  sopSuggestionsProduce: () => "/api/sops/suggestions/produce",
   crm: {
     contacts: () => "/api/crm/contacts",
     notes: () => "/api/crm/notes",

@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 import { assertClientAccess, type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { renderPrompt } from "@/lib/prompts/server";
 
 export const SUGGEST_MODEL = process.env.SOP_SUGGEST_MODEL || "openai/gpt-4o-mini";
 // Default to an OpenAI model that's reliably available on our OpenRouter account.
@@ -78,4 +79,71 @@ export async function llmJson<T>(model: string, system: string, user: string, ma
   } catch (err) {
     return { data: null, tokens: 0, error: err instanceof Error ? err.message : "AI request failed." };
   }
+}
+
+export interface SopDraft {
+  title: string;
+  intro: string;
+  prerequisites: string[];
+  steps: { title: string; detail: string; tip?: string }[];
+}
+
+/**
+ * Generate one full SOP draft (intro + prerequisites + steps) from a topic.
+ * Shared by the single-SOP generate route and the mass-produce endpoint.
+ * Returns a sanitised draft or an error string — never throws.
+ */
+export async function generateSopDraft(
+  clientId: string | null,
+  opts: { topic: string; title?: string; category?: string; audience?: "new" | "experienced" | "any"; depth?: "quick" | "standard" | "thorough" },
+): Promise<{ draft?: SopDraft; error?: string }> {
+  const depthHint: Record<string, string> = {
+    quick: "Keep it tight: 4-6 steps, only the essentials.",
+    standard: "Aim for 6-10 well-scoped steps.",
+    thorough: "Be comprehensive: 10-16 steps covering edge cases and checks.",
+  };
+  const audienceHint: Record<string, string> = {
+    new: "Assume the reader is new — explain terms and don't skip basics.",
+    experienced: "Assume an experienced operator — be concise, skip the obvious.",
+    any: "Write for a capable VA who may be new to this specific task.",
+  };
+
+  const ctx = await clientContext(clientId);
+  const system = await renderPrompt("sops.generate", {
+    mode: "creating a",
+    depth_hint: depthHint[opts.depth ?? "standard"],
+    audience_hint: audienceHint[opts.audience ?? "any"],
+    client_context: ctx,
+  });
+  const userMsg = [
+    `Topic: ${opts.topic}`,
+    opts.title ? `Preferred title/angle: ${opts.title}` : "",
+    opts.category ? `Category: ${opts.category}` : "",
+  ].filter(Boolean).join("\n");
+
+  const result = await llmJson<{ title?: string; intro?: string; prerequisites?: string[]; steps?: { title: string; detail: string; tip?: string }[] }>(
+    GENERATE_MODEL, system, userMsg, 4000,
+  );
+  if (!result.data?.steps?.length) return { error: result.error ?? "Couldn't generate the SOP." };
+
+  const steps = result.data.steps
+    .filter((s) => s.title?.trim())
+    .slice(0, 40)
+    .map((s) => ({
+      title: String(s.title).slice(0, 300),
+      detail: String(s.detail ?? "").slice(0, 5000),
+      ...(s.tip?.trim() ? { tip: String(s.tip).slice(0, 1000) } : {}),
+    }));
+  const prerequisites = Array.isArray(result.data.prerequisites)
+    ? result.data.prerequisites.filter((p) => typeof p === "string" && p.trim()).slice(0, 30).map((p) => p.slice(0, 500))
+    : [];
+
+  return {
+    draft: {
+      title: (result.data.title || opts.title || opts.topic).slice(0, 300),
+      intro: String(result.data.intro ?? "").slice(0, 5000),
+      prerequisites,
+      steps,
+    },
+  };
 }
