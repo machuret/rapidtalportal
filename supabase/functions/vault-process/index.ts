@@ -15,8 +15,9 @@
  *
  * Auth:    Bearer JWT → getUser() → DB user row → client membership check
  * Secrets: OPENROUTER_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
- * AI:      summary via OpenRouter (openai/gpt-4o-mini); embeddings via Supabase
- *          built-in gte-small (384-dim, no key). DB Writes also: vault_chunks.
+ * AI:      summary via OpenRouter (VAULT_PROCESS_MODEL, default openai/gpt-4o-mini;
+ *          prompt admin-editable via the "vault.process" slug); embeddings via
+ *          Supabase built-in gte-small (384-dim, no key). DB Writes: vault_chunks.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -27,15 +28,15 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-/** OpenAI prompt — produces structured JSON with exactly the fields we store */
-const PROCESS_PROMPT = `You are an AI assistant that analyses business documents for a knowledge management system.
-
-Given the document content, return a JSON object with EXACTLY these fields:
+/** Default extraction prompt — produces structured JSON with exactly the fields
+ * we store. Admin-overridable via the "vault.process" slug (see promptOverride),
+ * kept in sync with lib/prompts/registry.ts so "reset to default" matches. */
+const PROCESS_PROMPT = `You are an expert analyst building a company knowledge base. Read the document and return a JSON object with EXACTLY these fields:
 
 {
-  "ai_summary": "2-3 sentence summary of what this document is about and why it matters for the business",
+  "ai_summary": "A dense, specific summary (4-7 sentences) capturing what this document is, what it actually says, and the concrete details that matter — names, numbers, prices, dates, steps, who it's for, and any policies or conditions. Write it so someone who never reads the original still grasps the substance. No filler like 'this document describes…'.",
   "category": "ONE of: process, policy, service, contact, reference, general",
-  "tags": ["array", "of", "3-8", "relevant", "keyword", "tags"]
+  "tags": ["3-8 lowercase keyword tags — specific nouns/topics, no punctuation"]
 }
 
 Category guide:
@@ -46,10 +47,33 @@ Category guide:
 - reference: background info, industry knowledge, glossaries, FAQs
 - general: anything that doesn't fit above
 
-Requirements:
-- ai_summary must be useful for a VA reading it quickly — practical, specific
-- tags must be lowercase single words or short phrases, no punctuation
-- category must be exactly one of the six options listed`;
+Rules:
+- The summary must be genuinely useful as STANDALONE context for answering questions later — prefer specifics over generalities and pull out the distinctive facts. It feeds both the strategic "Expanded View" and content generation, so density matters.
+- Use ONLY what's in the document; never invent details.
+- category must be exactly one of the six options; tags lowercase, no punctuation.`;
+
+// Summary model — env-overridable so it can be upgraded without redeploying.
+const PROCESS_MODEL = Deno.env.get("VAULT_PROCESS_MODEL") || "openai/gpt-4o-mini";
+
+/**
+ * Admin prompt override (/admin/prompts → ai_prompts table). When a row exists
+ * for the slug, it replaces the built-in default — so prompt edits go live
+ * without redeploying. Cached briefly per instance; any failure falls back.
+ */
+const promptCache = new Map<string, { content: string | null; at: number }>();
+// deno-lint-ignore no-explicit-any
+async function promptOverride(admin: any, slug: string, fallback: string): Promise<string> {
+  const hit = promptCache.get(slug);
+  if (hit && Date.now() - hit.at < 30_000) return hit.content ?? fallback;
+  try {
+    const { data } = await admin.from("ai_prompts").select("content").eq("slug", slug).maybeSingle();
+    const content = (data?.content as string | undefined) ?? null;
+    promptCache.set(slug, { content, at: Date.now() });
+    return content ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 /** Character-level fallback splitter (paragraph/sentence-boundary aware). */
 function charChunks(text: string, maxLen = 1200, overlap = 150): string[] {
@@ -364,6 +388,7 @@ Deno.serve(async (req: Request) => {
 
     // ── OpenAI extraction ─────────────────────────────────────────────────────
     console.log(`🤖 vault-process: analysing item ${itemId}`);
+    const systemPrompt = await promptOverride(admin, "vault.process", PROCESS_PROMPT);
     const openaiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -373,13 +398,13 @@ Deno.serve(async (req: Request) => {
         "X-Title": "RapidTal Portal",
       },
       body: JSON.stringify({
-        model: "openai/gpt-4o-mini",
+        model: PROCESS_MODEL,
         response_format: { type: "json_object" },
-        max_tokens: 500, // Summary + category + tags only — keep cost low
-        temperature: 0.1, // Low temp = consistent categorisation
+        max_tokens: 900, // room for a dense summary + tags
+        temperature: 0.2, // low temp = consistent categorisation, slight room for prose
         messages: [
-          { role: "system", content: PROCESS_PROMPT },
-          { role: "user", content: rawContent.slice(0, 30000) }, // Cap input tokens
+          { role: "system", content: systemPrompt },
+          { role: "user", content: rawContent.slice(0, 45000) }, // cap input tokens
         ],
       }),
     });

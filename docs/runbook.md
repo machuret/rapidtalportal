@@ -53,6 +53,11 @@ Vercel. After deploying, confirm `vault_items.indexed_at` starts advancing.
   `anthropic/claude-3.5-sonnet`. This one is a **Vercel** env var (the
   `/api/vault/expand` route, not an edge function), so it takes effect on the
   next deploy — no `supabase functions deploy` needed.
+- `VAULT_PROCESS_MODEL` — per-document summary/tagging (`vault-process` edge
+  function). Default `openai/gpt-4o-mini`. Supabase function env; needs a
+  `vault-process` redeploy. The prompt is also admin-editable at `/admin/prompts`
+  (slug `vault.process`). Existing documents keep their old summary until
+  reprocessed — use "re-run AI" in the Vault, or they refresh on next rebuild.
 
 ## 3. Backfill / repair vault embeddings
 

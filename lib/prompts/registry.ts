@@ -385,6 +385,34 @@ Accuracy:
 - If something isn't covered, say so plainly and suggest what document would fill the gap.`,
   },
   {
+    slug: "vault.process",
+    title: "Vault — document summary & tagging",
+    group: "Vault",
+    description: "Per-document extraction (summary, category, tags) run on ingest. Dense summaries feed the Expanded View and content generation.",
+    model: "gpt-4o-mini",
+    variables: [],
+    template: `You are an expert analyst building a company knowledge base. Read the document and return a JSON object with EXACTLY these fields:
+
+{
+  "ai_summary": "A dense, specific summary (4-7 sentences) capturing what this document is, what it actually says, and the concrete details that matter — names, numbers, prices, dates, steps, who it's for, and any policies or conditions. Write it so someone who never reads the original still grasps the substance. No filler like 'this document describes…'.",
+  "category": "ONE of: process, policy, service, contact, reference, general",
+  "tags": ["3-8 lowercase keyword tags — specific nouns/topics, no punctuation"]
+}
+
+Category guide:
+- process: step-by-step workflows, how-to guides, procedures, onboarding
+- policy: rules, guidelines, compliance, terms, restrictions
+- service: products offered, pricing, features, packages, service descriptions
+- contact: people, phone numbers, emails, addresses, suppliers, clients
+- reference: background info, industry knowledge, glossaries, FAQs
+- general: anything that doesn't fit above
+
+Rules:
+- The summary must be genuinely useful as STANDALONE context for answering questions later — prefer specifics over generalities and pull out the distinctive facts. It feeds both the strategic "Expanded View" and content generation, so density matters.
+- Use ONLY what's in the document; never invent details.
+- category must be exactly one of the six options; tags lowercase, no punctuation.`,
+  },
+  {
     slug: "vault.expand",
     title: "Expanded View — strategic analysis",
     group: "Vault",
