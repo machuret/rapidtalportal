@@ -29,9 +29,17 @@ export default async function SopNewPage({ searchParams }: { searchParams: { sco
   const { data: sopRows } = await catQuery;
   const rows = (sopRows ?? []) as unknown as { category: string | null; subcategory: string | null }[];
 
-  let categories = Array.from(new Set(rows.map((s) => s.category).filter(Boolean))) as string[];
+  // Managed categories (incl. empty ones created in the manager).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mq = (admin as any).from("sop_categories").select("kind, name");
+  mq = isGlobal ? mq.is("client_id", null) : mq.eq("client_id", user.client_id!);
+  const { data: managed } = await mq;
+  const managedCats = ((managed ?? []) as { kind: string; name: string }[]).filter((m) => m.kind === "category").map((m) => m.name);
+  const managedSubs = ((managed ?? []) as { kind: string; name: string }[]).filter((m) => m.kind === "subcategory").map((m) => m.name);
+
+  let categories = Array.from(new Set([...rows.map((s) => s.category).filter(Boolean) as string[], ...managedCats]));
   if (isGlobal && categories.length === 0) categories = GLOBAL_SUGGESTED;
-  const subcategories = Array.from(new Set(rows.map((s) => s.subcategory).filter(Boolean))) as string[];
+  const subcategories = Array.from(new Set([...rows.map((s) => s.subcategory).filter(Boolean) as string[], ...managedSubs]));
 
   // VAs that can be granted access to a restricted SOP: all VAs (global scope)
   // or just this client's VAs.

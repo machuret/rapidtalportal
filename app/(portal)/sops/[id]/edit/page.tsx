@@ -43,8 +43,14 @@ export default async function SopEditPage({
   catQuery = isGlobal ? catQuery.is("client_id", null) : catQuery.eq("client_id", s.client_id!);
   const { data: sopRows } = await catQuery;
   const pickerRows = (sopRows ?? []) as unknown as { category: string | null; subcategory: string | null }[];
-  const categories = Array.from(new Set(pickerRows.map((r) => r.category).filter(Boolean))) as string[];
-  const subcategories = Array.from(new Set(pickerRows.map((r) => r.subcategory).filter(Boolean))) as string[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mq = (admin as any).from("sop_categories").select("kind, name");
+  mq = isGlobal ? mq.is("client_id", null) : mq.eq("client_id", s.client_id!);
+  const { data: managed } = await mq;
+  const managedCats = ((managed ?? []) as { kind: string; name: string }[]).filter((m) => m.kind === "category").map((m) => m.name);
+  const managedSubs = ((managed ?? []) as { kind: string; name: string }[]).filter((m) => m.kind === "subcategory").map((m) => m.name);
+  const categories = Array.from(new Set([...(pickerRows.map((r) => r.category).filter(Boolean) as string[]), ...managedCats]));
+  const subcategories = Array.from(new Set([...(pickerRows.map((r) => r.subcategory).filter(Boolean) as string[]), ...managedSubs]));
 
   // VA picker + this SOP's current access list (for restricted visibility).
   let vaQuery = admin.from("users").select("id, full_name, email").eq("role", "va");

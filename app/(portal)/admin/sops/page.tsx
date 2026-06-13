@@ -52,7 +52,8 @@ export default async function AdminSopsPage() {
   const { data: vaRows } = await admin.from("users").select("id, full_name, email").eq("role", "va").order("full_name");
   const vaOptions = ((vaRows ?? []) as { id: string; full_name: string | null; email: string }[]).map((v) => ({ id: v.id, name: v.full_name || v.email }));
 
-  // Category / subcategory counts for the manager.
+  // Category / subcategory counts for the manager — derived from SOPs, then
+  // unioned with managed entries (so a just-created, still-empty one shows too).
   const catCounts = new Map<string, number>();
   const subCounts = new Map<string, number>();
   for (const s of sopList) {
@@ -60,6 +61,12 @@ export default async function AdminSopsPage() {
     catCounts.set(c, (catCounts.get(c) ?? 0) + 1);
     const sub = (s.subcategory ?? "").trim();
     if (sub) subCounts.set(sub, (subCounts.get(sub) ?? 0) + 1);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: managed } = await (admin as any).from("sop_categories").select("kind, name").is("client_id", null);
+  for (const m of (managed ?? []) as { kind: string; name: string }[]) {
+    const map = m.kind === "subcategory" ? subCounts : catCounts;
+    if (!map.has(m.name)) map.set(m.name, 0);
   }
   const toSorted = (m: Map<string, number>): CatCount[] => Array.from(m.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name));
 
