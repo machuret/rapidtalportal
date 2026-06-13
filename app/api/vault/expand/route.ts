@@ -16,13 +16,14 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { deepAnalysisLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { renderPrompt } from "@/lib/prompts/server";
+import { waitUntil } from "@vercel/functions";
 
 export const maxDuration = 60;
 
 const ADMIN_ROLES = ["client_admin", "super_admin"];
 const MODEL = process.env.VAULT_EXPAND_MODEL || "anthropic/claude-3.5-sonnet";
 
-const schema = z.object({ clientId: z.string().uuid() });
+const schema = z.object({ clientId: z.string().uuid(), stream: z.boolean().optional() });
 
 // System prompt lives in the prompt registry ("vault.expand") — admin-editable.
 
@@ -120,6 +121,84 @@ export const POST = withAuth(async (req, { user }) => {
   ].filter(Boolean).join("\n\n").slice(0, 120000);
 
   const systemPrompt = await renderPrompt("vault.expand");
+
+  // ── Streaming path ──────────────────────────────────────────────────────────
+  // Stream the analysis token-by-token so the user sees it build instead of
+  // staring at a ~40s spinner. A streamed Response can't also return JSON, so we
+  // tee the upstream: one branch goes to the client (raw OpenRouter SSE, which
+  // the client's reader already understands), the other is drained in the
+  // background to accumulate the full text and persist it to vault_analyses.
+  if (parsed.data.stream) {
+    let res: Response;
+    try {
+      res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 6000,
+          temperature: 0.4,
+          stream: true,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: corpus },
+          ],
+        }),
+      });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Analysis call failed." }, { status: 502 });
+    }
+    if (!res.ok || !res.body) {
+      return NextResponse.json({ error: "Analysis stream failed." }, { status: 502 });
+    }
+
+    const [toClient, toPersist] = res.body.tee();
+    waitUntil((async () => {
+      try {
+        const reader = toPersist.getReader();
+        const decoder = new TextDecoder();
+        let buffer = ""; let full = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            const l = line.trim();
+            if (!l.startsWith("data:")) continue;
+            const d = l.slice(5).trim();
+            if (d === "[DONE]") continue;
+            try {
+              const delta = JSON.parse(d)?.choices?.[0]?.delta?.content;
+              if (delta) full += delta;
+            } catch { /* partial SSE line */ }
+          }
+        }
+        if (full.trim()) {
+          await admin.from("vault_analyses").upsert({
+            client_id: parsed.data.clientId,
+            content: full,
+            model: MODEL,
+            source_url: sourceUrl,
+            tokens_used: 0,
+            created_by: user.id,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "client_id" });
+        }
+      } catch (e) {
+        console.error("[vault/expand stream] persist failed:", e);
+      }
+    })());
+
+    return new Response(toClient, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Expand-Model": MODEL,
+      },
+    });
+  }
 
   let content = ""; let tokens = 0;
   try {

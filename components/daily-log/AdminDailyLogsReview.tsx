@@ -135,7 +135,7 @@ function LogRow({ log, onFeedbackSaved }: { log: LogWithUser; onFeedbackSaved: (
   );
 }
 
-export function AdminDailyLogsReview({ logs }: { logs: LogWithUser[] }) {
+export function AdminDailyLogsReview({ logs, rangeLabel = "Last 30 days" }: { logs: LogWithUser[]; rangeLabel?: string }) {
   const [items, setItems] = useState(logs);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "reviewed">("all");
   const [vaFilter, setVaFilter] = useState<string>("all");
@@ -170,7 +170,7 @@ export function AdminDailyLogsReview({ logs }: { logs: LogWithUser[] }) {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold">VA Daily Logs</h1>
-        <p className="text-zinc-400 text-sm mt-0.5">Last 30 days — pending logs queue to the top, oldest first</p>
+        <p className="text-zinc-400 text-sm mt-0.5">{rangeLabel} — pending logs queue to the top, oldest first</p>
       </div>
 
       <div className="flex gap-3 flex-wrap items-end">

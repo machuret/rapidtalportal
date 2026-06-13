@@ -19,6 +19,7 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -30,17 +31,66 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
     return () => { cancelled = true; };
   }, [clientId]);
 
+  // Non-streaming fallback used if the stream fails to start.
+  async function generateNonStreaming() {
+    const { analysis: a } = await api.post<{ analysis: Analysis }>(
+      ROUTES.vault.expand(), { clientId }, { showErrorToast: false },
+    );
+    setAnalysis(a);
+  }
+
   async function generate() {
     setGenerating(true);
+    setStreamingContent("");
     try {
-      const { analysis: a } = await api.post<{ analysis: Analysis }>(
-        ROUTES.vault.expand(), { clientId }, { showErrorToast: false },
-      );
-      setAnalysis(a);
-      toast.success("Deep analysis ready.");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't generate the analysis.");
+      // Stream the analysis as it's written; the server persists it in the
+      // background. Falls back to the non-streaming endpoint on any failure.
+      const res = await fetch("/api/vault/expand", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, stream: true }),
+      });
+      if (!res.ok || !res.body) throw new Error("stream-unavailable");
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = ""; let acc = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const l = line.trim();
+          if (!l.startsWith("data:")) continue;
+          const d = l.slice(5).trim();
+          if (d === "[DONE]") continue;
+          try {
+            const delta = JSON.parse(d)?.choices?.[0]?.delta?.content;
+            if (delta) { acc += delta; setStreamingContent(acc); }
+          } catch { /* partial SSE line */ }
+        }
+      }
+
+      if (acc.trim()) {
+        // Display the streamed text immediately; the authoritative stored record
+        // (with source_url etc.) loads via GET on the next visit.
+        setAnalysis({ content: acc, model: res.headers.get("X-Expand-Model"), source_url: null, updated_at: new Date().toISOString() });
+        toast.success("Deep analysis ready.");
+      } else {
+        await generateNonStreaming();
+        toast.success("Deep analysis ready.");
+      }
+    } catch {
+      try {
+        await generateNonStreaming();
+        toast.success("Deep analysis ready.");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't generate the analysis.");
+      }
     } finally {
+      setStreamingContent("");
       setGenerating(false);
     }
   }
@@ -57,10 +107,19 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
     </div>
   );
 
+  // While generating: show the streamed text as it arrives, or the spinner
+  // until the first token lands.
+  const liveView = streamingContent ? (
+    <div className="surface-card rounded-xl p-5">
+      <Markdown content={streamingContent} />
+      <span className="ml-0.5 animate-pulse">▍</span>
+    </div>
+  ) : generatingState;
+
   if (!analysis) {
     return (
       <div className="max-w-3xl">
-        {generating ? generatingState : (
+        {generating ? liveView : (
           <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-12 text-center">
             <div className="w-12 h-12 rounded-2xl bg-violet-500/15 flex items-center justify-center mx-auto mb-4">
               <Telescope className="w-6 h-6 text-violet-400" />
@@ -108,7 +167,7 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
         </p>
       </div>
 
-      {generating ? generatingState : <div className="surface-card rounded-xl p-5"><Markdown content={analysis.content} /></div>}
+      {generating ? liveView : <div className="surface-card rounded-xl p-5"><Markdown content={analysis.content} /></div>}
     </div>
   );
 }
