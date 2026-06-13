@@ -48,3 +48,21 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
           SUPABASE_SERVICE_ROLE_KEY: placeholder
+
+  # The Supabase edge functions are Deno, so they're excluded from the Next
+  # tsconfig/lint above and were previously checked by nothing — a typo shipped
+  # straight to prod on `supabase functions deploy`. This type-checks the RAG
+  # pipeline we actively maintain. Expand the file list as other functions are
+  # verified clean.
+  edge-functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check Supabase edge functions
+        working-directory: supabase/functions
+        run: deno check vault-ask/index.ts vault-process/index.ts

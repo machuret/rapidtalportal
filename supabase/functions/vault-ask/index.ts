@@ -443,7 +443,7 @@ Deno.serve(async (req: Request) => {
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${openrouterKey}`,
-        "HTTP-Referer": "https://rapidtalportal.vercel.app",
+        "HTTP-Referer": "https://rapidtal.online",
         "X-Title": "RapidTal Portal",
       },
       body: JSON.stringify({

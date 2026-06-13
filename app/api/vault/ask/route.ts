@@ -11,9 +11,18 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { askVaultLimiter, tooManyRequests } from "@/lib/rate-limit";
 
+// Deep mode runs a stronger model over whole documents — it can take 20-40s, so
+// lift the function timeout well above Vercel's short default or the answer 504s.
+export const maxDuration = 60;
+
 const bodySchema = z.object({
   clientId: z.string().uuid(),
   question: z.string().min(3).max(8000),
+  // "Go deeper" sends mode:"deep"; follow-ups send prior turns. Both were being
+  // silently dropped here (schema stripped them, the proxy forwarded only
+  // clientId+question), so deep answers were really just concise re-asks.
+  mode: z.enum(["concise", "deep"]).optional(),
+  history: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
 });
 
 export const POST = withAuth(async (req, { user }) => {
@@ -36,5 +45,7 @@ export const POST = withAuth(async (req, { user }) => {
   return proxyToEdgeFunction("vault-ask", {
     clientId: parsed.data.clientId,
     question: parsed.data.question,
+    mode: parsed.data.mode ?? "concise",
+    history: parsed.data.history ?? [],
   });
 });

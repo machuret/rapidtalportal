@@ -50,6 +50,7 @@ async function askStream(
   question: string,
   history: HistoryItem[],
   onProgress: (answer: string, sources: Source[]) => void,
+  mode?: "deep",
 ): Promise<{ ok: boolean; answer: string; sources: Source[] }> {
   let answer = "";
   let sources: Source[] = [];
@@ -57,7 +58,7 @@ async function askStream(
     const res = await fetch("/api/vault/ask-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId, question, history }),
+      body: JSON.stringify({ clientId, question, history, ...(mode ? { mode } : {}) }),
     });
     if (!res.ok || !res.body) return { ok: false, answer: "", sources: [] };
 
@@ -280,19 +281,23 @@ function ChatTurn({
   async function goDeeper() {
     if (deepLoading || deepAnswer) return;
     setDeepLoading(true);
-    try {
-      const res = await api.post<AskResponse>(ROUTES.vault.ask(), {
-        clientId,
-        question: turn.question,
-        mode: "deep",
-        history,
-      });
-      setDeepAnswer(res.answer);
-    } catch {
-      // api-client surfaces a toast
-    } finally {
-      setDeepLoading(false);
+    // Stream the deep answer so the long (gpt-4o) generation shows progress as it
+    // arrives; fall back to the non-streaming endpoint if streaming fails.
+    const r = await askStream(clientId, turn.question, history, (a) => setDeepAnswer(a), "deep");
+    if (!r.ok) {
+      try {
+        const res = await api.post<AskResponse>(ROUTES.vault.ask(), {
+          clientId,
+          question: turn.question,
+          mode: "deep",
+          history,
+        });
+        setDeepAnswer(res.answer);
+      } catch {
+        // api-client surfaces a toast
+      }
     }
+    setDeepLoading(false);
   }
 
   async function rate(r: 1 | -1) {
