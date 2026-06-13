@@ -18,13 +18,15 @@ export default async function AdminHealthPage() {
 
   const admin = createAdminClient();
 
-  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, { data: items }, { data: chunkRows }] = await Promise.all([
+  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, { data: items }, { data: chunkRows }, { count: recentErrorCount }] = await Promise.all([
     admin.from("schema_migrations").select("version"),
     admin.rpc("health_schema_check"),
     admin.from("cron_heartbeats").select("name, ran_at, detail"),
     admin.from("clients").select("id, name").is("archived_at", null).order("name"),
     admin.from("vault_items").select("id, client_id, status, index_error"),
     admin.from("vault_chunks").select("item_id"),
+    admin.from("app_errors").select("id", { count: "exact", head: true })
+      .gte("created_at", new Date(Date.now() - 24 * 3_600_000).toISOString()),
   ]);
 
   // ── Migration drift ────────────────────────────────────────────────────────
@@ -60,10 +62,51 @@ export default async function AdminHealthPage() {
     ? <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" aria-label="ok" />
     : <XCircle className="w-4 h-4 text-red-400 shrink-0" aria-label="failing" />);
 
+  // ── Aggregate "needs attention" summary ────────────────────────────────────
+  // Roll every panel's failures into one banner so a problem is visible the
+  // instant the page loads, instead of only to someone who scans all four.
+  const staleCrons = EXPECTED_CRONS.filter(({ name, staleAfterH }) => {
+    const beat = beatByName.get(name);
+    const ageH = beat ? (Date.now() - new Date(beat.ran_at).getTime()) / 3_600_000 : Infinity;
+    return ageH > staleAfterH;
+  });
+  const degradedClients = rows.filter((r) => r.errored > 0 || (r.ready > 0 && r.indexed / r.ready < 0.5));
+  const issues: string[] = [];
+  if (pending.length) issues.push(`${pending.length} migration(s) not applied`);
+  if (!schemaUnavailable && schemaFails.length) issues.push(`${schemaFails.length} schema object(s) missing`);
+  for (const c of staleCrons) issues.push(`cron “${c.name}” is stale`);
+  if (degradedClients.length) issues.push(`${degradedClients.length} client brain(s) degraded`);
+  if (recentErrorCount && recentErrorCount > 0) issues.push(`${recentErrorCount} error(s) logged in the last 24h`);
+
   return (
     <div>
       <AdminPageHeader icon={Activity} gradient="from-red-500 to-orange-600 shadow-red-500/20"
         title="System Health" subtitle="Migration drift, schema integrity, background jobs, and per-client brain health." />
+
+      {/* Top-level status banner */}
+      <div role="status" className={cn("rounded-xl border p-4 mb-6 flex items-start gap-3",
+        issues.length === 0
+          ? "border-green-500/30 bg-green-500/10"
+          : "border-red-500/30 bg-red-500/10")}>
+        {issues.length === 0
+          ? <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
+          : <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />}
+        <div>
+          <p className={cn("text-sm font-semibold", issues.length === 0 ? "text-green-300" : "text-red-300")}>
+            {issues.length === 0 ? "All systems healthy" : `${issues.length} issue${issues.length === 1 ? "" : "s"} need attention`}
+          </p>
+          {issues.length > 0 && (
+            <ul className="text-sm text-zinc-300 mt-1 space-y-0.5">
+              {issues.map((i) => <li key={i}>• {i}</li>)}
+            </ul>
+          )}
+          {recentErrorCount != null && recentErrorCount > 0 && (
+            <a href="/admin/errors" className="text-xs text-zinc-400 hover:text-white underline underline-offset-2 mt-2 inline-block">
+              View error log →
+            </a>
+          )}
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Migrations */}
