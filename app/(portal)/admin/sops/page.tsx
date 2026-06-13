@@ -1,6 +1,7 @@
 import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SopsLibrary } from "@/components/sops/SopsLibrary";
+import { SopSuggestions, type SopSuggestion } from "@/components/sops/SopSuggestions";
 import type { Sop } from "@/app/(portal)/sops/page";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,16 @@ export default async function AdminSopsPage() {
     .order("order_index");
 
   const sopList = (sops ?? []) as Sop[];
+
+  // Open SOP-idea backlog (global scope).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: suggestionRows } = await (admin as any)
+    .from("sop_suggestions")
+    .select("id, title, scope, category, step_count, status, created_at")
+    .is("client_id", null)
+    .eq("status", "open")
+    .order("created_at", { ascending: false });
+  const suggestions = (suggestionRows ?? []) as SopSuggestion[];
 
   // Adoption stats: how often each library SOP has been run / completed / by how many VAs.
   const usage: Record<string, { runs: number; completions: number; users: number }> = {};
@@ -43,6 +54,7 @@ export default async function AdminSopsPage() {
         Generic, reusable SOPs (WordPress, Shopify, AI, email…) shared with <span className="text-zinc-300">every VA across all clients</span>.
         Build great step-by-step checklists here — they enrich every VA&apos;s everyday work.
       </p>
+      <SopSuggestions clientId={null} initial={suggestions} />
       <SopsLibrary
         sops={sopList}
         clientId=""

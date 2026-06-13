@@ -41,6 +41,9 @@ interface Props {
   vaOptions?: VaOption[];
   existing?: ExistingSop; // present → edit mode (PATCH + "Improve with AI")
   autoImprove?: boolean;  // open the Improve panel on load (from "Improve with AI")
+  /** Prefill the brief (e.g. when created from a suggestion). */
+  initialTopic?: string;
+  initialCategory?: string;
 }
 
 interface Suggestion { title: string; scope: string; stepCount: number }
@@ -48,7 +51,7 @@ type Stage = "brief" | "suggesting" | "suggestions" | "generating" | "editor";
 type Depth = "quick" | "standard" | "thorough";
 type Audience = "new" | "experienced" | "any";
 
-export function SopStudio({ clientId, categories = [], subcategories = [], vaOptions = [], existing, autoImprove = false }: Props) {
+export function SopStudio({ clientId, categories = [], subcategories = [], vaOptions = [], existing, autoImprove = false, initialTopic, initialCategory }: Props) {
   const router = useRouter();
   const isGlobal = clientId === null;
   const isEdit = !!existing;
@@ -63,8 +66,8 @@ export function SopStudio({ clientId, categories = [], subcategories = [], vaOpt
   const [stage, setStage] = useState<Stage>(isEdit ? "editor" : "brief");
 
   // Brief
-  const [topic, setTopic] = useState(existing?.title ?? "");
-  const [category, setCategory] = useState(existing?.category ?? (isGlobal ? "" : "General"));
+  const [topic, setTopic] = useState(existing?.title ?? initialTopic ?? "");
+  const [category, setCategory] = useState(existing?.category ?? initialCategory ?? (isGlobal ? "" : "General"));
   const [subcategory, setSubcategory] = useState(existing?.subcategory ?? "");
 
   // Visibility: public (everyone in scope) or restricted to chosen VAs.

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 const GLOBAL_SUGGESTED = ["WordPress", "Shopify", "AI", "Email", "SEO", "Social Media", "Admin", "Customer Support"];
 
-export default async function SopNewPage({ searchParams }: { searchParams: { scope?: string } }) {
+export default async function SopNewPage({ searchParams }: { searchParams: { scope?: string; title?: string; category?: string } }) {
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;
@@ -52,7 +52,15 @@ export default async function SopNewPage({ searchParams }: { searchParams: { sco
         <ArrowLeft className="w-4 h-4" />
         {isGlobal ? "Back to SOP Library" : "Back to SOPs"}
       </Link>
-      <SopStudio clientId={isGlobal ? null : user.client_id!} userId={user.id} categories={categories} subcategories={subcategories} vaOptions={vaOptions} />
+      <SopStudio
+        clientId={isGlobal ? null : user.client_id!}
+        userId={user.id}
+        categories={categories}
+        subcategories={subcategories}
+        vaOptions={vaOptions}
+        initialTopic={searchParams?.title}
+        initialCategory={searchParams?.category}
+      />
     </div>
   );
 }
