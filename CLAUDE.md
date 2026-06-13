@@ -87,7 +87,13 @@ guarantee that admins have zero content access. Admins only ever see Notebook
   trigger-maintained `tsvector` columns (see migration 058).
 - Edge functions `supabase/functions/vault-ask` and `vault-process` must be
   **deployed manually** (`supabase functions deploy …`) — they are *not*
-  deployed by a `git push`.
+  deployed by a `git push`. They're Deno (excluded from the Next tsconfig/lint);
+  the `edge-functions` CI job `deno check`s them.
+- **Ask-the-Vault has two modes:** concise (default) and `mode:"deep"` ("Go
+  deeper" — stronger model, whole-section context, bigger budget). Models are
+  env-configurable: `VAULT_ASK_MODEL` / `VAULT_DEEP_MODEL` (see `docs/runbook.md`).
+  Don't confuse deep mode with `/api/vault/expand` ("Expanded View" — a separate
+  whole-corpus strategic analysis stored in `vault_analyses`, not retrieval).
 - Indexing is resumable (CPU-capped edge runtime drops big docs otherwise):
   `vault-index` cron runs every 15 min and processes in batches.
   `vault_items.indexed_at` / `index_error` track progress; surfaced on

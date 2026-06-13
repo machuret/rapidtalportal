@@ -346,7 +346,10 @@ function ChatTurn({
         {deepAnswer && (
           <div className="mt-3 pt-3 border-t border-zinc-800">
             <p className="label-section mb-1.5">More detail</p>
-            <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">{deepAnswer}</p>
+            <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+              {deepAnswer}
+              {deepLoading && <span className="ml-0.5 animate-pulse">▍</span>}
+            </p>
           </div>
         )}
 

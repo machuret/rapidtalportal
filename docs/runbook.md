@@ -42,6 +42,14 @@ supabase functions deploy vault-process
 Their secrets (OpenAI/Anthropic keys, etc.) live in Supabase function env, not
 Vercel. After deploying, confirm `vault_items.indexed_at` starts advancing.
 
+**Ask-the-Vault models (optional env, set in Supabase function env):**
+
+- `VAULT_ASK_MODEL` — concise answers. Default `openai/gpt-4o-mini`.
+- `VAULT_DEEP_MODEL` — "Go deeper" answers. Default `anthropic/claude-3.5-sonnet`
+  (your OpenRouter key needs Anthropic access — the Expanded View already uses
+  it). Point it at a newer Claude slug as they become available, or set
+  `openai/gpt-4o` to revert. Changing these needs a `vault-ask` redeploy.
+
 ## 3. Backfill / repair vault embeddings
 
 Indexing is resumable and cron-driven (`/api/cron/vault-index`, every 15 min),

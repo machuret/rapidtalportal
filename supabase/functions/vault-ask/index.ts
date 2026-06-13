@@ -34,18 +34,30 @@ Accuracy:
 - If the answer isn't in the context, say so plainly and suggest what document would help.
 - Prefer specifics (names, prices, durations, steps) when they're in the context.`;
 
-const DEEP_PROMPT = `You are the company's most knowledgeable in-house expert. The user asked to "go deeper", so give a genuinely THOROUGH answer that teaches them everything the documents actually say — not a summary, and never just a restated list.
+const DEEP_PROMPT = `You are the company's most knowledgeable in-house expert. The user asked to "go deeper", so give a genuinely THOROUGH, well-reasoned answer that teaches them everything the documents actually say — not a summary, and never just a restated list.
+
+Think first, then write:
+- Work out every facet the question touches, then answer all of them.
+- Synthesise ACROSS the documents into one coherent explanation. Do not go source-by-source, and do not repeat the same fact in different words.
+- For each point, pull the SPECIFICS out of the context: who it's for, how it actually works, the exact steps, conditions, eligibility, numbers, prices, timeframes, names, and any useful URLs (inline as plain text). Explain each thing — never merely name it.
 
 How to write:
 - Natural and conversational, like a senior colleague taking the time to explain it properly and completely.
-- Structure a long answer: a short opening sentence, then cover each relevant point as its own short paragraph led by a plain-text label on its own line (e.g. "Refinance and rate review") followed by 2-4 explaining sentences. NO markdown symbols at all — no #, no **, no bullet characters.
-- For every point, pull the SPECIFICS out of the context: who it's for, how it actually works, the steps involved, conditions, eligibility, numbers, timeframes, names, and any useful URLs (written inline as plain text). Explain each item — do not merely name it.
-- Synthesise across multiple documents into one coherent answer.
+- Structure a long answer: a short opening sentence that frames the answer, then each major point as its own short paragraph led by a plain-text label on its own line (e.g. "Refinance and rate review") followed by 2-4 explaining sentences.
+- Plain text ONLY — no markdown of any kind: no #, no **, no bullet characters, no markdown links. Do NOT put citation markers like [1] in the text; sources are shown separately.
 
 Depth & honesty:
-- Use ONLY the provided context, but use ALL of it that's relevant — the context contains full documents, so there is real detail to draw on.
-- A deep answer must be noticeably richer and longer than a quick one. If you catch yourself about to just list items with no explanation, stop and dig the detail behind each one out of the context.
+- Use ONLY the provided context, but use ALL of it that's relevant — the blocks below are real documents (ordered roughly most-relevant first), so there is genuine detail to draw on.
+- A deep answer must be noticeably richer, longer, and better organised than a quick one. If you catch yourself about to list items with no explanation, stop and dig the detail behind each one out of the context.
 - If part of the question genuinely isn't covered, say so plainly and name the document that would fill the gap. Never invent facts.`;
+
+// Models (OpenRouter slugs). Deep uses a stronger model for real synthesis;
+// concise stays fast/cheap. Both are env-overridable so the operator can point
+// at a newer model without redeploying — set VAULT_DEEP_MODEL=openai/gpt-4o to
+// revert. OpenRouter normalises every model to OpenAI-style SSE, so the
+// streaming passthrough below works regardless of which model is set.
+const CONCISE_MODEL = Deno.env.get("VAULT_ASK_MODEL") || "openai/gpt-4o-mini";
+const DEEP_MODEL = Deno.env.get("VAULT_DEEP_MODEL") || "anthropic/claude-3.5-sonnet";
 
 const SOURCE_LABEL: Record<string, string> = {
   dna: "Company DNA",
@@ -192,13 +204,16 @@ Deno.serve(async (req: Request) => {
     const clientId: string = body.clientId;
     const question: string = (body.question ?? "").toString().trim();
     const deep = body.mode === "deep";
-    const matchCount: number = deep ? 12 : 8;
-    // Deep mode is document-centric: it feeds the model whole documents (capped),
+    const matchCount: number = deep ? 18 : 8;
+    // Deep mode is document-centric: it feeds the model whole sections (capped),
     // more of them, and a bigger output budget — so the stronger model has real
     // material to synthesise instead of rephrasing the same short snippet.
-    const ftsDocLimit = deep ? 6 : 5;
+    const ftsDocLimit = deep ? 8 : 5;
     const ftsChunkLimit = deep ? 8 : 3;
-    const rawDocChars = deep ? 8000 : 3000;
+    const rawDocChars = deep ? 10000 : 3000;
+    // Neighbour chunks pulled around each vector hit — deep reads the whole
+    // surrounding section, not just the matched sentence.
+    const neighbourSpan = deep ? 3 : 0;
 
     // Conversation memory: recent turns make follow-ups ("what about pricing?")
     // work. We use the last couple of questions to broaden retrieval, and replay
@@ -255,7 +270,7 @@ Deno.serve(async (req: Request) => {
     // ── Retrieve from all sources in parallel ───────────────────────────────────
     // Hybrid: vector search over chunks PLUS keyword (FTS) search over documents,
     // so exact terms (product names, codes) are caught even when vectors miss.
-    const perEmbed = Math.max(4, Math.ceil(matchCount / Math.max(1, embeddings.length)));
+    const perEmbed = Math.max(deep ? 8 : 4, Math.ceil(matchCount / Math.max(1, embeddings.length)));
     const [dnaRes, kbRes, sopRes, vaultResults, ftsResults] = await Promise.all([
       admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
       admin.from("kb_entries").select("question, answer")
@@ -344,13 +359,20 @@ Deno.serve(async (req: Request) => {
           if (all.length) {
             const wanted = new Set<number>();
             for (const m of matches.filter((c) => c.item_id === id)) {
-              for (let i = m.chunk_index - 2; i <= m.chunk_index + 2; i++) wanted.add(i);
+              for (let i = m.chunk_index - neighbourSpan; i <= m.chunk_index + neighbourSpan; i++) wanted.add(i);
             }
-            text = all
-              .filter((c) => wanted.has(c.chunk_index))
-              .map((c) => c.content.trim())
-              .join("\n…\n")
-              .slice(0, rawDocChars);
+            // Stitch kept chunks in document order, inserting an ellipsis ONLY
+            // where chunks are non-contiguous — so the model isn't falsely told
+            // there's a gap between sections that actually run on.
+            const kept = all.filter((c) => wanted.has(c.chunk_index));
+            let stitched = "";
+            let prevIdx: number | null = null;
+            for (const c of kept) {
+              if (prevIdx !== null) stitched += c.chunk_index === prevIdx + 1 ? "\n" : "\n…\n";
+              stitched += c.content.trim();
+              prevIdx = c.chunk_index;
+            }
+            text = stitched.slice(0, rawDocChars);
           }
           if (!text) text = (row?.raw_content ?? "").slice(0, rawDocChars).trim();
         }
@@ -426,6 +448,10 @@ Deno.serve(async (req: Request) => {
     blocks.forEach((b, i) => {
       context += `[${i + 1}] (${SOURCE_LABEL[b.kind]}) ${b.title}\n${b.text}\n\n`;
     });
+    // Backstop so a pathological set of long documents can't blow the model's
+    // context window or the time budget. Per-doc caps above keep this generous.
+    const MAX_CONTEXT = deep ? 90000 : 24000;
+    if (context.length > MAX_CONTEXT) context = context.slice(0, MAX_CONTEXT);
     const sources = blocks.map((b, i) => ({
       n: i + 1,
       kind: b.kind,
@@ -450,8 +476,8 @@ Deno.serve(async (req: Request) => {
         // Deep mode uses a stronger model for harder synthesis; concise stays
         // on the fast/cheap model (it answers most questions well once the
         // retrieval above hands it the right context).
-        model: deep ? "openai/gpt-4o" : "openai/gpt-4o-mini",
-        max_tokens: deep ? 1800 : 550,
+        model: deep ? DEEP_MODEL : CONCISE_MODEL,
+        max_tokens: deep ? 3000 : 550,
         temperature: 0.4,
         stream,
         messages: [
