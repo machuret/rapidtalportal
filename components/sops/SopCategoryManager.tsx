@@ -16,7 +16,7 @@ export interface CatCount { name: string; count: number }
  */
 export function SopCategoryManager({ clientId, categories, subcategories }: { clientId: string | null; categories: CatCount[]; subcategories: CatCount[] }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState<string | null>(null); // `${kind}:${name}`
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
