@@ -7,7 +7,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sparkles, Loader2, Wand2, X, Lightbulb, ListChecks } from "lucide-react";
+import { Sparkles, Loader2, Wand2, Trash2, Lightbulb, ListChecks } from "lucide-react";
 
 export interface SopSuggestion {
   id: string;
@@ -58,10 +58,31 @@ export function SopSuggestions({ clientId, initial }: { clientId: string | null;
   }
 
   async function dismiss(id: string) {
+    const prev = items;
     setItems((p) => p.filter((s) => s.id !== id));
     setSelected((p) => { const n = new Set(p); n.delete(id); return n; });
-    try { await api.patch(ROUTES.sopSuggestions(), { id, status: "dismissed" }, { showErrorToast: false }); }
-    catch { /* best-effort; reappears on reload if the write failed */ }
+    try {
+      // Default error toast on — if this fails (e.g. table not migrated yet) the
+      // user sees why, and we restore the idea instead of a silent vanish-then-return.
+      await api.patch(ROUTES.sopSuggestions(), { id, status: "dismissed" });
+    } catch {
+      setItems(prev);
+    }
+  }
+
+  async function clearAll() {
+    if (!items.length) return;
+    if (!confirm(`Delete all ${items.length} idea${items.length !== 1 ? "s" : ""} from the backlog?`)) return;
+    const prev = items;
+    const ids = items.map((s) => s.id);
+    setItems([]);
+    setSelected(new Set());
+    try {
+      await api.patch(ROUTES.sopSuggestions(), { ids, status: "dismissed" });
+      toast.success("Backlog cleared.");
+    } catch {
+      setItems(prev);
+    }
   }
 
   async function createFrom(s: SopSuggestion) {
@@ -103,6 +124,11 @@ export function SopSuggestions({ clientId, initial }: { clientId: string | null;
       <div className="flex flex-wrap items-center gap-3">
         <p className="label-section flex items-center gap-2"><Lightbulb className="w-4 h-4 text-amber-400" /> SOP idea backlog</p>
         <span className="text-xs text-zinc-500">{items.length} open</span>
+        {items.length > 0 && (
+          <button onClick={clearAll} className="inline-flex items-center gap-1 text-xs text-red-400 hover:text-red-300">
+            <Trash2 className="w-3.5 h-3.5" /> Clear all
+          </button>
+        )}
         <div className="flex items-center gap-2 ml-auto">
           <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Category (optional)" className="bg-zinc-800 border-zinc-700 h-8 text-sm w-44" disabled={generating || producing} />
           <Button size="sm" onClick={generate} disabled={generating || producing} className="gap-1.5">
@@ -148,8 +174,8 @@ export function SopSuggestions({ clientId, initial }: { clientId: string | null;
                 <button onClick={() => createFrom(s)} disabled={producing} className="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1 shrink-0 mt-0.5 disabled:opacity-50">
                   <Wand2 className="w-3.5 h-3.5" /> Create
                 </button>
-                <button onClick={() => dismiss(s.id)} disabled={producing} title="Dismiss — never suggest this again" className="text-zinc-600 hover:text-red-400 shrink-0 mt-0.5 disabled:opacity-50">
-                  <X className="w-4 h-4" />
+                <button onClick={() => dismiss(s.id)} disabled={producing} title="Delete — never suggest this again" className="text-zinc-500 hover:text-red-400 shrink-0 mt-0.5 disabled:opacity-50">
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             ))}

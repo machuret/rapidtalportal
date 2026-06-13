@@ -128,27 +128,34 @@ ${ctx ? `\nCompany context:\n${ctx}` : ""}`;
 }, ADMIN);
 
 const patchSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().uuid().optional(),
+  ids: z.array(z.string().uuid()).max(500).optional(),
   status: z.enum(["dismissed", "created"]),
-});
+}).refine((d) => d.id || (d.ids?.length ?? 0) > 0, "Provide id or ids.");
 
-// ── PATCH: dismiss / mark created ─────────────────────────────────────────────
+// ── PATCH: dismiss / mark created (one or many) ───────────────────────────────
 export const PATCH = withAuth(async (req, { user }) => {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
 
+  const targetIds = parsed.data.ids?.length ? parsed.data.ids : [parsed.data.id!];
+
   const admin = createAdminClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (admin as any).from("sop_suggestions").select("id, client_id").eq("id", parsed.data.id).maybeSingle();
-  if (!existing) return NextResponse.json({ error: "Suggestion not found." }, { status: 404 });
+  const { data: existing } = await (admin as any).from("sop_suggestions").select("id, client_id").in("id", targetIds);
+  const rows = (existing ?? []) as { id: string; client_id: string | null }[];
+  if (!rows.length) return NextResponse.json({ updated: 0 });
 
-  const denied = authorizeSopScope(user, (existing as { client_id: string | null }).client_id);
-  if (denied) return denied;
+  // Authorise every distinct scope touched.
+  for (const clientId of Array.from(new Set(rows.map((r) => r.client_id)))) {
+    const denied = authorizeSopScope(user, clientId);
+    if (denied) return denied;
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any).from("sop_suggestions").update({ status: parsed.data.status }).eq("id", parsed.data.id);
+  const { error } = await (admin as any).from("sop_suggestions").update({ status: parsed.data.status }).in("id", rows.map((r) => r.id));
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ updated: rows.length });
 }, ADMIN);
