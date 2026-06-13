@@ -1,15 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
-import { requireApiAuth } from "@/lib/api-auth";
+import { NextResponse } from "next/server";
+import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 
 // ── GET /api/time-entries?date=YYYY-MM-DD ──────────────────────────────────
 // Returns all segments for the authenticated VA for the given date.
-export async function GET(req: NextRequest) {
-  const result = await requireApiAuth();
-  if ("error" in result) return result.error;
-  const { user } = result;
-
+export const GET = withAuth(async (req, { user }) => {
   const date = req.nextUrl.searchParams.get("date");
   if (!date) return NextResponse.json({ error: "date required" }, { status: 400 });
 
@@ -23,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ entries: data });
-}
+});
 
 // ── POST /api/time-entries ─────────────────────────────────────────────────
 // Upsert a single segment. Supply { id? } to close an existing open segment.
@@ -38,11 +34,7 @@ const SegmentSchema = z.object({
   category:   z.string().optional(),
 });
 
-export async function POST(req: NextRequest) {
-  const result = await requireApiAuth();
-  if ("error" in result) return result.error;
-  const { user } = result;
-
+export const POST = withAuth(async (req, { user }) => {
   if (!user.client_id) {
     return NextResponse.json({ error: "No client assigned" }, { status: 403 });
   }
@@ -60,7 +52,7 @@ export async function POST(req: NextRequest) {
     // Close (or update) an existing segment
     const { data, error } = await admin
       .from("time_entries")
-      .update({ 
+      .update({
         ended_at: ended_at ?? null,
         notes: notes ?? null,
         category: category ?? "General"
@@ -91,4 +83,4 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ entry: data });
   }
-}
+});

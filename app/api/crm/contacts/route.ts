@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const STATUSES = ["lead", "prospect", "active", "inactive", "closed"] as const;
@@ -51,11 +52,7 @@ const deleteSchema = z.object({
 });
 
 // ── POST: create contact ──────────────────────────────────────────────────────
-export async function POST(req: NextRequest) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const POST = withAuth(async (req, { user }) => {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
 
@@ -88,14 +85,10 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   logCrm((data as { id: string }).id, parsed.data.clientId, user.id, "created this contact");
   return NextResponse.json(data, { status: 201 });
-}
+});
 
 // ── PATCH: update contact ─────────────────────────────────────────────────────
-export async function PATCH(req: NextRequest) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const PATCH = withAuth(async (req, { user }) => {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
 
@@ -149,14 +142,10 @@ export async function PATCH(req: NextRequest) {
   }
 
   return NextResponse.json(data);
-}
+});
 
 // ── DELETE: delete contact ────────────────────────────────────────────────────
-export async function DELETE(req: NextRequest) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const DELETE = withAuth(async (req, { user }) => {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
 
@@ -180,4 +169,4 @@ export async function DELETE(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
-}
+});
