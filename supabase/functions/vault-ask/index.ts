@@ -154,7 +154,24 @@ function sseOnce(content: string): Response {
   });
 }
 
-interface Block { kind: "dna" | "vault" | "kb" | "sop"; title: string; text: string; itemId?: string }
+interface Block { kind: "dna" | "vault" | "kb" | "sop"; title: string; text: string; itemId?: string; score?: number }
+
+const RANK_STOPWORDS = new Set(["the","a","an","and","or","but","of","to","in","on","for","is","are","was","were","with","what","how","do","does","i","we","you","my","our","can","about","this","that","it","at","as","by","be","from","who","when","where","which","there","their"]);
+
+/**
+ * Cheap lexical relevance of a block to the question — fraction of the question's
+ * distinct content words that appear in the block. Used to rank keyword-only
+ * sources (FTS docs, KB, SOPs) that have no vector-similarity score, so they
+ * interleave sensibly with the semantically-matched vault blocks. No model call.
+ */
+function lexicalScore(question: string, text: string): number {
+  const terms = [...new Set((question.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []))].filter((t) => !RANK_STOPWORDS.has(t));
+  if (!terms.length) return 0;
+  const hay = text.toLowerCase();
+  let hits = 0;
+  for (const t of terms) if (hay.includes(t)) hits++;
+  return hits / terms.length;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -380,7 +397,9 @@ Deno.serve(async (req: Request) => {
           if (!text) text = (row?.raw_content ?? "").slice(0, rawDocChars).trim();
         }
         if (!text) text = matches.filter((c) => c.item_id === id).map((c) => c.content.trim()).join("\n…\n");
-        blocks.push({ kind: "vault", title: row?.title ?? "Untitled", text, itemId: id });
+        // Semantic relevance = best matched-chunk similarity for this document.
+        const score = Math.max(...matches.filter((c) => c.item_id === id).map((c) => c.similarity));
+        blocks.push({ kind: "vault", title: row?.title ?? "Untitled", text, itemId: id, score });
       }
     }
 
@@ -418,7 +437,7 @@ Deno.serve(async (req: Request) => {
             text = ((cks ?? []) as { content: string }[]).map((c) => c.content.trim()).join("\n…\n");
             if (!text) text = (it.raw_content ?? it.ai_summary ?? "").slice(0, rawDocChars).trim();
           }
-          if (text) blocks.push({ kind: "vault", title: it.title, text, itemId: it.id });
+          if (text) blocks.push({ kind: "vault", title: it.title, text, itemId: it.id, score: lexicalScore(question, `${it.title} ${text}`) });
         } catch (_e) { /* best-effort */ }
       }
     }
@@ -426,14 +445,16 @@ Deno.serve(async (req: Request) => {
     // 3. Knowledge Base — keyword matches.
     if (!kbRes.error) {
       for (const e of (kbRes.data ?? []) as { question: string; answer: string }[]) {
-        blocks.push({ kind: "kb", title: e.question, text: `Q: ${e.question}\nA: ${e.answer}` });
+        const text = `Q: ${e.question}\nA: ${e.answer}`;
+        blocks.push({ kind: "kb", title: e.question, text, score: lexicalScore(question, text) });
       }
     }
 
     // 4. SOPs — keyword matches.
     if (!sopRes.error) {
       for (const s of (sopRes.data ?? []) as { title: string; body: string }[]) {
-        blocks.push({ kind: "sop", title: s.title, text: (s.body ?? "").slice(0, 1500) });
+        const text = (s.body ?? "").slice(0, 1500);
+        blocks.push({ kind: "sop", title: s.title, text, score: lexicalScore(question, `${s.title} ${text}`) });
       }
     }
 
@@ -446,16 +467,27 @@ Deno.serve(async (req: Request) => {
       return json({ answer: msg, sources: [], chunksUsed: 0 });
     }
 
+    // ── Re-rank: lead with the most relevant material so the model focuses there,
+    //    and so that if the context is trimmed to MAX_CONTEXT the WEAKEST blocks
+    //    are the ones dropped (not just whatever happened to be last). DNA stays
+    //    pinned first (authoritative profile). Everything else is ordered by its
+    //    score — vault blocks by vector similarity, keyword-only sources by
+    //    lexical overlap, all in [0,1]. No extra model calls.
+    const ranked = [
+      ...blocks.filter((b) => b.kind === "dna"),
+      ...blocks.filter((b) => b.kind !== "dna").sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
+    ];
+
     // ── Build grounded context + sources ────────────────────────────────────────
     let context = "";
-    blocks.forEach((b, i) => {
+    ranked.forEach((b, i) => {
       context += `[${i + 1}] (${SOURCE_LABEL[b.kind]}) ${b.title}\n${b.text}\n\n`;
     });
     // Backstop so a pathological set of long documents can't blow the model's
     // context window or the time budget. Per-doc caps above keep this generous.
     const MAX_CONTEXT = deep ? 90000 : 24000;
     if (context.length > MAX_CONTEXT) context = context.slice(0, MAX_CONTEXT);
-    const sources = blocks.map((b, i) => ({
+    const sources = ranked.map((b, i) => ({
       n: i + 1,
       kind: b.kind,
       kindLabel: SOURCE_LABEL[b.kind],
