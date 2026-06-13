@@ -421,7 +421,7 @@ Deno.serve(async (req: Request) => {
 
     // Validate category — fall back to 'general' if AI returned something invalid
     const validCategories = ["process", "policy", "service", "contact", "reference", "general"];
-    const aiCategory = validCategories.includes(extracted.category ?? "") ? extracted.category : "general";
+    const aiCategory: string = validCategories.includes(extracted.category ?? "") ? (extracted.category ?? "general") : "general";
 
     // Respect human curation: if a person set category/tags, AI must not
     // overwrite them — only the summary (and embeddings) refresh.
