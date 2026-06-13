@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withSuperAdmin } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { invalidateCachedIdentity } from "@/lib/auth-cache";
 
 // ── POST /api/admin/users — Invite / create a new user ──────────────
 const createSchema = z.object({
@@ -148,6 +149,9 @@ export const PATCH = withSuperAdmin(async (req) => {
     }
   }
 
+  // Role/client may have changed — drop the cached identity so it takes effect
+  // immediately on this instance (other warm instances catch up within the TTL).
+  invalidateCachedIdentity(id);
   return NextResponse.json(data);
 });
 
@@ -207,5 +211,6 @@ export const DELETE = withSuperAdmin(async (req, { user }) => {
     // User row already deleted — log but don't fail
   }
 
+  invalidateCachedIdentity(parsed.data.id);
   return NextResponse.json({ success: true });
 });

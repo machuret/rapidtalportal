@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import type { Database } from "@/types/database";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getCachedIdentity, setCachedIdentity } from "@/lib/auth-cache";
 
 export interface ApiUser {
   id: string;
@@ -37,11 +38,14 @@ export async function requireApiAuth(): Promise<{ user: ApiUser } | { error: Nex
     };
   }
 
-  // TODO (perf): once a Supabase custom_access_token_hook is configured to embed
-  // `user_role` and `user_client_id` as JWT claims, replace this DB lookup with:
-  //   const role = authUser.app_metadata?.user_role
-  //   const client_id = authUser.app_metadata?.user_client_id
-  // That eliminates this DB call entirely on every API request.
+  // The identity (role + client_id) is cached per warm instance for a short TTL
+  // so we don't hit the DB on every request. getUser() above still verifies the
+  // JWT every time; only this role lookup is cached, and only briefly.
+  const cached = getCachedIdentity(authUser.id);
+  if (cached) {
+    return { user: { id: authUser.id, role: cached.role, client_id: cached.client_id } };
+  }
+
   const admin = createAdminClient();
   const { data: userRow } = await admin
     .from("users")
@@ -55,7 +59,9 @@ export async function requireApiAuth(): Promise<{ user: ApiUser } | { error: Nex
     };
   }
 
-  return { user: userRow as ApiUser };
+  const user = userRow as ApiUser;
+  setCachedIdentity(user.id, { role: user.role, client_id: user.client_id });
+  return { user };
 }
 
 /**
