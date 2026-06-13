@@ -329,7 +329,10 @@ Deno.serve(async (req: Request) => {
       const { data: itemRows } = await admin
         .from("vault_items").select(deep ? "id, title, raw_content" : "id, title").in("id", itemIds);
       const rowById = new Map<string, { title: string; raw_content?: string | null }>();
-      for (const r of (itemRows ?? []) as { id: string; title: string; raw_content?: string | null }[]) rowById.set(r.id, r);
+      // `as unknown as` because the ternary .select() above defeats supabase-js's
+      // typed-query inference (it widens to a ParserError type), so a direct cast
+      // is rejected. The shape is known and correct at runtime.
+      for (const r of (itemRows ?? []) as unknown as { id: string; title: string; raw_content?: string | null }[]) rowById.set(r.id, r);
       const orderedIds: string[] = [];
       for (const c of matches) if (!orderedIds.includes(c.item_id)) orderedIds.push(c.item_id);
 
