@@ -9,7 +9,10 @@ import { assertClientAccess, type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const SUGGEST_MODEL = process.env.SOP_SUGGEST_MODEL || "openai/gpt-4o-mini";
-export const GENERATE_MODEL = process.env.SOP_MODEL || "anthropic/claude-3.5-sonnet";
+// Default to an OpenAI model that's reliably available on our OpenRouter account.
+// (anthropic/claude-3.5-sonnet returns "no endpoints" there.) Override with
+// SOP_MODEL once a working Anthropic slug is confirmed.
+export const GENERATE_MODEL = process.env.SOP_MODEL || "openai/gpt-4o";
 
 /** Same scope rules as the SOPs write route: global = super_admin, client = admins. */
 export function authorizeSopScope(user: ApiUser, clientId: string | null): NextResponse | null {

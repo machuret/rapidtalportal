@@ -45,14 +45,19 @@ Vercel. After deploying, confirm `vault_items.indexed_at` starts advancing.
 **Ask-the-Vault models (optional env, set in Supabase function env):**
 
 - `VAULT_ASK_MODEL` — concise answers. Default `openai/gpt-4o-mini`.
-- `VAULT_DEEP_MODEL` — "Go deeper" answers. Default `anthropic/claude-3.5-sonnet`
-  (your OpenRouter key needs Anthropic access — the Expanded View already uses
-  it). Point it at a newer Claude slug as they become available, or set
-  `openai/gpt-4o` to revert. Changing these needs a `vault-ask` redeploy.
-- `VAULT_EXPAND_MODEL` — Expanded View strategic analysis. Default
-  `anthropic/claude-3.5-sonnet`. This one is a **Vercel** env var (the
-  `/api/vault/expand` route, not an edge function), so it takes effect on the
-  next deploy — no `supabase functions deploy` needed.
+- `VAULT_DEEP_MODEL` — "Go deeper" answers. Default `openai/gpt-4o`. Changing it
+  needs a `vault-ask` redeploy.
+- `VAULT_EXPAND_MODEL` — Expanded View strategic analysis. Default `openai/gpt-4o`.
+  Vercel env var (the `/api/vault/expand` route, not an edge function), so it
+  takes effect on the next deploy — no `supabase functions deploy` needed.
+- `SOP_MODEL` — full-SOP generation. Default `openai/gpt-4o`
+  (`SOP_SUGGEST_MODEL`, the angle suggestions, defaults to `openai/gpt-4o-mini`).
+  Vercel env, live on deploy.
+
+> ⚠️ Defaults are OpenAI models because `anthropic/claude-3.5-sonnet` returns
+> "No endpoints found" on this OpenRouter account. Only point any of these at an
+> Anthropic slug once you've confirmed your OpenRouter key has Anthropic access
+> and the exact current slug.
 - `VAULT_PROCESS_MODEL` — per-document summary/tagging (`vault-process` edge
   function). Default `openai/gpt-4o-mini`. Supabase function env; needs a
   `vault-process` redeploy. The prompt is also admin-editable at `/admin/prompts`

@@ -21,7 +21,9 @@ import { waitUntil } from "@vercel/functions";
 export const maxDuration = 60;
 
 const ADMIN_ROLES = ["client_admin", "super_admin"];
-const MODEL = process.env.VAULT_EXPAND_MODEL || "anthropic/claude-3.5-sonnet";
+// Default to a model reliably available on our OpenRouter account
+// (anthropic/claude-3.5-sonnet returns "no endpoints" there). Override via env.
+const MODEL = process.env.VAULT_EXPAND_MODEL || "openai/gpt-4o";
 
 const schema = z.object({ clientId: z.string().uuid(), stream: z.boolean().optional() });
 

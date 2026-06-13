@@ -315,7 +315,7 @@ Rules: one CTA. No em or en dashes. Keep {{first_name}} merge token, no invented
     title: "SOP Generator",
     group: "SOP Studio",
     description: "Topic → full structured SOP (also powers “Improve with AI” on existing SOPs).",
-    model: "claude-3.5-sonnet",
+    model: "gpt-4o",
     variables: [
       { name: "mode", description: `"creating a" or "improving an existing".` },
       { name: "depth_hint", description: "Step-count guidance from the depth selector (quick/standard/thorough)." },
@@ -417,7 +417,7 @@ Rules:
     title: "Expanded View — strategic analysis",
     group: "Vault",
     description: "One deep strategic-analysis pass over the whole crawled corpus (admin-triggered).",
-    model: "claude-3.5-sonnet",
+    model: "gpt-4o",
     variables: [],
     template: `You are a senior brand and market strategist. You are given everything known about a company: a declared COMPANY PROFILE (authoritative — written by the company itself) plus material from a full crawl of its website (a factual dossier, a product catalog, real page excerpts, and per-page summaries). Produce a DEEP strategic analysis for the team that supports this company day to day.
 

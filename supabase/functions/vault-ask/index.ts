@@ -57,7 +57,7 @@ Depth & honesty:
 // revert. OpenRouter normalises every model to OpenAI-style SSE, so the
 // streaming passthrough below works regardless of which model is set.
 const CONCISE_MODEL = Deno.env.get("VAULT_ASK_MODEL") || "openai/gpt-4o-mini";
-const DEEP_MODEL = Deno.env.get("VAULT_DEEP_MODEL") || "anthropic/claude-3.5-sonnet";
+const DEEP_MODEL = Deno.env.get("VAULT_DEEP_MODEL") || "openai/gpt-4o";
 
 const SOURCE_LABEL: Record<string, string> = {
   dna: "Company DNA",
