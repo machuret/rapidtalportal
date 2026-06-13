@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess } from "@/lib/api-auth";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import { z } from "zod";
 
@@ -36,11 +37,7 @@ function isBlockedUrl(raw: string): boolean {
   }
 }
 
-export async function POST(req: NextRequest) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const POST = withAuth(async (req, { user }) => {
   const body = await req.json();
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
@@ -167,4 +164,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ success: true });
-}
+});

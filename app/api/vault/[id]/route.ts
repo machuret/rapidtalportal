@@ -6,13 +6,14 @@
  * after the DB write — the UI receives a live update via Supabase Realtime when
  * vault-process completes and writes back to vault_items.
  *
- * Auth: requireApiAuth() — client_admin or item creator only.
+ * Auth: withAuth — client_admin or item creator only.
  * Safeguards: Zod validation, assertClientAccess, created_by ownership check.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess } from "@/lib/api-auth";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
 import { z } from "zod";
@@ -25,14 +26,7 @@ const patchSchema = z.object({
   tags: z.array(z.string().max(50)).max(10).optional(),
 });
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
   const body = await req.json();
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
@@ -92,4 +86,4 @@ export async function PATCH(
   }
 
   return NextResponse.json({ success: true });
-}
+});

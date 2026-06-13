@@ -1,14 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiAuth } from "@/lib/api-auth";
+import { withSuperAdmin } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-function requireSuperAdmin(role: string) {
-  if (role !== "super_admin") {
-    return NextResponse.json({ error: "Super admin only." }, { status: 403 });
-  }
-  return null;
-}
 
 // ── POST /api/admin/users — Invite / create a new user ──────────────
 const createSchema = z.object({
@@ -19,12 +12,7 @@ const createSchema = z.object({
   password:  z.string().min(8).max(100).optional(),
 });
 
-export async function POST(req: NextRequest) {
-  const result = await requireApiAuth();
-  if ("error" in result) return result.error;
-  const denied = requireSuperAdmin(result.user.role);
-  if (denied) return denied;
-
+export const POST = withSuperAdmin(async (req) => {
   let body: unknown;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
@@ -86,7 +74,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(userRow, { status: 201 });
-}
+});
 
 // ── PATCH /api/admin/users — Update any user ────────────────────────
 const patchSchema = z.object({
@@ -97,12 +85,7 @@ const patchSchema = z.object({
   client_id: z.string().uuid().nullable().optional(),
 });
 
-export async function PATCH(req: NextRequest) {
-  const result = await requireApiAuth();
-  if ("error" in result) return result.error;
-  const denied = requireSuperAdmin(result.user.role);
-  if (denied) return denied;
-
+export const PATCH = withSuperAdmin(async (req) => {
   let body: unknown;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
@@ -166,19 +149,14 @@ export async function PATCH(req: NextRequest) {
   }
 
   return NextResponse.json(data);
-}
+});
 
 // ── DELETE /api/admin/users — Remove a user ─────────────────────────
 const deleteSchema = z.object({
   id: z.string().uuid(),
 });
 
-export async function DELETE(req: NextRequest) {
-  const result = await requireApiAuth();
-  if ("error" in result) return result.error;
-  const denied = requireSuperAdmin(result.user.role);
-  if (denied) return denied;
-
+export const DELETE = withSuperAdmin(async (req, { user }) => {
   let body: unknown;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
@@ -187,7 +165,7 @@ export async function DELETE(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
 
   // Prevent self-deletion
-  if (parsed.data.id === result.user.id) {
+  if (parsed.data.id === user.id) {
     return NextResponse.json({ error: "Cannot delete yourself." }, { status: 400 });
   }
 
@@ -230,4 +208,4 @@ export async function DELETE(req: NextRequest) {
   }
 
   return NextResponse.json({ success: true });
-}
+});

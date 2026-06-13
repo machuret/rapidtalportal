@@ -1,11 +1,12 @@
 /**
  * POST /api/vault/[id]/reprocess — Trigger vault-process edge function on an existing item.
  * Re-runs AI extraction to refresh ai_summary, category, and tags.
- * Auth: requireApiAuth() — any authenticated user with client access.
+ * Auth: withAuth — any authenticated user with client access.
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { NextResponse } from "next/server";
+import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess } from "@/lib/api-auth";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { z } from "zod";
 
@@ -14,14 +15,7 @@ import { z } from "zod";
 // only embed what's missing, so the backfill makes incremental progress.
 const schema = z.object({ clientId: z.string().uuid(), rebuild: z.boolean().optional().default(false) });
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const POST = withAuth<{ id: string }>(async (req, { user, params }) => {
   const body = await req.json();
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
@@ -36,4 +30,4 @@ export async function POST(
     clientId: parsed.data.clientId,
     rebuild: parsed.data.rebuild,
   });
-}
+});

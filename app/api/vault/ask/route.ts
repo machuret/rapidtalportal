@@ -1,12 +1,13 @@
 /**
  * POST /api/vault/ask — Ask the Vault (retrieval-augmented Q&A).
  * Proxies to the vault-ask edge function with the caller's verified JWT.
- * Auth: requireApiAuth() — any authenticated user with access to the client.
+ * Auth: withAuth — any authenticated user with access to the client.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess } from "@/lib/api-auth";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { askVaultLimiter, tooManyRequests } from "@/lib/rate-limit";
 
@@ -15,11 +16,7 @@ const bodySchema = z.object({
   question: z.string().min(3).max(8000),
 });
 
-export async function POST(req: NextRequest) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const POST = withAuth(async (req, { user }) => {
   // Each question costs an OpenRouter call — throttle per user.
   const rl = askVaultLimiter.check(`ask:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
@@ -40,4 +37,4 @@ export async function POST(req: NextRequest) {
     clientId: parsed.data.clientId,
     question: parsed.data.question,
   });
-}
+});

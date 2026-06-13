@@ -11,16 +11,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireApiAuth, type ApiUser } from "@/lib/api-auth";
 import { captureError } from "@/lib/error-tracking";
 
+// Return type is widened to Response (not just NextResponse) so streaming
+// handlers — e.g. the SSE Ask-the-Vault route returning a piped ReadableStream —
+// can use the wrapper too. NextResponse already extends Response, so existing
+// JSON handlers are unaffected.
 type AuthedHandler<P> = (
   req: NextRequest,
   ctx: { user: ApiUser; params: P },
-) => Promise<NextResponse> | NextResponse;
+) => Promise<Response> | Response;
 
 export function withAuth<P = Record<string, never>>(
   handler: AuthedHandler<P>,
   opts?: { roles?: ApiUser["role"][] },
 ) {
-  return async (req: NextRequest, routeCtx?: { params: P }): Promise<NextResponse> => {
+  return async (req: NextRequest, routeCtx?: { params: P }): Promise<Response> => {
     const auth = await requireApiAuth();
     if ("error" in auth) return auth.error;
     if (opts?.roles && !opts.roles.includes(auth.user.role)) {

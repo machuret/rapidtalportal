@@ -7,9 +7,10 @@
  *         address, timezone, skills, full_name, phone, birthday.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const patchSchema = z.object({
@@ -26,14 +27,7 @@ const patchSchema = z.object({
   skills:          z.array(z.string().max(50)).max(30).optional().nullable(),
 });
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const result = await requireApiAuth();
-  if ("error" in result) return result.error;
-  const { user } = result;
-
+export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
   if (user.role !== "client_admin" && user.role !== "super_admin") {
     return NextResponse.json({ error: "Forbidden. Admins only." }, { status: 403 });
   }
@@ -75,4 +69,4 @@ export async function PATCH(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
-}
+});

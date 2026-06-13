@@ -1,17 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireApiAuth, assertClientAccess } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess } from "@/lib/api-auth";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import { safeKeyName } from "@/lib/storage-keys";
 
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
 
-export async function POST(req: NextRequest) {
-  const auth = await requireApiAuth();
-  if ("error" in auth) return auth.error;
-  const { user } = auth;
-
+export const POST = withAuth(async (req, { user }) => {
   const form = await req.formData();
   const file = form.get("file") as File | null;
   const title = (form.get("title") as string) || file?.name || "Untitled";
@@ -160,4 +157,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ success: true });
-}
+});
