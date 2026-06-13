@@ -64,6 +64,26 @@ Vercel. After deploying, confirm `vault_items.indexed_at` starts advancing.
   (slug `vault.process`). Existing documents keep their old summary until
   reprocessed — use "re-run AI" in the Vault, or they refresh on next rebuild.
 
+## 2b. Email (Resend)
+
+Transactional email goes through Resend (`lib/email.ts` → `sendEmail`). It's
+env-gated: with no key set, sends are skipped and the app works as before (the
+sign-in-link UI still shows the copyable link). To enable:
+
+1. **Verify the sending domain** (`rapidtal.online`) in the Resend dashboard —
+   add the DNS records they give you. Until the domain is verified, Resend only
+   lets you send to your own account email.
+2. Set in **Vercel** env (Production + Preview):
+   - `RESEND_API_KEY` — from the Resend dashboard. **Never commit it / paste it
+     in chat** — env only.
+   - `RESEND_FROM` *(optional)* — sender, default `RapidTal <noreply@rapidtal.online>`
+     (must be on the verified domain).
+3. Redeploy. `emailConfigured()` flips on and, e.g., the admin "send login link"
+   action emails the magic link (still returns it as a copy/paste fallback).
+
+`sendEmail` never throws — a provider hiccup is logged and returns `{ ok:false }`
+without breaking the action that triggered it.
+
 ## 3. Backfill / repair vault embeddings
 
 Indexing is resumable and cron-driven (`/api/cron/vault-index`, every 15 min),
