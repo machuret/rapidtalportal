@@ -18,6 +18,8 @@ interface CreateSopInput {
   steps?: SopStepInput[];
   intro?: string;
   prerequisites?: string[];
+  visibility?: "public" | "restricted";
+  accessUserIds?: string[];
 }
 
 interface UpdateSopInput {
@@ -30,6 +32,8 @@ interface UpdateSopInput {
   steps?: SopStepInput[];
   intro?: string;
   prerequisites?: string[];
+  visibility?: "public" | "restricted";
+  accessUserIds?: string[];
 }
 
 interface DeleteSopInput {

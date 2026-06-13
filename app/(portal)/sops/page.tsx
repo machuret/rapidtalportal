@@ -18,12 +18,22 @@ export default async function SopsPage() {
 
   const admin = createAdminClient();
   // The VA/client library = this client's SOPs PLUS the global admin library.
-  const { data: sops } = await admin
-    .from("sops")
-    .select("*")
-    .or(`client_id.eq.${user.client_id},client_id.is.null`)
-    .order("category")
-    .order("order_index");
+  const [{ data: sopsRaw }, { data: accessRows }] = await Promise.all([
+    admin
+      .from("sops")
+      .select("*")
+      .or(`client_id.eq.${user.client_id},client_id.is.null`)
+      .order("category")
+      .order("order_index"),
+    // SOPs this VA has been explicitly granted (for restricted ones).
+    admin.from("sop_access").select("sop_id").eq("user_id", user.id),
+  ]);
+
+  // Restricted SOPs are visible only to granted VAs (super_admin sees all).
+  const allowed = new Set(((accessRows ?? []) as { sop_id: string }[]).map((r) => r.sop_id));
+  const sops = ((sopsRaw ?? []) as Sop[]).filter(
+    (s) => s.visibility !== "restricted" || user.role === "super_admin" || allowed.has(s.id),
+  );
 
   // VAs author SOPs now that this is a VA tool (client_admin can't reach here).
   const canEdit = user.role === "va" || user.role === "super_admin";
@@ -51,6 +61,7 @@ export interface Sop {
   title: string;
   category: string;
   subcategory?: string | null;
+  visibility?: string;
   body: string;
   order_index: number;
   version?: number;

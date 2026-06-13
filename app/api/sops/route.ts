@@ -22,6 +22,8 @@ const createSchema = z.object({
   steps:         z.array(stepSchema).max(40).optional(),
   intro:         z.string().max(5000).optional(),
   prerequisites: z.array(z.string().max(500)).max(30).optional(),
+  visibility:    z.enum(["public", "restricted"]).optional(),
+  accessUserIds: z.array(z.string().uuid()).max(1000).optional(),
 });
 
 const updateSchema = z.object({
@@ -34,6 +36,8 @@ const updateSchema = z.object({
   steps:         z.array(stepSchema).max(40).optional(),
   intro:         z.string().max(5000).optional(),
   prerequisites: z.array(z.string().max(500)).max(30).optional(),
+  visibility:    z.enum(["public", "restricted"]).optional(),
+  accessUserIds: z.array(z.string().uuid()).max(1000).optional(),
 });
 
 const deleteSchema = z.object({
@@ -41,7 +45,25 @@ const deleteSchema = z.object({
   clientId: z.string().uuid().nullable().optional(),
 });
 
-const SELECT = "id, client_id, title, category, subcategory, body, order_index, steps, intro, prerequisites, version, forked_from, forked_version, created_at, updated_at";
+const SELECT = "id, client_id, title, category, subcategory, body, order_index, steps, intro, prerequisites, version, visibility, forked_from, forked_version, created_at, updated_at";
+
+/**
+ * Replace a SOP's access allow-list. Public SOPs get an empty list. For
+ * restricted SOPs we keep only real VAs, and — for a client SOP — only that
+ * client's VAs (so an admin can't grant another tenant's VA access).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function syncSopAccess(admin: any, sopId: string, clientId: string | null, visibility: string, accessUserIds: string[] | undefined): Promise<void> {
+  await admin.from("sop_access").delete().eq("sop_id", sopId);
+  if (visibility !== "restricted" || !accessUserIds?.length) return;
+  const { data: users } = await admin.from("users").select("id, role, client_id").in("id", accessUserIds.slice(0, 1000));
+  const valid = ((users ?? []) as { id: string; role: string; client_id: string | null }[])
+    .filter((u) => u.role === "va" && (clientId === null || u.client_id === clientId))
+    .map((u) => u.id);
+  if (valid.length) {
+    await admin.from("sop_access").insert(valid.map((uid) => ({ sop_id: sopId, user_id: uid })));
+  }
+}
 
 /** Authorise a write against a SOP's scope. Returns an error response or null. */
 function authorizeScope(user: ApiUser, clientId: string | null): NextResponse | null {
@@ -84,12 +106,17 @@ export const POST = withAuth(async (req, { user }) => {
       steps:         parsed.data.steps ?? null,
       intro:         parsed.data.intro ?? null,
       prerequisites: parsed.data.prerequisites ?? null,
+      visibility:    parsed.data.visibility ?? "public",
       updated_at:    new Date().toISOString(),
     })
     .select(SELECT)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if ((parsed.data.visibility ?? "public") === "restricted") {
+    await syncSopAccess(admin, (data as { id: string }).id, clientId, "restricted", parsed.data.accessUserIds);
+  }
   return NextResponse.json(data, { status: 201 });
 });
 
@@ -123,6 +150,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (parsed.data.steps !== undefined) updates.steps = parsed.data.steps;
   if (parsed.data.intro !== undefined) updates.intro = parsed.data.intro;
   if (parsed.data.prerequisites !== undefined) updates.prerequisites = parsed.data.prerequisites;
+  if (parsed.data.visibility !== undefined) updates.visibility = parsed.data.visibility;
   // Bump the version when the actual content changes (not just metadata edits).
   const contentChanged = parsed.data.body !== undefined || parsed.data.steps !== undefined
     || parsed.data.intro !== undefined || parsed.data.prerequisites !== undefined;
@@ -137,6 +165,12 @@ export const PATCH = withAuth(async (req, { user }) => {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Sync the access list when visibility was set (the studio sends visibility +
+  // accessUserIds together): public clears it, restricted replaces it.
+  if (parsed.data.visibility !== undefined) {
+    await syncSopAccess(admin, id, cur.client_id, parsed.data.visibility, parsed.data.accessUserIds);
+  }
   return NextResponse.json(data);
 });
 

@@ -33,6 +33,14 @@ export default async function SopNewPage({ searchParams }: { searchParams: { sco
   if (isGlobal && categories.length === 0) categories = GLOBAL_SUGGESTED;
   const subcategories = Array.from(new Set(rows.map((s) => s.subcategory).filter(Boolean))) as string[];
 
+  // VAs that can be granted access to a restricted SOP: all VAs (global scope)
+  // or just this client's VAs.
+  let vaQuery = admin.from("users").select("id, full_name, email").eq("role", "va");
+  if (!isGlobal) vaQuery = vaQuery.eq("client_id", user.client_id!);
+  const { data: vaRows } = await vaQuery.order("full_name");
+  const vaOptions = ((vaRows ?? []) as { id: string; full_name: string | null; email: string }[])
+    .map((v) => ({ id: v.id, name: v.full_name || v.email }));
+
   const backHref = isGlobal ? "/admin/sops" : "/sops";
 
   return (
@@ -44,7 +52,7 @@ export default async function SopNewPage({ searchParams }: { searchParams: { sco
         <ArrowLeft className="w-4 h-4" />
         {isGlobal ? "Back to SOP Library" : "Back to SOPs"}
       </Link>
-      <SopStudio clientId={isGlobal ? null : user.client_id!} userId={user.id} categories={categories} subcategories={subcategories} />
+      <SopStudio clientId={isGlobal ? null : user.client_id!} userId={user.id} categories={categories} subcategories={subcategories} vaOptions={vaOptions} />
     </div>
   );
 }

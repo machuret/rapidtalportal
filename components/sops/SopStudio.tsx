@@ -26,13 +26,19 @@ export interface ExistingSop {
   steps: SopStep[] | null;
   intro: string | null;
   prerequisites: string[] | null;
+  visibility?: string | null;
+  accessUserIds?: string[];
 }
+
+export interface VaOption { id: string; name: string }
 
 interface Props {
   clientId: string | null; // null = global library SOP
   userId: string;
   categories?: string[];
   subcategories?: string[];
+  /** VAs that can be granted access when a SOP is restricted. */
+  vaOptions?: VaOption[];
   existing?: ExistingSop; // present → edit mode (PATCH + "Improve with AI")
   autoImprove?: boolean;  // open the Improve panel on load (from "Improve with AI")
 }
@@ -42,7 +48,7 @@ type Stage = "brief" | "suggesting" | "suggestions" | "generating" | "editor";
 type Depth = "quick" | "standard" | "thorough";
 type Audience = "new" | "experienced" | "any";
 
-export function SopStudio({ clientId, categories = [], subcategories = [], existing, autoImprove = false }: Props) {
+export function SopStudio({ clientId, categories = [], subcategories = [], vaOptions = [], existing, autoImprove = false }: Props) {
   const router = useRouter();
   const isGlobal = clientId === null;
   const isEdit = !!existing;
@@ -60,6 +66,17 @@ export function SopStudio({ clientId, categories = [], subcategories = [], exist
   const [topic, setTopic] = useState(existing?.title ?? "");
   const [category, setCategory] = useState(existing?.category ?? (isGlobal ? "" : "General"));
   const [subcategory, setSubcategory] = useState(existing?.subcategory ?? "");
+
+  // Visibility: public (everyone in scope) or restricted to chosen VAs.
+  const [visibility, setVisibility] = useState<"public" | "restricted">(existing?.visibility === "restricted" ? "restricted" : "public");
+  const [accessIds, setAccessIds] = useState<Set<string>>(new Set(existing?.accessUserIds ?? []));
+  const [vaFilter, setVaFilter] = useState("");
+  const toggleVa = (id: string) => setAccessIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const filteredVas = vaOptions.filter((v) => v.name.toLowerCase().includes(vaFilter.trim().toLowerCase()));
   const [audience, setAudience] = useState<Audience>("any");
   const [depth, setDepth] = useState<Depth>("standard");
 
@@ -183,6 +200,7 @@ export function SopStudio({ clientId, categories = [], subcategories = [], exist
           id: existing!.id, clientId, title: title.trim(), category: category.trim() || "General",
           subcategory: subcategory.trim() || null,
           body, steps: cleanSteps, intro: intro.trim(), prerequisites,
+          visibility, accessUserIds: visibility === "restricted" ? Array.from(accessIds) : [],
         });
         toast.success("SOP updated.");
         router.push(`/sops/${existing!.id}`);
@@ -192,6 +210,7 @@ export function SopStudio({ clientId, categories = [], subcategories = [], exist
           clientId, title: title.trim(), category: category.trim() || "General",
           subcategory: subcategory.trim() || null,
           body, steps: cleanSteps, intro: intro.trim(), prerequisites, order_index: 0,
+          visibility, accessUserIds: visibility === "restricted" ? Array.from(accessIds) : [],
         });
         toast.success("SOP created.");
         router.push(`/sops/${(created as Sop).id}`);
@@ -363,6 +382,37 @@ export function SopStudio({ clientId, categories = [], subcategories = [], exist
             <Textarea id="pre" value={prereqText} onChange={(e) => setPrereqText(e.target.value)} rows={2}
               placeholder={"Admin access to the host\nA recent backup"} className="bg-zinc-800 border-zinc-700 text-zinc-100 text-sm" />
           </div>
+
+          {vaOptions.length > 0 && (
+            <div className="flex flex-col gap-2 border-t border-zinc-800 pt-4">
+              <Label>Who can see this SOP?</Label>
+              <div className="flex flex-wrap gap-4 text-sm text-zinc-300">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="sop-visibility" checked={visibility === "public"} onChange={() => setVisibility("public")} className="accent-amber-500" />
+                  Everyone {isGlobal ? "(all VAs)" : "(all this client's VAs)"}
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="sop-visibility" checked={visibility === "restricted"} onChange={() => setVisibility("restricted")} className="accent-amber-500" />
+                  Specific VAs only
+                </label>
+              </div>
+              {visibility === "restricted" && (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-2 flex flex-col gap-1">
+                  <Input value={vaFilter} onChange={(e) => setVaFilter(e.target.value)} placeholder="Filter VAs…" className="bg-zinc-800 border-zinc-700 text-zinc-100 text-sm mb-1" />
+                  <div className="max-h-52 overflow-y-auto flex flex-col gap-0.5">
+                    {filteredVas.length === 0 && <p className="text-xs text-zinc-500 px-1 py-2">No VAs match.</p>}
+                    {filteredVas.map((v) => (
+                      <label key={v.id} className="flex items-center gap-2 text-sm text-zinc-300 px-1.5 py-1 rounded hover:bg-zinc-800/60 cursor-pointer">
+                        <input type="checkbox" checked={accessIds.has(v.id)} onChange={() => toggleVa(v.id)} className="accent-amber-500" />
+                        {v.name}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-zinc-600 px-1 pt-1">{accessIds.size} VA{accessIds.size !== 1 ? "s" : ""} selected — only these (and admins) will see it.</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Step cards */}

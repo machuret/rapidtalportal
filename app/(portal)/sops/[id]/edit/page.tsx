@@ -20,7 +20,7 @@ export default async function SopEditPage({
   const admin = createAdminClient();
   const { data: sop } = await admin
     .from("sops")
-    .select("id, client_id, title, category, subcategory, body, steps, intro, prerequisites")
+    .select("id, client_id, title, category, subcategory, body, steps, intro, prerequisites, visibility")
     .eq("id", params.id)
     .maybeSingle();
   if (!sop) notFound();
@@ -46,6 +46,17 @@ export default async function SopEditPage({
   const categories = Array.from(new Set(pickerRows.map((r) => r.category).filter(Boolean))) as string[];
   const subcategories = Array.from(new Set(pickerRows.map((r) => r.subcategory).filter(Boolean))) as string[];
 
+  // VA picker + this SOP's current access list (for restricted visibility).
+  let vaQuery = admin.from("users").select("id, full_name, email").eq("role", "va");
+  if (!isGlobal) vaQuery = vaQuery.eq("client_id", s.client_id!);
+  const [{ data: vaRows }, { data: accessRows }] = await Promise.all([
+    vaQuery.order("full_name"),
+    admin.from("sop_access").select("user_id").eq("sop_id", s.id),
+  ]);
+  const vaOptions = ((vaRows ?? []) as { id: string; full_name: string | null; email: string }[])
+    .map((v) => ({ id: v.id, name: v.full_name || v.email }));
+  const accessUserIds = ((accessRows ?? []) as { user_id: string }[]).map((r) => r.user_id);
+
   return (
     <div className="max-w-3xl">
       <Link href={`/sops/${s.id}`} className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white mb-6 transition-colors">
@@ -56,7 +67,8 @@ export default async function SopEditPage({
         userId={user.id}
         categories={categories}
         subcategories={subcategories}
-        existing={{ id: s.id, title: s.title, category: s.category, subcategory: s.subcategory, body: s.body, steps: s.steps, intro: s.intro, prerequisites: s.prerequisites }}
+        vaOptions={vaOptions}
+        existing={{ id: s.id, title: s.title, category: s.category, subcategory: s.subcategory, body: s.body, steps: s.steps, intro: s.intro, prerequisites: s.prerequisites, visibility: s.visibility, accessUserIds }}
         autoImprove={searchParams?.improve === "1"}
       />
     </div>

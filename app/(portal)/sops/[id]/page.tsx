@@ -25,6 +25,13 @@ export default async function SopDetailPage({ params }: { params: { id: string }
   // (or a super_admin).
   if (!isGlobal && !sameClient && user.role !== "super_admin") notFound();
 
+  // Restricted SOPs: only granted VAs (and super_admin) may open them directly.
+  if (sop.visibility === "restricted" && user.role !== "super_admin") {
+    const { data: grant } = await admin
+      .from("sop_access").select("sop_id").eq("sop_id", sop.id).eq("user_id", user.id).maybeSingle();
+    if (!grant) notFound();
+  }
+
   // Edit rights: global → super_admin only; client → super_admin or the client's admin.
   const canEdit = isGlobal
     ? user.role === "super_admin"
