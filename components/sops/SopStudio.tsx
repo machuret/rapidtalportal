@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { useSops } from "@/hooks/useSops";
+import { cn } from "@/lib/utils";
 import { serializeSteps, parseSopSteps, type SopStep } from "@/lib/sop-steps";
 import type { Sop } from "@/app/(portal)/sops/page";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,15 @@ export function SopStudio({ clientId, categories = [], subcategories = [], vaOpt
 
   // AI results
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  // Multi-select for mass-producing several angles at once.
+  const [selAngles, setSelAngles] = useState<Set<number>>(new Set());
+  const [producingAngles, setProducingAngles] = useState(false);
+  const toggleAngle = (i: number) => setSelAngles((p) => {
+    const n = new Set(p);
+    if (n.has(i)) n.delete(i); else n.add(i);
+    return n;
+  });
+  const allAnglesSelected = suggestions.length > 0 && suggestions.every((_, i) => selAngles.has(i));
 
   // Editor state
   const [title, setTitle] = useState(existing?.title ?? "");
@@ -129,6 +139,29 @@ export function SopStudio({ clientId, categories = [], subcategories = [], vaOpt
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Generation failed.");
       setStage(suggestions.length ? "suggestions" : "brief");
+    }
+  }
+
+  // Mass-produce full SOPs from the selected angles (no per-one review) and
+  // jump to the library to see them.
+  async function produceSelectedAngles() {
+    const picks = Array.from(selAngles).map((i) => suggestions[i]).filter(Boolean);
+    if (!picks.length || producingAngles) return;
+    setProducingAngles(true);
+    try {
+      const items = picks.map((s) => ({ title: s.title, category: category.trim() || undefined, subcategory: subcategory.trim() || undefined }));
+      let total = 0;
+      for (let i = 0; i < items.length; i += 8) {
+        const res = await api.post<{ created: number }>(ROUTES.sopSuggestionsProduce(), { clientId, items: items.slice(i, i + 8) }, { showErrorToast: false });
+        total += res.created;
+      }
+      toast.success(`Produced ${total} SOP${total !== 1 ? "s" : ""} — opening the library.`);
+      router.push(isGlobal ? "/admin/sops" : "/sops");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't produce the SOPs.");
+    } finally {
+      setProducingAngles(false);
     }
   }
 
@@ -256,9 +289,9 @@ export function SopStudio({ clientId, categories = [], subcategories = [], vaOpt
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cat">Category</Label>
+              <Label htmlFor="cat">Category <span className="text-zinc-600 font-normal">(type a new one to create it)</span></Label>
               <Input id="cat" value={category} onChange={(e) => setCategory(e.target.value)} list="sop-cats" disabled={busy}
-                placeholder="e.g. WordPress" className="bg-zinc-800 border-zinc-700 text-zinc-100" />
+                placeholder="Type to create, e.g. WordPress" className="bg-zinc-800 border-zinc-700 text-zinc-100" />
               <datalist id="sop-cats">{categories.map((c) => <option key={c} value={c} />)}</datalist>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -318,18 +351,35 @@ export function SopStudio({ clientId, categories = [], subcategories = [], vaOpt
         <button onClick={() => setStage("brief")} className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white mb-4">
           <ArrowLeft className="w-4 h-4" /> Change the brief
         </button>
-        <p className="text-sm text-zinc-400 mb-3">Pick the angle that fits — the AI will write the full SOP from it.</p>
+        <p className="text-sm text-zinc-400 mb-3">Click one to write &amp; refine it — or tick several and produce them all at once.</p>
+
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+            <input type="checkbox" checked={allAnglesSelected} onChange={() => setSelAngles(allAnglesSelected ? new Set() : new Set(suggestions.map((_, i) => i)))} className="accent-amber-500" disabled={producingAngles} />
+            Select all
+          </label>
+          <span className="text-xs text-zinc-600">{selAngles.size} selected</span>
+          <Button size="sm" onClick={() => void produceSelectedAngles()} disabled={producingAngles || selAngles.size === 0} className="gap-1.5 ml-auto">
+            {producingAngles ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
+            {producingAngles ? "Producing…" : `Produce ${selAngles.size || ""} selected`}
+          </Button>
+        </div>
+
         <div className="flex flex-col gap-2.5">
           {suggestions.map((s, i) => (
-            <button key={i} onClick={() => void generate(s.title)}
-              className="surface-card text-left px-4 py-3.5 hover:border-amber-400/40 hover:bg-zinc-800/40 transition-colors group">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-zinc-100 flex-1">{s.title}</p>
-                <span className="text-[11px] text-zinc-500 shrink-0">{s.stepCount} steps</span>
-                <Wand2 className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 transition-colors shrink-0" />
-              </div>
-              {s.scope && <p className="text-xs text-zinc-500 mt-1">{s.scope}</p>}
-            </button>
+            <div key={i} className={cn("surface-card flex items-start gap-3 px-4 py-3.5 transition-colors", selAngles.has(i) ? "border-amber-400/40 bg-zinc-800/30" : "")}>
+              <input type="checkbox" checked={selAngles.has(i)} onChange={() => toggleAngle(i)} disabled={producingAngles}
+                className="accent-amber-500 mt-1 shrink-0" aria-label={`Select ${s.title}`} />
+              <button onClick={() => void generate(s.title)} disabled={producingAngles}
+                className="text-left flex-1 min-w-0 group disabled:opacity-60">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-zinc-100 flex-1">{s.title}</p>
+                  <span className="text-[11px] text-zinc-500 shrink-0">{s.stepCount} steps</span>
+                  <Wand2 className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 transition-colors shrink-0" />
+                </div>
+                {s.scope && <p className="text-xs text-zinc-500 mt-1">{s.scope}</p>}
+              </button>
+            </div>
           ))}
         </div>
         <button onClick={startBlank} className="mt-4 text-sm text-zinc-500 hover:text-zinc-300 inline-flex items-center gap-1.5">
@@ -366,7 +416,7 @@ export function SopStudio({ clientId, categories = [], subcategories = [], vaOpt
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="c2">Category</Label>
-              <Input id="c2" value={category} onChange={(e) => setCategory(e.target.value)} list="sop-cats2" className="bg-zinc-800 border-zinc-700 text-zinc-100" />
+              <Input id="c2" value={category} onChange={(e) => setCategory(e.target.value)} list="sop-cats2" placeholder="Type to create" className="bg-zinc-800 border-zinc-700 text-zinc-100" />
               <datalist id="sop-cats2">{categories.map((c) => <option key={c} value={c} />)}</datalist>
             </div>
             <div className="flex flex-col gap-1.5">

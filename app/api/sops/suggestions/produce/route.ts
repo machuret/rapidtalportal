@@ -18,16 +18,24 @@ const MAX_BATCH = 8; // each is a strong-model generation — keep within 60s
 
 const schema = z.object({
   clientId: z.string().uuid().nullable().optional(),
-  ids: z.array(z.string().uuid()).min(1).max(MAX_BATCH),
-});
+  // Either backlog suggestion ids…
+  ids: z.array(z.string().uuid()).max(MAX_BATCH).optional(),
+  // …or ad-hoc angles (e.g. the studio "suggest angles" picks).
+  items: z.array(z.object({
+    title: z.string().min(1).max(300),
+    category: z.string().max(100).optional(),
+    subcategory: z.string().max(100).optional(),
+  })).max(MAX_BATCH).optional(),
+}).refine((d) => (d.ids?.length ?? 0) > 0 || (d.items?.length ?? 0) > 0, "Provide ids or items.");
 
 interface SuggestionRow { id: string; title: string; category: string | null; client_id: string | null }
+interface Target { title: string; category: string | null; subcategory: string | null; suggestionId?: string }
 
 export const POST = withAuth(async (req, { user }) => {
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
   const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: `Select between 1 and ${MAX_BATCH} ideas.` }, { status: 422 });
+  if (!parsed.success) return NextResponse.json({ error: `Select between 1 and ${MAX_BATCH} items.` }, { status: 422 });
 
   const clientId = parsed.data.clientId ?? null;
   const denied = authorizeSopScope(user, clientId);
@@ -38,30 +46,37 @@ export const POST = withAuth(async (req, { user }) => {
 
   const admin = createAdminClient();
 
-  // Load the chosen suggestions, scoped — never trust ids alone.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q = (admin as any).from("sop_suggestions").select("id, title, category, client_id").in("id", parsed.data.ids).eq("status", "open");
-  q = clientId === null ? q.is("client_id", null) : q.eq("client_id", clientId);
-  const { data: rows } = await q;
-  const suggestions = (rows ?? []) as SuggestionRow[];
-  if (!suggestions.length) return NextResponse.json({ created: 0, failed: 0, ids: [] });
+  // Resolve the list of SOPs to write.
+  const targets: Target[] = [];
+  if (parsed.data.ids?.length) {
+    // Load the chosen backlog suggestions, scoped — never trust ids alone.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q = (admin as any).from("sop_suggestions").select("id, title, category, client_id").in("id", parsed.data.ids).eq("status", "open");
+    q = clientId === null ? q.is("client_id", null) : q.eq("client_id", clientId);
+    const { data: rows } = await q;
+    for (const s of (rows ?? []) as SuggestionRow[]) targets.push({ title: s.title, category: s.category, subcategory: null, suggestionId: s.id });
+  }
+  for (const it of (parsed.data.items ?? [])) {
+    targets.push({ title: it.title.trim(), category: it.category?.trim() || null, subcategory: it.subcategory?.trim() || null });
+  }
+  if (!targets.length) return NextResponse.json({ created: 0, failed: 0, producedIds: [] });
 
   // Generate + save each in parallel (batch is capped).
-  const results = await Promise.all(suggestions.map(async (s) => {
+  const results = await Promise.all(targets.map(async (t) => {
     try {
-      const { draft, error } = await generateSopDraft(clientId, { topic: s.title, title: s.title, category: s.category ?? undefined });
-      if (!draft) return { id: s.id, ok: false, error };
+      const { draft, error } = await generateSopDraft(clientId, { topic: t.title, title: t.title, category: t.category ?? undefined });
+      if (!draft) return { id: t.suggestionId, ok: false, error };
 
       const body = serializeSteps(draft.intro, draft.prerequisites, draft.steps);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: created, error: insErr } = await (admin as any)
+      const { error: insErr } = await (admin as any)
         .from("sops")
         .insert({
           client_id: clientId,
           created_by: user.id,
           title: draft.title,
-          category: s.category?.trim() || "General",
-          subcategory: null,
+          category: t.category?.trim() || "General",
+          subcategory: t.subcategory,
           body,
           order_index: 0,
           steps: draft.steps,
@@ -69,16 +84,16 @@ export const POST = withAuth(async (req, { user }) => {
           prerequisites: draft.prerequisites,
           visibility: "public",
           updated_at: new Date().toISOString(),
-        })
-        .select("id")
-        .single();
-      if (insErr) return { id: s.id, ok: false, error: insErr.message };
+        });
+      if (insErr) return { id: t.suggestionId, ok: false, error: insErr.message };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (admin as any).from("sop_suggestions").update({ status: "created" }).eq("id", s.id);
-      return { id: s.id, ok: true, sopId: (created as { id: string }).id };
+      if (t.suggestionId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (admin as any).from("sop_suggestions").update({ status: "created" }).eq("id", t.suggestionId);
+      }
+      return { id: t.suggestionId, ok: true };
     } catch (e) {
-      return { id: s.id, ok: false, error: e instanceof Error ? e.message : "failed" };
+      return { id: t.suggestionId, ok: false, error: e instanceof Error ? e.message : "failed" };
     }
   }));
 
@@ -86,6 +101,6 @@ export const POST = withAuth(async (req, { user }) => {
   return NextResponse.json({
     created,
     failed: results.length - created,
-    producedIds: results.filter((r) => r.ok).map((r) => r.id),
+    producedIds: results.filter((r) => r.ok && r.id).map((r) => r.id),
   });
 }, { roles: ["client_admin", "super_admin"] });
