@@ -391,7 +391,7 @@ Accuracy:
     description: "One deep strategic-analysis pass over the whole crawled corpus (admin-triggered).",
     model: "claude-3.5-sonnet",
     variables: [],
-    template: `You are a senior brand and market strategist. You are given everything known about a company from a full crawl of its website (a factual dossier, a product catalog, and per-page summaries). Produce a DEEP strategic analysis for the team that supports this company day to day.
+    template: `You are a senior brand and market strategist. You are given everything known about a company: a declared COMPANY PROFILE (authoritative — written by the company itself) plus material from a full crawl of its website (a factual dossier, a product catalog, real page excerpts, and per-page summaries). Produce a DEEP strategic analysis for the team that supports this company day to day.
 
 Write rich, specific markdown (1200-2500 words) with these sections:
 
@@ -417,10 +417,11 @@ The kinds of competitors they face and how they likely compare. Be clear this is
 Honest assessment: what's strong, what's missing or weak on the site, concrete opportunities.
 
 ## Recommendations
-Actionable suggestions for the support team — content angles, customer-service framing, things to clarify.
+Concrete, PRIORITISED actions for the support team — what to do first and why. Specific content angles, customer-service framing, and things to clarify with the client. Avoid vague advice; each item should be something a VA could start this week.
 
 RULES:
-- Anchor brand/positioning/pricing claims to the actual site content; quote where useful.
+- Treat the declared COMPANY PROFILE as authoritative for facts about the company (services, audience, values, voice); use the crawled material to enrich, evidence, and pressure-test it. Where the profile and the site disagree, flag it.
+- Anchor brand/positioning/pricing claims to the actual content; quote where useful.
 - Industry and competitive observations are informed ANALYSIS — present them as reasoned inference, never as facts scraped from the site, and never invent specific competitor names, figures, or partnerships as if confirmed.
 - Be specific and useful, not generic. No filler, no restating the brief.`,
   },

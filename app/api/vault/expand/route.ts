@@ -54,32 +54,70 @@ export const POST = withAuth(async (req, { user }) => {
 
   const admin = createAdminClient();
 
-  // Assemble the corpus: dossier + catalog (full) + every page summary.
-  const { data: rows } = await admin
-    .from("vault_items")
-    .select("title, source_url, ai_summary, raw_content, tags, category")
-    .eq("client_id", parsed.data.clientId)
-    .order("created_at", { ascending: false });
+  // Assemble the corpus from everything we know about the company:
+  //   declared Company DNA (authoritative) + crawl dossier + product catalog +
+  //   real excerpts from the richest pages + a summary of every page.
+  const [{ data: rows }, { data: dnaRow }] = await Promise.all([
+    admin
+      .from("vault_items")
+      .select("title, source_url, ai_summary, raw_content, tags, category")
+      .eq("client_id", parsed.data.clientId)
+      .order("created_at", { ascending: false }),
+    admin
+      .from("company_dna")
+      .select("company_name, founders, location, phone, email, website, client_type, target_demographic, values, services, brand_voice, sign_off, extra")
+      .eq("client_id", parsed.data.clientId)
+      .maybeSingle(),
+  ]);
   const items = (rows ?? []) as { title: string; source_url: string | null; ai_summary: string | null; raw_content: string | null; tags: string[]; category: string | null }[];
 
-  if (items.length === 0) {
-    return NextResponse.json({ error: "Nothing to analyze yet — crawl a site or add documents first." }, { status: 409 });
+  // Declared profile — human-curated, so it grounds positioning/voice/audience
+  // in stated fact rather than crawl inference alone.
+  const dna = (dnaRow ?? null) as Record<string, unknown> | null;
+  let dnaText = "";
+  if (dna) {
+    const lines: string[] = [];
+    const add = (label: string, v: unknown) => { if (v && String(v).trim()) lines.push(`${label}: ${String(v).trim()}`); };
+    add("Company name", dna.company_name); add("Founders", dna.founders); add("Location", dna.location);
+    add("Website", dna.website); add("Client type", dna.client_type);
+    add("Target audience", dna.target_demographic); add("Values", dna.values);
+    add("Services", dna.services); add("Brand voice", dna.brand_voice); add("Sign-off", dna.sign_off);
+    if (dna.extra && typeof dna.extra === "object" && !Array.isArray(dna.extra)) {
+      for (const [k, v] of Object.entries(dna.extra as Record<string, unknown>)) add(k, v);
+    }
+    dnaText = lines.join("\n");
+  }
+
+  if (items.length === 0 && !dnaText) {
+    return NextResponse.json({ error: "Nothing to analyze yet — crawl a site, add documents, or fill in Company DNA first." }, { status: 409 });
   }
 
   const dossier = items.find((i) => (i.tags ?? []).includes("dossier") || /^company dossier/i.test(i.title));
   const catalog = items.find((i) => /^product catalog/i.test(i.title));
-  const summaries = items
-    .filter((i) => i !== dossier && i !== catalog)
+  const otherPages = items.filter((i) => i !== dossier && i !== catalog);
+
+  const summaries = otherPages
     .map((i) => `- [${i.category ?? "general"}] ${i.title}${i.source_url ? ` (${i.source_url})` : ""}: ${i.ai_summary ?? "(no summary)"}`)
     .join("\n");
 
-  const sourceUrl = dossier?.source_url ?? items.find((i) => i.source_url)?.source_url ?? null;
+  // Real content from the most substantial pages (not just one-line summaries),
+  // so the analysis has genuine material to reason over.
+  const keyPages = otherPages
+    .filter((p) => (p.raw_content ?? "").trim().length > 200)
+    .sort((a, b) => (b.raw_content?.length ?? 0) - (a.raw_content?.length ?? 0))
+    .slice(0, 12)
+    .map((p) => `## ${p.title}${p.source_url ? ` (${p.source_url})` : ""}\n${(p.raw_content ?? "").slice(0, 2500).trim()}`)
+    .join("\n\n");
+
+  const sourceUrl = dossier?.source_url ?? items.find((i) => i.source_url)?.source_url ?? (dna?.website ? String(dna.website) : null);
 
   const corpus = [
+    dnaText ? `# COMPANY PROFILE (declared by the company — authoritative)\n${dnaText}` : "",
     dossier?.raw_content ? `# COMPANY DOSSIER\n${dossier.raw_content}` : "",
-    catalog?.raw_content ? `# PRODUCT CATALOG\n${catalog.raw_content.slice(0, 8000)}` : "",
-    summaries ? `# PAGE SUMMARIES\n${summaries}` : "",
-  ].filter(Boolean).join("\n\n").slice(0, 60000);
+    catalog?.raw_content ? `# PRODUCT CATALOG\n${catalog.raw_content.slice(0, 10000)}` : "",
+    keyPages ? `# KEY PAGE CONTENT (excerpts)\n${keyPages}` : "",
+    summaries ? `# PAGE SUMMARIES (every page)\n${summaries}` : "",
+  ].filter(Boolean).join("\n\n").slice(0, 120000);
 
   const systemPrompt = await renderPrompt("vault.expand");
 
@@ -90,7 +128,7 @@ export const POST = withAuth(async (req, { user }) => {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 4000,
+        max_tokens: 6000,
         temperature: 0.4,
         messages: [
           { role: "system", content: systemPrompt },
