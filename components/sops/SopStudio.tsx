@@ -21,6 +21,7 @@ export interface ExistingSop {
   id: string;
   title: string;
   category: string;
+  subcategory?: string | null;
   body: string;
   steps: SopStep[] | null;
   intro: string | null;
@@ -31,6 +32,7 @@ interface Props {
   clientId: string | null; // null = global library SOP
   userId: string;
   categories?: string[];
+  subcategories?: string[];
   existing?: ExistingSop; // present → edit mode (PATCH + "Improve with AI")
   autoImprove?: boolean;  // open the Improve panel on load (from "Improve with AI")
 }
@@ -40,7 +42,7 @@ type Stage = "brief" | "suggesting" | "suggestions" | "generating" | "editor";
 type Depth = "quick" | "standard" | "thorough";
 type Audience = "new" | "experienced" | "any";
 
-export function SopStudio({ clientId, categories = [], existing, autoImprove = false }: Props) {
+export function SopStudio({ clientId, categories = [], subcategories = [], existing, autoImprove = false }: Props) {
   const router = useRouter();
   const isGlobal = clientId === null;
   const isEdit = !!existing;
@@ -57,6 +59,7 @@ export function SopStudio({ clientId, categories = [], existing, autoImprove = f
   // Brief
   const [topic, setTopic] = useState(existing?.title ?? "");
   const [category, setCategory] = useState(existing?.category ?? (isGlobal ? "" : "General"));
+  const [subcategory, setSubcategory] = useState(existing?.subcategory ?? "");
   const [audience, setAudience] = useState<Audience>("any");
   const [depth, setDepth] = useState<Depth>("standard");
 
@@ -178,6 +181,7 @@ export function SopStudio({ clientId, categories = [], existing, autoImprove = f
       if (isEdit) {
         await updateSop({
           id: existing!.id, clientId, title: title.trim(), category: category.trim() || "General",
+          subcategory: subcategory.trim() || null,
           body, steps: cleanSteps, intro: intro.trim(), prerequisites,
         });
         toast.success("SOP updated.");
@@ -186,6 +190,7 @@ export function SopStudio({ clientId, categories = [], existing, autoImprove = f
       } else {
         const created = await createSop({
           clientId, title: title.trim(), category: category.trim() || "General",
+          subcategory: subcategory.trim() || null,
           body, steps: cleanSteps, intro: intro.trim(), prerequisites, order_index: 0,
         });
         toast.success("SOP created.");
@@ -227,13 +232,21 @@ export function SopStudio({ clientId, categories = [], existing, autoImprove = f
               className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="cat">Category</Label>
               <Input id="cat" value={category} onChange={(e) => setCategory(e.target.value)} list="sop-cats" disabled={busy}
                 placeholder="e.g. WordPress" className="bg-zinc-800 border-zinc-700 text-zinc-100" />
               <datalist id="sop-cats">{categories.map((c) => <option key={c} value={c} />)}</datalist>
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="subcat">Subcategory <span className="text-zinc-600 font-normal">(optional)</span></Label>
+              <Input id="subcat" value={subcategory} onChange={(e) => setSubcategory(e.target.value)} list="sop-subcats" disabled={busy}
+                placeholder="e.g. Rank Math" className="bg-zinc-800 border-zinc-700 text-zinc-100" />
+              <datalist id="sop-subcats">{subcategories.map((c) => <option key={c} value={c} />)}</datalist>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="aud">Written for</Label>
               <select id="aud" value={audience} onChange={(e) => setAudience(e.target.value as Audience)} disabled={busy}
@@ -324,7 +337,7 @@ export function SopStudio({ clientId, categories = [], existing, autoImprove = f
       {header}
       <div className="flex flex-col gap-5">
         <div className="surface-card px-6 py-5 flex flex-col gap-4">
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_200px] gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px_180px] gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="t">Title</Label>
               <Input id="t" value={title} onChange={(e) => setTitle(e.target.value)} className="bg-zinc-800 border-zinc-700 text-zinc-100" />
@@ -333,6 +346,11 @@ export function SopStudio({ clientId, categories = [], existing, autoImprove = f
               <Label htmlFor="c2">Category</Label>
               <Input id="c2" value={category} onChange={(e) => setCategory(e.target.value)} list="sop-cats2" className="bg-zinc-800 border-zinc-700 text-zinc-100" />
               <datalist id="sop-cats2">{categories.map((c) => <option key={c} value={c} />)}</datalist>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="sc2">Subcategory</Label>
+              <Input id="sc2" value={subcategory} onChange={(e) => setSubcategory(e.target.value)} list="sop-subcats2" placeholder="optional" className="bg-zinc-800 border-zinc-700 text-zinc-100" />
+              <datalist id="sop-subcats2">{subcategories.map((c) => <option key={c} value={c} />)}</datalist>
             </div>
           </div>
           <div className="flex flex-col gap-1.5">

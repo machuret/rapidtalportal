@@ -36,6 +36,21 @@ function groupByCategory(list: Sop[]): { order: string[]; groups: Record<string,
   return { order, groups };
 }
 
+// Sub-group a category's SOPs by subcategory (preserving order). "" = no
+// subcategory; those render directly under the category with no sub-heading.
+function groupBySubcategory(list: Sop[]): { order: string[]; groups: Record<string, Sop[]> } {
+  const order: string[] = [];
+  const groups: Record<string, Sop[]> = {};
+  for (const s of list) {
+    const k = (s.subcategory ?? "").trim();
+    if (!(k in groups)) { groups[k] = []; order.push(k); }
+    groups[k].push(s);
+  }
+  // Un-subcategorised first, then named subcategories.
+  order.sort((a, b) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b)));
+  return { order, groups };
+}
+
 function stepCountOf(body: string): number {
   return body.split("\n").filter((l) => /^(step\s*\d+|\d+[.):])/i.test(l.trim())).length;
 }
@@ -72,6 +87,69 @@ export function SopsLibrary({ sops, canEdit, newHref = "/sops/new", usage }: Sop
         .catch(() => toast.error("Couldn't save order."));
       return g.order.flatMap((k) => g.groups[k]);
     });
+  }
+
+  // One SOP row — reorder handle variant or the clickable link. `idx` is the
+  // position within its (reorder) category group, used for drag targeting.
+  function renderSopRow(sop: Sop, category: string, idx: number) {
+    const stepCount = stepCountOf(sop.body);
+    const meta = (
+      <p className="text-sm text-zinc-500 mt-0.5">
+        {stepCount > 0 ? `${stepCount} step${stepCount !== 1 ? "s" : ""}` : "View procedure"}
+        {" · "}Updated {new Date(sop.updated_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+        {usage?.[sop.id] && (
+          <span className="text-zinc-400">
+            {" · "}{usage[sop.id].runs} run{usage[sop.id].runs !== 1 ? "s" : ""}
+            {usage[sop.id].completions > 0 && `, ${usage[sop.id].completions} completed`}
+            {usage[sop.id].users > 0 && ` · ${usage[sop.id].users} VA${usage[sop.id].users !== 1 ? "s" : ""}`}
+          </span>
+        )}
+      </p>
+    );
+    const titleRow = (
+      <div className="flex items-center gap-2">
+        <p className="font-semibold text-base text-zinc-100 group-hover:text-white transition-colors">{sop.title}</p>
+        {sop.client_id === null && <span className="text-[10px] font-medium uppercase tracking-wide text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-full px-1.5 py-0.5 shrink-0">Library</span>}
+      </div>
+    );
+
+    if (reordering) {
+      return (
+        <div
+          key={sop.id}
+          draggable
+          onDragStart={() => { dragSrc.current = { category, index: idx }; }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const src = dragSrc.current;
+            if (src && src.category === category) moveWithin(category, src.index, idx);
+            dragSrc.current = null;
+          }}
+          className="surface-card flex items-center gap-3 px-5 py-4 cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical className="w-4 h-4 text-zinc-600 shrink-0" />
+          <div className="w-9 h-9 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
+            <ListChecks className="w-4.5 h-4.5 text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">{titleRow}{meta}</div>
+        </div>
+      );
+    }
+
+    return (
+      <Link
+        key={sop.id}
+        href={`/sops/${sop.id}`}
+        className="surface-card group flex items-center gap-4 px-5 py-4 hover:border-zinc-700 hover:bg-zinc-800/60 transition-all"
+      >
+        <div className="w-9 h-9 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
+          <ListChecks className="w-4.5 h-4.5 text-amber-400" />
+        </div>
+        <div className="flex-1 min-w-0">{titleRow}{meta}</div>
+        <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0" />
+      </Link>
+    );
   }
 
   return (
@@ -132,77 +210,40 @@ export function SopsLibrary({ sops, canEdit, newHref = "/sops/new", usage }: Sop
         </div>
       ) : (
         <div className="flex flex-col gap-8">
-          {catOrder.map((category) => (
-            <div key={category}>
-              <div className="flex items-center gap-2 mb-3">
-                <Tag className="w-3.5 h-3.5 text-amber-400" />
-                <p className="label-section text-amber-400">{category}</p>
-                <span className="text-xs text-zinc-600 ml-1">({groups[category].length})</span>
-              </div>
-              <div className="flex flex-col gap-2">
-                {groups[category].map((sop, idx) => {
-                  const stepCount = stepCountOf(sop.body);
-                  const meta = (
-                    <p className="text-sm text-zinc-500 mt-0.5">
-                      {stepCount > 0 ? `${stepCount} step${stepCount !== 1 ? "s" : ""}` : "View procedure"}
-                      {" · "}Updated {new Date(sop.updated_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
-                      {usage?.[sop.id] && (
-                        <span className="text-zinc-400">
-                          {" · "}{usage[sop.id].runs} run{usage[sop.id].runs !== 1 ? "s" : ""}
-                          {usage[sop.id].completions > 0 && `, ${usage[sop.id].completions} completed`}
-                          {usage[sop.id].users > 0 && ` · ${usage[sop.id].users} VA${usage[sop.id].users !== 1 ? "s" : ""}`}
-                        </span>
-                      )}
-                    </p>
-                  );
-                  const titleRow = (
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-base text-zinc-100 group-hover:text-white transition-colors">{sop.title}</p>
-                      {sop.client_id === null && <span className="text-[10px] font-medium uppercase tracking-wide text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-full px-1.5 py-0.5 shrink-0">Library</span>}
-                    </div>
-                  );
-
-                  if (reordering) {
-                    return (
-                      <div
-                        key={sop.id}
-                        draggable
-                        onDragStart={() => { dragSrc.current = { category, index: idx }; }}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const src = dragSrc.current;
-                          if (src && src.category === category) moveWithin(category, src.index, idx);
-                          dragSrc.current = null;
-                        }}
-                        className="surface-card flex items-center gap-3 px-5 py-4 cursor-grab active:cursor-grabbing"
-                      >
-                        <GripVertical className="w-4 h-4 text-zinc-600 shrink-0" />
-                        <div className="w-9 h-9 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
-                          <ListChecks className="w-4.5 h-4.5 text-amber-400" />
+          {catOrder.map((category) => {
+            const items = groups[category];
+            const sub = groupBySubcategory(items);
+            // Sub-group by subcategory in normal mode; flat list while reordering
+            // (drag indices must match the category's flat order).
+            const showSub = !reordering && sub.order.some((s) => s !== "");
+            return (
+              <div key={category}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Tag className="w-3.5 h-3.5 text-amber-400" />
+                  <p className="label-section text-amber-400">{category}</p>
+                  <span className="text-xs text-zinc-600 ml-1">({items.length})</span>
+                </div>
+                {showSub ? (
+                  <div className="flex flex-col gap-4">
+                    {sub.order.map((subname) => (
+                      <div key={subname || "_none"}>
+                        {subname && (
+                          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-1.5 ml-0.5">{subname}</p>
+                        )}
+                        <div className="flex flex-col gap-2">
+                          {sub.groups[subname].map((sop, idx) => renderSopRow(sop, category, idx))}
                         </div>
-                        <div className="flex-1 min-w-0">{titleRow}{meta}</div>
                       </div>
-                    );
-                  }
-
-                  return (
-                    <Link
-                      key={sop.id}
-                      href={`/sops/${sop.id}`}
-                      className="surface-card group flex items-center gap-4 px-5 py-4 hover:border-zinc-700 hover:bg-zinc-800/60 transition-all"
-                    >
-                      <div className="w-9 h-9 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
-                        <ListChecks className="w-4.5 h-4.5 text-amber-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">{titleRow}{meta}</div>
-                      <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0" />
-                    </Link>
-                  );
-                })}
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {items.map((sop, idx) => renderSopRow(sop, category, idx))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

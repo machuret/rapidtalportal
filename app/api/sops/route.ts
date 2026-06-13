@@ -16,6 +16,7 @@ const createSchema = z.object({
   clientId:      z.string().uuid().nullable().optional(),
   title:         z.string().min(1).max(300),
   category:      z.string().max(100).optional().default("General"),
+  subcategory:   z.string().max(100).optional().nullable(),
   body:          z.string().min(1).max(100000),
   order_index:   z.number().int().optional().default(0),
   steps:         z.array(stepSchema).max(40).optional(),
@@ -28,6 +29,7 @@ const updateSchema = z.object({
   clientId:      z.string().uuid().nullable().optional(),
   title:         z.string().min(1).max(300).optional(),
   category:      z.string().max(100).optional(),
+  subcategory:   z.string().max(100).optional().nullable(),
   body:          z.string().min(1).max(100000).optional(),
   steps:         z.array(stepSchema).max(40).optional(),
   intro:         z.string().max(5000).optional(),
@@ -39,7 +41,7 @@ const deleteSchema = z.object({
   clientId: z.string().uuid().nullable().optional(),
 });
 
-const SELECT = "id, client_id, title, category, body, order_index, steps, intro, prerequisites, version, forked_from, forked_version, created_at, updated_at";
+const SELECT = "id, client_id, title, category, subcategory, body, order_index, steps, intro, prerequisites, version, forked_from, forked_version, created_at, updated_at";
 
 /** Authorise a write against a SOP's scope. Returns an error response or null. */
 function authorizeScope(user: ApiUser, clientId: string | null): NextResponse | null {
@@ -76,6 +78,7 @@ export const POST = withAuth(async (req, { user }) => {
       created_by:  user.id,
       title:         parsed.data.title.trim(),
       category:      parsed.data.category.trim() || "General",
+      subcategory:   parsed.data.subcategory?.trim() || null,
       body:          parsed.data.body,
       order_index:   parsed.data.order_index,
       steps:         parsed.data.steps ?? null,
@@ -109,7 +112,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const id = parsed.data.id;
-  const fields = { title: parsed.data.title, category: parsed.data.category, body: parsed.data.body };
+  const fields = { title: parsed.data.title, category: parsed.data.category, subcategory: parsed.data.subcategory, body: parsed.data.body };
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const [k, v] of Object.entries(fields)) {
     if (v !== undefined) updates[k] = typeof v === "string" ? v.trim() || null : v;

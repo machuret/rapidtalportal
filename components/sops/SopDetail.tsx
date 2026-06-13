@@ -92,6 +92,7 @@ export function SopDetail({ sop: initial, canEdit, clientId, categories, forkToC
         clientId,
         title:       `${sop.title} (Copy)`,
         category:    sop.category,
+        subcategory: sop.subcategory ?? null,
         body:        sop.body,
         order_index: sop.order_index,
       });
@@ -178,7 +179,7 @@ export function SopDetail({ sop: initial, canEdit, clientId, categories, forkToC
           </div>
           <div className="flex items-center gap-3 mt-1">
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-full px-2.5 py-0.5">
-              <Tag className="w-3 h-3" /> {sop.category}
+              <Tag className="w-3 h-3" /> {sop.category}{sop.subcategory ? ` › ${sop.subcategory}` : ""}
             </span>
             <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500">
               <Clock className="w-3 h-3" /> Updated {new Date(sop.updated_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}

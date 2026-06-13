@@ -50,6 +50,7 @@ export interface Sop {
   client_id: string | null;
   title: string;
   category: string;
+  subcategory?: string | null;
   body: string;
   order_index: number;
   version?: number;

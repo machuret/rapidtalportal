@@ -20,12 +20,14 @@ export default async function SopEditPage({
   const admin = createAdminClient();
   const { data: sop } = await admin
     .from("sops")
-    .select("id, client_id, title, category, body, steps, intro, prerequisites")
+    .select("id, client_id, title, category, subcategory, body, steps, intro, prerequisites")
     .eq("id", params.id)
     .maybeSingle();
   if (!sop) notFound();
 
-  const s = sop as ExistingSop & { client_id: string | null };
+  // as unknown as — generated DB types don't include `subcategory` until they're
+  // regenerated after migration 063; the runtime shape is correct.
+  const s = sop as unknown as ExistingSop & { client_id: string | null };
 
   // Same scope rules as the write API: global = super_admin, client = admins.
   const isGlobal = s.client_id === null;
@@ -36,11 +38,13 @@ export default async function SopEditPage({
     if (user.role !== "super_admin" && s.client_id !== user.client_id) notFound();
   }
 
-  // Categories for the picker.
-  let catQuery = admin.from("sops").select("category");
+  // Categories + subcategories for the pickers.
+  let catQuery = admin.from("sops").select("category, subcategory");
   catQuery = isGlobal ? catQuery.is("client_id", null) : catQuery.eq("client_id", s.client_id!);
   const { data: sopRows } = await catQuery;
-  const categories = Array.from(new Set((sopRows ?? []).map((r: { category: string }) => r.category).filter(Boolean)));
+  const pickerRows = (sopRows ?? []) as unknown as { category: string | null; subcategory: string | null }[];
+  const categories = Array.from(new Set(pickerRows.map((r) => r.category).filter(Boolean))) as string[];
+  const subcategories = Array.from(new Set(pickerRows.map((r) => r.subcategory).filter(Boolean))) as string[];
 
   return (
     <div className="max-w-3xl">
@@ -51,7 +55,8 @@ export default async function SopEditPage({
         clientId={s.client_id}
         userId={user.id}
         categories={categories}
-        existing={{ id: s.id, title: s.title, category: s.category, body: s.body, steps: s.steps, intro: s.intro, prerequisites: s.prerequisites }}
+        subcategories={subcategories}
+        existing={{ id: s.id, title: s.title, category: s.category, subcategory: s.subcategory, body: s.body, steps: s.steps, intro: s.intro, prerequisites: s.prerequisites }}
         autoImprove={searchParams?.improve === "1"}
       />
     </div>

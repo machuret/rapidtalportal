@@ -12,6 +12,7 @@ interface CreateSopInput {
   clientId: string | null; // null = global library SOP
   title: string;
   category: string;
+  subcategory?: string | null;
   body: string;
   order_index: number;
   steps?: SopStepInput[];
@@ -24,6 +25,7 @@ interface UpdateSopInput {
   clientId: string | null;
   title?: string;
   category?: string;
+  subcategory?: string | null;
   body?: string;
   steps?: SopStepInput[];
   intro?: string;

@@ -24,14 +24,14 @@ export default async function SopNewPage({ searchParams }: { searchParams: { sco
   }
 
   const admin = createAdminClient();
-  let catQuery = admin.from("sops").select("category");
+  let catQuery = admin.from("sops").select("category, subcategory");
   catQuery = isGlobal ? catQuery.is("client_id", null) : catQuery.eq("client_id", user.client_id!);
   const { data: sopRows } = await catQuery;
+  const rows = (sopRows ?? []) as unknown as { category: string | null; subcategory: string | null }[];
 
-  let categories = Array.from(
-    new Set((sopRows ?? []).map((s: { category: string }) => s.category).filter(Boolean)),
-  );
+  let categories = Array.from(new Set(rows.map((s) => s.category).filter(Boolean))) as string[];
   if (isGlobal && categories.length === 0) categories = GLOBAL_SUGGESTED;
+  const subcategories = Array.from(new Set(rows.map((s) => s.subcategory).filter(Boolean))) as string[];
 
   const backHref = isGlobal ? "/admin/sops" : "/sops";
 
@@ -44,7 +44,7 @@ export default async function SopNewPage({ searchParams }: { searchParams: { sco
         <ArrowLeft className="w-4 h-4" />
         {isGlobal ? "Back to SOP Library" : "Back to SOPs"}
       </Link>
-      <SopStudio clientId={isGlobal ? null : user.client_id!} userId={user.id} categories={categories} />
+      <SopStudio clientId={isGlobal ? null : user.client_id!} userId={user.id} categories={categories} subcategories={subcategories} />
     </div>
   );
 }
