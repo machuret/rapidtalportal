@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { reportClientError } from "@/lib/report-client-error";
 
 export default function PortalError({
   error,
@@ -12,6 +13,7 @@ export default function PortalError({
 }) {
   useEffect(() => {
     console.error("Portal error:", error);
+    reportClientError(error);
   }, [error]);
 
   return (

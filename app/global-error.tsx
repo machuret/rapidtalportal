@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { reportClientError } from "@/lib/report-client-error";
 
 export default function GlobalError({
   error,
@@ -10,11 +11,14 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const isMissingEnv = error.message?.includes("Missing NEXT_PUBLIC_SUPABASE");
+
   useEffect(() => {
     console.error("Global error:", error);
-  }, [error]);
-
-  const isMissingEnv = error.message?.includes("Missing NEXT_PUBLIC_SUPABASE");
+    // A misconfigured env isn't worth a report (the endpoint is likely down
+    // too); genuine crashes are recorded for /admin/errors.
+    if (!isMissingEnv) reportClientError(error);
+  }, [error, isMissingEnv]);
 
   return (
     <html>
