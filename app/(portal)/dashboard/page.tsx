@@ -5,6 +5,7 @@ import { VaDashboard } from "@/components/dashboard/VaDashboard";
 import { VaDayStrip, AdminTeamStrip } from "@/components/dashboard/DayStrips";
 import { ClientDashboard } from "@/components/dashboard/ClientDashboard";
 import { renderClientDashboard } from "./client-dashboard";
+import { sumWorkHours } from "@/lib/tasks/metrics";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard — RapidTal" };
@@ -24,8 +25,19 @@ export default async function DashboardPage() {
     return <ClientDashboard {...data} clientName={client?.name ?? ""} />;
   }
 
+  // Any non-super user must belong to a client; without one there's nothing to
+  // show (avoids a null client_id flowing into every query below).
+  if (!user.client_id) {
+    return (
+      <div className="max-w-lg mx-auto mt-20 text-center">
+        <h1 className="text-xl font-semibold text-white">Your account isn&apos;t linked to a client yet</h1>
+        <p className="text-zinc-400 text-sm mt-2">Ask your RapidTal admin to assign you to a client, then refresh.</p>
+      </div>
+    );
+  }
+
   const supabase = createAdminClient();
-  const clientId = user.client_id!;
+  const clientId = user.client_id;
 
   const [
     kbResult,
@@ -62,17 +74,14 @@ export default async function DashboardPage() {
       supabase.from("time_entries").select("started_at, ended_at").eq("client_id", clientId).eq("phase", "work").eq("work_date", today),
     ]);
     const open = (openTaskRows ?? []) as { status: string }[];
-    let hoursMs = 0;
-    for (const t of (timeToday ?? []) as { started_at: string; ended_at: string | null }[]) {
-      if (t.ended_at) hoursMs += new Date(t.ended_at).getTime() - new Date(t.started_at).getTime();
-    }
+    const hoursToday = sumWorkHours((timeToday ?? []) as { started_at: string; ended_at: string | null }[]);
     topSlot = (
       <AdminTeamStrip
         vaCount={(vas ?? []).length}
         loggedToday={new Set(((logsToday ?? []) as { user_id: string }[]).map((l) => l.user_id)).size}
         openTasks={open.length}
         reviewTasks={open.filter((t) => t.status === "review").length}
-        hoursToday={hoursMs / 3_600_000}
+        hoursToday={hoursToday}
       />
     );
   } else {

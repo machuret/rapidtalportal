@@ -109,3 +109,15 @@ export async function requireSuperAdmin(): Promise<CurrentUserAndClient> {
   if (ctx.user.role !== "super_admin") redirect("/dashboard");
   return ctx;
 }
+
+/**
+ * Page guard for client-admin-only pages. Guarantees a non-null client_id in
+ * the returned type, so callers drop the `user.client_id!` non-null assertions.
+ */
+export type ClientAdminContext = CurrentUserAndClient & { user: DbUser & { client_id: string } };
+export async function requireClientAdmin(): Promise<ClientAdminContext> {
+  const ctx = await getCurrentUserAndClient();
+  if (!ctx) redirect("/login");
+  if (ctx.user.role !== "client_admin" || !ctx.user.client_id) redirect("/dashboard");
+  return ctx as ClientAdminContext;
+}

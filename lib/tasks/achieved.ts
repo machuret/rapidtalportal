@@ -4,6 +4,8 @@
  * rate, and the most recent few). Kept dependency-free and unit-tested because
  * it underpins the headline view and the My Job self-report synergy.
  */
+import { isOnTime } from "./metrics";
+
 export interface AchievedTask {
   title: string;
   status: string;
@@ -46,8 +48,7 @@ export function computeAchieved(tasks: AchievedTask[], now: Date = new Date()): 
     if (ts >= monthStart) month++;
     if (t.due_date) {
       onTimeDenom++;
-      // Completed by end of the due date counts as on time.
-      if (ts <= new Date(t.due_date + "T23:59:59").getTime()) onTime++;
+      if (isOnTime(t.completed_at!, t.due_date)) onTime++;
     }
   }
 

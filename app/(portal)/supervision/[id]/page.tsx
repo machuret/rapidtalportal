@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ArrowLeft, NotebookPen, Clock, ListChecks, CheckCircle2 } from "lucide-react";
+import { sumWorkHours } from "@/lib/tasks/metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -10,12 +11,6 @@ const WINDOW_DAYS = 30;
 const MOOD_LABEL: Record<string, string> = {
   great: "😄 Great", good: "🙂 Good", neutral: "😐 Neutral", difficult: "😕 Difficult", overwhelmed: "😩 Overwhelmed",
 };
-
-function hours(entries: { started_at: string; ended_at: string | null }[]): number {
-  let ms = 0;
-  for (const e of entries) if (e.ended_at) ms += new Date(e.ended_at).getTime() - new Date(e.started_at).getTime();
-  return ms / 3_600_000;
-}
 
 export default async function SupervisionDetailPage({ params }: { params: { id: string } }) {
   const ctx = await getCurrentUserAndClient();
@@ -59,7 +54,7 @@ export default async function SupervisionDetailPage({ params }: { params: { id: 
     for (const s of (sopRows ?? []) as { id: string; title: string }[]) sopTitles[s.id] = s.title;
   }
 
-  const totalHours = hours(times);
+  const totalHours = sumWorkHours(times);
   const completed = runs.filter((r) => r.status === "completed").length;
 
   return (

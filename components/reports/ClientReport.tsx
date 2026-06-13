@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Printer, Copy, Check } from "lucide-react";
-import { useState } from "react";
+import { Printer, Copy, Check, Loader2 } from "lucide-react";
+import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { categoryColor } from "@/lib/tasks/category-colors";
 import type { ClientReportData } from "@/app/(portal)/reports/report-data";
@@ -34,6 +34,7 @@ function toPlainText(d: ClientReportData): string {
 export function ClientReport({ data }: { data: ClientReportData }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
+  const [pending, startTransition] = useTransition();
   const t = data.totals;
 
   async function copy() {
@@ -53,10 +54,12 @@ export function ClientReport({ data }: { data: ClientReportData }) {
           <p className="text-zinc-400 text-sm mt-0.5">A shareable summary of what was delivered.</p>
         </div>
         <div className="flex items-center gap-2 ml-auto">
+          {pending && <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />}
           <select
             value={data.monthKey}
-            onChange={(e) => router.push(`/reports?month=${e.target.value}`)}
-            className="bg-zinc-800 border border-zinc-700 rounded-md px-3 h-9 text-sm text-zinc-200"
+            disabled={pending}
+            onChange={(e) => startTransition(() => router.push(`/reports?month=${e.target.value}`))}
+            className="bg-zinc-800 border border-zinc-700 rounded-md px-3 h-9 text-sm text-zinc-200 disabled:opacity-60"
           >
             {data.months.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
           </select>

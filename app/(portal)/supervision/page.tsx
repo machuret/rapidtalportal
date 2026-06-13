@@ -5,17 +5,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ExportCsv } from "@/components/supervision/ExportCsv";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { Eye, Clock, ChevronRight, CheckCircle2, Target, Inbox, AlertTriangle, NotebookPen } from "lucide-react";
+import { sumWorkHours, isOnTime } from "@/lib/tasks/metrics";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Supervision — RapidTal" };
 
 const WINDOW_DAYS = 30;
-
-function hours(entries: { started_at: string; ended_at: string | null }[]): number {
-  let ms = 0;
-  for (const e of entries) if (e.ended_at) ms += new Date(e.ended_at).getTime() - new Date(e.started_at).getTime();
-  return ms / 3_600_000;
-}
 
 export default async function SupervisionPage() {
   const ctx = await getCurrentUserAndClient();
@@ -73,7 +68,7 @@ export default async function SupervisionPage() {
         s.delivered++;
         if (t.due_date) {
           s.onTimeDen++;
-          if (new Date(t.completed_at).getTime() <= new Date(t.due_date + "T23:59:59").getTime()) s.onTimeNum++;
+          if (isOnTime(t.completed_at, t.due_date)) s.onTimeNum++;
         }
       }
     } else if (t.status === "review") {
@@ -86,7 +81,7 @@ export default async function SupervisionPage() {
 
   const timesByUser: Record<string, typeof times> = {};
   for (const t of times) { (timesByUser[t.user_id] ??= []).push(t); const s = ensure(t.user_id); s.lastActive = Math.max(s.lastActive, new Date(t.started_at).getTime()); }
-  for (const [uid, ts] of Object.entries(timesByUser)) ensure(uid).hours = hours(ts);
+  for (const [uid, ts] of Object.entries(timesByUser)) ensure(uid).hours = sumWorkHours(ts);
 
   const onTimePct = (s: Stat) => (s.onTimeDen ? Math.round((s.onTimeNum / s.onTimeDen) * 100) : null);
 

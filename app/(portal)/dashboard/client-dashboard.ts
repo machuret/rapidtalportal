@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { workHours } from "@/lib/tasks/metrics";
 import type { ClientDashboardProps } from "@/components/dashboard/ClientDashboard";
 
 /** Local-midnight of the most recent Monday. */
@@ -49,10 +50,7 @@ export async function renderClientDashboard(clientId: string, fullName: string):
     .slice(0, 8)
     .map((t) => ({ id: t.id, title: t.title, completedAt: t.completed_at as string, assigneeName: t.assigned_to ? nameById.get(t.assigned_to) ?? null : null }));
 
-  let hoursMs = 0;
-  for (const e of (timeRows ?? []) as { started_at: string; ended_at: string | null }[]) {
-    if (e.ended_at) hoursMs += new Date(e.ended_at).getTime() - new Date(e.started_at).getTime();
-  }
+  const hoursThisWeek = workHours((timeRows ?? []) as { started_at: string; ended_at: string | null }[]);
 
   // Planned weekly hours = sum of the VAs' contracts (when present).
   let planHours: number | null = null;
@@ -77,7 +75,7 @@ export async function renderClientDashboard(clientId: string, fullName: string):
       inProgress: tasks.filter((t) => t.status === "in_progress").length,
       todo: tasks.filter((t) => t.status === "todo").length,
       completedThisWeek,
-      hoursThisWeek: Math.round(hoursMs / 360_000) / 10, // 1 decimal
+      hoursThisWeek,
       planHours,
     },
     recentDelivered,

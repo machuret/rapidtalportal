@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isOnTime } from "@/lib/tasks/metrics";
 
 export interface ReportVARow { name: string; delivered: number; onTimePct: number | null; hours: number }
 export interface ReportCatRow { name: string; color: string; count: number }
@@ -72,7 +73,7 @@ export async function buildClientReport(clientId: string, clientName: string, mo
   for (const t of tasks) {
     if (t.assigned_to) { const v = ensureVA(t.assigned_to); v.delivered++; }
     if (t.due_date && t.completed_at) {
-      const onTime = new Date(t.completed_at).getTime() <= new Date(t.due_date + "T23:59:59").getTime();
+      const onTime = isOnTime(t.completed_at, t.due_date);
       onTimeDen++; if (onTime) onTimeNum++;
       if (t.assigned_to) { const v = ensureVA(t.assigned_to); v.onDen++; if (onTime) v.onNum++; }
     }
