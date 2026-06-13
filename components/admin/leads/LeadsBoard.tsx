@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { useResource } from "@/lib/hooks/useResource";
 import { ROUTES } from "@/lib/api/routes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,9 @@ const relTime = (iso: string) => {
 };
 
 export function LeadsBoard({ initialLeads, owners, currentUserId }: { initialLeads: Lead[]; owners: LeadOwner[]; currentUserId: string }) {
-  const [leads, setLeads] = useState<Lead[]>(initialLeads);
+  const { items: leads, create, update, remove } = useResource<Lead>({
+    key: ["admin", "leads"], route: ROUTES.admin.leads(), initial: initialLeads,
+  });
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
   const dragId = useRef<string | null>(null);
@@ -50,10 +53,9 @@ export function LeadsBoard({ initialLeads, owners, currentUserId }: { initialLea
   async function moveTo(id: string, stage: string) {
     const lead = leads.find((l) => l.id === id);
     if (!lead || lead.stage === stage) return;
-    const prev = leads;
-    setLeads((ls) => ls.map((l) => (l.id === id ? { ...l, stage } : l)));
-    try { await api.patch(ROUTES.admin.leads(), { id, stage }); }
-    catch { setLeads(prev); toast.error("Couldn't move the lead."); }
+    // The hook applies the stage optimistically (matching field) and rolls back
+    // on failure; the api client surfaces the error toast.
+    try { await update({ id, stage }); } catch { /* rolled back */ }
   }
 
   const pipelineValue = leads.filter((l) => l.stage !== "lost").reduce((sum, l) => sum + (l.value ?? 0), 0);
@@ -121,21 +123,23 @@ export function LeadsBoard({ initialLeads, owners, currentUserId }: { initialLea
       {creating && (
         <LeadDialog mode="create" owners={owners} currentUserId={currentUserId}
           onClose={() => setCreating(false)}
-          onSaved={(l) => { setLeads((ls) => [l, ...ls]); setCreating(false); }} />
+          submit={(payload) => create(payload)} />
       )}
       {editing && (
         <LeadDialog mode="edit" lead={editing} owners={owners} currentUserId={currentUserId}
           onClose={() => setEditing(null)}
-          onSaved={(l) => { setLeads((ls) => ls.map((x) => (x.id === l.id ? l : x))); setEditing(null); }}
-          onDeleted={(id) => { setLeads((ls) => ls.filter((x) => x.id !== id)); setEditing(null); }} />
+          submit={(payload) => update({ id: editing.id, ...payload })}
+          onArchive={async () => { await remove({ id: editing.id }); setEditing(null); }} />
       )}
     </>
   );
 }
 
-function LeadDialog({ mode, lead, owners, currentUserId, onClose, onSaved, onDeleted }: {
+function LeadDialog({ mode, lead, owners, currentUserId, onClose, submit, onArchive }: {
   mode: "create" | "edit"; lead?: Lead; owners: LeadOwner[]; currentUserId: string;
-  onClose: () => void; onSaved: (l: Lead) => void; onDeleted?: (id: string) => void;
+  onClose: () => void;
+  submit: (payload: Record<string, unknown>) => Promise<unknown>;
+  onArchive?: () => Promise<void>;
 }) {
   const [f, setF] = useState({
     name: lead?.name ?? "", company: lead?.company ?? "", contactName: lead?.contact_name ?? "",
@@ -157,19 +161,17 @@ function LeadDialog({ mode, lead, owners, currentUserId, onClose, onSaved, onDel
       nextAction: f.nextAction || null, nextActionDate: f.nextActionDate || null,
     };
     try {
-      const saved = mode === "create"
-        ? await api.post<Lead>(ROUTES.admin.leads(), payload)
-        : await api.patch<Lead>(ROUTES.admin.leads(), { id: lead!.id, ...payload });
+      await submit(payload);
       toast.success(mode === "create" ? "Lead added." : "Lead saved.");
-      onSaved(saved);
-    } catch { /* toasts */ } finally { setBusy(false); }
+      onClose();
+    } catch { /* api-client toasts */ } finally { setBusy(false); }
   }
 
   async function remove() {
-    if (!lead || !confirm(`Archive "${lead.name}"?`)) return;
+    if (!lead || !onArchive || !confirm(`Archive "${lead.name}"?`)) return;
     setBusy(true);
-    try { await api.delete(ROUTES.admin.leads(), { id: lead.id }); toast.success("Lead archived."); onDeleted?.(lead.id); }
-    catch { /* toasts */ } finally { setBusy(false); }
+    try { await onArchive(); toast.success("Lead archived."); }
+    catch { /* api-client toasts */ } finally { setBusy(false); }
   }
 
   return (

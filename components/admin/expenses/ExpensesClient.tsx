@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { api } from "@/lib/api-client";
+import { useResource } from "@/lib/hooks/useResource";
 import { ROUTES } from "@/lib/api/routes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,9 @@ function fmtMoney(amount: number, currency: string): string {
 }
 
 export function ExpensesClient({ initial }: { initial: Expense[] }) {
-  const [expenses, setExpenses] = useState<Expense[]>(initial);
+  const { items: expenses, create, update, remove } = useResource<Expense>({
+    key: ["admin", "expenses"], route: ROUTES.admin.expenses(), initial,
+  });
   const [search, setSearch] = useState("");
   const [showCancelled, setShowCancelled] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -132,18 +134,23 @@ export function ExpensesClient({ initial }: { initial: Expense[] }) {
         </table>
       </div>
 
-      {creating && <ExpenseDialog mode="create" onClose={() => setCreating(false)} onSaved={(x) => { setExpenses((e) => [x, ...e]); setCreating(false); }} />}
+      {creating && (
+        <ExpenseDialog mode="create" onClose={() => setCreating(false)}
+          submit={(payload) => create(payload)} />
+      )}
       {editing && (
         <ExpenseDialog mode="edit" expense={editing} onClose={() => setEditing(null)}
-          onSaved={(x) => { setExpenses((e) => e.map((y) => (y.id === x.id ? x : y))); setEditing(null); }}
-          onDeleted={(id) => { setExpenses((e) => e.filter((y) => y.id !== id)); setEditing(null); }} />
+          submit={(payload) => update({ id: editing.id, ...payload })}
+          onArchive={async () => { await remove({ id: editing.id }); setEditing(null); }} />
       )}
     </div>
   );
 }
 
-function ExpenseDialog({ mode, expense, onClose, onSaved, onDeleted }: {
-  mode: "create" | "edit"; expense?: Expense; onClose: () => void; onSaved: (e: Expense) => void; onDeleted?: (id: string) => void;
+function ExpenseDialog({ mode, expense, onClose, submit, onArchive }: {
+  mode: "create" | "edit"; expense?: Expense; onClose: () => void;
+  submit: (payload: Record<string, unknown>) => Promise<unknown>;
+  onArchive?: () => Promise<void>;
 }) {
   const [f, setF] = useState({
     name: expense?.name ?? "", vendor: expense?.vendor ?? "", category: expense?.category ?? "Software",
@@ -164,19 +171,17 @@ function ExpenseDialog({ mode, expense, onClose, onSaved, onDeleted }: {
       nextDueDate: f.nextDueDate || null, url: f.url || null, startedOn: f.startedOn || null, notes: f.notes || null,
     };
     try {
-      const saved = mode === "create"
-        ? await api.post<Expense>(ROUTES.admin.expenses(), payload)
-        : await api.patch<Expense>(ROUTES.admin.expenses(), { id: expense!.id, ...payload });
+      await submit(payload);
       toast.success(mode === "create" ? "Expense added." : "Saved.");
-      onSaved(saved);
-    } catch { /* toasts */ } finally { setBusy(false); }
+      onClose();
+    } catch { /* api-client toasts */ } finally { setBusy(false); }
   }
 
   async function remove() {
-    if (!expense || !confirm(`Archive "${expense.name}"?`)) return;
+    if (!expense || !onArchive || !confirm(`Archive "${expense.name}"?`)) return;
     setBusy(true);
-    try { await api.delete(ROUTES.admin.expenses(), { id: expense.id }); toast.success("Archived."); onDeleted?.(expense.id); }
-    catch { /* toasts */ } finally { setBusy(false); }
+    try { await onArchive(); toast.success("Archived."); }
+    catch { /* api-client toasts */ } finally { setBusy(false); }
   }
 
   return (
