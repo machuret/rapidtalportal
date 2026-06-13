@@ -51,10 +51,17 @@ const patchSchema = z.object({
   sortOrder: z.number().int().min(0).max(1e6).optional(),
 });
 
+// Safety cap on the unbounded list — the board renders every lead client-side,
+// so this isn't pagination (which would need server-side search/filter), just a
+// guard so a runaway dataset can't OOM the page. Revisit with real pagination
+// if a pipeline ever approaches this.
+const LIST_CAP = 2000;
+
 export const GET = withSuperAdmin(async () => {
   const admin = createAdminClient();
   const { data, error } = await admin.from("leads").select(SELECT)
-    .is("archived_at", null).order("stage").order("sort_order").order("created_at", { ascending: false });
+    .is("archived_at", null).order("stage").order("sort_order").order("created_at", { ascending: false })
+    .limit(LIST_CAP);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 });

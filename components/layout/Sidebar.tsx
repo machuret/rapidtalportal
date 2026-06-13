@@ -166,21 +166,27 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
                 {item.section}
               </p>
             ) : (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onNavigate}
-                className={cn(
-                  "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                  // "/admin" is exact-only, otherwise it would highlight on every /admin/* page.
-                  pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href + "/"))
-                    ? "bg-zinc-700 text-white"
-                    : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-                )}
-              >
-                <item.icon className="w-4 h-4 shrink-0" />
-                {item.label}
-              </Link>
+              (() => {
+                // "/admin" is exact-only, otherwise it would highlight on every /admin/* page.
+                const isActive = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href + "/"));
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onNavigate}
+                    aria-current={isActive ? "page" : undefined}
+                    className={cn(
+                      "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-zinc-700 text-white"
+                        : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                    )}
+                  >
+                    <item.icon className="w-4 h-4 shrink-0" />
+                    {item.label}
+                  </Link>
+                );
+              })()
             )
           )}
         </nav>

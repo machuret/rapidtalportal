@@ -46,6 +46,13 @@ export default async function PortalLayout({
 
   return (
     <div className="flex min-h-screen bg-zinc-950 text-zinc-50 print:bg-white print:min-h-0">
+      {/* Keyboard skip link — first focusable element, visible only on focus. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded-lg focus:bg-zinc-800 focus:px-4 focus:py-2 focus:text-sm focus:text-white focus:ring-2 focus:ring-zinc-400"
+      >
+        Skip to content
+      </a>
       <ErrorReporter />
       {/* Desktop sidebar (hidden when printing, e.g. My Job documents) */}
       <div className="hidden md:flex print:!hidden">
@@ -56,7 +63,7 @@ export default async function PortalLayout({
         <MobileSidebarTrigger user={ctx.user} client={ctx.client} />
       </div>
       {/* Main content — pt accounts for mobile menu button */}
-      <main className="flex-1 overflow-auto pt-14 md:pt-0 print:pt-0 print:overflow-visible">
+      <main id="main-content" className="flex-1 overflow-auto pt-14 md:pt-0 print:pt-0 print:overflow-visible">
         {ctx.impersonating && ctx.actualUser && (
           <ImpersonationBanner
             viewingName={ctx.user.full_name ?? ctx.user.email}

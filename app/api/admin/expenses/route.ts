@@ -36,10 +36,16 @@ const patchSchema = z.object({
   currency: base.currency.optional(),
 });
 
+// Safety cap on the unbounded list — the table searches/filters client-side over
+// the full set, so this isn't pagination, just a guard against a runaway dataset
+// OOM-ing the page. Revisit with real pagination if this is ever approached.
+const LIST_CAP = 2000;
+
 export const GET = withSuperAdmin(async () => {
   const admin = createAdminClient();
   const { data, error } = await admin.from("expenses").select(SELECT)
-    .is("archived_at", null).order("status").order("name");
+    .is("archived_at", null).order("status").order("name")
+    .limit(LIST_CAP);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 });
