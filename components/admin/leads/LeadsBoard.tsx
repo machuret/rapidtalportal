@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { useResource } from "@/lib/hooks/useResource";
+import { useCrudDialog } from "@/lib/hooks/useCrudDialog";
 import { ROUTES } from "@/lib/api/routes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -147,32 +147,22 @@ function LeadDialog({ mode, lead, owners, currentUserId, onClose, submit, onArch
     value: lead?.value != null ? String(lead.value) : "", ownerId: lead?.owner_id ?? currentUserId,
     nextAction: lead?.next_action ?? "", nextActionDate: lead?.next_action_date ?? "",
   });
-  const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f, v: string) => setF((p) => ({ ...p, [k]: v }));
   const selectCls = "bg-zinc-800 border border-zinc-700 rounded-md px-3 h-9 text-sm text-zinc-300";
 
-  async function save() {
-    if (f.name.trim().length < 1 || busy) return;
-    setBusy(true);
-    const payload = {
+  const { busy, save, archive } = useCrudDialog({
+    mode, onClose,
+    onSubmit: () => submit({
       name: f.name.trim(), company: f.company || null, contactName: f.contactName || null,
       email: f.email || null, phone: f.phone || null, source: f.source || null, stage: f.stage,
       value: f.value ? Number(f.value) : null, ownerId: f.ownerId || null,
       nextAction: f.nextAction || null, nextActionDate: f.nextActionDate || null,
-    };
-    try {
-      await submit(payload);
-      toast.success(mode === "create" ? "Lead added." : "Lead saved.");
-      onClose();
-    } catch { /* api-client toasts */ } finally { setBusy(false); }
-  }
-
-  async function remove() {
-    if (!lead || !onArchive || !confirm(`Archive "${lead.name}"?`)) return;
-    setBusy(true);
-    try { await onArchive(); toast.success("Lead archived."); }
-    catch { /* api-client toasts */ } finally { setBusy(false); }
-  }
+    }),
+    onArchive,
+    messages: { created: "Lead added.", saved: "Lead saved.", archived: "Lead archived." },
+    archiveConfirm: () => (lead ? `Archive "${lead.name}"?` : null),
+    canSave: () => f.name.trim().length >= 1,
+  });
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -218,7 +208,7 @@ function LeadDialog({ mode, lead, owners, currentUserId, onClose, submit, onArch
             </div>
             <div className="flex justify-between gap-2 pt-1">
               {mode === "edit" ? (
-                <Button variant="destructive" size="sm" onClick={remove} disabled={busy} className="gap-1.5"><Trash2 className="w-3.5 h-3.5" /> Archive</Button>
+                <Button variant="destructive" size="sm" onClick={archive} disabled={busy} className="gap-1.5"><Trash2 className="w-3.5 h-3.5" /> Archive</Button>
               ) : <span />}
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={onClose} className="border-zinc-700">Cancel</Button>
