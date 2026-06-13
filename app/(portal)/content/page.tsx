@@ -14,6 +14,8 @@ export default async function ContentPage() {
 
   const { user } = ctx;
   if (!user.client_id) redirect("/dashboard");
+  // VA tool — clients drive this through their VA, not directly.
+  if (user.role === "client_admin") redirect("/dashboard");
 
   const admin = createAdminClient();
   const [{ data: history }, { data: topics }] = await Promise.all([
@@ -30,7 +32,8 @@ export default async function ContentPage() {
       .order("created_at", { ascending: false }),
   ]);
 
-  const canApprove = user.role === "client_admin" || user.role === "super_admin";
+  // client_admin can no longer reach this VA tool; super_admin retains approval.
+  const canApprove = user.role === "super_admin";
 
   return (
     <div>

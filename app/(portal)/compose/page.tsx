@@ -12,6 +12,8 @@ export default async function ComposePage() {
   if (!ctx) redirect("/login");
   const { user, client } = ctx;
   if (!user.client_id) redirect("/dashboard");
+  // VA tool — clients drive this through their VA, not directly.
+  if (user.role === "client_admin") redirect("/dashboard");
 
   // Feed brand voice + recent contacts in from the server — no new endpoints.
   const admin = createAdminClient();

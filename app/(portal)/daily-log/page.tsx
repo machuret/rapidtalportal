@@ -19,9 +19,13 @@ export default async function DailyLogPage({
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;
+  // VA tool (VAs write their daily log). Clients read VA logs via My Team.
+  if (user.role === "client_admin") redirect("/dashboard");
 
   const admin = createAdminClient();
-  const isClientAdmin = user.role === "client_admin" || user.role === "super_admin";
+  // Only super_admin reaches the manager view now (client_admin is redirected
+  // above; clients read VA logs via My Team).
+  const isClientAdmin = user.role === "super_admin";
 
   // ── Client admin: show employee picker + selected employee's log ──
   if (isClientAdmin && user.client_id) {

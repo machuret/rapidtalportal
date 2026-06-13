@@ -13,6 +13,8 @@ export default async function SopsPage() {
 
   const { user, client } = ctx;
   if (!user.client_id) redirect("/dashboard");
+  // VA tool — VAs own process docs; clients see shared SOPs in the Notebook.
+  if (user.role === "client_admin") redirect("/dashboard");
 
   const admin = createAdminClient();
   // The VA/client library = this client's SOPs PLUS the global admin library.
@@ -23,7 +25,8 @@ export default async function SopsPage() {
     .order("category")
     .order("order_index");
 
-  const canEdit = user.role === "client_admin" || user.role === "super_admin";
+  // VAs author SOPs now that this is a VA tool (client_admin can't reach here).
+  const canEdit = user.role === "va" || user.role === "super_admin";
 
   return (
     <div>

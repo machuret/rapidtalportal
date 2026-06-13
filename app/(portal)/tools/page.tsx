@@ -18,6 +18,8 @@ export default async function ToolsPage() {
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   if (!ctx.user.client_id) redirect("/dashboard");
+  // VA tool — clients drive this through their VA, not directly.
+  if (ctx.user.role === "client_admin") redirect("/dashboard");
 
   const admin = createAdminClient();
   const { data: runs } = await admin
