@@ -60,6 +60,8 @@ export const ROUTES = {
   sopGenerate: () => "/api/sops/generate",
   sopSuggestions: () => "/api/sops/suggestions",
   sopSuggestionsProduce: () => "/api/sops/suggestions/produce",
+  sopBulk: () => "/api/sops/bulk",
+  sopCategories: () => "/api/sops/categories",
   crm: {
     contacts: () => "/api/crm/contacts",
     notes: () => "/api/crm/notes",

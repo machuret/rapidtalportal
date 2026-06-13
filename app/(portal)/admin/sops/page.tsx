@@ -2,6 +2,7 @@ import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SopsLibrary } from "@/components/sops/SopsLibrary";
 import { SopSuggestions, type SopSuggestion } from "@/components/sops/SopSuggestions";
+import { SopCategoryManager, type CatCount } from "@/components/sops/SopCategoryManager";
 import type { Sop } from "@/app/(portal)/sops/page";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +48,21 @@ export default async function AdminSopsPage() {
     for (const [k, v] of Object.entries(tmp)) usage[k] = { runs: v.runs, completions: v.completions, users: v.users.size };
   }
 
+  // All VAs (across clients) — bulk "restrict to VAs" picker for global SOPs.
+  const { data: vaRows } = await admin.from("users").select("id, full_name, email").eq("role", "va").order("full_name");
+  const vaOptions = ((vaRows ?? []) as { id: string; full_name: string | null; email: string }[]).map((v) => ({ id: v.id, name: v.full_name || v.email }));
+
+  // Category / subcategory counts for the manager.
+  const catCounts = new Map<string, number>();
+  const subCounts = new Map<string, number>();
+  for (const s of sopList) {
+    const c = (s.category || "General").trim();
+    catCounts.set(c, (catCounts.get(c) ?? 0) + 1);
+    const sub = (s.subcategory ?? "").trim();
+    if (sub) subCounts.set(sub, (subCounts.get(sub) ?? 0) + 1);
+  }
+  const toSorted = (m: Map<string, number>): CatCount[] => Array.from(m.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-1">SOP Library</h1>
@@ -55,6 +71,7 @@ export default async function AdminSopsPage() {
         Build great step-by-step checklists here — they enrich every VA&apos;s everyday work.
       </p>
       <SopSuggestions clientId={null} initial={suggestions} />
+      <SopCategoryManager clientId={null} categories={toSorted(catCounts)} subcategories={toSorted(subCounts)} />
       <SopsLibrary
         sops={sopList}
         clientId=""
@@ -62,6 +79,7 @@ export default async function AdminSopsPage() {
         canEdit
         newHref="/sops/new?scope=global"
         usage={usage}
+        bulk={{ clientId: null, vaOptions }}
       />
     </div>
   );

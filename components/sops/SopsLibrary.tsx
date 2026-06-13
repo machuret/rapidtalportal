@@ -2,15 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Sop } from "@/app/(portal)/sops/page";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import { Search, Plus, ListChecks, ChevronRight, Tag, ArrowUpDown, GripVertical, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Search, Plus, ListChecks, ChevronRight, Tag, ArrowUpDown, GripVertical, Check, CheckSquare, Trash2, Users } from "lucide-react";
 
 interface SopUsage { runs: number; completions: number; users: number }
+interface VaOption { id: string; name: string }
 
 interface SopsLibraryProps {
   sops: Sop[];
@@ -21,6 +24,8 @@ interface SopsLibraryProps {
   newHref?: string;
   /** Optional per-SOP usage stats (admin library shows adoption). */
   usage?: Record<string, SopUsage>;
+  /** Enables admin bulk-select (assign category/subcategory/visibility, delete). */
+  bulk?: { clientId: string | null; vaOptions: VaOption[] };
 }
 
 const catKey = (s: Sop) => s.category || "General";
@@ -55,14 +60,53 @@ function stepCountOf(body: string): number {
   return body.split("\n").filter((l) => /^(step\s*\d+|\d+[.):])/i.test(l.trim())).length;
 }
 
-export function SopsLibrary({ sops, canEdit, newHref = "/sops/new", usage }: SopsLibraryProps) {
+export function SopsLibrary({ sops, canEdit, newHref = "/sops/new", usage, bulk }: SopsLibraryProps) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [reordering, setReordering] = useState(false);
   const [order, setOrder] = useState<Sop[]>(sops);
   const dragSrc = useRef<{ category: string; index: number } | null>(null);
 
+  // ── Bulk select (admin) ─────────────────────────────────────────────────────
+  const [selecting, setSelecting] = useState(false);
+  const [selectedSops, setSelectedSops] = useState<Set<string>>(new Set());
+  const [bulkCat, setBulkCat] = useState("");
+  const [bulkSub, setBulkSub] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [vaPicker, setVaPicker] = useState(false);
+  const [vaFilter, setVaFilter] = useState("");
+  const [bulkVa, setBulkVa] = useState<Set<string>>(new Set());
+  const toggleSop = (id: string) => setSelectedSops((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+
   // Keep local order in sync with props except while actively reordering.
   useEffect(() => { if (!reordering) setOrder(sops); }, [sops, reordering]);
+
+  async function bulkApply(patch: Record<string, unknown>, label: string) {
+    const ids = Array.from(selectedSops);
+    if (!ids.length || bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      await api.patch(ROUTES.sopBulk(), { ids, ...patch }, { showErrorToast: false });
+      toast.success(`${label} — ${ids.length} SOP${ids.length !== 1 ? "s" : ""} updated.`);
+      setSelectedSops(new Set()); setSelecting(false); setVaPicker(false); setBulkCat(""); setBulkSub(""); setBulkVa(new Set());
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Bulk update failed.");
+    } finally { setBulkBusy(false); }
+  }
+
+  async function bulkDelete() {
+    const ids = Array.from(selectedSops);
+    if (!ids.length || bulkBusy || !confirm(`Delete ${ids.length} SOP${ids.length !== 1 ? "s" : ""}? This can't be undone.`)) return;
+    setBulkBusy(true);
+    try {
+      await api.delete(ROUTES.sopBulk(), { ids }, { showErrorToast: false });
+      toast.success(`Deleted ${ids.length} SOP${ids.length !== 1 ? "s" : ""}.`);
+      setSelectedSops(new Set()); setSelecting(false); router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Bulk delete failed.");
+    } finally { setBulkBusy(false); }
+  }
 
   const q = search.toLowerCase();
   const filtered = reordering
@@ -112,6 +156,20 @@ export function SopsLibrary({ sops, canEdit, newHref = "/sops/new", usage }: Sop
         {sop.client_id === null && <span className="text-[10px] font-medium uppercase tracking-wide text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-full px-1.5 py-0.5 shrink-0">Library</span>}
       </div>
     );
+
+    if (selecting) {
+      const checked = selectedSops.has(sop.id);
+      return (
+        <div key={sop.id} onClick={() => toggleSop(sop.id)}
+          className={cn("surface-card flex items-center gap-3 px-5 py-4 cursor-pointer transition-colors", checked && "border-amber-400/50 bg-zinc-800/40")}>
+          <input type="checkbox" checked={checked} onChange={() => toggleSop(sop.id)} className="accent-amber-500 shrink-0" aria-label={`Select ${sop.title}`} />
+          <div className="w-9 h-9 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
+            <ListChecks className="w-4.5 h-4.5 text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">{titleRow}{meta}</div>
+        </div>
+      );
+    }
 
     if (reordering) {
       return (
@@ -179,12 +237,17 @@ export function SopsLibrary({ sops, canEdit, newHref = "/sops/new", usage }: Sop
             className="pl-9 bg-zinc-900 border-zinc-700 text-zinc-100 disabled:opacity-50"
           />
         </div>
-        {canEdit && sops.length > 1 && (
+        {bulk && canEdit && sops.length > 0 && !reordering && (
+          <Button size="sm" variant={selecting ? "default" : "outline"} onClick={() => { setSelecting((v) => !v); setSelectedSops(new Set()); }} className="gap-1.5 border-zinc-700">
+            {selecting ? <><Check className="w-4 h-4" /> Done</> : <><CheckSquare className="w-4 h-4" /> Select</>}
+          </Button>
+        )}
+        {canEdit && sops.length > 1 && !selecting && (
           <Button size="sm" variant={reordering ? "default" : "outline"} onClick={() => setReordering((v) => !v)} className="gap-1.5 border-zinc-700">
             {reordering ? <><Check className="w-4 h-4" /> Done</> : <><ArrowUpDown className="w-4 h-4" /> Reorder</>}
           </Button>
         )}
-        {canEdit && !reordering && (
+        {canEdit && !reordering && !selecting && (
           <Link href={newHref}>
             <Button size="sm"><Plus className="w-4 h-4" /> New SOP</Button>
           </Link>
@@ -193,6 +256,53 @@ export function SopsLibrary({ sops, canEdit, newHref = "/sops/new", usage }: Sop
 
       {reordering && (
         <p className="text-xs text-zinc-500 mb-4">Drag the handle to reorder SOPs within a category. Changes save automatically.</p>
+      )}
+
+      {/* Bulk action bar */}
+      {selecting && bulk && (
+        <div className="surface-card p-3 mb-5 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-zinc-200">{selectedSops.size} selected</span>
+            <button onClick={() => setSelectedSops(new Set(filtered.map((s) => s.id)))} className="text-xs text-zinc-400 hover:text-white">Select all ({filtered.length})</button>
+            {selectedSops.size > 0 && <button onClick={() => setSelectedSops(new Set())} className="text-xs text-zinc-500 hover:text-zinc-300">Clear</button>}
+            <button onClick={bulkDelete} disabled={bulkBusy || selectedSops.size === 0} className="ml-auto inline-flex items-center gap-1 text-xs text-red-400 hover:text-red-300 disabled:opacity-40">
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </button>
+          </div>
+          {selectedSops.size > 0 && (
+            <div className="flex flex-wrap items-end gap-2 border-t border-zinc-800 pt-3">
+              <div className="flex items-end gap-1.5">
+                <Input value={bulkCat} onChange={(e) => setBulkCat(e.target.value)} placeholder="Set category…" className="bg-zinc-800 border-zinc-700 h-8 text-sm w-40" disabled={bulkBusy} />
+                <Button size="sm" variant="outline" className="border-zinc-700 h-8" disabled={bulkBusy || !bulkCat.trim()} onClick={() => bulkApply({ category: bulkCat.trim() }, "Category set")}>Apply</Button>
+              </div>
+              <div className="flex items-end gap-1.5">
+                <Input value={bulkSub} onChange={(e) => setBulkSub(e.target.value)} placeholder="Set subcategory…" className="bg-zinc-800 border-zinc-700 h-8 text-sm w-40" disabled={bulkBusy} />
+                <Button size="sm" variant="outline" className="border-zinc-700 h-8" disabled={bulkBusy} onClick={() => bulkApply({ subcategory: bulkSub.trim() || null }, "Subcategory set")}>Apply</Button>
+              </div>
+              <Button size="sm" variant="outline" className="border-zinc-700 h-8" disabled={bulkBusy} onClick={() => bulkApply({ visibility: "public" }, "Made public")}>Make public</Button>
+              <Button size="sm" variant="outline" className="border-zinc-700 h-8 gap-1" disabled={bulkBusy} onClick={() => setVaPicker((v) => !v)}>
+                <Users className="w-3.5 h-3.5" /> Restrict to VAs…
+              </Button>
+            </div>
+          )}
+          {vaPicker && selectedSops.size > 0 && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-2 flex flex-col gap-1">
+              <Input value={vaFilter} onChange={(e) => setVaFilter(e.target.value)} placeholder="Filter VAs…" className="bg-zinc-800 border-zinc-700 h-8 text-sm mb-1" />
+              <div className="max-h-52 overflow-y-auto flex flex-col gap-0.5">
+                {bulk.vaOptions.filter((v) => v.name.toLowerCase().includes(vaFilter.trim().toLowerCase())).map((v) => (
+                  <label key={v.id} className="flex items-center gap-2 text-sm text-zinc-300 px-1.5 py-1 rounded hover:bg-zinc-800/60 cursor-pointer">
+                    <input type="checkbox" checked={bulkVa.has(v.id)} onChange={() => setBulkVa((p) => { const n = new Set(p); if (n.has(v.id)) n.delete(v.id); else n.add(v.id); return n; })} className="accent-amber-500" />
+                    {v.name}
+                  </label>
+                ))}
+              </div>
+              <Button size="sm" className="mt-1 self-start gap-1.5" disabled={bulkBusy || bulkVa.size === 0}
+                onClick={() => bulkApply({ visibility: "restricted", accessUserIds: Array.from(bulkVa) }, `Restricted to ${bulkVa.size} VA${bulkVa.size !== 1 ? "s" : ""}`)}>
+                Restrict {selectedSops.size} SOP{selectedSops.size !== 1 ? "s" : ""} to {bulkVa.size} VA{bulkVa.size !== 1 ? "s" : ""}
+              </Button>
+            </div>
+          )}
+        </div>
       )}
 
       {catOrder.length === 0 ? (

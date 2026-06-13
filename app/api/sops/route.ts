@@ -3,6 +3,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess, type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { syncSopAccess } from "@/lib/sops/sop-access";
 
 // clientId null  → global library SOP (super_admin only)
 // clientId uuid  → client SOP (client_admin for own client, or super_admin)
@@ -46,24 +47,6 @@ const deleteSchema = z.object({
 });
 
 const SELECT = "id, client_id, title, category, subcategory, body, order_index, steps, intro, prerequisites, version, visibility, forked_from, forked_version, created_at, updated_at";
-
-/**
- * Replace a SOP's access allow-list. Public SOPs get an empty list. For
- * restricted SOPs we keep only real VAs, and — for a client SOP — only that
- * client's VAs (so an admin can't grant another tenant's VA access).
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function syncSopAccess(admin: any, sopId: string, clientId: string | null, visibility: string, accessUserIds: string[] | undefined): Promise<void> {
-  await admin.from("sop_access").delete().eq("sop_id", sopId);
-  if (visibility !== "restricted" || !accessUserIds?.length) return;
-  const { data: users } = await admin.from("users").select("id, role, client_id").in("id", accessUserIds.slice(0, 1000));
-  const valid = ((users ?? []) as { id: string; role: string; client_id: string | null }[])
-    .filter((u) => u.role === "va" && (clientId === null || u.client_id === clientId))
-    .map((u) => u.id);
-  if (valid.length) {
-    await admin.from("sop_access").insert(valid.map((uid) => ({ sop_id: sopId, user_id: uid })));
-  }
-}
 
 /** Authorise a write against a SOP's scope. Returns an error response or null. */
 function authorizeScope(user: ApiUser, clientId: string | null): NextResponse | null {
