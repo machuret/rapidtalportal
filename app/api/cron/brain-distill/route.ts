@@ -11,6 +11,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { distillClientMemory } from "@/lib/brain/distill";
+import { computeBrainScore } from "@/lib/brain/score";
+import { logBrainEvent } from "@/lib/brain/events";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -51,6 +53,7 @@ export async function GET(req: NextRequest) {
       const r = await distillClientMemory(admin, clientId);
       newMemories += r.newMemories;
       processed += r.processedSignals;
+      await snapshotScore(admin, clientId);
     } catch (e) {
       console.error("[cron/brain-distill] client", clientId, e);
     }
@@ -58,4 +61,28 @@ export async function GET(req: NextRequest) {
 
   await beat({ clients: clientIds.length, memories: newMemories });
   return NextResponse.json({ ok: true, clients: clientIds.length, processedSignals: processed, newMemories });
+}
+
+// Snapshot today's Brain Score (one row per client per day) and emit a
+// "level up" journal event when the band increases vs the previous snapshot.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function snapshotScore(admin: any, clientId: string) {
+  const s = await computeBrainScore(admin, clientId);
+  const { data: prev } = await admin
+    .from("brain_score_history")
+    .select("level, captured_date")
+    .eq("client_id", clientId)
+    .order("captured_date", { ascending: false })
+    .limit(1);
+  const prevLevel = (prev ?? [])[0]?.level as string | undefined;
+
+  await admin.from("brain_score_history").upsert(
+    { client_id: clientId, score: s.score, level: s.level, components: s.components },
+    { onConflict: "client_id,captured_date" },
+  );
+
+  const order = ["Newborn", "Learning", "Sharp", "Expert", "Genius"];
+  if (prevLevel && order.indexOf(s.level) > order.indexOf(prevLevel)) {
+    await logBrainEvent(admin, clientId, "level_up", `Reached ${s.level} — your Brain is getting sharper 🎉`, { from: prevLevel, to: s.level, score: s.score });
+  }
 }

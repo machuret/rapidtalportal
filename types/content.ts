@@ -40,6 +40,18 @@ export interface AiSuggestion {
   fit?: number | null;
   /** Brain flagged this as weak/off-brand (fit below threshold). */
   ai_flagged?: boolean;
+  /** Provenance for "Why this?" — what the Brain drew on. */
+  why?: BrainWhy | null;
+}
+
+/** What the Brain used to produce a suggestion (powers "Why this?"). */
+export interface BrainWhy {
+  profile?: boolean;
+  vault?: boolean;
+  lessons?: number;
+  examples?: number;
+  grounded?: boolean;
+  fit?: number | null;
 }
 
 export interface ContentGenerationParams {

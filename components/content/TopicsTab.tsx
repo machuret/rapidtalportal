@@ -90,6 +90,7 @@ export const TopicsTab = memo(function TopicsTab({
           content_type: s.content_type,
           ai_fit_score: s.fit ?? null,
           ai_flagged: s.ai_flagged ?? false,
+          why: (s.why ?? null) as Record<string, unknown> | null,
         })
       );
 

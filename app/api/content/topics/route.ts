@@ -13,6 +13,7 @@ const createSchema = z.object({
   // whether low-fit predictions actually got rejected (prediction accuracy).
   ai_fit_score: z.number().int().min(0).max(100).optional().nullable(),
   ai_flagged:   z.boolean().optional(),
+  why:          z.record(z.string(), z.unknown()).optional().nullable(),
 });
 
 const updateSchema = z.object({
@@ -86,6 +87,7 @@ export const POST = withAuth(async (req, { user }) => {
       created_by:   user.id,
       ai_fit_score: parsed.data.ai_fit_score ?? null,
       ai_flagged:   parsed.data.ai_flagged ?? false,
+      why:          parsed.data.why ?? null,
     })
     .select()
     .single();

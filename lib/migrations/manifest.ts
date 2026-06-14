@@ -77,4 +77,7 @@ export const MIGRATIONS = [
   "069_brain_signals.sql",
   "070_content_topics_brain.sql",
   "071_brain_memory.sql",
+  "072_brain_events.sql",
+  "073_brain_score_history.sql",
+  "074_content_topics_provenance.sql",
 ] as const;

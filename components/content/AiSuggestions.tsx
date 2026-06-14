@@ -1,12 +1,28 @@
 "use client";
 
 import { memo, useCallback, useState } from "react";
-import { RefreshCw, Wand2, Lightbulb, SquareCheckBig, Square, BookText, ThumbsUp, ThumbsDown, AlertTriangle } from "lucide-react";
+import { RefreshCw, Wand2, Lightbulb, SquareCheckBig, Square, BookText, ThumbsUp, ThumbsDown, AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { AiSuggestion } from "@/types/content";
 import { TYPE_ICON_COLORS, TYPE_ICONS } from "@/types/content";
+import type { BrainWhy } from "@/types/content";
 import { useBrainSignal } from "@/hooks/useBrainSignal";
+
+/** Build a plain-English "Why this?" line from the Brain provenance. */
+function whySentence(why: BrainWhy | null | undefined): string | null {
+  if (!why) return null;
+  const parts: string[] = [];
+  if (why.profile) parts.push("your company profile");
+  if (why.vault) parts.push("your Vault");
+  if (why.examples) parts.push(`${why.examples} idea${why.examples === 1 ? "" : "s"} you approved before`);
+  if (why.lessons) parts.push(`${why.lessons} learned lesson${why.lessons === 1 ? "" : "s"}`);
+  if (parts.length === 0) return null;
+  let s = `Built from ${parts.join(", ")}`;
+  if (why.grounded) s += " · matched to your acceptance history";
+  if (typeof why.fit === "number") s += ` · fit ${why.fit}/100`;
+  return s + ".";
+}
 
 interface AiSuggestionsProps {
   clientId: string;
@@ -70,6 +86,11 @@ const SuggestionCard = memo(function SuggestionCard({
             <p className="text-xs text-zinc-500 leading-relaxed line-clamp-2">{suggestion.description}</p>
             {suggestion.rationale && (
               <p className="text-xs text-zinc-600 mt-1.5 italic line-clamp-1">💡 {suggestion.rationale}</p>
+            )}
+            {whySentence(suggestion.why) && (
+              <p className="text-xs text-orange-400/80 mt-1.5 flex items-start gap-1">
+                <Info className="w-3 h-3 shrink-0 mt-0.5" /> <span>{whySentence(suggestion.why)}</span>
+              </p>
             )}
           </div>
         </div>

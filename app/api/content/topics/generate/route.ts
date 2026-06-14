@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { renderPrompt } from "@/lib/prompts/server";
 import { buildBrainContext } from "@/lib/brain/context";
 import { embeddingFit } from "@/lib/brain/embed";
+import { logBrainEvent } from "@/lib/brain/events";
 
 const bodySchema = z.object({
   client_id: z.string().uuid(),
@@ -187,6 +188,15 @@ export const POST = withAuth(async (req, { user }) => {
     console.error("[topics/generate] embeddingFit failed", e);
   }
 
+  // Shared provenance — what the Brain drew on to produce these ("Why this?").
+  const whyBase = {
+    profile: brain.hasProfile,
+    vault: brain.hasVault,
+    lessons: brain.memories,
+    examples: brain.positives,
+    grounded: embFits !== null,
+  };
+
   const topics = base.map((t, i) => {
     const emb = embFits?.[i] ?? null;
     const fit =
@@ -200,8 +210,17 @@ export const POST = withAuth(async (req, { user }) => {
       rationale: t.rationale,
       fit,
       ai_flagged: fit !== null && fit < FIT_THRESHOLD,
+      why: { ...whyBase, fit },
     };
   });
+
+  // Journal: surface the value the Brain just delivered (weak ideas filtered).
+  const flaggedCount = topics.filter((t) => t.ai_flagged).length;
+  if (flaggedCount > 0) {
+    await logBrainEvent(admin, parsed.data.client_id, "filtered",
+      `Pre-screened ${topics.length} ideas and flagged ${flaggedCount} as weak before you saw them`,
+      { total: topics.length, flagged: flaggedCount });
+  }
 
   return NextResponse.json({
     topics,

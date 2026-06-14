@@ -14,6 +14,7 @@ interface CreateTopicInput {
   content_type: string;
   ai_fit_score?: number | null;
   ai_flagged?: boolean;
+  why?: Record<string, unknown> | null;
 }
 
 interface UpdateTopicInput {
@@ -59,7 +60,7 @@ async function deleteTopic(input: DeleteTopicInput): Promise<void> {
 async function generateTopicIdeas(
   clientId: string,
   count: number = 8
-): Promise<{ topics: Array<{ title: string; description: string; content_type: string; rationale: string; fit?: number | null; ai_flagged?: boolean }> }> {
+): Promise<{ topics: Array<{ title: string; description: string; content_type: string; rationale: string; fit?: number | null; ai_flagged?: boolean; why?: Record<string, unknown> | null }> }> {
   return api.post("/content/topics/generate", { client_id: clientId, count });
 }
 

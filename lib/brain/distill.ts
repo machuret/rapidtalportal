@@ -11,6 +11,7 @@
  * Pure server util. Callers must have already authorised access to the client.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { logBrainEvent } from "./events";
 
 type Admin = SupabaseClient;
 
@@ -134,6 +135,9 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
       }))
     );
     if (insErr) console.error("[brain/distill] memory insert", insErr.message);
+    else await logBrainEvent(admin, clientId, "learned",
+      `Learned ${fresh.length} new lesson${fresh.length === 1 ? "" : "s"} from your feedback`,
+      { count: fresh.length });
   }
 
   // Mark these signals distilled regardless, so we don't reprocess them.
