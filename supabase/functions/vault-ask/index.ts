@@ -321,10 +321,24 @@ Deno.serve(async (req: Request) => {
       add("Phone", dna.phone); add("Email", dna.email); add("Website", dna.website);
       add("Services", dna.services); add("Values", dna.values);
       add("Target audience", dna.target_demographic); add("Client type", dna.client_type);
+      add("Business goals", dna.business_goals); add("Marketing goals", dna.marketing_goals);
+      add("Team", dna.team); add("Tools used", dna.tools_used);
+      add("Content tone & style", dna.content_style); add("Internal rules", dna.internal_rules);
       if (dna.extra && typeof dna.extra === "object") {
         for (const [k, v] of Object.entries(dna.extra as Record<string, unknown>)) add(k, v);
       }
       if (lines.length) blocks.push({ kind: "dna", title: "Company DNA", text: lines.join("\n") });
+    }
+
+    // 1b. Brain memory — learned, authoritative preferences & rules to respect.
+    const { data: memRows } = await admin.from("brain_memory")
+      .select("kind, content").eq("client_id", clientId).eq("active", true)
+      .order("pinned", { ascending: false }).limit(20);
+    const mem = (memRows ?? []) as { kind: string; content: string }[];
+    if (mem.length) {
+      const memLabel: Record<string, string> = { preference: "Prefer", anti_pattern: "Avoid", rule: "Rule" };
+      const memText = mem.map((m) => `${memLabel[m.kind] ?? "Note"}: ${m.content}`).join("\n");
+      blocks.push({ kind: "dna", title: "Company preferences & rules (learned)", text: memText });
     }
 
     // 2. Vault docs — semantic matches across ALL query variants, merged and

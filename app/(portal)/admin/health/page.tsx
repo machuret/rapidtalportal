@@ -40,10 +40,21 @@ export default async function AdminHealthPage() {
   const schemaFails = schemaChecks.filter((c) => !c.ok);
   const schemaUnavailable = !!schemaRes.error; // 059 not applied yet
 
+  // ── Brain learning counts (global) ─────────────────────────────────────────
+  // brain_* tables aren't in the generated types; query loosely.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const a = admin as any;
+  const [{ count: signalCount }, { count: undistilledCount }, { count: memoryCount }] = await Promise.all([
+    a.from("brain_signals").select("id", { count: "exact", head: true }),
+    a.from("brain_signals").select("id", { count: "exact", head: true }).is("distilled_at", null),
+    a.from("brain_memory").select("id", { count: "exact", head: true }).eq("active", true),
+  ]);
+
   // ── Cron heartbeats ───────────────────────────────────────────────────────
   const EXPECTED_CRONS: { name: string; staleAfterH: number }[] = [
     { name: "tasks", staleAfterH: 26 },        // daily at 01:00
     { name: "vault-index", staleAfterH: 1 },   // every 15 min
+    { name: "brain-distill", staleAfterH: 26 }, // daily at 02:30
   ];
   const beatByName = new Map(((beats ?? []) as { name: string; ran_at: string; detail: Record<string, unknown> }[]).map((b) => [b.name, b]));
 
@@ -174,9 +185,31 @@ export default async function AdminHealthPage() {
           </ul>
         </section>
 
+        {/* Brain learning (global) */}
+        <section className="surface-card p-4">
+          <p className="label-section mb-3 flex items-center gap-2"><Brain className="w-4 h-4" /> Brain learning</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="stat-value text-white">{signalCount ?? 0}</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Feedback signals</p>
+            </div>
+            <div>
+              <p className="stat-value text-white">{undistilledCount ?? 0}</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Awaiting distill</p>
+            </div>
+            <div>
+              <p className="stat-value text-white">{memoryCount ?? 0}</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Active lessons</p>
+            </div>
+          </div>
+          <p className="text-xs text-zinc-500 mt-3">
+            Signals turn into lessons via the <code className="bg-zinc-800 px-1 py-0.5 rounded">brain-distill</code> cron (daily) or the “Distill now” button on Brain Analytics.
+          </p>
+        </section>
+
         {/* Per-client brain health */}
         <section className="surface-card p-4 lg:col-span-2">
-          <p className="label-section mb-3 flex items-center gap-2"><Brain className="w-4 h-4" /> Brain health (per client)</p>
+          <p className="label-section mb-3 flex items-center gap-2"><Brain className="w-4 h-4" /> Vault indexing (per client)</p>
           <table className="w-full text-sm">
             <thead className="text-xs text-zinc-500 border-b border-zinc-800">
               <tr>

@@ -167,7 +167,7 @@ Deno.serve(async (req: Request) => {
     const relevantCats = CATEGORY_RELEVANCE[contentType as string] ?? ["service", "general", "reference", "process"];
 
     const [{ data: dna }, { data: allVaultItems }] = await Promise.all([
-      admin.from("company_dna").select("company_name,values,services,target_demographic,location,mission,extra").eq("client_id", clientId).maybeSingle(),
+      admin.from("company_dna").select("company_name,values,services,target_demographic,location,business_goals,marketing_goals,team,tools_used,content_style,brand_voice,internal_rules,extra").eq("client_id", clientId).maybeSingle(),
       // Fetch up to 30 items, then sort by category relevance client-side
       admin.from("vault_items").select("title,raw_content,category,ai_summary").eq("client_id", clientId).eq("status", "ready").order("created_at", { ascending: false }).limit(30),
     ]);
@@ -200,6 +200,18 @@ Deno.serve(async (req: Request) => {
         if (!body.trim()) continue;
         context += `--- ${item.title} ---\n${body}\n\n`;
       }
+    }
+
+    // Brain memory — learned preferences & rules the draft must honour.
+    const { data: memRows } = await admin.from("brain_memory")
+      .select("kind, content").eq("client_id", clientId).eq("active", true)
+      .order("pinned", { ascending: false }).limit(20);
+    const mem = (memRows ?? []) as { kind: string; content: string }[];
+    if (mem.length) {
+      const memLabel: Record<string, string> = { preference: "Prefer", anti_pattern: "Avoid", rule: "Rule" };
+      context += "=== COMPANY PREFERENCES & RULES (learned — follow these) ===\n";
+      for (const m of mem) context += `${memLabel[m.kind] ?? "Note"}: ${m.content}\n`;
+      context += "\n";
     }
 
     // ── OpenAI generation ─────────────────────────────────────────────────────
