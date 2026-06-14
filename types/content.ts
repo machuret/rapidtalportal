@@ -9,6 +9,7 @@ import type { LucideIcon } from "lucide-react";
 export type ContentType = "email" | "social" | "newsletter" | "blog";
 export type TopicStatus = "pending" | "approved" | "rejected";
 export type ContentStatus = "draft" | "approved" | "archived";
+export type ContentOutcome = "win" | "miss";
 
 export interface ContentTopic {
   id: string;
@@ -28,6 +29,7 @@ export interface ContentPiece {
   title: string;
   body?: string | null;
   status: ContentStatus;
+  outcome?: ContentOutcome | null;
   created_at: string;
 }
 

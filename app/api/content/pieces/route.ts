@@ -4,6 +4,8 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notifications";
+import { similarityRatio } from "@/lib/brain/textdiff";
+import { logBrainEvent } from "@/lib/brain/events";
 
 const querySchema = z.object({
   client_id: z.string().uuid(),
@@ -81,7 +83,7 @@ export const GET = withAuth(async (req, { user }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (admin as any)
       .from("content_pieces")
-      .select("id, client_id, content_type, title, brief, body, status, created_by, created_at, updated_at")
+      .select("id, client_id, content_type, title, brief, body, status, outcome, created_by, created_at, updated_at")
       .eq("id", parsed.data.id)
       .eq("client_id", parsed.data.client_id)
       .single();
@@ -97,7 +99,7 @@ export const GET = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("content_pieces")
-    .select("id, content_type, title, status, created_at")
+    .select("id, content_type, title, status, outcome, created_at")
     .eq("client_id", parsed.data.client_id)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -139,7 +141,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .update(updates)
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
-    .select("id, content_type, title, brief, body, status, created_by, created_at, updated_at")
+    .select("id, content_type, title, brief, body, status, outcome, ai_original, created_by, created_at, updated_at")
     .single();
 
   if (error) {
@@ -158,5 +160,47 @@ export const PATCH = withAuth(async (req, { user }) => {
     });
   }
 
+  // Real-outcome learning: when a piece is approved, measure how much the human
+  // changed the AI's draft. Kept verbatim → the Brain logs a win; rewritten →
+  // it learns the human preferred something else. Best-effort.
+  if (parsed.data.status === "approved") {
+    void recordApprovalOutcome(admin, parsed.data.client_id, user.id, data);
+  }
+
   return NextResponse.json(data);
 });
+
+/**
+ * On approval, turn "how much did the human keep?" into a Brain signal. Only
+ * fires for AI-generated pieces (those with an ai_original). Never throws.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function recordApprovalOutcome(admin: any, clientId: string, userId: string, piece: any) {
+  try {
+    const original: string | null = piece.ai_original ?? null;
+    const final: string | null = piece.body ?? null;
+    if (!original || !final) return; // not AI-generated, or empty — nothing to learn
+    const sim = similarityRatio(original, final);
+    const pct = Math.round(sim * 100);
+    const kept = sim >= 0.85;
+    await admin.from("brain_signals").insert({
+      client_id: clientId,
+      user_id: userId,
+      surface: "content_draft",
+      artifact_id: piece.id,
+      artifact_text: (kept ? final : original).slice(0, 8000),
+      rating: kept ? 1 : -1,
+      reason: kept
+        ? `Approved ${pct}% as written — the AI draft was on the money`
+        : `Rewritten before approval (kept ~${pct}%) — humans preferred a different version`,
+      context: { event: "approval", content_type: piece.content_type, kept_pct: pct },
+    });
+    await logBrainEvent(admin, clientId, "feedback",
+      kept
+        ? `Approved a ${piece.content_type} draft kept ${pct}% as written — counted as a win`
+        : `A ${piece.content_type} draft was rewritten before approval — the Brain noted what to change`,
+      { kept_pct: pct, content_type: piece.content_type });
+  } catch (e) {
+    console.error("[content/pieces] recordApprovalOutcome failed", e);
+  }
+}

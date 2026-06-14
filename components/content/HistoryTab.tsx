@@ -12,12 +12,17 @@ import {
   Archive,
   RefreshCw,
   Search,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import { usePieceDetail, useUpdatePieceStatus } from "@/hooks/useContent";
 import type { ContentPieceFull } from "@/hooks/useContent";
-import type { ContentPiece, ContentStatus } from "@/types/content";
+import type { ContentPiece, ContentStatus, ContentOutcome } from "@/types/content";
 import { TYPE_ICON_COLORS, TYPE_ICONS, CONTENT_STATUS_STYLES } from "@/types/content";
 
 /* ── Props ──────────────────────────────────────────────────────── */
@@ -81,8 +86,28 @@ function PieceDetail({
   onStatusChanged: (id: string, status: ContentStatus) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [outcome, setOutcome] = useState<ContentOutcome | null>(piece.outcome ?? null);
+  const [savingOutcome, setSavingOutcome] = useState(false);
 
   const { updateStatus, isUpdating } = useUpdatePieceStatus();
+
+  const recordOutcome = useCallback(
+    async (next: ContentOutcome) => {
+      if (savingOutcome) return;
+      const prev = outcome;
+      setOutcome(next);
+      setSavingOutcome(true);
+      try {
+        await api.post(ROUTES.content.outcome(), { client_id: clientId, id: piece.id, outcome: next });
+        toast.success(next === "win" ? "Logged as a win — the Brain will learn from it." : "Noted — the Brain will adjust.");
+      } catch {
+        setOutcome(prev); // api-client already toasted
+      } finally {
+        setSavingOutcome(false);
+      }
+    },
+    [savingOutcome, outcome, clientId, piece.id],
+  );
 
   const TypeIcon = TYPE_ICONS[piece.content_type] || BookText;
   const iconColor = TYPE_ICON_COLORS[piece.content_type] || "text-zinc-400";
@@ -186,6 +211,33 @@ function PieceDetail({
           </Button>
         )}
       </div>
+
+      {/* Real-world outcome — the strongest signal the Brain can learn from */}
+      {piece.status === "approved" && (
+        <div className="flex items-center gap-2 flex-wrap rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2.5">
+          <span className="text-xs text-zinc-400 mr-1">How did this perform?</span>
+          <button
+            type="button"
+            onClick={() => recordOutcome("win")}
+            disabled={savingOutcome}
+            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-50 ${
+              outcome === "win" ? "border-green-500/50 bg-green-500/10 text-green-400" : "border-zinc-700 text-zinc-400 hover:text-green-400 hover:border-green-500/40"
+            }`}
+          >
+            <ThumbsUp className="w-3.5 h-3.5" /> Performed well
+          </button>
+          <button
+            type="button"
+            onClick={() => recordOutcome("miss")}
+            disabled={savingOutcome}
+            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-50 ${
+              outcome === "miss" ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-zinc-700 text-zinc-400 hover:text-red-400 hover:border-red-500/40"
+            }`}
+          >
+            <ThumbsDown className="w-3.5 h-3.5" /> Underperformed
+          </button>
+        </div>
+      )}
 
       {/* Brief */}
       {piece.brief && (
