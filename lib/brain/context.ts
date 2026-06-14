@@ -57,6 +57,9 @@ export interface BrainContext {
   negatives: number;
   /** Number of distilled memory lessons applied. */
   memories: number;
+  /** Raw example texts, for embedding-based fit scoring (Phase 4). */
+  positiveExamples: string[];
+  negativeExamples: string[];
 }
 
 const VAULT_CHAR_LIMIT = 12000; // ~3k tokens
@@ -186,5 +189,7 @@ export async function buildBrainContext(admin: Admin, clientId: string): Promise
     positives: posTopics.length,
     negatives: negatives.length,
     memories: memory.length,
+    positiveExamples: posTopics.map((t) => `${t.title}${t.description ? ` — ${t.description}` : ""}`),
+    negativeExamples: negatives,
   };
 }

@@ -9,6 +9,10 @@ const createSchema = z.object({
   title:        z.string().min(1).max(300),
   description:  z.string().max(2000).optional().nullable(),
   content_type: z.enum(["email", "social", "newsletter", "blog"]),
+  // Brain pre-screen carried over from the suggestion, so we can later measure
+  // whether low-fit predictions actually got rejected (prediction accuracy).
+  ai_fit_score: z.number().int().min(0).max(100).optional().nullable(),
+  ai_flagged:   z.boolean().optional(),
 });
 
 const updateSchema = z.object({
@@ -80,6 +84,8 @@ export const POST = withAuth(async (req, { user }) => {
       description:  parsed.data.description ?? null,
       content_type: parsed.data.content_type,
       created_by:   user.id,
+      ai_fit_score: parsed.data.ai_fit_score ?? null,
+      ai_flagged:   parsed.data.ai_flagged ?? false,
     })
     .select()
     .single();

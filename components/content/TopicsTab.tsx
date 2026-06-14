@@ -88,6 +88,8 @@ export const TopicsTab = memo(function TopicsTab({
           title: s.title,
           description: s.description,
           content_type: s.content_type,
+          ai_fit_score: s.fit ?? null,
+          ai_flagged: s.ai_flagged ?? false,
         })
       );
 

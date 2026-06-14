@@ -8,6 +8,7 @@ import { KnowledgeGaps } from "@/components/vault/KnowledgeGaps";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { AnswersToReview, type ReviewItem } from "@/components/vault/AnswersToReview";
 import { BrainMemoryPanel, type BrainMemoryItem } from "@/components/brain/BrainMemoryPanel";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Brain Analytics — RapidTal" };
@@ -25,7 +26,7 @@ export default async function BrainAnalyticsPage() {
   const clientId = user.client_id;
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  const [queriesRes, feedbackRes, memoryRes] = await Promise.all([
+  const [queriesRes, feedbackRes, memoryRes, topicsRes, signalsRes] = await Promise.all([
     admin.from("vault_queries").select("*")
       .eq("client_id", clientId).gte("created_at", since).order("created_at", { ascending: false }).limit(2000),
     admin.from("vault_feedback").select("*")
@@ -34,9 +35,56 @@ export default async function BrainAnalyticsPage() {
     (admin as any).from("brain_memory")
       .select("id, kind, content, confidence, source_count, active, pinned, created_at")
       .eq("client_id", clientId).order("pinned", { ascending: false }).order("created_at", { ascending: false }).limit(200),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (admin as any).from("content_topics")
+      .select("id, status, ai_fit_score, ai_flagged, created_at, updated_at")
+      .eq("client_id", clientId).order("updated_at", { ascending: false }).limit(1000),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (admin as any).from("brain_signals")
+      .select("rating, surface, created_at").eq("client_id", clientId)
+      .gte("created_at", since).limit(3000),
   ]);
 
   const memory = (memoryRes.error ? [] : (memoryRes.data ?? [])) as BrainMemoryItem[];
+
+  // ── Content Brain measurement (Phase 4) ──────────────────────────────────
+  type TopicRow = { status: string; ai_flagged: boolean | null; updated_at: string };
+  const topics = (topicsRes.error ? [] : (topicsRes.data ?? [])) as TopicRow[];
+  const signals = (signalsRes.error ? [] : (signalsRes.data ?? [])) as { rating: number; surface: string }[];
+
+  const isDecided = (t: TopicRow) => t.status === "approved" || t.status === "rejected";
+  const decided = topics.filter(isDecided);
+
+  // Weekly acceptance trend — last 6 weeks (7-day buckets, oldest→newest).
+  const WEEKS = 6;
+  const now = Date.now();
+  const week = 7 * 24 * 60 * 60 * 1000;
+  const trend = Array.from({ length: WEEKS }, (_, i) => {
+    const end = now - (WEEKS - 1 - i) * week;
+    const start = end - week;
+    const inBucket = decided.filter((t) => {
+      const ts = new Date(t.updated_at).getTime();
+      return ts > start && ts <= end;
+    });
+    const approved = inBucket.filter((t) => t.status === "approved").length;
+    return {
+      label: i === WEEKS - 1 ? "This wk" : `${WEEKS - 1 - i}w ago`,
+      total: inBucket.length,
+      pct: inBucket.length ? Math.round((approved / inBucket.length) * 100) : null,
+    };
+  });
+
+  // Flag precision — when the Brain warned (ai_flagged), how often was the topic
+  // actually rejected? (Was the warning right?)
+  const flaggedDecided = decided.filter((t) => t.ai_flagged);
+  const flaggedRejected = flaggedDecided.filter((t) => t.status === "rejected").length;
+  const flagPrecision = flaggedDecided.length ? Math.round((flaggedRejected / flaggedDecided.length) * 100) : null;
+
+  const contentSignals = signals.filter((s) => s.surface === "content_topic");
+  const contentUp = contentSignals.filter((s) => s.rating === 1).length;
+  const contentDown = contentSignals.filter((s) => s.rating === -1).length;
+  const overallAccept = decided.length ? Math.round((decided.filter((t) => t.status === "approved").length / decided.length) * 100) : null;
+  const hasContentBrain = topics.length > 0 || contentSignals.length > 0;
 
   const queries = (queriesRes.error ? [] : (queriesRes.data ?? [])) as { question: string; answered: boolean; dismissed?: boolean }[];
   const feedback = (feedbackRes.error ? [] : (feedbackRes.data ?? [])) as {
@@ -154,6 +202,50 @@ export default async function BrainAnalyticsPage() {
             </section>
           )}
         </>
+      )}
+
+      {/* Content Brain — how well it predicts what you'll accept, over time */}
+      {hasContentBrain && (
+        <section className="surface-card p-6 mt-6">
+          <h2 className="text-lg font-semibold text-white mb-1">Content Brain</h2>
+          <p className="text-xs text-zinc-500 mb-4">How the Brain is doing on content topics — and whether its low-fit warnings are right.</p>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+              <p className="label-section mb-1">Acceptance</p>
+              <p className="stat-value text-white">{overallAccept === null ? "—" : `${overallAccept}%`}</p>
+              <p className="text-xs text-zinc-500 mt-0.5">{decided.length} decided</p>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+              <p className="label-section mb-1">Flag precision</p>
+              <p className="stat-value text-white">{flagPrecision === null ? "—" : `${flagPrecision}%`}</p>
+              <p className="text-xs text-zinc-500 mt-0.5">{flaggedDecided.length} warned</p>
+            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+              <p className="label-section mb-1">Feedback</p>
+              <p className="stat-value text-white">{contentUp + contentDown}</p>
+              <p className="text-xs text-zinc-500 mt-0.5">{contentUp}👍 {contentDown}👎</p>
+            </div>
+          </div>
+
+          <p className="label-section mb-2">Weekly acceptance rate</p>
+          <div className="flex flex-col gap-2">
+            {trend.map((w) => (
+              <div key={w.label} className="flex items-center gap-3">
+                <span className="text-xs text-zinc-500 w-16 shrink-0">{w.label}</span>
+                <ProgressBar
+                  value={w.pct ?? 0}
+                  min={w.pct === null ? 0 : 3}
+                  trackClassName="h-2.5 flex-1"
+                  barClassName="bg-gradient-to-r from-amber-500 to-green-500"
+                />
+                <span className="text-xs text-zinc-400 w-20 shrink-0 text-right tabular">
+                  {w.pct === null ? "—" : `${w.pct}%`} <span className="text-zinc-600">({w.total})</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Brain memory — learned lessons, independent of Ask-the-Vault usage */}

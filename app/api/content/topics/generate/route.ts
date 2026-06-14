@@ -5,6 +5,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderPrompt } from "@/lib/prompts/server";
 import { buildBrainContext } from "@/lib/brain/context";
+import { embeddingFit } from "@/lib/brain/embed";
 
 const bodySchema = z.object({
   client_id: z.string().uuid(),
@@ -153,25 +154,57 @@ export const POST = withAuth(async (req, { user }) => {
 
   const rawTopics = Array.isArray(parsed2.topics) ? parsed2.topics : [];
 
-  // Normalise + attach the Brain's pre-screen (fit + ai_flagged).
-  const topics = rawTopics
+  // Normalise + capture the model's self-assessed fit.
+  const base = rawTopics
     .map((t) => {
       const o = (t ?? {}) as Record<string, unknown>;
       const title = typeof o.title === "string" ? o.title.trim() : "";
       if (!title) return null;
       const type = typeof o.content_type === "string" && VALID_TYPES.has(o.content_type) ? o.content_type : "blog";
       const fitNum = Number(o.fit);
-      const fit = Number.isFinite(fitNum) ? Math.max(0, Math.min(100, Math.round(fitNum))) : null;
+      const llmFit = Number.isFinite(fitNum) ? Math.max(0, Math.min(100, Math.round(fitNum))) : null;
       return {
         title,
         description: typeof o.description === "string" ? o.description : "",
         content_type: type,
         rationale: typeof o.rationale === "string" ? o.rationale : "",
-        fit,
-        ai_flagged: fit !== null && fit < FIT_THRESHOLD,
+        llmFit,
       };
     })
     .filter((t): t is NonNullable<typeof t> => t !== null);
 
-  return NextResponse.json({ topics, learnedFrom: { positives: brain.positives, negatives: brain.negatives } });
+  // Ground the score in the client's real acceptance history (embedding fit),
+  // then blend with the model's self-assessment. Falls back to self-fit alone
+  // when there isn't enough approved/rejected history yet.
+  let embFits: (number | null)[] | null = null;
+  try {
+    embFits = await embeddingFit({
+      positives: brain.positiveExamples,
+      negatives: brain.negativeExamples,
+      candidates: base.map((t) => `${t.title} — ${t.description}`),
+    });
+  } catch (e) {
+    console.error("[topics/generate] embeddingFit failed", e);
+  }
+
+  const topics = base.map((t, i) => {
+    const emb = embFits?.[i] ?? null;
+    const fit =
+      t.llmFit !== null && emb !== null ? Math.round(t.llmFit * 0.5 + emb * 0.5)
+      : emb !== null ? emb
+      : t.llmFit;
+    return {
+      title: t.title,
+      description: t.description,
+      content_type: t.content_type,
+      rationale: t.rationale,
+      fit,
+      ai_flagged: fit !== null && fit < FIT_THRESHOLD,
+    };
+  });
+
+  return NextResponse.json({
+    topics,
+    learnedFrom: { positives: brain.positives, negatives: brain.negatives, grounded: embFits !== null },
+  });
 });

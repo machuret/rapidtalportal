@@ -12,6 +12,8 @@ interface CreateTopicInput {
   title: string;
   description?: string | null;
   content_type: string;
+  ai_fit_score?: number | null;
+  ai_flagged?: boolean;
 }
 
 interface UpdateTopicInput {
