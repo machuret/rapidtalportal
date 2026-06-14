@@ -11,6 +11,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { LocalTime } from "@/components/ui/LocalTime";
 import {
   Loader2, Save, RotateCcw, History, ChevronDown, ChevronRight,
   Pencil, CircleDot, Braces,
@@ -175,7 +176,7 @@ function PromptEditor({ prompt, onChange }: { prompt: PromptRow; onChange: (slug
 
         {isCustomized && prompt.updatedAt && (
           <p className="text-[11px] text-zinc-600 mb-3 flex items-center gap-1">
-            <Pencil className="w-3 h-3" /> Last edited {new Date(prompt.updatedAt).toLocaleString()}{prompt.updatedBy ? ` by ${prompt.updatedBy}` : ""}
+            <Pencil className="w-3 h-3" /> Last edited <LocalTime value={prompt.updatedAt} />{prompt.updatedBy ? ` by ${prompt.updatedBy}` : ""}
           </p>
         )}
 
@@ -236,7 +237,7 @@ function PromptEditor({ prompt, onChange }: { prompt: PromptRow; onChange: (slug
             {(history ?? []).map((v) => (
               <div key={v.id} className="px-3 py-2.5 flex items-center gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-zinc-400">{new Date(v.created_at).toLocaleString()}</p>
+                  <LocalTime value={v.created_at} className="text-xs text-zinc-400" />
                   <p className="text-[11px] text-zinc-600 truncate">{v.content.slice(0, 110)}</p>
                 </div>
                 <button onClick={() => { setContent(v.content); toast.info("Loaded into the editor — save to make it live."); }}

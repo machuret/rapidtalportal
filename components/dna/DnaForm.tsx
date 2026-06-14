@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Copy, Check, Globe, Loader2, Brain, Sparkles } from "lucide-react";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 interface DnaFormProps {
   initialData: DbCompanyDna | null;
@@ -168,7 +169,7 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
           })}
         </div>
         {updatedAt && (
-          <p className="text-xs text-zinc-600">Last updated: {new Date(updatedAt).toLocaleString()}</p>
+          <p className="text-xs text-zinc-600">Last updated: <LocalTime value={updatedAt} /></p>
         )}
       </div>
     );
@@ -279,7 +280,7 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
         </div>
       ))}
       {updatedAt && (
-        <p className="text-xs text-zinc-500">Last saved: {new Date(updatedAt).toLocaleString()}</p>
+        <p className="text-xs text-zinc-500">Last saved: <LocalTime value={updatedAt} /></p>
       )}
       <Button type="submit" disabled={saving} className="self-start">
         {saving ? "Saving…" : "Save DNA"}

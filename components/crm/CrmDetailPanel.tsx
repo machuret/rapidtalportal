@@ -17,6 +17,7 @@ import {
 import { useEffect } from "react";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 type Note = { id: string; body: string; created_at: string };
 
@@ -322,7 +323,7 @@ export function CrmDetailPanel({
                 <div key={n.id} className="rounded-lg bg-zinc-800 border border-zinc-700/50 px-3 py-2.5 group relative">
                   <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed pr-6">{n.body}</p>
                   <p className="text-xs text-zinc-600 mt-1.5">
-                    {new Date(n.created_at).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    <LocalTime value={n.created_at} opts={{ day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }} />
                   </p>
                   <button
                     onClick={() => deleteNote(n.id)}
@@ -350,7 +351,7 @@ export function CrmDetailPanel({
               {events.map((e) => (
                 <p key={e.id} className="text-[11px] text-zinc-500 leading-relaxed">
                   <span className="text-zinc-400">{e.who}</span> {e.body} ·{" "}
-                  {new Date(e.created_at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  <LocalTime value={e.created_at} opts={{ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }} />
                 </p>
               ))}
             </div>

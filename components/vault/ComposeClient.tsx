@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BrainFeedback } from "@/components/brain/BrainFeedback";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { cn } from "@/lib/utils";
 import {
   Wand2, Loader2, Copy, Check, RefreshCw, Reply, Mail, MessageSquare, Megaphone,
@@ -598,7 +599,7 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
               <div key={d.id} className="surface-card flex items-center gap-3 px-3.5 py-2.5">
                 <button onClick={() => restore(d)} className="flex-1 min-w-0 text-left">
                   <p className="text-sm text-zinc-200 truncate">{d.label}</p>
-                  <p className="text-[11px] text-zinc-500">{new Date(d.ts).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+                  <LocalTime value={d.ts} opts={{ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }} className="text-[11px] text-zinc-500" />
                 </button>
                 <button onClick={() => removeSaved(d.id)} className="text-zinc-600 hover:text-red-400 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>

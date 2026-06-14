@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Play, Coffee, RotateCcw, LogOut, Clock, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { ManualTimeEntry } from "./ManualTimeEntry";
+import { LocalTime } from "@/components/ui/LocalTime";
 import {
   useTimeEntriesQuery,
   useUpsertTimeEntry,
@@ -310,9 +311,9 @@ export function TimeTracker({ userId }: { userId: string }) {
                 )}
               </div>
               <span className="text-zinc-500 font-mono">
-                {new Date(e.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                <LocalTime value={e.start} opts={{ hour: "2-digit", minute: "2-digit" }} />
                 {" → "}
-                {e.end ? new Date(e.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "now"}
+                {e.end ? <LocalTime value={e.end} opts={{ hour: "2-digit", minute: "2-digit" }} /> : "now"}
               </span>
               <span className="text-zinc-400 font-mono w-14 text-right">
                 {e.end ? fmt(new Date(e.end).getTime() - new Date(e.start).getTime()) : "—"}

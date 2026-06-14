@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Editor } from "./Editor";
 import type { NotebookPage, NotebookRevision } from "@/lib/notebook/types";
 import { X, RotateCcw, Loader2 } from "lucide-react";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 interface Props {
   open: boolean;
@@ -17,9 +18,6 @@ interface Props {
   nameFor: (uid: string | null) => string | null;
   onRestored: (page: NotebookPage) => void;
 }
-
-const stamp = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
 export function RevisionDrawer({ open, onClose, pageId, nameFor, onRestored }: Props) {
   const [revisions, setRevisions] = useState<NotebookRevision[]>([]);
@@ -68,7 +66,7 @@ export function RevisionDrawer({ open, onClose, pageId, nameFor, onRestored }: P
               <button key={r.id} onClick={() => setSelected(r)}
                 className={cn("w-full text-left px-3 py-2 border-b border-zinc-800/60 transition-colors",
                   selected?.id === r.id ? "bg-zinc-800" : "hover:bg-zinc-900")}>
-                <p className="text-sm text-zinc-200">{stamp(r.created_at)}</p>
+                <p className="text-sm text-zinc-200"><LocalTime value={r.created_at} opts={{ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }} /></p>
                 <p className="text-xs text-zinc-500">{(nameFor(r.edited_by) ?? "Someone").split(" ")[0]}</p>
               </button>
             ))}

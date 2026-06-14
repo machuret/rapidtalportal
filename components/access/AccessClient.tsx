@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LocalTime } from "@/components/ui/LocalTime";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -321,7 +322,7 @@ function AuditDialog({ entry, onClose }: { entry: AccessEntry; onClose: () => vo
                 <div key={i} className="flex items-center justify-between py-2.5">
                   <span className="text-sm text-zinc-200">{r.who}</span>
                   <span className="text-xs text-zinc-500">
-                    {new Date(r.at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    <LocalTime value={r.at} opts={{ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }} />
                   </span>
                 </div>
               ))}
