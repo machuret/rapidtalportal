@@ -1,0 +1,36 @@
+name: Deploy edge functions
+
+# One-click / automatic deploy of the Supabase edge functions, so nobody has to
+# run the Supabase CLI locally. Edge functions are NOT deployed by a normal git
+# push — this workflow does it.
+#
+# Runs automatically when an edge function changes on main, and can be run
+# manually any time from the Actions tab ("Run workflow").
+#
+# One-time setup (GitHub → Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  — supabase.com/dashboard/account/tokens
+#   SUPABASE_PROJECT_REF   — your project ref (the xxxx in https://xxxx.supabase.co)
+# And once in the Supabase dashboard (Edge Functions → Secrets), set:
+#   OPENROUTER_API_KEY     — the functions' LLM key (runtime secret, not a build secret)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/**"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Deploy functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy vault-ask content-generate \
+            --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
