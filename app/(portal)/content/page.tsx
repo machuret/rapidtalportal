@@ -32,8 +32,9 @@ export default async function ContentPage() {
       .order("created_at", { ascending: false }),
   ]);
 
-  // client_admin can no longer reach this VA tool; super_admin retains approval.
-  const canApprove = user.role === "super_admin";
+  // VAs run this tool end-to-end: they create AND approve their own client's
+  // content. super_admin retains approval too. (client_admin is redirected above.)
+  const canApprove = user.role === "va" || user.role === "super_admin";
 
   return (
     <div>

@@ -124,9 +124,11 @@ export const PATCH = withAuth(async (req, { user }) => {
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
 
-  // Only admins can approve
-  if (parsed.data.status === "approved" && user.role !== "client_admin" && user.role !== "super_admin") {
-    return NextResponse.json({ error: "Only admins can approve content." }, { status: 403 });
+  // Approval is allowed for any member with access to this client (VAs run the
+  // content workflow end-to-end and may approve their own client's content;
+  // tenant access is already enforced by assertClientAccess above).
+  if (parsed.data.status === "approved" && !["va", "client_admin", "super_admin"].includes(user.role)) {
+    return NextResponse.json({ error: "Not allowed to approve content." }, { status: 403 });
   }
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
