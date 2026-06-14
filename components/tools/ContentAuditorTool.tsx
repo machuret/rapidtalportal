@@ -55,7 +55,7 @@ function auditAsText(a: Out): string {
 export function ContentAuditorTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [content, setContent] = useState("");
   const [keyword, setKeyword] = useState("");
-  const { result: audit, loading, run } = useToolRun<Out>(ROUTES.tools.contentAuditor(), (initial ?? null) as Out | null);
+  const { result: audit, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.contentAuditor(), (initial ?? null) as Out | null);
 
   return (
     <div>
@@ -149,6 +149,7 @@ export function ContentAuditorTool({ clientId, initial }: { clientId: string; in
           </div>
         </div>
       )}
+      {feedback}
     </div>
   );
 }

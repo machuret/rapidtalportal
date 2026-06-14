@@ -14,7 +14,7 @@ interface Out { subject: string; preview: string; body: string }
 export function SpintaxTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [brief, setBrief] = useState("");
   const [audience, setAudience] = useState("");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.spintax(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.spintax(), (initial ?? null) as Out | null);
 
   return (
     <div>
@@ -70,6 +70,7 @@ export function SpintaxTool({ clientId, initial }: { clientId: string; initial?:
           </p>
         </div>
       )}
+      {feedback}
     </div>
   );
 }

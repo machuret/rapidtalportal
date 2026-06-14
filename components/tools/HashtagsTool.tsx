@@ -20,7 +20,7 @@ const GROUPS: { key: keyof Omit<Out, "note">; label: string }[] = [
 export function HashtagsTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [topic, setTopic] = useState("");
   const [platform, setPlatform] = useState("Instagram");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.hashtags(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.hashtags(), (initial ?? null) as Out | null);
   const [copiedTag, setCopiedTag] = useState<string | null>(null);
 
   async function copyTag(tag: string) {
@@ -76,6 +76,7 @@ export function HashtagsTool({ clientId, initial }: { clientId: string; initial?
           ))}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

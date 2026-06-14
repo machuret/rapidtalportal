@@ -39,7 +39,7 @@ function Section({ icon: Icon, title, text }: { icon: ComponentType<{ className?
 
 export function RepurposerTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [content, setContent] = useState("");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.repurposer(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.repurposer(), (initial ?? null) as Out | null);
 
   return (
     <div>
@@ -92,6 +92,7 @@ export function RepurposerTool({ clientId, initial }: { clientId: string; initia
           )}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

@@ -21,7 +21,7 @@ const DESC_LIMIT = 155;
 export function MetaTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [content, setContent] = useState("");
   const [keyword, setKeyword] = useState("");
-  const { result, setResult, loading, run } = useToolRun<Out>(ROUTES.tools.meta(), (initial ?? null) as Out | null);
+  const { result, setResult, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.meta(), (initial ?? null) as Out | null);
   const [fixing, setFixing] = useState<number | null>(null);
 
   /** "Fix length": rewrite one over-limit variant in place. */
@@ -96,6 +96,7 @@ export function MetaTool({ clientId, initial }: { clientId: string; initial?: un
           })}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

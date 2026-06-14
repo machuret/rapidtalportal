@@ -13,7 +13,7 @@ interface Out { slides: { heading: string; body: string }[]; caption: string }
 
 export function CarouselTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [topic, setTopic] = useState("");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.carousel(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.carousel(), (initial ?? null) as Out | null);
 
   return (
     <div>
@@ -62,6 +62,7 @@ export function CarouselTool({ clientId, initial }: { clientId: string; initial?
           )}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

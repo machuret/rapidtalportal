@@ -15,7 +15,7 @@ interface Out { replies: ReplyOption[] }
 export function ReplyAssistantTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [message, setMessage] = useState("");
   const [context, setContext] = useState("");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.replyAssistant(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.replyAssistant(), (initial ?? null) as Out | null);
 
   return (
     <div>
@@ -55,6 +55,7 @@ export function ReplyAssistantTool({ clientId, initial }: { clientId: string; in
           ))}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

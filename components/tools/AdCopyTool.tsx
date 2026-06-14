@@ -21,7 +21,7 @@ const LIMITS: Record<Platform, { h: number; b: number; bLabel: string }> = {
 export function AdCopyTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [offer, setOffer] = useState("");
   const [platform, setPlatform] = useState<Platform>("meta");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.adCopy(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.adCopy(), (initial ?? null) as Out | null);
   const lim = LIMITS[result?.platform ?? "meta"];
 
   return (
@@ -68,6 +68,7 @@ export function AdCopyTool({ clientId, initial }: { clientId: string; initial?: 
           ))}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

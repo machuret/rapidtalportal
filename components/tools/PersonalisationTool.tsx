@@ -12,7 +12,7 @@ interface Out { lines: string[] }
 
 export function PersonalisationTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [about, setAbout] = useState("");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.personalisation(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.personalisation(), (initial ?? null) as Out | null);
 
   return (
     <div>
@@ -44,6 +44,7 @@ export function PersonalisationTool({ clientId, initial }: { clientId: string; i
           ))}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

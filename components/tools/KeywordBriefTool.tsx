@@ -43,7 +43,7 @@ function briefAsText(keyword: string, b: Out): string {
 export function KeywordBriefTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [keyword, setKeyword] = useState("");
   const [content, setContent] = useState("");
-  const { result: brief, loading, run } = useToolRun<Out>(ROUTES.tools.keywordBrief(), (initial ?? null) as Out | null);
+  const { result: brief, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.keywordBrief(), (initial ?? null) as Out | null);
 
   const go = () => run({ clientId, keyword: keyword.trim(), content: content.trim() || undefined });
 
@@ -152,6 +152,7 @@ export function KeywordBriefTool({ clientId, initial }: { clientId: string; init
           )}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

@@ -13,7 +13,7 @@ interface Out { hooks: Hook[] }
 
 export function HooksTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [content, setContent] = useState("");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.hooks(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.hooks(), (initial ?? null) as Out | null);
 
   return (
     <div>
@@ -50,6 +50,7 @@ export function HooksTool({ clientId, initial }: { clientId: string; initial?: u
           ))}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

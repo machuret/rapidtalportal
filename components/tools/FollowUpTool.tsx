@@ -13,7 +13,7 @@ interface Out { touches: Touch[] }
 
 export function FollowUpTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [email, setEmail] = useState("");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.followUp(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.followUp(), (initial ?? null) as Out | null);
 
   return (
     <div>
@@ -50,6 +50,7 @@ export function FollowUpTool({ clientId, initial }: { clientId: string; initial?
           ))}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

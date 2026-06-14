@@ -14,7 +14,7 @@ const TONES = ["Friendly", "Professional", "Warm", "Playful", "Inspirational"];
 export function NewsletterTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [topic, setTopic] = useState("");
   const [tone, setTone] = useState("Friendly");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.newsletter(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.newsletter(), (initial ?? null) as Out | null);
 
   return (
     <div>
@@ -56,6 +56,7 @@ export function NewsletterTool({ clientId, initial }: { clientId: string; initia
           <p className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">{result.body}</p>
         </div>
       )}
+      {feedback}
     </div>
   );
 }

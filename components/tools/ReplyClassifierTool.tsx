@@ -22,7 +22,7 @@ const TINT: Record<string, string> = {
 export function ReplyClassifierTool({ clientId, initial }: { clientId: string; initial?: unknown }) {
   const [reply, setReply] = useState("");
   const [context, setContext] = useState("");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.replyClassifier(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.replyClassifier(), (initial ?? null) as Out | null);
 
   return (
     <div>
@@ -68,6 +68,7 @@ export function ReplyClassifierTool({ clientId, initial }: { clientId: string; i
           </div>
         </div>
       )}
+      {feedback}
     </div>
   );
 }

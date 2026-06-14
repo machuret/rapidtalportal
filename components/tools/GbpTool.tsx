@@ -16,7 +16,7 @@ const LIMIT = 1500;
 export function GbpTool({ clientId, companyName, initial }: { clientId: string; companyName: string; initial?: unknown }) {
   const [topic, setTopic] = useState("");
   const [service, setService] = useState("");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.gbp(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.gbp(), (initial ?? null) as Out | null);
 
   const go = () => run({ clientId, topic: topic.trim(), service: service.trim() || undefined });
 
@@ -60,6 +60,7 @@ export function GbpTool({ clientId, companyName, initial }: { clientId: string; 
           ))}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

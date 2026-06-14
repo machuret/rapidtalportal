@@ -27,7 +27,7 @@ export function CalendarTool({ clientId, initial }: { clientId: string; initial?
   const [focus, setFocus] = useState("");
   const [tone, setTone] = useState("Friendly");
   const [platform, setPlatform] = useState("Mixed");
-  const { result, loading, run } = useToolRun<Out>(ROUTES.tools.calendar(), (initial ?? null) as Out | null);
+  const { result, loading, run, feedback } = useToolRun<Out>(ROUTES.tools.calendar(), (initial ?? null) as Out | null);
   const days = result?.days ?? [];
 
   return (
@@ -87,6 +87,7 @@ export function CalendarTool({ clientId, initial }: { clientId: string; initial?
           </div>
         </div>
       )}
+      {feedback}
     </div>
   );
 }

@@ -10,15 +10,25 @@ import { useState, type ComponentType } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import { BrainFeedback } from "@/components/brain/BrainFeedback";
 import { Loader2, Copy, Check, Download } from "lucide-react";
 
-/** Run a tool endpoint: loading state, result, error toast — one hook. */
+/**
+ * Run a tool endpoint: loading state, result, error toast — one hook.
+ *
+ * Also returns a ready `feedback` node (👍/👎 → brain_signals, surface "tool")
+ * so every tool feeds the same learning loop as the rest of the product. The
+ * client_id is captured from the run payload (all tools pass it), so wiring a
+ * tool up is just rendering `{feedback}` below its result.
+ */
 export function useToolRun<T>(endpoint: string, initial?: T | null) {
   const [result, setResult] = useState<T | null>(initial ?? null);
   const [loading, setLoading] = useState(false);
+  const [clientId, setClientId] = useState<string | null>(null);
 
   async function run(payload: Record<string, unknown>) {
     if (loading) return;
+    if (typeof payload.clientId === "string") setClientId(payload.clientId);
     setLoading(true);
     setResult(null);
     try {
@@ -30,7 +40,19 @@ export function useToolRun<T>(endpoint: string, initial?: T | null) {
     }
   }
 
-  return { result, setResult, loading, run };
+  // Whole-result rating (one signal per generation, consistent across all
+  // tools). The artifact carries every variant, so a 👎 + reason can be specific.
+  const artifactText = result ? (typeof result === "string" ? result : JSON.stringify(result)) : "";
+  const feedback = result && clientId && artifactText
+    ? (
+      <div className="mt-4 flex items-center gap-2">
+        <span className="text-xs text-zinc-500">Was this useful?</span>
+        <BrainFeedback clientId={clientId} surface="tool" artifactText={artifactText} context={{ tool: endpoint }} />
+      </div>
+    )
+    : null;
+
+  return { result, setResult, loading, run, feedback };
 }
 
 const TINTS: Record<string, string> = {
