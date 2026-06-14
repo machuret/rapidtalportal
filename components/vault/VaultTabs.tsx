@@ -21,7 +21,7 @@ export function VaultTabs({ active }: { active: "documents" | "knowledge" }) {
           className={cn(
             "inline-flex items-center gap-2 px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors",
             active === t.id
-              ? "border-blue-500 text-white font-medium"
+              ? "border-orange-500 text-white font-medium"
               : "border-transparent text-zinc-400 hover:text-zinc-200",
           )}
         >

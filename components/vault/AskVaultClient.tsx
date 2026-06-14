@@ -156,7 +156,7 @@ export function AskVaultClient({
     <div className="max-w-3xl flex flex-col min-h-[calc(100vh-8rem)]">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
           <Brain className="w-6 h-6 text-white" />
         </div>
         <div>
@@ -203,7 +203,7 @@ export function AskVaultClient({
         {interim && (
           <div className="space-y-3">
             <div className="flex justify-end">
-              <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-blue-600 text-white px-4 py-2.5 text-sm">
+              <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-orange-500 text-zinc-950 px-4 py-2.5 text-sm">
                 {interim.question}
               </div>
             </div>
@@ -334,7 +334,7 @@ function ChatTurn({
     <div className="space-y-3">
       {/* Question */}
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-blue-600 text-white px-4 py-2.5 text-sm">
+        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-orange-500 text-zinc-950 px-4 py-2.5 text-sm">
           {turn.question}
         </div>
       </div>

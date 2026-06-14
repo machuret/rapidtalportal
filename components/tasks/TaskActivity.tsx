@@ -74,7 +74,7 @@ export function TaskActivity({ taskId, onCommented }: { taskId: string; onCommen
             ) : (
               <div key={e.id} className={cn(
                 "rounded-lg px-3 py-2 text-sm max-w-[90%]",
-                e.mine ? "bg-blue-600/20 self-end" : "bg-zinc-800",
+                e.mine ? "bg-orange-500/20 self-end" : "bg-zinc-800",
               )}>
                 <p className="text-[11px] text-zinc-400 mb-0.5">{e.who} · {relTime(e.created_at)}</p>
                 <p className="text-zinc-200 whitespace-pre-wrap leading-snug">{e.body}</p>

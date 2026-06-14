@@ -178,7 +178,7 @@ export function ManualTimeEntry({ open, onOpenChange, onSuccess }: ManualTimeEnt
             <Button
               type="submit"
               disabled={submitting}
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
+              className="flex-1 bg-orange-500 hover:bg-orange-400"
             >
               {submitting ? "Adding..." : "Add Entry"}
             </Button>

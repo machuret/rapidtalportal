@@ -128,7 +128,7 @@ export function CrmBoard({ contacts: initial, clientId, isAdmin }: CrmBoardProps
           )}
           <Button
             onClick={() => router.push("/crm/add-contact")}
-            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shrink-0"
+            className="gap-1.5 bg-orange-500 hover:bg-orange-400 text-zinc-950 shrink-0"
           >
             <Plus className="w-4 h-4" /> Add Contact
           </Button>

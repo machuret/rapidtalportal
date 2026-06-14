@@ -180,7 +180,7 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 gap-2 bg-blue-600 hover:bg-blue-500"
+            className="flex-1 gap-2 bg-orange-500 hover:bg-orange-400"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {saving ? "Saving & Processing…" : "Save & Re-process AI"}

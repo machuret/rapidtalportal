@@ -164,7 +164,7 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
             onClick={() => void handleUrlScrape()}
             disabled={isScraping || !scrapingUrl.trim()}
             variant="outline"
-            className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+            className="border-blue-500/50 text-blue-400 hover:bg-orange-400/10"
           >
             {isScraping ? (
               <>

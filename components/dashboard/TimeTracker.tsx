@@ -255,7 +255,7 @@ export function TimeTracker({ userId }: { userId: string }) {
       <div className="flex gap-2 flex-wrap">
         <button 
           onClick={() => setManualEntryOpen(true)} 
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-400 text-sm font-medium hover:bg-orange-400/30 transition-colors"
         >
           <Plus className="w-3.5 h-3.5" /> Add Entry
         </button>
@@ -268,7 +268,7 @@ export function TimeTracker({ userId }: { userId: string }) {
           <button onClick={startBreak} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 text-sm font-medium hover:bg-amber-500/30 transition-colors">
             <Coffee className="w-3.5 h-3.5" /> Take Break
           </button>
-          <button onClick={logOff} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-colors">
+          <button onClick={logOff} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-400 text-sm font-medium hover:bg-orange-400/30 transition-colors">
             <LogOut className="w-3.5 h-3.5" /> Log Off
           </button>
         </>)}
@@ -276,7 +276,7 @@ export function TimeTracker({ userId }: { userId: string }) {
           <button onClick={resumeWork} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/20 border border-green-500/40 text-green-400 text-sm font-medium hover:bg-green-500/30 transition-colors">
             <RotateCcw className="w-3.5 h-3.5" /> Resume Work
           </button>
-          <button onClick={logOff} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-colors">
+          <button onClick={logOff} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-400 text-sm font-medium hover:bg-orange-400/30 transition-colors">
             <LogOut className="w-3.5 h-3.5" /> Log Off
           </button>
         </>)}

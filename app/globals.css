@@ -15,8 +15,8 @@
     --card-foreground: 0 0% 98%;
     --popover: 240 3.7% 11%;
     --popover-foreground: 0 0% 98%;
-    --primary: 217 91% 60%;           /* blue-500 — vibrant, AA on dark */
-    --primary-foreground: 0 0% 100%;
+    --primary: 24 95% 53%;            /* orange-500 — brand, edgy on black */
+    --primary-foreground: 24 30% 6%;  /* near-black — high contrast ON orange */
     --secondary: 240 3.7% 25%;        /* zinc-700 */
     --secondary-foreground: 0 0% 95%;
     --muted: 240 3.7% 15%;            /* zinc-800 */
@@ -27,7 +27,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 3.7% 25%;           /* zinc-700 */
     --input: 240 3.7% 15%;            /* zinc-800 */
-    --ring: 217 91% 60%;              /* blue-500 — branded focus ring */
+    --ring: 24 95% 53%;               /* orange-500 — branded focus ring */
     --radius: 0.5rem;
 
     /* ── Palette source of truth (space-separated RGB channels) ──────────────
@@ -134,7 +134,7 @@
   /* ── Focus ring — branded blue, not grey ────────────────────────────────── */
   /* Single global rule — never repeat in components.                          */
   *:focus-visible {
-    @apply outline-none ring-2 ring-blue-500 ring-offset-2 ring-offset-zinc-950;
+    @apply outline-none ring-2 ring-orange-500 ring-offset-2 ring-offset-zinc-950;
   }
 
   /* ── Body ────────────────────────────────────────────────────────────────── */

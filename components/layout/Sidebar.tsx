@@ -148,7 +148,7 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
         {/* Brand */}
         <div>
           <div className="flex items-center justify-between">
-            <span className="font-bold text-white text-xl tracking-tight leading-none">RapidTal</span>
+            <span className="font-bold text-white text-xl tracking-tight leading-none">Rapid<span className="text-orange-500">Tal</span></span>
             <NotificationsBell userId={user.id} />
           </div>
           {isSuperAdmin ? (
@@ -179,10 +179,10 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
                     onClick={onNavigate}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                      "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border-l-2",
                       isActive
-                        ? "bg-zinc-700 text-white"
-                        : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                        ? "border-orange-500 bg-orange-500/10 text-orange-300"
+                        : "border-transparent text-zinc-400 hover:bg-zinc-800 hover:text-white"
                     )}
                   >
                     <item.icon className="w-4 h-4 shrink-0" />

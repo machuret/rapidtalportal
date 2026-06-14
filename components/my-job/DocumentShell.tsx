@@ -17,7 +17,7 @@ export function DocumentShell({ children, backHref = "/my-job" }: { children: Re
           <ArrowLeft className="w-4 h-4" /> Back to My Job
         </Link>
         <button onClick={() => window.print()}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 transition-colors">
+          className="inline-flex items-center gap-2 rounded-lg bg-orange-500 hover:bg-orange-400 text-zinc-950 text-sm font-medium px-4 py-2 transition-colors">
           <Printer className="w-4 h-4" /> Print / Save as PDF
         </button>
       </div>

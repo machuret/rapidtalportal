@@ -159,7 +159,7 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
             <div className={cn(
               "px-3.5 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words",
               isOwn
-                ? "bg-blue-600 text-white rounded-tr-sm"
+                ? "bg-orange-500 text-zinc-950 rounded-tr-sm"
                 : "bg-zinc-800 text-zinc-100 rounded-tl-sm border border-zinc-700"
             )}>
               {msg.body}
@@ -238,7 +238,7 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
             size="sm"
             onClick={handleSend}
             disabled={!input.trim() || sending}
-            className="shrink-0 h-8 w-8 p-0 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded-lg"
+            className="shrink-0 h-8 w-8 p-0 bg-orange-500 hover:bg-orange-400 disabled:opacity-40 rounded-lg"
           >
             {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           </Button>

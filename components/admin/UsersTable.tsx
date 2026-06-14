@@ -450,7 +450,7 @@ export function UsersTable({
                               disabled={impersonatingId === u.id}
                               title="Log in as this user"
                               aria-label={`Log in as ${u.full_name ?? u.email}`}
-                              className="p-1.5 rounded-lg text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors disabled:opacity-40"
+                              className="p-1.5 rounded-lg text-zinc-500 hover:text-blue-400 hover:bg-orange-400/10 transition-colors disabled:opacity-40"
                             >
                               {impersonatingId === u.id ? (
                                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />

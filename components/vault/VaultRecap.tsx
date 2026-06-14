@@ -25,7 +25,7 @@ interface RecapData {
 }
 
 function StatusDot({ status }: { status: string }) {
-  const map: Record<string, string> = { ready: "bg-green-500", processing: "bg-blue-500 animate-pulse", pending: "bg-blue-500 animate-pulse", error: "bg-red-500" };
+  const map: Record<string, string> = { ready: "bg-green-500", processing: "bg-orange-500 animate-pulse", pending: "bg-orange-500 animate-pulse", error: "bg-red-500" };
   return <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", map[status] ?? "bg-zinc-500")} />;
 }
 
@@ -95,7 +95,7 @@ export function VaultRecap({ clientId, canWrite }: { clientId: string; canWrite:
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mb-6 text-sm">
         <span className="text-zinc-400"><span className="font-semibold text-zinc-100">{counts.total}</span> items</span>
         <span className="flex items-center gap-1.5 text-green-400"><span className="w-2 h-2 rounded-full bg-green-500" />{counts.ready} indexed</span>
-        {counts.processing > 0 && <span className="flex items-center gap-1.5 text-blue-400"><span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />{counts.processing} indexing…</span>}
+        {counts.processing > 0 && <span className="flex items-center gap-1.5 text-blue-400"><span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />{counts.processing} indexing…</span>}
         {counts.error > 0 && <span className="flex items-center gap-1.5 text-red-400"><AlertTriangle className="w-3.5 h-3.5" />{counts.error} failed (use “Index for AI search”)</span>}
         {canWrite && (
           <Button

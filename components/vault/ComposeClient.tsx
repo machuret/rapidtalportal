@@ -319,7 +319,7 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
     <div className="max-w-3xl">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
           <Wand2 className="w-6 h-6 text-white" />
         </div>
         <div>

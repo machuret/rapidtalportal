@@ -202,7 +202,7 @@ export function KbList({ entries: initialEntries, lastRun, canRegenerate, client
               <Button 
                 onClick={regenerate} 
                 disabled={generating} 
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg shadow-blue-500/20 min-w-[160px]"
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 shadow-lg shadow-orange-500/20 min-w-[160px]"
               >
                 {generating ? (
                   <>
@@ -245,7 +245,7 @@ export function KbList({ entries: initialEntries, lastRun, canRegenerate, client
                 onClick={() => setSelectedCategory(cat)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                   selectedCategory === cat
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                    ? "bg-orange-500 text-zinc-950 shadow-lg shadow-orange-500/20"
                     : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700 border border-zinc-700"
                 }`}
               >

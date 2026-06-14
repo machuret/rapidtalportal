@@ -112,7 +112,7 @@ const TopicCard = memo(function TopicCard({
             onClick={handleGenerate}
             aria-label="Generate content from this topic"
             title="Generate content from this topic"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-blue-400 hover:text-white hover:bg-blue-600 border border-blue-500/30 hover:border-blue-600 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-blue-400 hover:text-zinc-950 hover:bg-orange-500 border border-blue-500/30 hover:border-blue-600 transition-colors"
           >
             <Sparkles className="w-3.5 h-3.5" />
             Generate

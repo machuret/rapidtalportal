@@ -117,7 +117,7 @@ export function CrawlJobPanel({ clientId, startedJob }: { clientId: string; star
       </div>
 
       {job.status === "crawling" && (
-        <ProgressBar value={pct} min={4} trackClassName="mt-3 h-1.5 w-full" barClassName="bg-blue-500 duration-700" />
+        <ProgressBar value={pct} min={4} trackClassName="mt-3 h-1.5 w-full" barClassName="bg-orange-500 duration-700" />
       )}
 
       {isActive && (

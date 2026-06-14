@@ -23,7 +23,7 @@ export default async function GuidePage() {
   return (
     <div className="max-w-3xl">
       <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
           <BookOpen className="w-6 h-6 text-white" />
         </div>
         <div>

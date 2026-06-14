@@ -151,7 +151,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
                   )}
                 >
                   <div className="flex items-start gap-2">
-                    {!n.read_at && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />}
+                    {!n.read_at && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 shrink-0" />}
                     <div className="min-w-0 flex-1">
                       <p className={cn("text-sm leading-snug", n.read_at ? "text-zinc-400" : "text-zinc-100 font-medium")}>
                         {n.title}
