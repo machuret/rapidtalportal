@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
-import { Brain, Sparkles, Pin, PinOff, Eye, EyeOff, Trash2, ThumbsUp, Ban, Scale } from "lucide-react";
+import { Brain, Sparkles, Pin, PinOff, Eye, EyeOff, Trash2, ThumbsUp, Ban, Scale, Check, X } from "lucide-react";
 
 export interface BrainMemoryItem {
   id: string;
@@ -16,6 +16,8 @@ export interface BrainMemoryItem {
   source_count: number;
   active: boolean;
   pinned: boolean;
+  status?: "proposed" | "active" | "muted";
+  scope?: { surfaces?: string[] } | null;
   created_at: string;
 }
 
@@ -40,20 +42,27 @@ export function BrainMemoryPanel({ clientId, initial }: { clientId: string; init
     if (busy) return;
     setBusy(true);
     try {
-      const r = await api.post<{ skipped: boolean; reason?: string; newMemories: number; processedSignals: number }>(
+      const r = await api.post<{ skipped: boolean; reason?: string; newMemories: number; processedSignals: number; reinforced?: number; proposed?: number }>(
         ROUTES.brain.memoryDistill(), { client_id: clientId }
       );
       if (r.skipped) toast.message(r.reason ?? "Nothing new to learn yet.");
-      else toast.success(`Learned ${r.newMemories} new lesson${r.newMemories === 1 ? "" : "s"} from ${r.processedSignals} signal${r.processedSignals === 1 ? "" : "s"}.`);
+      else {
+        const bits = [
+          r.newMemories ? `learned ${r.newMemories}` : "",
+          r.reinforced ? `reinforced ${r.reinforced}` : "",
+          r.proposed ? `${r.proposed} to review` : "",
+        ].filter(Boolean);
+        toast.success(bits.length ? `From ${r.processedSignals} signal${r.processedSignals === 1 ? "" : "s"}: ${bits.join(", ")}.` : `Processed ${r.processedSignals} signals — nothing new.`);
+      }
       router.refresh();
     } finally {
       setBusy(false);
     }
   }
 
-  async function patch(id: string, body: Partial<Pick<BrainMemoryItem, "active" | "pinned">>) {
+  async function patch(id: string, body: { pinned?: boolean; status?: "proposed" | "active" | "muted" }) {
     const prev = items;
-    setItems((xs) => xs.map((x) => (x.id === id ? { ...x, ...body } : x)));
+    setItems((xs) => xs.map((x) => (x.id === id ? { ...x, ...body, ...(body.status ? { active: body.status === "active", status: body.status } : {}) } : x)));
     try {
       await api.patch(ROUTES.brain.memory(), { client_id: clientId, id, ...body });
     } catch {
@@ -73,6 +82,53 @@ export function BrainMemoryPanel({ clientId, initial }: { clientId: string; init
     }
   }
 
+  const proposed = items.filter((m) => m.status === "proposed");
+  const settled = items.filter((m) => m.status !== "proposed");
+
+  function Row({ m, proposedRow }: { m: BrainMemoryItem; proposedRow?: boolean }) {
+    const meta = KIND_META[m.kind];
+    const Icon = meta.icon;
+    const scopes = m.scope?.surfaces ?? [];
+    return (
+      <li className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 ${
+        proposedRow ? "border-amber-500/40 bg-amber-500/5"
+        : m.active ? "border-zinc-800 bg-zinc-900/40" : "border-zinc-800/60 bg-zinc-900/20 opacity-60"}`}>
+        <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded border shrink-0 ${meta.cls}`}>
+          <Icon className="w-3 h-3" /> {meta.label}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-zinc-200 leading-relaxed">{m.content}</p>
+          {scopes.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {scopes.map((s) => <span key={s} className="text-[10px] text-zinc-500 bg-zinc-800 rounded px-1.5 py-0.5">{s}</span>)}
+            </div>
+          )}
+        </div>
+        <span className="text-[11px] text-zinc-600 shrink-0 mt-0.5" title="Confidence">{m.confidence}%</span>
+        <div className="flex items-center gap-1 shrink-0">
+          {proposedRow ? (
+            <>
+              <button onClick={() => patch(m.id, { status: "active" })} title="Approve — start applying" className="p-1 rounded text-green-400 hover:bg-zinc-800"><Check className="w-4 h-4" /></button>
+              <button onClick={() => remove(m.id)} title="Dismiss" className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-800"><X className="w-4 h-4" /></button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => patch(m.id, { pinned: !m.pinned })} title={m.pinned ? "Unpin" : "Pin"} className={`p-1 rounded hover:bg-zinc-800 ${m.pinned ? "text-amber-400" : "text-zinc-500 hover:text-amber-400"}`}>
+                {m.pinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
+              </button>
+              <button onClick={() => patch(m.id, { status: m.active ? "muted" : "active" })} title={m.active ? "Mute (stop applying)" : "Reactivate"} className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-800">
+                {m.active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              </button>
+              <button onClick={() => remove(m.id)} title="Delete" className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-800">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
+        </div>
+      </li>
+    );
+  }
+
   return (
     <section className="surface-card p-6 mt-6">
       <div className="flex items-center justify-between gap-3 mb-1">
@@ -86,42 +142,26 @@ export function BrainMemoryPanel({ clientId, initial }: { clientId: string; init
         </Button>
       </div>
       <p className="text-xs text-zinc-500 mb-4">
-        Lessons distilled from your 👍/👎 feedback. Active lessons steer every topic and draft the AI produces — pin the important ones, mute or delete anything off.
+        Lessons distilled from your 👍/👎 feedback. Active lessons steer every topic, answer and draft — pin the important ones, mute or delete anything off.
       </p>
 
-      {items.length === 0 ? (
+      {/* Proposed — needs your OK before the Brain applies them */}
+      {proposed.length > 0 && (
+        <div className="mb-4">
+          <p className="label-section text-amber-400 mb-2">Proposed — approve to apply ({proposed.length})</p>
+          <ul className="flex flex-col gap-2">
+            {proposed.map((m) => <Row key={m.id} m={m} proposedRow />)}
+          </ul>
+        </div>
+      )}
+
+      {settled.length === 0 && proposed.length === 0 ? (
         <p className="text-sm text-zinc-500">
-          Nothing learned yet. As you thumb topics up or flag ones that don&apos;t make sense, then run “Distill now”, the Brain&apos;s lessons appear here.
+          Nothing learned yet. As you thumb things up or flag ones that don&apos;t make sense, then run “Distill now”, the Brain&apos;s lessons appear here.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {items.map((m) => {
-            const meta = KIND_META[m.kind];
-            const Icon = meta.icon;
-            return (
-              <li
-                key={m.id}
-                className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 ${m.active ? "border-zinc-800 bg-zinc-900/40" : "border-zinc-800/60 bg-zinc-900/20 opacity-60"}`}
-              >
-                <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded border shrink-0 ${meta.cls}`}>
-                  <Icon className="w-3 h-3" /> {meta.label}
-                </span>
-                <p className="text-sm text-zinc-200 leading-relaxed flex-1 min-w-0">{m.content}</p>
-                <span className="text-[11px] text-zinc-600 shrink-0 mt-0.5" title="Confidence">{m.confidence}%</span>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => patch(m.id, { pinned: !m.pinned })} title={m.pinned ? "Unpin" : "Pin"} className={`p-1 rounded hover:bg-zinc-800 ${m.pinned ? "text-amber-400" : "text-zinc-500 hover:text-amber-400"}`}>
-                    {m.pinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
-                  </button>
-                  <button onClick={() => patch(m.id, { active: !m.active })} title={m.active ? "Mute (stop applying)" : "Reactivate"} className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-800">
-                    {m.active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                  </button>
-                  <button onClick={() => remove(m.id)} title="Delete" className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-800">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </li>
-            );
-          })}
+          {settled.map((m) => <Row key={m.id} m={m} />)}
         </ul>
       )}
     </section>

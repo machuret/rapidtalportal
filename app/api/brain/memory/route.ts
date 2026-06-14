@@ -13,6 +13,7 @@ const patchSchema = z.object({
   active:    z.boolean().optional(),
   pinned:    z.boolean().optional(),
   content:   z.string().min(1).max(2000).optional(),
+  status:    z.enum(["proposed", "active", "muted"]).optional(),
 });
 const deleteSchema = z.object({ client_id: z.string().uuid(), id: z.string().uuid() });
 
@@ -32,7 +33,7 @@ export const GET = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("brain_memory")
-    .select("id, kind, content, confidence, source_count, active, pinned, created_at")
+    .select("id, kind, content, confidence, source_count, active, pinned, status, scope, created_at")
     .eq("client_id", parsed.data.client_id)
     .order("pinned", { ascending: false })
     .order("created_at", { ascending: false });
@@ -58,9 +59,19 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (parsed.data.active !== undefined) updates.active = parsed.data.active;
   if (parsed.data.pinned !== undefined) updates.pinned = parsed.data.pinned;
   if (parsed.data.content !== undefined) updates.content = parsed.data.content;
+  // status is the source of truth; keep the legacy `active` flag in sync so
+  // readers (context, score, health) need no changes. Approving a proposed
+  // lesson activates it; muting deactivates it.
+  if (parsed.data.status !== undefined) {
+    updates.status = parsed.data.status;
+    updates.active = parsed.data.status === "active";
+    if (parsed.data.status === "active") updates.last_reinforced_at = new Date().toISOString();
+  } else if (parsed.data.active !== undefined) {
+    updates.active = parsed.data.active;
+    updates.status = parsed.data.active ? "active" : "muted";
+  }
 
   const admin = createAdminClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

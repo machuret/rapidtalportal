@@ -39,7 +39,7 @@ const PROFILE_SELECT = PROFILE_FIELDS.map((f) => f.key).join(", ");
 interface VaultRow { title: string; raw_content: string | null; category: string | null; ai_summary: string | null }
 interface TopicRow { title: string; description: string | null; flag_reason: string | null }
 interface SignalRow { artifact_text: string; reason: string | null }
-interface MemoryRow { kind: string; content: string }
+interface MemoryRow { kind: string; content: string; scope: { surfaces?: string[] } | null }
 
 const MEMORY_LABELS: Record<string, string> = {
   preference: "Prefer",
@@ -69,7 +69,13 @@ const MAX_EXAMPLES = 8;
  * Build the Brain context for a client. Pure read; safe to call from any route
  * that has already authorised the caller for this client_id.
  */
-export async function buildBrainContext(admin: Admin, clientId: string): Promise<BrainContext> {
+export async function buildBrainContext(
+  admin: Admin,
+  clientId: string,
+  opts: { surfaces?: string[] } = {},
+): Promise<BrainContext> {
+  // Which surfaces this task counts as — used to inject only relevant lessons.
+  const taskSurfaces = new Set([...(opts.surfaces ?? ["content"]), "all"]);
   const [dnaRes, vaultRes, posTopicsRes, negTopicsRes, signalsRes, memoryRes] = await Promise.all([
     admin.from("company_dna").select(PROFILE_SELECT).eq("client_id", clientId).maybeSingle(),
     admin
@@ -106,12 +112,12 @@ export async function buildBrainContext(admin: Admin, clientId: string): Promise
     // Distilled, curated lessons — the Brain's long-term memory (pinned first).
     admin
       .from("brain_memory")
-      .select("kind, content")
+      .select("kind, content, scope")
       .eq("client_id", clientId)
       .eq("active", true)
       .order("pinned", { ascending: false })
       .order("confidence", { ascending: false })
-      .limit(40),
+      .limit(60),
   ]);
 
   const dna = (dnaRes.data ?? null) as Record<string, unknown> | null;
@@ -119,7 +125,15 @@ export async function buildBrainContext(admin: Admin, clientId: string): Promise
   const posTopics = (posTopicsRes.data ?? []) as TopicRow[];
   const negTopics = (negTopicsRes.data ?? []) as TopicRow[];
   const negSignals = (signalsRes.data ?? []) as SignalRow[];
-  const memory = (memoryRes.data ?? []) as MemoryRow[];
+  const memoryAll = (memoryRes.data ?? []) as MemoryRow[];
+  // Keep only lessons relevant to this task: global (no scope) or overlapping.
+  const memory = memoryAll
+    .filter((m) => {
+      const s = m.scope?.surfaces;
+      if (!s || s.length === 0) return true;
+      return s.some((x) => taskSurfaces.has(x));
+    })
+    .slice(0, 40);
 
   let text = "";
   let hasProfile = false;

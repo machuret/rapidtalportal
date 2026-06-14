@@ -33,7 +33,7 @@ export default async function BrainAnalyticsPage() {
       .eq("client_id", clientId).gte("created_at", since).order("created_at", { ascending: false }).limit(1000),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (admin as any).from("brain_memory")
-      .select("id, kind, content, confidence, source_count, active, pinned, created_at")
+      .select("id, kind, content, confidence, source_count, active, pinned, status, scope, created_at")
       .eq("client_id", clientId).order("pinned", { ascending: false }).order("created_at", { ascending: false }).limit(200),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (admin as any).from("content_topics")
