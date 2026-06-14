@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { MIGRATIONS } from "@/lib/migrations/manifest";
 import { cn } from "@/lib/utils";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { Activity, CheckCircle2, XCircle, AlertTriangle, Database, Clock, Brain } from "lucide-react";
+import { Activity, CheckCircle2, XCircle, AlertTriangle, Database, Clock, Brain, KeyRound } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "System Health — RapidTal Admin" };
@@ -44,11 +44,16 @@ export default async function AdminHealthPage() {
   // brain_* tables aren't in the generated types; query loosely.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const a = admin as any;
-  const [{ count: signalCount }, { count: undistilledCount }, { count: memoryCount }] = await Promise.all([
+  const [{ count: signalCount }, { count: undistilledCount }, { count: memoryCount }, { count: proposedCount }] = await Promise.all([
     a.from("brain_signals").select("id", { count: "exact", head: true }),
     a.from("brain_signals").select("id", { count: "exact", head: true }).is("distilled_at", null),
     a.from("brain_memory").select("id", { count: "exact", head: true }).eq("active", true),
+    a.from("brain_memory").select("id", { count: "exact", head: true }).eq("status", "proposed"),
   ]);
+
+  // Next-side Brain AI (distillation, embeddings, onboarding) needs OPENAI_API_KEY.
+  // Without it the Brain silently stops learning — surface that loudly.
+  const brainAiConfigured = !!process.env.OPENAI_API_KEY;
 
   // ── Cron heartbeats ───────────────────────────────────────────────────────
   const EXPECTED_CRONS: { name: string; staleAfterH: number }[] = [
@@ -86,6 +91,7 @@ export default async function AdminHealthPage() {
   if (pending.length) issues.push(`${pending.length} migration(s) not applied`);
   if (!schemaUnavailable && schemaFails.length) issues.push(`${schemaFails.length} schema object(s) missing`);
   for (const c of staleCrons) issues.push(`cron “${c.name}” is stale`);
+  if (!brainAiConfigured) issues.push("OPENAI_API_KEY not set — Brain learning/embeddings disabled");
   if (degradedClients.length) issues.push(`${degradedClients.length} client brain(s) degraded`);
   if (recentErrorCount && recentErrorCount > 0) issues.push(`${recentErrorCount} error(s) logged in the last 24h`);
 
@@ -188,7 +194,7 @@ export default async function AdminHealthPage() {
         {/* Brain learning (global) */}
         <section className="surface-card p-4">
           <p className="label-section mb-3 flex items-center gap-2"><Brain className="w-4 h-4" /> Brain learning</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <p className="stat-value text-white">{signalCount ?? 0}</p>
               <p className="text-xs text-zinc-500 mt-0.5">Feedback signals</p>
@@ -201,9 +207,21 @@ export default async function AdminHealthPage() {
               <p className="stat-value text-white">{memoryCount ?? 0}</p>
               <p className="text-xs text-zinc-500 mt-0.5">Active lessons</p>
             </div>
+            <div>
+              <p className={cn("stat-value", (proposedCount ?? 0) > 0 ? "text-amber-300" : "text-white")}>{proposedCount ?? 0}</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Proposed (review)</p>
+            </div>
+          </div>
+          <div className="mt-3 flex items-start gap-2 text-sm">
+            {brainAiConfigured ? <KeyRound className="w-4 h-4 text-green-400 shrink-0 mt-0.5" /> : <KeyRound className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />}
+            <span className={brainAiConfigured ? "text-zinc-400" : "text-red-300"}>
+              {brainAiConfigured
+                ? "OPENAI_API_KEY configured — distillation, embeddings and onboarding can run."
+                : "OPENAI_API_KEY missing — the Brain can't learn, embed or draft. Set it in Vercel."}
+            </span>
           </div>
           <p className="text-xs text-zinc-500 mt-3">
-            Signals turn into lessons via the <code className="bg-zinc-800 px-1 py-0.5 rounded">brain-distill</code> cron (daily) or the “Distill now” button on Brain Analytics.
+            Signals turn into lessons via the <code className="bg-zinc-800 px-1 py-0.5 rounded">brain-distill</code> cron (daily) or the “Distill now” button on Brain Analytics. Proposed lessons await admin approval in the memory panel.
           </p>
         </section>
 
