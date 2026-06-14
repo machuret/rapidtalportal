@@ -43,8 +43,8 @@ export const CreateTab = memo(function CreateTab({
   const generatingRef = useRef(false);
 
   const handleGenerate = useCallback(async () => {
-    if (!selectedType || !title.trim() || !brief.trim()) {
-      toast.error("Please fill in all fields");
+    if (!selectedType || !title.trim()) {
+      toast.error("Add a topic and pick a content type.");
       return;
     }
 
@@ -59,7 +59,9 @@ export const CreateTab = memo(function CreateTab({
         userId,
         contentType: selectedType,
         title: title.trim(),
-        brief: brief.trim(),
+        // Brief is optional in the UI — fall back to the topic so the generator
+        // (which requires a brief) always has something to work from.
+        brief: brief.trim() || title.trim(),
         tone: tone.toLowerCase(),
         length,
       });
@@ -109,6 +111,23 @@ export const CreateTab = memo(function CreateTab({
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Left — form */}
       <div className="flex flex-col gap-5">
+        <p className="text-sm text-zinc-400">
+          Start from your own idea: add a topic, pick a content type and length,
+          and we&apos;ll write the draft — grounded in your Vault and brand.
+        </p>
+
+        {/* Topic / seed idea */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="content-title">Topic</Label>
+          <Input
+            id="content-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Announcing our new cloud migration service"
+            className="bg-zinc-900 border-zinc-700"
+          />
+        </div>
+
         {/* Content Type */}
         <div>
           <Label className="label-section mb-2 block">Content Type</Label>
@@ -135,31 +154,6 @@ export const CreateTab = memo(function CreateTab({
               );
             })}
           </div>
-        </div>
-
-        {/* Title */}
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="content-title">Title / Topic</Label>
-          <Input
-            id="content-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Announcing our new cloud migration service"
-            className="bg-zinc-900 border-zinc-700"
-          />
-        </div>
-
-        {/* Brief */}
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="content-brief">Brief</Label>
-          <Textarea
-            id="content-brief"
-            value={brief}
-            onChange={(e) => setBrief(e.target.value)}
-            rows={4}
-            placeholder="What should this content cover? Key points, audience, goal…"
-            className="bg-zinc-900 border-zinc-700 text-sm"
-          />
         </div>
 
         {/* Tone & Length */}
@@ -200,10 +194,25 @@ export const CreateTab = memo(function CreateTab({
           </div>
         </div>
 
+        {/* Details (optional) */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="content-brief">
+            Details <span className="text-zinc-500 font-normal">(optional)</span>
+          </Label>
+          <Textarea
+            id="content-brief"
+            value={brief}
+            onChange={(e) => setBrief(e.target.value)}
+            rows={4}
+            placeholder="Add any key points, audience or goal — or leave blank and we'll work from the topic."
+            className="bg-zinc-900 border-zinc-700 text-sm"
+          />
+        </div>
+
         {/* Generate Button */}
         <Button
           onClick={handleGenerate}
-          disabled={isGenerating || !selectedType || !title.trim() || !brief.trim()}
+          disabled={isGenerating || !selectedType || !title.trim()}
           className="w-full"
         >
           {isGenerating ? (
@@ -226,7 +235,7 @@ export const CreateTab = memo(function CreateTab({
           <div className="flex-1 flex flex-col items-center justify-center text-center px-8 py-12">
             <Sparkles className="w-10 h-10 text-zinc-700 mb-3" />
             <p className="text-zinc-500 font-medium">Generated content will appear here</p>
-            <p className="text-zinc-600 text-sm mt-1">Fill in the brief and click Generate</p>
+            <p className="text-zinc-600 text-sm mt-1">Add a topic, pick a content type, and click Generate</p>
           </div>
         )}
 

@@ -10,8 +10,8 @@ import { ContentErrorBoundary } from "./ErrorBoundary";
 type Tab = "topics" | "create" | "history";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "topics", label: "💡 Topics" },
-  { id: "create", label: "✍️ Create" },
+  { id: "topics", label: "💡 Generate ideas" },
+  { id: "create", label: "✍️ Write from a topic" },
   { id: "history", label: "🕐 History" },
 ];
 
