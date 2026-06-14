@@ -3,12 +3,15 @@
 import { useState } from "react";
 import type { DbCompanyDna } from "@/types/database";
 import { useDna } from "@/hooks/useDna";
+import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
+import { profileGaps } from "@/lib/brain/gaps";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Copy, Check, Globe, Loader2 } from "lucide-react";
+import { Copy, Check, Globe, Loader2, Brain, Sparkles } from "lucide-react";
 
 interface DnaFormProps {
   initialData: DbCompanyDna | null;
@@ -44,9 +47,45 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
   const [updatedAt, setUpdatedAt] = useState(initialData?.updated_at ?? null);
   const [copied, setCopied] = useState(false);
   const [scrapingUrl, setScrapingUrl] = useState("");
+  const [isDrafting, setIsDrafting] = useState(false);
+
+  const gaps = profileGaps(form as Record<string, unknown>);
 
   function set(key: keyof DbCompanyDna, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // Brain 2.0 (F): draft the empty profile fields from the client's Vault docs.
+  // Fills only blanks — the admin reviews and Saves as usual.
+  async function handleDraftFromVault() {
+    setIsDrafting(true);
+    try {
+      const data = await api.post<{
+        drafts: Record<string, string>;
+        noVault?: boolean;
+        complete?: boolean;
+      }>(ROUTES.brain.onboard(), { client_id: clientId }, { showErrorToast: false });
+
+      if (data.complete) { toast.message("Your profile already covers the key fields."); return; }
+      if (data.noVault) { toast.message("Add some documents to the Vault first — then the Brain can draft your profile."); return; }
+
+      const keys = Object.keys(data.drafts ?? {});
+      if (keys.length === 0) { toast.message("Couldn't draft new fields from your documents yet."); return; }
+
+      setForm((prev) => {
+        const next = { ...prev } as Record<string, unknown>;
+        for (const k of keys) {
+          const cur = (prev as Record<string, unknown>)[k];
+          if (typeof cur !== "string" || !cur.trim()) next[k] = data.drafts[k];
+        }
+        return next as Partial<DbCompanyDna>;
+      });
+      toast.success(`Drafted ${keys.length} field${keys.length === 1 ? "" : "s"} from your Vault — review and Save.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to draft from Vault");
+    } finally {
+      setIsDrafting(false);
+    }
   }
 
   async function handleUrlScrape(e?: React.FormEvent) {
@@ -137,6 +176,48 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
 
   return (
     <form onSubmit={handleSave} className="flex flex-col gap-5">
+      {/* Brain 2.0 (F): proactive gap questions — what's missing, highest-impact first */}
+      {gaps.gaps.length > 0 && (
+        <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Brain className="w-4 h-4 text-orange-400" />
+            <h3 className="text-sm font-semibold text-white">Make your Brain smarter — {gaps.completionPct}% complete</h3>
+          </div>
+          <p className="text-xs text-zinc-400 mb-2">A few quick answers fill the biggest gaps:</p>
+          <ul className="flex flex-col gap-1">
+            {gaps.gaps.slice(0, 4).map((g) => (
+              <li key={g.key} className="text-xs text-zinc-300 flex items-start gap-1.5">
+                <span className="text-orange-400">•</span>{g.question}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Brain 2.0 (F): draft empty fields from the Vault */}
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles className="w-4 h-4 text-orange-400" />
+          <h3 className="text-sm font-semibold text-white">Draft from your Vault</h3>
+        </div>
+        <p className="text-xs text-zinc-400 mb-3">
+          Let the Brain draft your empty profile fields from the documents you&apos;ve uploaded — grounded in your own knowledge. You review and Save.
+        </p>
+        <Button
+          type="button"
+          onClick={() => void handleDraftFromVault()}
+          disabled={isDrafting}
+          variant="outline"
+          className="border-orange-500/50 text-orange-400 hover:bg-orange-400/10"
+        >
+          {isDrafting ? (
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Drafting…</>
+          ) : (
+            <><Sparkles className="w-4 h-4 mr-2" />Draft empty fields</>
+          )}
+        </Button>
+      </div>
+
       {/* URL Scraping Section */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <div className="flex items-center gap-2 mb-3">
