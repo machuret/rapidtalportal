@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { BrainFeedback } from "@/components/brain/BrainFeedback";
 import { toast } from "sonner";
 import { useGenerateContent } from "@/hooks/useContent";
 import { CONTENT_TYPES, TONES, LENGTHS, TYPE_ICON_COLORS, TYPE_ICONS } from "@/types/content";
@@ -238,7 +239,10 @@ export const CreateTab = memo(function CreateTab({
           <>
             <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800">
               <p className="text-sm font-semibold text-zinc-300">Generated Draft</p>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                <BrainFeedback clientId={clientId} surface="content_draft"
+                  artifactText={output ?? ""}
+                  context={{ type: selectedType, title }} />
                 <button
                   onClick={handleCopy}
                   className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded hover:bg-zinc-800"

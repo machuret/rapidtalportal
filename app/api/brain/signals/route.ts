@@ -11,7 +11,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  */
 const createSchema = z.object({
   client_id:     z.string().uuid(),
-  surface:       z.enum(["content_topic", "vault_answer", "compose", "tool"]),
+  surface:       z.enum(["content_topic", "vault_answer", "compose", "tool", "content_draft", "kb"]),
   artifact_id:   z.string().uuid().optional().nullable(),
   artifact_text: z.string().min(1).max(8000),
   rating:        z.union([z.literal(1), z.literal(-1)]),

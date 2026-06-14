@@ -63,6 +63,23 @@ export const POST = withAuth(async (req, { user }) => {
     console.error("[vault/feedback POST]", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Fold Ask-the-Vault feedback into the unified Brain learning loop, so the
+  // Brain learns from answers too — not just content topics. Best-effort.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (admin as any).from("brain_signals").insert({
+      client_id: parsed.data.clientId,
+      user_id: user.id,
+      surface: "vault_answer",
+      artifact_text: parsed.data.answer.slice(0, 8000),
+      rating: parsed.data.rating,
+      context: { question: parsed.data.question, sources: parsed.data.sources ?? [] },
+    });
+  } catch (e) {
+    console.error("[vault/feedback POST] brain_signals dual-write failed", e);
+  }
+
   return NextResponse.json({ success: true });
 });
 

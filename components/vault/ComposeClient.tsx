@@ -7,6 +7,7 @@ import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { BrainFeedback } from "@/components/brain/BrainFeedback";
 import { cn } from "@/lib/utils";
 import {
   Wand2, Loader2, Copy, Check, RefreshCw, Reply, Mail, MessageSquare, Megaphone,
@@ -503,6 +504,11 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
                       <Bookmark className="w-3.5 h-3.5" /> Save
                     </button>
                   </>
+                )}
+                {current && !current.loading && (
+                  <BrainFeedback clientId={clientId} surface="compose"
+                    artifactText={email ? email.body : current?.text ?? ""}
+                    context={{ channel }} />
                 )}
                 <button onClick={() => copyText("all", email ? `${email.subject ? `Subject: ${email.subject}\n\n` : ""}${email.body}` : current?.text ?? "")}
                   className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
