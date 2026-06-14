@@ -51,9 +51,11 @@ export default async function AdminHealthPage() {
     a.from("brain_memory").select("id", { count: "exact", head: true }).eq("status", "proposed"),
   ]);
 
-  // Next-side Brain AI (distillation, embeddings, onboarding) needs OPENAI_API_KEY.
-  // Without it the Brain silently stops learning — surface that loudly.
-  const brainAiConfigured = !!process.env.OPENAI_API_KEY;
+  // Next-side Brain AI. Chat (distillation, onboarding) runs on OpenRouter OR
+  // OpenAI; embeddings (memory dedup/reinforce + topic fit) are OpenAI-only and
+  // optional. Surface both so a silent no-op is visible.
+  const chatConfigured = !!(process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY);
+  const embeddingsConfigured = !!process.env.OPENAI_API_KEY;
 
   // ── Cron heartbeats ───────────────────────────────────────────────────────
   const EXPECTED_CRONS: { name: string; staleAfterH: number }[] = [
@@ -91,7 +93,7 @@ export default async function AdminHealthPage() {
   if (pending.length) issues.push(`${pending.length} migration(s) not applied`);
   if (!schemaUnavailable && schemaFails.length) issues.push(`${schemaFails.length} schema object(s) missing`);
   for (const c of staleCrons) issues.push(`cron “${c.name}” is stale`);
-  if (!brainAiConfigured) issues.push("OPENAI_API_KEY not set — Brain learning/embeddings disabled");
+  if (!chatConfigured) issues.push("No LLM key set — Brain learning/onboarding disabled (set OPENROUTER_API_KEY or OPENAI_API_KEY)");
   if (degradedClients.length) issues.push(`${degradedClients.length} client brain(s) degraded`);
   if (recentErrorCount && recentErrorCount > 0) issues.push(`${recentErrorCount} error(s) logged in the last 24h`);
 
@@ -213,11 +215,19 @@ export default async function AdminHealthPage() {
             </div>
           </div>
           <div className="mt-3 flex items-start gap-2 text-sm">
-            {brainAiConfigured ? <KeyRound className="w-4 h-4 text-green-400 shrink-0 mt-0.5" /> : <KeyRound className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />}
-            <span className={brainAiConfigured ? "text-zinc-400" : "text-red-300"}>
-              {brainAiConfigured
-                ? "OPENAI_API_KEY configured — distillation, embeddings and onboarding can run."
-                : "OPENAI_API_KEY missing — the Brain can't learn, embed or draft. Set it in Vercel."}
+            <KeyRound className={cn("w-4 h-4 shrink-0 mt-0.5", chatConfigured ? "text-green-400" : "text-red-400")} />
+            <span className={chatConfigured ? "text-zinc-400" : "text-red-300"}>
+              {chatConfigured
+                ? `LLM chat configured (${process.env.OPENROUTER_API_KEY ? "OpenRouter" : "OpenAI"}) — distillation and onboarding can run.`
+                : "No LLM key — the Brain can't learn or draft. Set OPENROUTER_API_KEY or OPENAI_API_KEY in Vercel."}
+            </span>
+          </div>
+          <div className="mt-2 flex items-start gap-2 text-sm">
+            <KeyRound className={cn("w-4 h-4 shrink-0 mt-0.5", embeddingsConfigured ? "text-green-400" : "text-amber-400")} />
+            <span className={embeddingsConfigured ? "text-zinc-400" : "text-amber-300"}>
+              {embeddingsConfigured
+                ? "Embeddings configured (OpenAI) — memory de-duplication and topic fit are active."
+                : "Embeddings off (OpenAI only) — optional. Memory dedup/reinforce and embedding fit are skipped; everything else works."}
             </span>
           </div>
           <p className="text-xs text-zinc-500 mt-3">

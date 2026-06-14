@@ -13,10 +13,9 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { profileGaps } from "@/lib/brain/gaps";
+import { chatProvider, chatModel } from "@/lib/brain/llm";
 
 const schema = z.object({ client_id: z.string().uuid() });
-
-const DRAFT_MODEL = process.env.BRAIN_DISTILL_MODEL ?? "gpt-4o-mini";
 
 export const POST = withAuth(async (req, { user }) => {
   let raw: unknown;
@@ -32,8 +31,8 @@ export const POST = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "Only admins can edit the company profile." }, { status: 403 });
   }
 
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) return NextResponse.json({ error: "AI not configured." }, { status: 500 });
+  const llm = chatProvider();
+  if (!llm) return NextResponse.json({ error: "AI not configured (set OPENROUTER_API_KEY or OPENAI_API_KEY)." }, { status: 500 });
 
   const admin = createAdminClient();
   const clientId = parsed.data.client_id;
@@ -72,11 +71,11 @@ export const POST = withAuth(async (req, { user }) => {
 
   const drafts: Record<string, string> = {};
   try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    const res = await fetch(llm.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${llm.key}` },
       body: JSON.stringify({
-        model: DRAFT_MODEL, temperature: 0.3, max_tokens: 1500,
+        model: chatModel("BRAIN_DISTILL_MODEL"), temperature: 0.3, max_tokens: 1500,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: "You draft an accurate company profile strictly from the company's own documents. Never invent facts; omit fields the documents don't support." },
@@ -92,7 +91,7 @@ export const POST = withAuth(async (req, { user }) => {
         if (typeof v === "string" && v.trim()) drafts[f.key] = v.trim();
       }
     } else {
-      console.error("[brain/onboard] OpenAI", res.status);
+      console.error("[brain/onboard]", llm.provider, res.status);
     }
   } catch (e) {
     console.error("[brain/onboard] fetch", e);

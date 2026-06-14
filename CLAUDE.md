@@ -135,11 +135,14 @@ It is **Next-side** (not the Deno edge functions) and lives in `lib/brain/*`.
   — **redeploy it manually** after changes. `ai_original` (the AI's delivered
   draft) is captured in the `/api/content/generate` proxy so approval can measure
   how much a human rewrote it.
-- **Env:** Next-side Brain AI uses **`OPENAI_API_KEY`** (`api.openai.com`) —
-  distillation, embeddings (`lib/brain/embed.ts`, `text-embedding-3-small`) and
-  onboarding draft all no-op gracefully without it. Models:
-  `BRAIN_DISTILL_MODEL`, `BRAIN_EMBED_MODEL`. The edge functions use
-  `OPENROUTER_API_KEY` instead. Both must be set in prod.
+- **Env:** Next-side Brain **chat** (distillation, onboarding draft) runs on
+  **`OPENROUTER_API_KEY` or `OPENAI_API_KEY`** — `lib/brain/llm.ts` `chatProvider()`
+  prefers OpenRouter and normalises the model id (`gpt-4o-mini` → `openai/gpt-4o-mini`).
+  **Embeddings** (`lib/brain/embed.ts`, `text-embedding-3-small`) are **OpenAI-only**
+  — OpenRouter has no embeddings endpoint — and **optional**: without `OPENAI_API_KEY`,
+  memory dedup/reinforce/contradiction and embedding fit are skipped, everything
+  else works. Models: `BRAIN_DISTILL_MODEL`, `BRAIN_EMBED_MODEL`. The edge
+  functions use `OPENROUTER_API_KEY`. `/admin/health` shows both rows.
 - **Tables to migrate:** 070–077 (`brain_signals`, `brain_memory`,
   `brain_events`, `brain_score_history`, `content_topics.why`,
   vault_feedback backfill, `brain_memory` v2, `content_pieces` outcomes).

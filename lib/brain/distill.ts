@@ -15,10 +15,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logBrainEvent } from "./events";
 import { embedTexts, cosine } from "./embed";
+import { chatProvider, chatModel } from "./llm";
 
 type Admin = SupabaseClient;
 
-const DISTILL_MODEL = process.env.BRAIN_DISTILL_MODEL ?? "gpt-4o-mini";
 const MIN_NEW_SIGNALS = Number(process.env.BRAIN_DISTILL_MIN ?? 3);
 const SIGNAL_BATCH = 60;
 
@@ -46,8 +46,8 @@ const POLARITY = new Set(["preference", "anti_pattern"]);
 
 export async function distillClientMemory(admin: Admin, clientId: string): Promise<DistillResult> {
   const empty: DistillResult = { skipped: true, processedSignals: 0, newMemories: 0, reinforced: 0, proposed: 0 };
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) return { ...empty, reason: "OpenAI not configured." };
+  const llm = chatProvider();
+  if (!llm) return { ...empty, reason: "No LLM provider configured (set OPENROUTER_API_KEY or OPENAI_API_KEY)." };
 
   const { data: sigData } = await admin
     .from("brain_signals")
@@ -90,11 +90,11 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
 
   let res: Response;
   try {
-    res = await fetch("https://api.openai.com/v1/chat/completions", {
+    res = await fetch(llm.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${llm.key}` },
       body: JSON.stringify({
-        model: DISTILL_MODEL, temperature: 0.3, max_tokens: 1200,
+        model: chatModel("BRAIN_DISTILL_MODEL"), temperature: 0.3, max_tokens: 1200,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: "You distil noisy feedback into a few durable, specific lessons. Never invent preferences unsupported by the data." },
@@ -104,11 +104,11 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
     });
   } catch (e) {
     console.error("[brain/distill] fetch", e);
-    return { ...empty, reason: "Failed to reach OpenAI." };
+    return { ...empty, reason: `Failed to reach ${llm.provider}.` };
   }
   if (!res.ok) {
-    console.error("[brain/distill] OpenAI", res.status);
-    return { ...empty, reason: "OpenAI request failed." };
+    console.error("[brain/distill]", llm.provider, res.status);
+    return { ...empty, reason: `${llm.provider} request failed.` };
   }
 
   let parsed: { memories?: unknown[] };
