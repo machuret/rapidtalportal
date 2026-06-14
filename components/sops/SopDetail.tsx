@@ -13,6 +13,7 @@ import { Pencil, Trash2, Copy, Check, Save, X, ListChecks, Tag, Clock, Copy as C
 import { useSops } from "@/hooks/useSops";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { formatDate, formatNumber } from "@/lib/utils";
 
 // (interface below) clientId may be null for global library SOPs.
 interface Props {
@@ -154,7 +155,7 @@ export function SopDetail({ sop: initial, canEdit, clientId, categories, forkToC
               className="bg-zinc-800 border-zinc-700 text-zinc-100 font-mono text-sm leading-relaxed resize-y"
             />
             <p className="text-xs text-zinc-600 text-right">
-              {wordCount.toLocaleString()} words &middot; {charCount.toLocaleString()} chars
+              {formatNumber(wordCount)} words &middot; {formatNumber(charCount)} chars
             </p>
           </div>
           <div className="flex justify-end gap-2">
@@ -182,7 +183,7 @@ export function SopDetail({ sop: initial, canEdit, clientId, categories, forkToC
               <Tag className="w-3 h-3" /> {sop.category}{sop.subcategory ? ` › ${sop.subcategory}` : ""}
             </span>
             <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500">
-              <Clock className="w-3 h-3" /> Updated {new Date(sop.updated_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+              <Clock className="w-3 h-3" /> Updated {formatDate(sop.updated_at)}
             </span>
           </div>
         </div>

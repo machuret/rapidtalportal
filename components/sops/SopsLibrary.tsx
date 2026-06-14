@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { Search, Plus, ListChecks, ChevronRight, Tag, ArrowUpDown, GripVertical, Check, CheckSquare, Trash2, Users } from "lucide-react";
 
 interface SopUsage { runs: number; completions: number; users: number }
@@ -140,7 +140,7 @@ export function SopsLibrary({ sops, canEdit, newHref = "/sops/new", usage, bulk 
     const meta = (
       <p className="text-sm text-zinc-500 mt-0.5">
         {stepCount > 0 ? `${stepCount} step${stepCount !== 1 ? "s" : ""}` : "View procedure"}
-        {" · "}Updated {new Date(sop.updated_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+        {" · "}Updated {formatDate(sop.updated_at, { day: "numeric", month: "short" })}
         {usage?.[sop.id] && (
           <span className="text-zinc-400">
             {" · "}{usage[sop.id].runs} run{usage[sop.id].runs !== 1 ? "s" : ""}
@@ -220,7 +220,7 @@ export function SopsLibrary({ sops, canEdit, newHref = "/sops/new", usage, bulk 
           {lastUpdated && (
             <>
               <span className="text-zinc-700">&middot;</span>
-              <span>Last updated <span className="text-zinc-200">{lastUpdated.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</span></span>
+              <span>Last updated <span className="text-zinc-200">{formatDate(lastUpdated, { day: "numeric", month: "short", year: "numeric" })}</span></span>
             </>
           )}
         </div>
