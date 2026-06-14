@@ -7,6 +7,7 @@ import {
 import { KnowledgeGaps } from "@/components/vault/KnowledgeGaps";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { AnswersToReview, type ReviewItem } from "@/components/vault/AnswersToReview";
+import { BrainMemoryPanel, type BrainMemoryItem } from "@/components/brain/BrainMemoryPanel";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Brain Analytics — RapidTal" };
@@ -24,12 +25,18 @@ export default async function BrainAnalyticsPage() {
   const clientId = user.client_id;
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  const [queriesRes, feedbackRes] = await Promise.all([
+  const [queriesRes, feedbackRes, memoryRes] = await Promise.all([
     admin.from("vault_queries").select("*")
       .eq("client_id", clientId).gte("created_at", since).order("created_at", { ascending: false }).limit(2000),
     admin.from("vault_feedback").select("*")
       .eq("client_id", clientId).gte("created_at", since).order("created_at", { ascending: false }).limit(1000),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (admin as any).from("brain_memory")
+      .select("id, kind, content, confidence, source_count, active, pinned, created_at")
+      .eq("client_id", clientId).order("pinned", { ascending: false }).order("created_at", { ascending: false }).limit(200),
   ]);
+
+  const memory = (memoryRes.error ? [] : (memoryRes.data ?? [])) as BrainMemoryItem[];
 
   const queries = (queriesRes.error ? [] : (queriesRes.data ?? [])) as { question: string; answered: boolean; dismissed?: boolean }[];
   const feedback = (feedbackRes.error ? [] : (feedbackRes.data ?? [])) as {
@@ -148,6 +155,9 @@ export default async function BrainAnalyticsPage() {
           )}
         </>
       )}
+
+      {/* Brain memory — learned lessons, independent of Ask-the-Vault usage */}
+      <BrainMemoryPanel clientId={clientId} initial={memory} />
     </div>
   );
 }

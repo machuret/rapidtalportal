@@ -76,6 +76,9 @@ export const ROUTES = {
   },
   brain: {
     signals: () => "/api/brain/signals",
+    memory: () => "/api/brain/memory",
+    memoryForClient: (clientId: string) => `/api/brain/memory?client_id=${clientId}`,
+    memoryDistill: () => "/api/brain/memory/distill",
   },
   tasks: () => "/api/tasks",
   taskEvents: () => "/api/tasks/events",

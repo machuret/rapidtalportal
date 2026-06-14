@@ -39,6 +39,13 @@ const PROFILE_SELECT = PROFILE_FIELDS.map((f) => f.key).join(", ");
 interface VaultRow { title: string; raw_content: string | null; category: string | null; ai_summary: string | null }
 interface TopicRow { title: string; description: string | null; flag_reason: string | null }
 interface SignalRow { artifact_text: string; reason: string | null }
+interface MemoryRow { kind: string; content: string }
+
+const MEMORY_LABELS: Record<string, string> = {
+  preference: "Prefer",
+  anti_pattern: "Avoid",
+  rule: "Rule",
+};
 
 export interface BrainContext {
   /** The assembled prompt block to inject into a system/user message. */
@@ -48,6 +55,8 @@ export interface BrainContext {
   /** Counts of the feedback the Brain is conditioning on (for transparency/UI). */
   positives: number;
   negatives: number;
+  /** Number of distilled memory lessons applied. */
+  memories: number;
 }
 
 const VAULT_CHAR_LIMIT = 12000; // ~3k tokens
@@ -58,7 +67,7 @@ const MAX_EXAMPLES = 8;
  * that has already authorised the caller for this client_id.
  */
 export async function buildBrainContext(admin: Admin, clientId: string): Promise<BrainContext> {
-  const [dnaRes, vaultRes, posTopicsRes, negTopicsRes, signalsRes] = await Promise.all([
+  const [dnaRes, vaultRes, posTopicsRes, negTopicsRes, signalsRes, memoryRes] = await Promise.all([
     admin.from("company_dna").select(PROFILE_SELECT).eq("client_id", clientId).maybeSingle(),
     admin
       .from("vault_items")
@@ -91,6 +100,15 @@ export async function buildBrainContext(admin: Admin, clientId: string): Promise
       .eq("rating", -1)
       .order("created_at", { ascending: false })
       .limit(MAX_EXAMPLES),
+    // Distilled, curated lessons — the Brain's long-term memory (pinned first).
+    admin
+      .from("brain_memory")
+      .select("kind, content")
+      .eq("client_id", clientId)
+      .eq("active", true)
+      .order("pinned", { ascending: false })
+      .order("confidence", { ascending: false })
+      .limit(40),
   ]);
 
   const dna = (dnaRes.data ?? null) as Record<string, unknown> | null;
@@ -98,6 +116,7 @@ export async function buildBrainContext(admin: Admin, clientId: string): Promise
   const posTopics = (posTopicsRes.data ?? []) as TopicRow[];
   const negTopics = (negTopicsRes.data ?? []) as TopicRow[];
   const negSignals = (signalsRes.data ?? []) as SignalRow[];
+  const memory = (memoryRes.data ?? []) as MemoryRow[];
 
   let text = "";
   let hasProfile = false;
@@ -151,11 +170,21 @@ export async function buildBrainContext(admin: Admin, clientId: string): Promise
     text += "\n";
   }
 
+  // Distilled memory — the durable lessons learned from feedback over time.
+  if (memory.length > 0) {
+    text += "=== WHAT THE BRAIN HAS LEARNED (apply these lessons) ===\n";
+    for (const m of memory) {
+      text += `• ${MEMORY_LABELS[m.kind] ?? "Note"}: ${m.content}\n`;
+    }
+    text += "\n";
+  }
+
   return {
     text,
     hasProfile,
     hasVault: vault.length > 0,
     positives: posTopics.length,
     negatives: negatives.length,
+    memories: memory.length,
   };
 }
