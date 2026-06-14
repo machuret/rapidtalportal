@@ -35,15 +35,19 @@ export function BrainFeedback({
         ? window.prompt("What was off about this? (optional — helps the Brain improve)")
         : null;
     if (rating === -1 && reason === null && typeof window !== "undefined") return; // cancelled
-    await sendSignal({
-      client_id: clientId,
-      surface,
-      artifact_id: artifactId,
-      artifact_text: artifactText.slice(0, 8000),
-      rating,
-      reason,
-      context,
-    });
+    try {
+      await sendSignal({
+        client_id: clientId,
+        surface,
+        artifact_id: artifactId,
+        artifact_text: artifactText.slice(0, 8000),
+        rating,
+        reason,
+        context,
+      });
+    } catch {
+      return; // api-client already toasted; leave the control active to retry
+    }
     setDone(rating === 1 ? "up" : "down");
     toast.success(rating === 1 ? "Glad it helped — the Brain will favour this." : "Noted — the Brain will learn from this.");
   }
