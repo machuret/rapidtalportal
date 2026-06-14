@@ -39,6 +39,7 @@ import {
   FileBarChart,
   TrendingUp,
   Wallet,
+  BookOpen,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -70,6 +71,7 @@ const vaLinks: NavItem[] = [
   { href: "/sops",           label: "SOPs",           icon: ListChecks },
   { href: "/company-dna",    label: "Company DNA",    icon: Dna },
   { href: "/vault",          label: "Vault",          icon: Archive },
+  { href: "/guide",          label: "Guide",          icon: BookOpen },
   { href: "/profile",        label: "My Profile",     icon: UserCircle },
 ];
 
@@ -94,6 +96,7 @@ const clientAdminLinks: NavItem[] = [
   { href: "/vault",          label: "Vault",           icon: Archive },
   { href: "/access",         label: "Access",          icon: KeyRound },
   { section: "Account" },
+  { href: "/guide",          label: "Guide",           icon: BookOpen },
   { href: "/profile",        label: "My Profile",      icon: UserCircle },
 ];
 
