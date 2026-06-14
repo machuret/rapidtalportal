@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { Plus, Users, Archive, ArchiveRestore } from "lucide-react";
 
 interface Client {
@@ -152,7 +152,7 @@ export function ClientsTable({ clients: initial, userCounts }: ClientsTableProps
                       {userCounts[c.id] ?? 0}
                     </span>
                   </TableCell>
-                  <TableCell className="text-zinc-500 text-sm">{new Date(c.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell className="text-zinc-500 text-sm">{formatDate(c.created_at)}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3 justify-end">
                       <a href={`/admin/clients/${c.id}`} className="text-xs text-zinc-400 hover:text-white underline">Manage</a>

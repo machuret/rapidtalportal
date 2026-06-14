@@ -3,6 +3,7 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DocumentShell } from "@/components/my-job/DocumentShell";
 import { periodEarnings, fmtMoney, type PayContract, type WorkedDay } from "@/lib/my-job/pay";
+import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Invoice — RapidTal" };
@@ -62,7 +63,7 @@ export default async function InvoicePage({ searchParams }: { searchParams: { mo
           <p className="font-semibold">{client?.name ?? "Client"}</p>
         </div>
         <div className="text-right">
-          <p><span className="text-zinc-500">Invoice date:</span> {new Date().toLocaleDateString("en", { day: "numeric", month: "long", year: "numeric" })}</p>
+          <p><span className="text-zinc-500">Invoice date:</span> {formatDate(new Date(), { day: "numeric", month: "long", year: "numeric" })}</p>
           <p><span className="text-zinc-500">Period:</span> {monthLabel}</p>
         </div>
       </div>

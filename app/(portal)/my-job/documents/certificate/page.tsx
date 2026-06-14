@@ -3,6 +3,7 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DocumentShell } from "@/components/my-job/DocumentShell";
 import { fmtMoney } from "@/lib/my-job/pay";
+import { formatDate } from "@/lib/utils";
 import { differenceInCalendarMonths } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ export default async function CertificatePage({ searchParams }: { searchParams: 
   const months = start ? differenceInCalendarMonths(new Date(), start) : null;
   const tenure = months == null ? null : months >= 12 ? `${Math.floor(months / 12)} year${Math.floor(months / 12) !== 1 ? "s" : ""}${months % 12 ? ` and ${months % 12} month${months % 12 !== 1 ? "s" : ""}` : ""}` : `${months} month${months !== 1 ? "s" : ""}`;
   const startLabel = start ? start.toLocaleDateString("en", { day: "numeric", month: "long", year: "numeric" }) : null;
-  const today = new Date().toLocaleDateString("en", { day: "numeric", month: "long", year: "numeric" });
+  const today = formatDate(new Date(), { day: "numeric", month: "long", year: "numeric" });
 
   return (
     <DocumentShell>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Loader2, Plus, Handshake } from "lucide-react";
 
@@ -125,7 +125,7 @@ export function AdminPlacements({
                 <td className="px-4 py-2.5 text-right tabular-nums text-zinc-300">{p.pageCount}</td>
                 <td className="px-4 py-2.5 text-zinc-400">
                   {p.lastActivityAt
-                    ? <>{new Date(p.lastActivityAt).toLocaleDateString()} <span className="text-zinc-600">· last by {p.lastActorRole}</span></>
+                    ? <>{formatDate(p.lastActivityAt)} <span className="text-zinc-600">· last by {p.lastActorRole}</span></>
                     : <span className="text-zinc-600">No activity</span>}
                 </td>
                 <td className="px-4 py-2.5">

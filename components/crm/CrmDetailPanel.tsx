@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import type { CrmContact } from "@/app/(portal)/crm/page";
 import { useContactMutations } from "@/hooks/useContacts";
 import { CRM_STATUS_META, CRM_STATUSES } from "@/lib/crm-config";
@@ -281,7 +281,7 @@ export function CrmDetailPanel({
             <div className="flex flex-col gap-1 text-xs text-zinc-600">
               <span className="flex items-center gap-2">
                 <CalendarDays className="w-3.5 h-3.5" />
-                Added {new Date(contact.created_at).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
+                Added {formatDate(contact.created_at, { day: "numeric", month: "long", year: "numeric" })}
               </span>
               {contact.notes && (
                 <div className="mt-2 rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2">

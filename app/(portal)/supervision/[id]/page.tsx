@@ -4,6 +4,7 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ArrowLeft, NotebookPen, Clock, ListChecks, CheckCircle2 } from "lucide-react";
 import { sumWorkHours } from "@/lib/tasks/metrics";
+import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +94,7 @@ export default async function SupervisionDetailPage({ params }: { params: { id: 
                 <li key={l.log_date} className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="text-sm font-medium text-zinc-200">
-                      {new Date(l.log_date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+                      {formatDate(l.log_date, { weekday: "short", day: "numeric", month: "short" })}
                     </span>
                     <span className="text-xs text-zinc-500">
                       {l.mood ? MOOD_LABEL[l.mood] ?? l.mood : ""}
@@ -123,7 +124,7 @@ export default async function SupervisionDetailPage({ params }: { params: { id: 
                     <p className="text-sm text-zinc-200 truncate">{sopTitles[r.sop_id] ?? "Untitled SOP"}</p>
                     <p className="text-xs text-zinc-500">
                       {r.status === "completed" ? "Completed" : `${r.steps_done}/${r.steps_total} steps`}
-                      {" · "}{new Date(r.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                      {" · "}{formatDate(r.created_at, { day: "numeric", month: "short" })}
                     </p>
                   </div>
                 </li>

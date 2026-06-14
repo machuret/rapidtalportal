@@ -6,6 +6,7 @@ import { ExportCsv } from "@/components/supervision/ExportCsv";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { Eye, Clock, ChevronRight, CheckCircle2, Target, Inbox, AlertTriangle, NotebookPen } from "lucide-react";
 import { sumWorkHours, isOnTime } from "@/lib/tasks/metrics";
+import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Supervision — RapidTal" };
@@ -153,7 +154,7 @@ export default async function SupervisionPage() {
                     <p className="font-semibold text-zinc-100">{va.full_name ?? va.email}</p>
                     <p className="text-xs text-zinc-500 mt-0.5">
                       {isSuper && va.client_id && <>{clientNames[va.client_id] ?? "—"} · </>}
-                      {s.lastActive ? `Active ${new Date(s.lastActive).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : "No recent activity"}
+                      {s.lastActive ? `Active ${formatDate(s.lastActive, { day: "numeric", month: "short" })}` : "No recent activity"}
                     </p>
                   </div>
                   {/* Outcomes first; hours are secondary context. */}

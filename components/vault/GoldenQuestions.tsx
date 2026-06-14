@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
   Plus, Play, Check, X, Trash2, Loader2, Target, ChevronDown, ChevronRight,
@@ -96,7 +96,7 @@ export function GoldenQuestions({ clientId, onAsk }: { clientId: string; onAsk: 
                       {/* history dots: oldest → newest, last 8 */}
                       <div className="flex items-center gap-1 shrink-0 w-[72px]">
                         {(q.history ?? []).slice(-8).map((h, i) => (
-                          <span key={i} title={`${h.s} — ${new Date(h.at).toLocaleDateString()}`}
+                          <span key={i} title={`${h.s} — ${formatDate(h.at)}`}
                             className={cn("w-1.5 h-1.5 rounded-full", h.s === "pass" ? "bg-green-500" : "bg-red-500")} />
                         ))}
                         {(q.history ?? []).length === 0 && <span className="text-[10px] text-zinc-600">never run</span>}

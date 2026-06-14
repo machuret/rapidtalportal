@@ -4,11 +4,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Printer, Copy, Check, Loader2 } from "lucide-react";
 import { useState, useTransition } from "react";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { categoryColor } from "@/lib/tasks/category-colors";
 import type { ClientReportData } from "@/app/(portal)/reports/report-data";
 
-const fmtDate = (iso: string) => iso ? new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short" }) : "";
+const fmtDate = (iso: string) => iso ? formatDate(iso, { day: "numeric", month: "short" }) : "";
 
 function toPlainText(d: ClientReportData): string {
   const L: string[] = [];
@@ -83,7 +83,7 @@ export function ClientReport({ data }: { data: ClientReportData }) {
           </div>
           <div className="text-right">
             <p className="font-bold text-zinc-900">RapidTal</p>
-            <p className="text-xs text-zinc-400 mt-0.5">Generated {new Date(data.generatedAt).toLocaleDateString()}</p>
+            <p className="text-xs text-zinc-400 mt-0.5">Generated {formatDate(data.generatedAt)}</p>
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import type { DbVaultItem } from "@/types/database";
 import { CategoryBadge } from "@/components/shared/CategoryBadge";
 import {
@@ -77,7 +77,7 @@ export function VaultItemRow({
               </span>
             )}
             <span className="text-xs text-zinc-600">
-              {new Date(item.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+              {formatDate(item.created_at, { day: "numeric", month: "short", year: "numeric" })}
             </span>
             {item.source_url && (
               <a

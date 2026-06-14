@@ -30,6 +30,7 @@ import {
   type ClientUserRow,
 } from "@/hooks/useUsers";
 import { ROLES, ROLE_OPTIONS, type UserRole } from "@/lib/taxonomy/roles";
+import { formatDate } from "@/lib/utils";
 
 /* ── Types ────────────────────────────────────────────────────────── */
 type ClientUser = ClientUserRow;
@@ -288,7 +289,7 @@ export function ClientDetail({
             <div>
               <p className="text-xs text-zinc-500 mb-1">Created</p>
               <p className="text-sm text-zinc-400">
-                {new Date(client.created_at).toLocaleDateString()}
+                {formatDate(client.created_at)}
               </p>
             </div>
           </div>
@@ -506,7 +507,7 @@ export function ClientDetail({
                       </select>
                     </td>
                     <td className="px-4 py-3 text-zinc-500">
-                      {new Date(u.created_at).toLocaleDateString()}
+                      {formatDate(u.created_at)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">

@@ -7,7 +7,7 @@ import type { JSONContent } from "@tiptap/core";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { Editor } from "./Editor";
 import { RevisionDrawer } from "./RevisionDrawer";
 import type { NotebookPage } from "@/lib/notebook/types";
@@ -37,7 +37,7 @@ function relTime(iso: string): string {
   const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24); if (d < 30) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return formatDate(iso);
 }
 
 export function NotebookApp({ placements, activePlacementId, pages: initialPages, participants, currentUserId }: Props) {

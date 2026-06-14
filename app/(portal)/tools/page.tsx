@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TOOL_CATEGORIES } from "@/lib/tools/registry";
+import { formatDate } from "@/lib/utils";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { Wrench, ArrowRight, History } from "lucide-react";
 
@@ -79,7 +80,7 @@ export default async function ToolsPage() {
                   <span className="text-sm text-zinc-200 shrink-0">{meta?.title ?? r.tool}</span>
                   {r.input_summary && <span className="text-sm text-zinc-500 truncate flex-1">“{r.input_summary}”</span>}
                   <span className="text-xs text-zinc-600 shrink-0 ml-auto">
-                    {new Date(r.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                    {formatDate(r.created_at, { day: "numeric", month: "short" })}
                   </span>
                 </Link>
               );

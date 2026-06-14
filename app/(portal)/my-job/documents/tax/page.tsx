@@ -3,6 +3,7 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DocumentShell } from "@/components/my-job/DocumentShell";
 import { periodEarnings, fmtMoney, type PayContract, type WorkedDay } from "@/lib/my-job/pay";
+import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Yearly Income Summary — RapidTal" };
@@ -39,7 +40,7 @@ export default async function TaxSummaryPage({ searchParams }: { searchParams: {
   const total = months.reduce((s, m) => s + (m.amount ?? 0), 0);
   const totalDays = months.reduce((s, m) => s + m.days, 0);
   const totalHours = months.reduce((s, m) => s + m.hours, 0);
-  const today = new Date().toLocaleDateString("en", { day: "numeric", month: "long", year: "numeric" });
+  const today = formatDate(new Date(), { day: "numeric", month: "long", year: "numeric" });
 
   return (
     <DocumentShell>

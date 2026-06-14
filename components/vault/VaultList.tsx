@@ -10,6 +10,7 @@ import {
   Clock, Loader2, ExternalLink,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { formatDate } from "@/lib/utils";
 
 const SOURCE_META: Record<VaultSourceType, { label: string; icon: React.ElementType; iconCls: string; bgCls: string }> = {
   pdf:  { label: "PDF",  icon: FileUp,   iconCls: "text-red-400",    bgCls: "bg-red-400/10 border-red-400/20" },
@@ -158,7 +159,7 @@ export function VaultList({ items: initialItems, canDelete }: VaultListProps) {
                         {src.label}
                       </span>
                       <span className="text-xs text-zinc-600">
-                        {new Date(item.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+                        {formatDate(item.created_at, { day: "numeric", month: "short", year: "numeric" })}
                       </span>
                       {item.source_url && (
                         <a

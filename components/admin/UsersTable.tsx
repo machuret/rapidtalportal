@@ -20,6 +20,7 @@ import { ROUTES } from "@/lib/api/routes";
 import { Input } from "@/components/ui/input";
 import { useUsers, type AdminUserRow } from "@/hooks/useUsers";
 import { ROLES, ROLE_OPTIONS, type UserRole } from "@/lib/taxonomy/roles";
+import { formatDate } from "@/lib/utils";
 import { CreateUserDialog } from "./users/CreateUserDialog";
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -412,7 +413,7 @@ export function UsersTable({
                     </td>
 
                     {/* Last active (joined date on hover) */}
-                    <td className="px-4 py-3 text-zinc-500" title={`Joined ${new Date(u.created_at).toLocaleDateString()}`}>
+                    <td className="px-4 py-3 text-zinc-500" title={`Joined ${formatDate(u.created_at)}`}>
                       {relTime(lastActive[u.id])}
                     </td>
 

@@ -8,11 +8,11 @@
  */
 import { useState } from "react";
 import { Trophy, ChevronDown, CheckCircle2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import type { AchievedSummary } from "@/lib/tasks/achieved";
 
 const when = (iso: string) =>
-  new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  formatDate(iso, { day: "numeric", month: "short" });
 
 export function AchievedStrip({ summary, scope }: { summary: AchievedSummary; scope: "mine" | "team" }) {
   const [open, setOpen] = useState(false);

@@ -5,7 +5,7 @@ import { api } from "@/lib/api-client";
 import { useResource } from "@/lib/hooks/useResource";
 import { useCrudDialog } from "@/lib/hooks/useCrudDialog";
 import { ROUTES } from "@/lib/api/routes";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +36,7 @@ const relTime = (iso: string) => {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return formatDate(iso, { day: "numeric", month: "short" });
 };
 
 export function LeadsBoard({ initialLeads, owners, currentUserId }: { initialLeads: Lead[]; owners: LeadOwner[]; currentUserId: string }) {

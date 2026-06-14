@@ -6,6 +6,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "./Markdown";
+import { formatDate } from "@/lib/utils";
 import { Telescope, Loader2, RefreshCw, Sparkles, Info } from "lucide-react";
 
 interface Analysis {
@@ -149,7 +150,7 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
         <Telescope className="w-4 h-4 text-violet-400" />
         <h2 className="text-sm font-semibold text-violet-300 uppercase tracking-wide">Expanded View</h2>
         <span className="text-xs text-zinc-600">
-          {analysis.model} · {new Date(analysis.updated_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+          {analysis.model} · {formatDate(analysis.updated_at, { day: "numeric", month: "short", year: "numeric" })}
         </span>
         {canWrite && (
           <Button size="sm" variant="outline" onClick={generate} disabled={generating} className="ml-auto gap-1.5 border-zinc-700 h-8 text-xs">

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { categoryColor } from "@/lib/tasks/category-colors";
 import { CategoryManager, type TaskCategory } from "./CategoryManager";
 import { RecurrenceManager, type TaskRecurrence } from "./RecurrenceManager";
@@ -295,7 +295,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
                             <span className={cn("inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5",
                               overdue ? "text-red-400 bg-red-500/10" : "text-zinc-400 bg-zinc-800")}>
                               <CalendarDays className="w-3 h-3" />
-                              {new Date(t.due_date).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                              {formatDate(t.due_date, { day: "numeric", month: "short" })}
                             </span>
                           )}
                         </div>

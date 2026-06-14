@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import type { CrmContact } from "@/app/(portal)/crm/page";
 import { CRM_STATUS_META } from "@/lib/crm-config";
 import { Mail, Phone, ExternalLink, Tag, CalendarDays } from "lucide-react";
@@ -73,11 +73,11 @@ export function CrmContactCard({ contact: c, isSelected, onClick }: CrmContactCa
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800">
         <div className="flex items-center gap-1 text-xs text-zinc-600">
           <CalendarDays className="w-3.5 h-3.5" />
-          {new Date(c.created_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+          {formatDate(c.created_at, { day: "numeric", month: "short", year: "numeric" })}
         </div>
         {c.updated_at !== c.created_at && (
           <span className="text-xs text-zinc-600">
-            Updated {new Date(c.updated_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+            Updated {formatDate(c.updated_at, { day: "numeric", month: "short" })}
           </span>
         )}
       </div>
