@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { CLIENT_GUIDE } from "@/lib/client-guide";
+import { CLIENT_GUIDE, type GuideGroup } from "@/lib/client-guide";
 import { ChevronDown, ChevronRight, CheckCircle2, Lightbulb, Target } from "lucide-react";
 
-/** Collapsible, plain-language guide to every client feature. */
-export function ClientGuide() {
-  const [open, setOpen] = useState<string | null>(CLIENT_GUIDE[0]?.items[0]?.title ?? null);
+/** Collapsible, plain-language guide. Renders the client guide by default, or
+ *  any set of groups passed in (e.g. the VA guide). */
+export function ClientGuide({ groups = CLIENT_GUIDE }: { groups?: GuideGroup[] }) {
+  const [open, setOpen] = useState<string | null>(groups[0]?.items[0]?.title ?? null);
 
   return (
     <div className="flex flex-col gap-8">
-      {CLIENT_GUIDE.map((group) => (
+      {groups.map((group) => (
         <section key={group.heading}>
           <h2 className="text-lg font-bold text-white">{group.heading}</h2>
           {group.blurb && <p className="text-sm text-zinc-400 mt-0.5 mb-3">{group.blurb}</p>}
