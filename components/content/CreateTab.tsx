@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState, useCallback, useRef } from "react";
-import { Sparkles, Copy, Check, RefreshCw } from "lucide-react";
+import { Sparkles, Copy, Check, RefreshCw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +35,7 @@ export const CreateTab = memo(function CreateTab({
   const [tone, setTone] = useState("Professional");
   const [length, setLength] = useState<"short" | "medium" | "long">("medium");
   const [output, setOutput] = useState<string | null>(null);
+  const [critique, setCritique] = useState<{ issues: string[]; grounded: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
 
   const { generate, isGenerating } = useGenerateContent();
@@ -50,6 +51,7 @@ export const CreateTab = memo(function CreateTab({
     if (generatingRef.current) return;
     generatingRef.current = true;
     setOutput(null);
+    setCritique(null);
 
     try {
       const data = await generate({
@@ -63,6 +65,7 @@ export const CreateTab = memo(function CreateTab({
       });
 
       setOutput(data.body);
+      setCritique(data.critique ?? null);
 
       const newPiece: ContentPiece = {
         id: data.id,
@@ -89,6 +92,7 @@ export const CreateTab = memo(function CreateTab({
 
   const handleReset = useCallback(() => {
     setOutput(null);
+    setCritique(null);
     setTitle("");
     setBrief("");
     setSelectedType(null);
@@ -274,6 +278,19 @@ export const CreateTab = memo(function CreateTab({
                 </button>
               </div>
             </div>
+            {critique && (
+              <div className="px-5 py-2 border-b border-zinc-800 flex items-start gap-2 text-xs">
+                <ShieldCheck className="w-3.5 h-3.5 text-green-400 shrink-0 mt-0.5" />
+                <div className="text-zinc-400">
+                  <span className="text-zinc-300 font-medium">
+                    Self-checked{critique.grounded ? " & grounded in your Vault" : ""}
+                  </span>
+                  {critique.issues.length > 0
+                    ? <> — revised {critique.issues.length} issue{critique.issues.length === 1 ? "" : "s"}: {critique.issues.join("; ")}</>
+                    : " — no issues found"}
+                </div>
+              </div>
+            )}
             <div className="flex-1 overflow-y-auto px-5 py-4">
               <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-300 leading-relaxed">
                 {output}

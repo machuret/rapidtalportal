@@ -17,6 +17,7 @@ export interface ContentPieceFull extends ContentPiece {
 interface GenerationResponse {
   id: string;
   body: string;
+  critique?: { issues: string[]; grounded: boolean };
 }
 
 interface GenerateContentInput {

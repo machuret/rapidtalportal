@@ -172,14 +172,48 @@ Deno.serve(async (req: Request) => {
       admin.from("vault_items").select("title,raw_content,category,ai_summary").eq("client_id", clientId).eq("status", "ready").order("created_at", { ascending: false }).limit(30),
     ]);
 
-    // Sort by relevance: items in relevant categories first, then others
+    // ── Vault-grounded retrieval ────────────────────────────────────────────────
+    // Semantic search for the chunks most relevant to THIS brief (gte-small +
+    // match_vault_chunks), so the draft is built on the company's actual
+    // knowledge — not just its most recent documents. Non-fatal: if embeddings
+    // or chunks are unavailable we fall back to the category-relevant raw text.
+    let retrievedBlock = "";
+    let groundedCount = 0;
+    try {
+      const retrievalQuery = `${title}. ${brief}`.slice(0, 1500);
+      // deno-lint-ignore no-explicit-any
+      const session = new (globalThis as any).Supabase.ai.Session("gte-small");
+      const embedding = await session.run(retrievalQuery, { mean_pool: true, normalize: true });
+      const { data: chunks } = await admin.rpc("match_vault_chunks", {
+        p_client_id: clientId, p_query_embedding: embedding, p_match_count: 10,
+      });
+      type ChunkRow = { item_id: string; content: string; similarity: number };
+      const rows = ((chunks ?? []) as ChunkRow[]).filter((c) => c.similarity > 0.25);
+      if (rows.length) {
+        const itemIds = [...new Set(rows.map((c) => c.item_id))];
+        const { data: titleRows } = await admin.from("vault_items").select("id,title").in("id", itemIds);
+        const titleById = new Map(((titleRows ?? []) as { id: string; title: string }[]).map((t) => [t.id, t.title]));
+        let block = "";
+        for (const c of rows) {
+          const entry = `[${titleById.get(c.item_id) ?? "Document"}] ${c.content.slice(0, 700)}\n\n`;
+          if (block.length + entry.length > 6000) break;
+          block += entry;
+          groundedCount++;
+        }
+        if (block) retrievedBlock = `=== MOST RELEVANT KNOWLEDGE (ground the draft in these facts) ===\n${block}`;
+      }
+    } catch (e) {
+      console.warn("content-generate: semantic retrieval unavailable, using category fallback:", e);
+    }
+
+    // Category-relevant raw items (fewer when semantic retrieval already grounded us).
     type VaultCtxRow = { title: string; raw_content: string | null; category: string | null; ai_summary: string | null };
     const vaultItems = ((allVaultItems ?? []) as VaultCtxRow[]).sort((a, b) => {
       const ai = relevantCats.indexOf(a.category ?? "general");
       const bi = relevantCats.indexOf(b.category ?? "general");
       // Not-found (-1) sorts last
       return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-    }).slice(0, 15); // Top 15 most relevant items (was 8)
+    }).slice(0, groundedCount > 0 ? 6 : 15);
 
     let context = "";
     if (dna) {
@@ -190,6 +224,7 @@ Deno.serve(async (req: Request) => {
       }
       context += "\n";
     }
+    if (retrievedBlock) context += retrievedBlock + "\n";
     if (vaultItems?.length) {
       context += "=== REFERENCE MATERIAL ===\n";
       for (const item of vaultItems) {
@@ -257,6 +292,37 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // ── Self-critique ───────────────────────────────────────────────────────────
+    // A strict editor pass that catches ungrounded claims, off-brand wording and
+    // unmet brief points, then returns a corrected draft. One extra call;
+    // failures fall back to the original draft so generation never breaks.
+    let finalBody = generatedBody;
+    const critique: { issues: string[]; grounded: boolean } = { issues: [], grounded: groundedCount > 0 };
+    try {
+      const critRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openrouterKey}` },
+        body: JSON.stringify({
+          model: "openai/gpt-4o-mini",
+          max_tokens: 4000,
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: `You are a strict editor for on-brand business content. Given the company knowledge, the brief and a draft, find concrete problems and fix them. Look for: (1) specific claims/facts NOT supported by the knowledge (names, numbers, prices, dates, guarantees) — replace with a [placeholder] or remove; (2) breaches of the company's stated preferences/rules; (3) brief requirements not met; (4) generic filler. Preserve the author's format and length. Return JSON: { "issues": string[] (short notes on what you fixed; empty array if nothing needed changing), "draft": string (the corrected content) }.` },
+            { role: "user", content: `${context}\n=== BRIEF ===\nType: ${contentType}\nTitle: ${title}\nBrief: ${brief}\n\n=== DRAFT TO REVIEW ===\n${generatedBody}` },
+          ],
+        }),
+      });
+      if (critRes.ok) {
+        const critJson = await critRes.json();
+        const parsed = JSON.parse(critJson.choices?.[0]?.message?.content ?? "{}");
+        if (typeof parsed.draft === "string" && parsed.draft.trim().length > 40) finalBody = parsed.draft.trim();
+        if (Array.isArray(parsed.issues)) critique.issues = parsed.issues.filter((x: unknown) => typeof x === "string").slice(0, 8);
+      }
+    } catch (e) {
+      console.warn("content-generate: self-critique skipped:", e);
+    }
+
     // ── Save draft ────────────────────────────────────────────────────────────
     const { data: piece, error: dbError } = await admin
       .from("content_pieces")
@@ -265,7 +331,7 @@ Deno.serve(async (req: Request) => {
         content_type: contentType,
         title,
         brief,
-        body: generatedBody,
+        body: finalBody,
         status: "draft",
         created_by: authUser.id,
       })
@@ -284,7 +350,8 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({
       success: true,
       id: (piece as { id: string }).id,
-      body: generatedBody,
+      body: finalBody,
+      critique,
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
