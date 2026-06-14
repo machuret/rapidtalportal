@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CLIENT_GUIDE } from "@/lib/client-guide";
-import { ChevronDown, ChevronRight, CheckCircle2 } from "lucide-react";
+import { ChevronDown, ChevronRight, CheckCircle2, Lightbulb, Target } from "lucide-react";
 
 /** Collapsible, plain-language guide to every client feature. */
 export function ClientGuide() {
@@ -26,6 +26,13 @@ export function ClientGuide() {
                   {isOpen && (
                     <div className="px-4 pb-4 pt-3 flex flex-col gap-4 border-t border-zinc-800">
                       <p className="text-sm text-zinc-300 leading-relaxed">{item.what}</p>
+                      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
+                        <p className="flex items-center gap-1.5 label-section text-emerald-400 mb-1">
+                          <Target className="w-3.5 h-3.5 shrink-0" />
+                          Why it matters
+                        </p>
+                        <p className="text-sm text-zinc-300 leading-relaxed">{item.why}</p>
+                      </div>
                       <div>
                         <p className="label-section mb-1.5">What you can do</p>
                         <ul className="flex flex-col gap-1.5">
@@ -48,6 +55,12 @@ export function ClientGuide() {
                           ))}
                         </ol>
                       </div>
+                      {item.tip && (
+                        <div className="flex gap-2 rounded-lg bg-amber-500/5 border border-amber-500/20 px-3 py-2.5">
+                          <Lightbulb className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                          <p className="text-sm text-zinc-300 leading-relaxed"><span className="font-semibold text-amber-400">Tip:</span> {item.tip}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
