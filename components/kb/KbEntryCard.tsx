@@ -7,6 +7,7 @@ import {
   ChevronDown, ChevronUp, Copy, Check, Lightbulb,
   FileText, Loader2, Pencil, Trash2, X, Save,
 } from "lucide-react";
+import { BrainFeedback } from "@/components/brain/BrainFeedback";
 
 interface KbEntry {
   id: string;
@@ -32,6 +33,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 interface KbEntryCardProps {
   entry: KbEntry;
+  clientId: string;
   isExpanded: boolean;
   isEditing: boolean;
   isSaving: boolean;
@@ -50,7 +52,7 @@ interface KbEntryCardProps {
 }
 
 export function KbEntryCard({
-  entry, isExpanded, isEditing, isSaving, isDeleting, isCopied, canEdit,
+  entry, clientId, isExpanded, isEditing, isSaving, isDeleting, isCopied, canEdit,
   editForm, vaultTitleMap,
   onToggleExpand, onStartEdit, onCancelEdit, onSaveEdit, onDelete, onCopy, onEditFormChange,
 }: KbEntryCardProps) {
@@ -152,16 +154,19 @@ export function KbEntryCard({
                 </div>
               )}
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-800">
-                <button
-                  onClick={onCopy}
-                  className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-                >
-                  {isCopied ? (
-                    <><Check className="w-4 h-4 text-green-400" /><span className="text-green-400">Copied!</span></>
-                  ) : (
-                    <><Copy className="w-4 h-4" />Copy answer</>
-                  )}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={onCopy}
+                    className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    {isCopied ? (
+                      <><Check className="w-4 h-4 text-green-400" /><span className="text-green-400">Copied!</span></>
+                    ) : (
+                      <><Copy className="w-4 h-4" />Copy answer</>
+                    )}
+                  </button>
+                  <BrainFeedback clientId={clientId} surface="kb" artifactId={entry.id} artifactText={entry.answer} context={{ question: entry.question }} />
+                </div>
                 {canEdit && (
                   <div className="flex items-center gap-2">
                     <button

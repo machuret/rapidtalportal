@@ -313,6 +313,7 @@ export function KbList({ entries: initialEntries, lastRun, canRegenerate, client
             <KbEntryCard
               key={entry.id}
               entry={entry}
+              clientId={clientId}
               isExpanded={expanded === entry.id}
               isEditing={editingId === entry.id}
               isSaving={savingId === entry.id}

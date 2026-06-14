@@ -19,10 +19,7 @@ ALTER TABLE content_pieces
 
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage
-    WHERE constraint_name = 'content_pieces_outcome_check'
-  ) THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'content_pieces_outcome_check') THEN
     ALTER TABLE content_pieces
       ADD CONSTRAINT content_pieces_outcome_check CHECK (outcome IS NULL OR outcome IN ('win', 'miss'));
   END IF;

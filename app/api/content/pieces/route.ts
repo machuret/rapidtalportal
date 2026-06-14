@@ -162,9 +162,10 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   // Real-outcome learning: when a piece is approved, measure how much the human
   // changed the AI's draft. Kept verbatim → the Brain logs a win; rewritten →
-  // it learns the human preferred something else. Best-effort.
+  // it learns the human preferred something else. Awaited (it's a quick insert)
+  // so the signal isn't lost to a serverless freeze; internally best-effort.
   if (parsed.data.status === "approved") {
-    void recordApprovalOutcome(admin, parsed.data.client_id, user.id, data);
+    await recordApprovalOutcome(admin, parsed.data.client_id, user.id, data);
   }
 
   return NextResponse.json(data);

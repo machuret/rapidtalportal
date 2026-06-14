@@ -24,10 +24,7 @@ ALTER TABLE brain_memory
 
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage
-    WHERE constraint_name = 'brain_memory_status_check'
-  ) THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'brain_memory_status_check') THEN
     ALTER TABLE brain_memory
       ADD CONSTRAINT brain_memory_status_check CHECK (status IN ('proposed', 'active', 'muted'));
   END IF;

@@ -91,7 +91,11 @@ export const POST = withAuth(async (req, { user }) => {
 
   const admin = createAdminClient();
   // The Brain assembles the profile + Vault highlights + learned positives/negatives.
-  const brain = await buildBrainContext(admin, parsed.data.client_id);
+  // Topic generation spans every content channel, so inject content + all
+  // channel-scoped lessons (plus global). Ask/Compose-only lessons are excluded.
+  const brain = await buildBrainContext(admin, parsed.data.client_id, {
+    surfaces: ["content", "email", "social", "blog", "newsletter"],
+  });
 
   if (!brain.hasProfile && !brain.hasVault) {
     return NextResponse.json(

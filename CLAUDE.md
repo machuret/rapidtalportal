@@ -101,11 +101,55 @@ guarantee that admins have zero content access. Admins only ever see Notebook
 - Dedup is a DB invariant (unique partial index on
   `vault_items(client_id, content_hash)`, migration 057).
 
+## The Brain (the learning system)
+
+The "Company Brain" is the loop that makes every AI surface get smarter from use.
+It is **Next-side** (not the Deno edge functions) and lives in `lib/brain/*`.
+
+- **Signals → memory → context.** Every 👍/👎 (`<BrainFeedback>` → `/api/brain/
+  signals`, table `brain_signals`) is distilled (`lib/brain/distill.ts`, cron
+  `/api/cron/brain-distill` + manual "Distill now") into curated lessons
+  (`brain_memory`). `lib/brain/context.ts` `buildBrainContext` injects profile +
+  Vault + lessons into generation. **Don't re-derive any of this inline** — reuse
+  these modules.
+- **Memory is self-correcting (migration 076).** Lessons have `scope`
+  (surfaces), `status` (`proposed`|`active`|`muted`), an `embedding` (JSON) and
+  `last_reinforced_at`. Distillation reinforces repeats, routes conflicts/rules/
+  low-confidence to `proposed` (admin approval in `BrainMemoryPanel`), and decays
+  stale lessons. `active` is kept in sync with `status` so readers (context,
+  score, health) need no changes — **keep them in sync on any write**.
+- **One canonical field list per concern, don't fork them:** `lib/brain/gaps.ts`
+  (profile fields + onboarding questions), `score.ts` `PROFILE_FIELDS`
+  (completeness), `context.ts` `PROFILE_FIELDS` (prompt). If you add a profile
+  field, update the relevant ones deliberately.
+- **Brain Score & journal.** `lib/brain/score.ts` computes a 0–100 score (shown
+  on `/brain`); the cron snapshots it to `brain_score_history` (trend) and writes
+  human-readable `brain_events` (the journal). Score/journal are derived — never
+  the source of truth.
+- **Surfaces are unified.** `brain_signals.surface` ∈ {content_topic,
+  vault_answer, compose, tool, content_draft, kb, content_outcome}. Ask-the-Vault
+  dual-writes via `/api/vault/feedback`; outcomes via `/api/content/outcome` and
+  the approval edit-distance check in `/api/content/pieces` PATCH.
+- **Grounded + self-critical generation** lives in the `content-generate` **edge
+  function** (semantic retrieval via `match_vault_chunks` + a self-critique pass)
+  — **redeploy it manually** after changes. `ai_original` (the AI's delivered
+  draft) is captured in the `/api/content/generate` proxy so approval can measure
+  how much a human rewrote it.
+- **Env:** Next-side Brain AI uses **`OPENAI_API_KEY`** (`api.openai.com`) —
+  distillation, embeddings (`lib/brain/embed.ts`, `text-embedding-3-small`) and
+  onboarding draft all no-op gracefully without it. Models:
+  `BRAIN_DISTILL_MODEL`, `BRAIN_EMBED_MODEL`. The edge functions use
+  `OPENROUTER_API_KEY` instead. Both must be set in prod.
+- **Tables to migrate:** 070–077 (`brain_signals`, `brain_memory`,
+  `brain_events`, `brain_score_history`, `content_topics.why`,
+  vault_feedback backfill, `brain_memory` v2, `content_pieces` outcomes).
+
 ## Cron
 
 `vercel.json` defines crons (`/api/cron/tasks` daily, `/api/cron/vault-index`
-every 15 min). Cron routes authenticate with a `CRON_SECRET` Bearer token —
-set it in Vercel env. Heartbeats land in `cron_heartbeats` (migration 059).
+every 15 min, `/api/cron/brain-distill`). Cron routes authenticate with a
+`CRON_SECRET` Bearer token — set it in Vercel env. Heartbeats land in
+`cron_heartbeats` (migration 059).
 
 ## Validation gates (run before every commit)
 
