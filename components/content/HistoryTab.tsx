@@ -16,6 +16,7 @@ import {
   ThumbsDown,
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api-client";
@@ -58,7 +59,7 @@ const HistoryItem = memo(function HistoryItem({
       <div className="flex-1 min-w-0">
         <p className="font-medium text-sm truncate">{piece.title}</p>
         <p className="text-xs text-zinc-500 mt-0.5">
-          {piece.content_type} · {new Date(piece.created_at).toLocaleDateString()}
+          {piece.content_type} · {formatDate(piece.created_at)}
         </p>
       </div>
 
@@ -151,7 +152,7 @@ function PieceDetail({
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-semibold text-white truncate">{piece.title}</h2>
           <p className="text-xs text-zinc-500 mt-0.5">
-            {piece.content_type} · {new Date(piece.created_at).toLocaleDateString()}
+            {piece.content_type} · {formatDate(piece.created_at)}
           </p>
         </div>
         <span className={`text-xs px-2 py-0.5 rounded-full border font-medium shrink-0 ${statusStyle}`}>

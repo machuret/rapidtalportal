@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { KbEntryCard } from "./KbEntryCard";
 import { useKb } from "@/hooks/useKb";
+import { formatDate } from "@/lib/utils";
 
 interface KbEntry {
   id: string;
@@ -279,7 +280,7 @@ export function KbList({ entries: initialEntries, lastRun, canRegenerate, client
                 <span>· {Math.round(lastRun.tokens_used / 1000)}k tokens</span>
               )}
               {lastRun.completed_at && (
-                <span>· {new Date(lastRun.completed_at).toLocaleDateString()}</span>
+                <span>· {formatDate(lastRun.completed_at)}</span>
               )}
             </div>
             {lastRun.error_message && (

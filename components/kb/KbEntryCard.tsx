@@ -8,6 +8,7 @@ import {
   FileText, Loader2, Pencil, Trash2, X, Save,
 } from "lucide-react";
 import { BrainFeedback } from "@/components/brain/BrainFeedback";
+import { formatDate } from "@/lib/utils";
 
 interface KbEntry {
   id: string;
@@ -70,7 +71,7 @@ export function KbEntryCard({
                 </span>
               )}
               <span className="text-xs text-zinc-500">
-                {new Date(entry.generated_at).toLocaleDateString()}
+                {formatDate(entry.generated_at)}
               </span>
             </div>
             <p className="font-semibold text-white leading-snug mb-1">{entry.question}</p>

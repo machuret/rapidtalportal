@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { ContentTopic } from "@/types/content";
 import { TYPE_ICON_COLORS, STATUS_STYLES, TYPE_ICONS } from "@/types/content";
+import { formatDate } from "@/lib/utils";
 
 interface TopicListProps {
   topics: ContentTopic[];
@@ -77,7 +78,7 @@ const TopicCard = memo(function TopicCard({
           <p className="text-xs text-zinc-500 line-clamp-2">{topic.description}</p>
         )}
         <p className="text-xs text-zinc-600 mt-1">
-          {topic.content_type} · {new Date(topic.created_at).toLocaleDateString()}
+          {topic.content_type} · {formatDate(topic.created_at)}
         </p>
       </div>
 
