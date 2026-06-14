@@ -72,4 +72,5 @@ export const MIGRATIONS = [
   "064_sop_visibility.sql",
   "065_sop_suggestions.sql",
   "066_sop_managed_categories.sql",
+  "067_sop_subcategory_parent.sql",
 ] as const;

@@ -40,14 +40,15 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
   const admin = createAdminClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await scoped((admin as any).from("sop_categories").select("kind, name"), clientId);
-  return NextResponse.json({ managed: (data ?? []) as { kind: string; name: string }[] });
+  const { data } = await scoped((admin as any).from("sop_categories").select("kind, name, parent"), clientId);
+  return NextResponse.json({ managed: (data ?? []) as { kind: string; name: string; parent: string | null }[] });
 }, ADMIN);
 
 const createSchema = z.object({
   clientId: z.string().uuid().nullable().optional(),
   kind:     z.enum(["category", "subcategory"]),
   name:     z.string().min(1).max(100),
+  parent:   z.string().max(100).optional(), // category a subcategory belongs to
 });
 
 export const POST = withAuth(async (req, { user }) => {
@@ -61,7 +62,12 @@ export const POST = withAuth(async (req, { user }) => {
 
   const admin = createAdminClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any).from("sop_categories").insert({ client_id: clientId, kind: parsed.data.kind, name: parsed.data.name.trim() });
+  const { error } = await (admin as any).from("sop_categories").insert({
+    client_id: clientId,
+    kind: parsed.data.kind,
+    name: parsed.data.name.trim(),
+    parent: parsed.data.kind === "subcategory" ? (parsed.data.parent?.trim() || null) : null,
+  });
   // Unique violation = already exists — treat as success (idempotent create).
   if (error && error.code !== "23505") return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
