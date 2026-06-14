@@ -18,6 +18,14 @@ const bodySchema = z.object({
   services:           z.string().max(2000).optional().nullable(),
   brand_voice:        z.string().max(2000).optional().nullable(),
   sign_off:           z.string().max(300).optional().nullable(),
+  // Brain profile fields (migration 068) — feed every AI surface.
+  business_goals:     z.string().max(4000).optional().nullable(),
+  marketing_goals:    z.string().max(4000).optional().nullable(),
+  team:               z.string().max(4000).optional().nullable(),
+  tools_used:         z.string().max(4000).optional().nullable(),
+  website_content:    z.string().max(20000).optional().nullable(),
+  content_style:      z.string().max(4000).optional().nullable(),
+  internal_rules:     z.string().max(4000).optional().nullable(),
   // extra is a NOT NULL JSONB column — must be present on first INSERT
   extra:              z.record(z.string(), z.unknown()).optional().default({}),
 });

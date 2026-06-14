@@ -17,6 +17,8 @@ const updateSchema = z.object({
   status:    z.enum(["pending", "approved", "rejected"]).optional(),
   title:     z.string().min(1).max(300).optional(),
   description: z.string().max(2000).optional().nullable(),
+  flagged:     z.boolean().optional(),
+  flag_reason: z.string().max(2000).optional().nullable(),
 });
 
 const deleteSchema = z.object({
@@ -116,6 +118,8 @@ export const PATCH = withAuth(async (req, { user }) => {
   }
   if (parsed.data.title !== undefined) updates.title = parsed.data.title;
   if (parsed.data.description !== undefined) updates.description = parsed.data.description;
+  if (parsed.data.flagged !== undefined) updates.flagged = parsed.data.flagged;
+  if (parsed.data.flag_reason !== undefined) updates.flag_reason = parsed.data.flag_reason;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
@@ -130,6 +134,30 @@ export const PATCH = withAuth(async (req, { user }) => {
     console.error("[content/topics PATCH]", error.code, error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Feed the Brain: a reject/flag is a 👎 (with reason), an approve is a 👍.
+  // Best-effort — a logging failure must not fail the user's action.
+  const isNegative = parsed.data.status === "rejected" || parsed.data.flagged === true;
+  const isPositive = parsed.data.status === "approved";
+  if ((isNegative || isPositive) && data) {
+    const artifactText = [data.title, data.description].filter(Boolean).join(" — ").slice(0, 8000);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (admin as any).from("brain_signals").insert({
+        client_id:     parsed.data.client_id,
+        user_id:       user.id,
+        surface:       "content_topic",
+        artifact_id:   parsed.data.id,
+        artifact_text: artifactText || data.title || "(topic)",
+        rating:        isNegative ? -1 : 1,
+        reason:        parsed.data.flag_reason ?? null,
+        context:       { content_type: data.content_type },
+      });
+    } catch (e) {
+      console.error("[content/topics PATCH] brain_signals insert failed", e);
+    }
+  }
+
   return NextResponse.json(data);
 });
 

@@ -36,6 +36,10 @@ export interface AiSuggestion {
   description: string;
   content_type: ContentType;
   rationale: string;
+  /** Brain pre-screen: 0-100 fit to this company (null if not scored). */
+  fit?: number | null;
+  /** Brain flagged this as weak/off-brand (fit below threshold). */
+  ai_flagged?: boolean;
 }
 
 export interface ContentGenerationParams {

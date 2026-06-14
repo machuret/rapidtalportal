@@ -73,4 +73,7 @@ export const MIGRATIONS = [
   "065_sop_suggestions.sql",
   "066_sop_managed_categories.sql",
   "067_sop_subcategory_parent.sql",
+  "068_company_brain_fields.sql",
+  "069_brain_signals.sql",
+  "070_content_topics_brain.sql",
 ] as const;

@@ -4,6 +4,7 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderPrompt } from "@/lib/prompts/server";
+import { buildBrainContext } from "@/lib/brain/context";
 
 const bodySchema = z.object({
   client_id: z.string().uuid(),
@@ -26,89 +27,31 @@ const rateLimitStore = new Map<string, RateLimitEntry>();
 function checkRateLimit(clientId: string): { allowed: boolean; remaining: number; resetAt: number } {
   const now = Date.now();
   const key = clientId;
-  
+
   const entry = rateLimitStore.get(key);
-  
+
   if (!entry || now > entry.resetAt) {
-    // New window
-    const newEntry: RateLimitEntry = {
-      count: 1,
-      resetAt: now + RATE_LIMIT_WINDOW,
-    };
+    const newEntry: RateLimitEntry = { count: 1, resetAt: now + RATE_LIMIT_WINDOW };
     rateLimitStore.set(key, newEntry);
     return { allowed: true, remaining: MAX_REQUESTS_PER_WINDOW - 1, resetAt: newEntry.resetAt };
   }
-  
+
   if (entry.count >= MAX_REQUESTS_PER_WINDOW) {
     return { allowed: false, remaining: 0, resetAt: entry.resetAt };
   }
-  
+
   entry.count++;
   return { allowed: true, remaining: MAX_REQUESTS_PER_WINDOW - entry.count, resetAt: entry.resetAt };
 }
 
 // System prompt lives in the prompt registry ("content.topics") — admin-editable.
 
-type VaultRow = {
-  id: string;
-  title: string;
-  raw_content: string | null;
-  category: string | null;
-  ai_summary: string | null;
-};
+// Below this fit score, the Brain pre-flags a topic as weak/off-brand so a human
+// doesn't waste time on it. Env-tunable.
+const FIT_THRESHOLD = Number(process.env.BRAIN_FIT_THRESHOLD ?? 55);
+const TOPICS_MODEL = process.env.CONTENT_TOPICS_MODEL ?? "gpt-4o-mini";
 
-type DnaRow = Record<string, unknown>;
-
-function buildContext(dna: DnaRow | null, vaultItems: VaultRow[]): string {
-  let ctx = "";
-
-  if (dna) {
-    ctx += "=== COMPANY DNA ===\n";
-    const fields = [
-      "company_name", "mission", "services", "values", "description",
-      "target_demographic", "client_type",
-    ];
-    for (const f of fields) {
-      const v = dna[f];
-      if (v && typeof v === "string" && v.trim()) {
-        ctx += `${f.toUpperCase()}: ${v.trim()}\n`;
-      }
-    }
-    // Include extra JSONB fields as additional context
-    const extra = dna["extra"];
-    if (extra && typeof extra === "object" && !Array.isArray(extra)) {
-      for (const [k, v] of Object.entries(extra as Record<string, unknown>)) {
-        if (v && typeof v === "string" && v.trim()) {
-          ctx += `${k.toUpperCase()}: ${v.trim()}\n`;
-        }
-      }
-    }
-    ctx += "\n";
-  }
-
-  if (vaultItems.length > 0) {
-    ctx += "=== VAULT CONTENT ===\n";
-    const CONTEXT_CHAR_LIMIT = 12000; // ~3k tokens (avg 4 chars/token) — enough for topic generation
-    let chars = 0;
-    // Prioritise items with AI summaries (more signal-dense) before raw-content-only items
-    const sorted = [...vaultItems].sort((a, b) => {
-      if (a.ai_summary && !b.ai_summary) return -1;
-      if (!a.ai_summary && b.ai_summary) return 1;
-      return 0;
-    });
-    for (const item of sorted) {
-      // Use ai_summary as dense signal; fall back to larger raw_content window (3000 chars)
-      const snippet = item.ai_summary ?? item.raw_content?.slice(0, 3000) ?? "";
-      if (!snippet.trim()) continue;
-      const entry = `[${item.category?.toUpperCase() ?? "DOC"}] ${item.title}\n${snippet}\n\n`;
-      if (chars + entry.length > CONTEXT_CHAR_LIMIT) break;
-      ctx += entry;
-      chars += entry.length;
-    }
-  }
-
-  return ctx;
-}
+const VALID_TYPES = new Set(["email", "social", "newsletter", "blog"]);
 
 export const POST = withAuth(async (req, { user }) => {
   let body: unknown;
@@ -127,14 +70,14 @@ export const POST = withAuth(async (req, { user }) => {
     const retryAfter = Math.ceil((rateLimit.resetAt - Date.now()) / 1000);
     return NextResponse.json(
       { error: "Rate limit exceeded. Please try again later.", retryAfter },
-      { 
+      {
         status: 429,
         headers: {
           "X-RateLimit-Limit": String(MAX_REQUESTS_PER_WINDOW),
           "X-RateLimit-Remaining": "0",
           "X-RateLimit-Reset": String(Math.ceil(rateLimit.resetAt / 1000)),
           "Retry-After": String(retryAfter),
-        }
+        },
       }
     );
   }
@@ -145,33 +88,27 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   const admin = createAdminClient();
-  const [{ data: vaultItems }, { data: dna }] = await Promise.all([
-    admin
-      .from("vault_items")
-      .select("id, title, raw_content, category, ai_summary")
-      .eq("client_id", parsed.data.client_id)
-      .eq("status", "ready")
-      .order("created_at", { ascending: false })
-      .limit(30),
-    admin
-      .from("company_dna")
-      .select("company_name, mission, services, values, description, target_demographic, client_type, extra, founders, location, phone, email, website")
-      .eq("client_id", parsed.data.client_id)
-      .maybeSingle(),
-  ]);
+  // The Brain assembles the profile + Vault highlights + learned positives/negatives.
+  const brain = await buildBrainContext(admin, parsed.data.client_id);
 
-  if (!vaultItems?.length && !dna) {
+  if (!brain.hasProfile && !brain.hasVault) {
     return NextResponse.json(
-      { error: "No Vault content or Company DNA found. Add documents to the Vault first." },
+      { error: "No Company Brain profile or Vault content found. Fill in the Company Brain or add documents to the Vault first." },
       { status: 422 }
     );
   }
 
-  const context = buildContext(dna as DnaRow | null, (vaultItems ?? []) as VaultRow[]);
   const count = parsed.data.count;
-
-  const userPrompt = `Based on the company information below, generate exactly ${count} content topic ideas.\n\n${context}`;
   const systemPrompt = await renderPrompt("content.topics");
+  const userPrompt =
+    `${brain.text}\n` +
+    `Based on the company information above, generate exactly ${count} content topic ideas.\n\n` +
+    `RULES (follow strictly):\n` +
+    `- Honour the company's goals, audience, brand voice and internal rules.\n` +
+    `- Do NOT repeat, paraphrase, or resemble anything listed under "WHAT TO AVOID".\n` +
+    `- Favour the angles/style listed under "WHAT WORKS HERE".\n` +
+    `- For EACH topic, include "fit": an integer 0-100 for how well it fits THIS specific company (not generic), where below ${FIT_THRESHOLD} means weak, generic, or off-brand.\n\n` +
+    `Return JSON exactly as: { "topics": [ { "title": string, "description": string, "content_type": "email"|"social"|"newsletter"|"blog", "rationale": string, "fit": number } ] }`;
 
   let openaiRes: Response;
   try {
@@ -182,7 +119,7 @@ export const POST = withAuth(async (req, { user }) => {
         Authorization: `Bearer ${openaiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: TOPICS_MODEL,
         temperature: 0.8,
         max_tokens: 3000,
         response_format: { type: "json_object" },
@@ -214,7 +151,27 @@ export const POST = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "Failed to parse AI response." }, { status: 500 });
   }
 
-  const topics = Array.isArray(parsed2.topics) ? parsed2.topics : [];
+  const rawTopics = Array.isArray(parsed2.topics) ? parsed2.topics : [];
 
-  return NextResponse.json({ topics });
+  // Normalise + attach the Brain's pre-screen (fit + ai_flagged).
+  const topics = rawTopics
+    .map((t) => {
+      const o = (t ?? {}) as Record<string, unknown>;
+      const title = typeof o.title === "string" ? o.title.trim() : "";
+      if (!title) return null;
+      const type = typeof o.content_type === "string" && VALID_TYPES.has(o.content_type) ? o.content_type : "blog";
+      const fitNum = Number(o.fit);
+      const fit = Number.isFinite(fitNum) ? Math.max(0, Math.min(100, Math.round(fitNum))) : null;
+      return {
+        title,
+        description: typeof o.description === "string" ? o.description : "",
+        content_type: type,
+        rationale: typeof o.rationale === "string" ? o.rationale : "",
+        fit,
+        ai_flagged: fit !== null && fit < FIT_THRESHOLD,
+      };
+    })
+    .filter((t): t is NonNullable<typeof t> => t !== null);
+
+  return NextResponse.json({ topics, learnedFrom: { positives: brain.positives, negatives: brain.negatives } });
 });

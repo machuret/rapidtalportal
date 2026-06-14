@@ -74,6 +74,9 @@ export const ROUTES = {
     topicsForClient: (clientId: string) => `/api/content/topics?client_id=${clientId}`,
     topicsGenerate: () => "/api/content/topics/generate",
   },
+  brain: {
+    signals: () => "/api/brain/signals",
+  },
   tasks: () => "/api/tasks",
   taskEvents: () => "/api/tasks/events",
   taskReview: () => "/api/tasks/review",

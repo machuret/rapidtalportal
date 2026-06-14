@@ -158,6 +158,7 @@ export const TopicsTab = memo(function TopicsTab({
       {/* AI Suggestions Panel */}
       {showSuggestions && (
         <AiSuggestions
+          clientId={clientId}
           suggestions={suggestions as AiSuggestion[] | null}
           isGenerating={isGenerating}
           isSubmitting={isCreating}

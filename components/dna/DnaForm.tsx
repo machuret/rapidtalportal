@@ -27,7 +27,14 @@ const fields: { key: keyof DbCompanyDna; label: string; multiline?: boolean }[] 
   { key: "target_demographic", label: "Target Demographic" },
   { key: "values", label: "Company Values", multiline: true },
   { key: "services", label: "Services Offered", multiline: true },
+  { key: "business_goals", label: "Business Goals", multiline: true },
+  { key: "marketing_goals", label: "Marketing Goals", multiline: true },
+  { key: "team", label: "Team", multiline: true },
+  { key: "tools_used", label: "Tools the Company Uses", multiline: true },
+  { key: "website_content", label: "Website Content", multiline: true },
   { key: "brand_voice", label: "Brand Voice & Tone", multiline: true },
+  { key: "content_style", label: "Content Tone & Style", multiline: true },
+  { key: "internal_rules", label: "Internal Rules", multiline: true },
   { key: "sign_off", label: "Default Sign-off" },
 ];
 
