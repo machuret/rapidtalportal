@@ -11,21 +11,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
-import { assertClientAccess, type ApiUser } from "@/lib/api-auth";
+import { type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { syncSopAccess } from "@/lib/sops/sop-access";
+import { syncSopAccess, authorizeScope } from "@/lib/sops/sop-access";
 
 const MAX_IDS = 500;
-
-/** Authorise a write against a SOP scope (mirrors the single-SOP route). */
-function authorizeScope(user: ApiUser, clientId: string | null): NextResponse | null {
-  if (clientId === null) {
-    if (user.role !== "super_admin") return NextResponse.json({ error: "Only RapidTal admins can manage the global SOP library." }, { status: 403 });
-    return null;
-  }
-  if (!["client_admin", "super_admin"].includes(user.role)) return NextResponse.json({ error: "Only admins can manage SOPs." }, { status: 403 });
-  return assertClientAccess(user, clientId);
-}
 
 interface SopRow { id: string; client_id: string | null }
 
@@ -95,7 +85,9 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (!loaded.rows.length) return NextResponse.json({ deleted: 0 });
   const ids = loaded.rows.map((r) => r.id);
 
-  const { error } = await admin.from("sops").delete().in("id", ids);
+  // Soft delete — recoverable, mirroring the single-SOP DELETE.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (admin as any).from("sops").update({ deleted_at: new Date().toISOString() }).in("id", ids);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ deleted: ids.length });
 }, { roles: ["client_admin", "super_admin"] });
