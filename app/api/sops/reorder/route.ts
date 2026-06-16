@@ -38,9 +38,16 @@ export const POST = withAuth(
       if (denied) return denied;
     }
 
-    for (const item of parsed.data.items) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (admin as any).from("sops").update({ order_index: item.order_index }).eq("id", item.id);
+    // Run the per-row updates in parallel and surface any failure (the previous
+    // sequential loop ignored every result, so a partial failure went silent).
+    const results = await Promise.all(
+      parsed.data.items.map((item) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (admin as any).from("sops").update({ order_index: item.order_index }).eq("id", item.id),
+      ),
+    );
+    if (results.some((r) => r.error)) {
+      return NextResponse.json({ error: "Some items couldn't be reordered — refresh and try again." }, { status: 500 });
     }
     return NextResponse.json({ success: true });
   },

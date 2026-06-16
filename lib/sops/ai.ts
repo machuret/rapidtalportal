@@ -4,30 +4,20 @@
  * thin. Generation uses a strong model (SOPs are written rarely, quality
  * matters); suggestions use a cheap one.
  */
-import { NextResponse } from "next/server";
-import { assertClientAccess, type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderPrompt } from "@/lib/prompts/server";
+import { chatProvider } from "@/lib/brain/llm";
+
+// Same scope rules everywhere — re-export the ONE canonical helper so SOP
+// surfaces don't each carry their own copy (was duplicated here, in
+// sop-access.ts, and in the categories route).
+export { authorizeScope as authorizeSopScope } from "./sop-access";
 
 export const SUGGEST_MODEL = process.env.SOP_SUGGEST_MODEL || "openai/gpt-4o-mini";
 // Default to an OpenAI model that's reliably available on our OpenRouter account.
 // (anthropic/claude-3.5-sonnet returns "no endpoints" there.) Override with
 // SOP_MODEL once a working Anthropic slug is confirmed.
 export const GENERATE_MODEL = process.env.SOP_MODEL || "openai/gpt-4o";
-
-/** Same scope rules as the SOPs write route: global = super_admin, client = admins. */
-export function authorizeSopScope(user: ApiUser, clientId: string | null): NextResponse | null {
-  if (clientId === null) {
-    if (user.role !== "super_admin") {
-      return NextResponse.json({ error: "Only RapidTal admins can author global library SOPs." }, { status: 403 });
-    }
-    return null;
-  }
-  if (!["client_admin", "super_admin"].includes(user.role)) {
-    return NextResponse.json({ error: "Only admins can author SOPs." }, { status: 403 });
-  }
-  return assertClientAccess(user, clientId);
-}
 
 /** Light company context so client SOPs reference their real tools/brand. */
 export async function clientContext(clientId: string | null): Promise<string> {
@@ -55,16 +45,20 @@ export async function clientContext(clientId: string | null): Promise<string> {
 
 interface LlmJsonResult<T> { data: T | null; tokens: number; error?: string }
 
-/** Call OpenRouter expecting a JSON object; parses + tolerates ```json fences. */
+/** Call the configured LLM (OpenRouter-preferred, OpenAI fallback) expecting a
+ *  JSON object; parses + tolerates ```json fences. */
 export async function llmJson<T>(model: string, system: string, user: string, maxTokens: number): Promise<LlmJsonResult<T>> {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) return { data: null, tokens: 0, error: "OPENROUTER_API_KEY is not configured." };
+  const llm = chatProvider();
+  if (!llm) return { data: null, tokens: 0, error: "No LLM provider configured (set OPENROUTER_API_KEY or OPENAI_API_KEY)." };
+  // Our SOP models are OpenRouter-namespaced ("openai/gpt-4o"); strip the
+  // namespace when falling back to the OpenAI endpoint.
+  const resolvedModel = llm.provider === "openai" && model.startsWith("openai/") ? model.slice("openai/".length) : model;
   try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const res = await fetch(llm.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${llm.key}` },
       body: JSON.stringify({
-        model,
+        model: resolvedModel,
         max_tokens: maxTokens,
         temperature: 0.3,
         response_format: { type: "json_object" },
@@ -95,8 +89,13 @@ export interface SopDraft {
  */
 export async function generateSopDraft(
   clientId: string | null,
-  opts: { topic: string; title?: string; category?: string; audience?: "new" | "experienced" | "any"; depth?: "quick" | "standard" | "thorough" },
-): Promise<{ draft?: SopDraft; error?: string }> {
+  opts: {
+    topic: string; title?: string; category?: string;
+    audience?: "new" | "experienced" | "any"; depth?: "quick" | "standard" | "thorough";
+    // "Improve with AI" on an existing SOP: the current content + what to change.
+    existing?: string; instruction?: string;
+  },
+): Promise<{ draft?: SopDraft; error?: string; tokens: number }> {
   const depthHint: Record<string, string> = {
     quick: "Keep it tight: 4-6 steps, only the essentials.",
     standard: "Aim for 6-10 well-scoped steps.",
@@ -108,9 +107,10 @@ export async function generateSopDraft(
     any: "Write for a capable VA who may be new to this specific task.",
   };
 
+  const improving = !!opts.existing?.trim();
   const ctx = await clientContext(clientId);
   const system = await renderPrompt("sops.generate", {
-    mode: "creating a",
+    mode: improving ? "improving an existing" : "creating a",
     depth_hint: depthHint[opts.depth ?? "standard"],
     audience_hint: audienceHint[opts.audience ?? "any"],
     client_context: ctx,
@@ -119,12 +119,14 @@ export async function generateSopDraft(
     `Topic: ${opts.topic}`,
     opts.title ? `Preferred title/angle: ${opts.title}` : "",
     opts.category ? `Category: ${opts.category}` : "",
+    improving ? `\nImprove this EXISTING SOP — keep what's correct, fix structure, clarity, gaps and ordering:\n"""\n${opts.existing!.slice(0, 40000)}\n"""` : "",
+    improving && opts.instruction?.trim() ? `\nFocus of the improvement: ${opts.instruction.trim()}` : "",
   ].filter(Boolean).join("\n");
 
   const result = await llmJson<{ title?: string; intro?: string; prerequisites?: string[]; steps?: { title: string; detail: string; tip?: string }[] }>(
     GENERATE_MODEL, system, userMsg, 4000,
   );
-  if (!result.data?.steps?.length) return { error: result.error ?? "Couldn't generate the SOP." };
+  if (!result.data?.steps?.length) return { error: result.error ?? "Couldn't generate the SOP.", tokens: result.tokens };
 
   const steps = result.data.steps
     .filter((s) => s.title?.trim())
@@ -145,5 +147,6 @@ export async function generateSopDraft(
       prerequisites,
       steps,
     },
+    tokens: result.tokens,
   };
 }

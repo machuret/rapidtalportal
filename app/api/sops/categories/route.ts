@@ -14,19 +14,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
-import { assertClientAccess, type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { authorizeScope } from "@/lib/sops/sop-access";
 
 const ADMIN = { roles: ["client_admin", "super_admin"] };
-
-function authorizeScope(user: ApiUser, clientId: string | null): NextResponse | null {
-  if (clientId === null) {
-    if (user.role !== "super_admin") return NextResponse.json({ error: "Global library is super-admin only." }, { status: 403 });
-    return null;
-  }
-  if (!["client_admin", "super_admin"].includes(user.role)) return NextResponse.json({ error: "Admins only." }, { status: 403 });
-  return assertClientAccess(user, clientId);
-}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function scoped(q: any, clientId: string | null) {
@@ -96,6 +87,14 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (!toName || toName === from) return NextResponse.json({ updated: 0 });
 
   const admin = createAdminClient();
+  // Preserve a subcategory's parent across the rename — the re-insert below used
+  // to omit it, orphaning the renamed subcategory from its category.
+  let parent: string | null = null;
+  if (parsed.data.kind === "subcategory") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: existing } = await scoped((admin as any).from("sop_categories").select("parent").eq("kind", "subcategory").eq("name", from), clientId).maybeSingle();
+    parent = (existing as { parent: string | null } | null)?.parent ?? null;
+  }
   // Update SOPs whose field matches.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { count } = await scoped((admin as any).from("sops").update({ [parsed.data.kind]: toSop, updated_at: new Date().toISOString() }).eq(parsed.data.kind, from), clientId).select("id", { count: "exact" });
@@ -103,7 +102,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await scoped((admin as any).from("sop_categories").delete().eq("kind", parsed.data.kind).eq("name", from), clientId);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (admin as any).from("sop_categories").insert({ client_id: clientId, kind: parsed.data.kind, name: toName });
+  await (admin as any).from("sop_categories").insert({ client_id: clientId, kind: parsed.data.kind, name: toName, parent });
   return NextResponse.json({ updated: count ?? 0 });
 }, ADMIN);
 
