@@ -53,6 +53,7 @@ export const ROUTES = {
     reprocess: (id: string) => `/api/vault/${id}/reprocess`,
   },
   sops: () => "/api/sops",
+  sopRestore: () => "/api/sops/restore",
   sopFork: () => "/api/sops/fork",
   sopRun: () => "/api/sops/run",
   sopReorder: () => "/api/sops/reorder",

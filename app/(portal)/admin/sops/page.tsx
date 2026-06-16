@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { SopsLibrary } from "@/components/sops/SopsLibrary";
 import { SopSuggestions, type SopSuggestion } from "@/components/sops/SopSuggestions";
 import { SopCategoryManager, type CategoryNode } from "@/components/sops/SopCategoryManager";
+import { SopTrash, type TrashedSop } from "@/components/sops/SopTrash";
 import type { Sop } from "@/app/(portal)/sops/page";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,16 @@ export default async function AdminSopsPage() {
     .order("order_index");
 
   const sopList = (sops ?? []) as Sop[];
+
+  // Soft-deleted global SOPs, newest first — restorable from the Trash panel.
+  const { data: trashed } = await admin
+    .from("sops")
+    .select("id, title, category, deleted_at")
+    .is("client_id", null)
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false })
+    .limit(50);
+  const trashedSops = (trashed ?? []) as TrashedSop[];
 
   // Open SOP-idea backlog (global scope).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -84,6 +95,7 @@ export default async function AdminSopsPage() {
         Generic, reusable SOPs (WordPress, Shopify, AI, email…) shared with <span className="text-zinc-300">every VA across all clients</span>.
         Build great step-by-step checklists here — they enrich every VA&apos;s everyday work.
       </p>
+      <SopTrash initial={trashedSops} />
       <SopSuggestions clientId={null} initial={suggestions} />
       <SopCategoryManager clientId={null} tree={tree} />
       <SopsLibrary

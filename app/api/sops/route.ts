@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
-import { assertClientAccess, type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { syncSopAccess } from "@/lib/sops/sop-access";
+import { syncSopAccess, authorizeScope } from "@/lib/sops/sop-access";
 
 // clientId null  → global library SOP (super_admin only)
 // clientId uuid  → client SOP (client_admin for own client, or super_admin)
@@ -48,19 +47,6 @@ const deleteSchema = z.object({
 
 const SELECT = "id, client_id, title, category, subcategory, body, order_index, steps, intro, prerequisites, version, visibility, forked_from, forked_version, created_at, updated_at";
 
-/** Authorise a write against a SOP's scope. Returns an error response or null. */
-function authorizeScope(user: ApiUser, clientId: string | null): NextResponse | null {
-  if (clientId === null) {
-    if (user.role !== "super_admin") {
-      return NextResponse.json({ error: "Only RapidTal admins can manage the global SOP library." }, { status: 403 });
-    }
-    return null;
-  }
-  if (!["client_admin", "super_admin"].includes(user.role)) {
-    return NextResponse.json({ error: "Only admins can manage SOPs." }, { status: 403 });
-  }
-  return assertClientAccess(user, clientId);
-}
 
 // ── POST: create SOP ──────────────────────────────────────────────────────────
 export const POST = withAuth(async (req, { user }) => {
