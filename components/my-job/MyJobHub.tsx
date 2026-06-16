@@ -6,10 +6,11 @@
  * Contract terms are read-only here (admins set them); everything else the VA
  * authors. Document generators (invoice / COE / tax) land in a later pass.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { summariseLeaveTaken } from "@/lib/my-job/leave";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { differenceInCalendarMonths, addMonths, format } from "date-fns";
@@ -316,6 +317,9 @@ function LeaveTab({ initial }: { initial: LeaveRow[] }) {
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const thisYear = new Date().getFullYear();
+  const taken = useMemo(() => summariseLeaveTaken(rows, thisYear), [rows, thisYear]);
+
   async function request() {
     if (saving || !start || !end) return;
     setSaving(true);
@@ -357,6 +361,29 @@ function LeaveTab({ initial }: { initial: LeaveRow[] }) {
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plane className="w-4 h-4" />} Request
           </Button>
         </div>
+      </div>
+
+      <div className="surface-card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-zinc-100">Taken in {thisYear}</h3>
+          <span className="text-[11px] text-zinc-500">approved · working days</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {([
+            { key: "annual", label: "Annual" },
+            { key: "sick", label: "Sick" },
+            { key: "personal", label: "Personal" },
+            { key: "unpaid", label: "Unpaid" },
+          ] as const).map(({ key, label }) => (
+            <div key={key} className="rounded-lg bg-zinc-800/60 border border-zinc-700/70 px-3 py-2.5">
+              <p className="text-2xl font-semibold text-zinc-100 leading-none">{taken[key]}</p>
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500 mt-1.5">{label}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-zinc-500 mt-3">
+          {taken.total} working {taken.total === 1 ? "day" : "days"} taken so far this year.
+        </p>
       </div>
 
       {rows.length === 0 ? <p className="text-sm text-zinc-500">No leave requests yet.</p> : (
