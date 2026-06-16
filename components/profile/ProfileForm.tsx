@@ -51,12 +51,26 @@ export function ProfileForm({ user }: Props) {
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Allow-list raster image types only. SVGs are script-capable when opened
+    // directly from the public bucket URL, so they're rejected; the stored
+    // extension/content-type are derived from this map, never from the
+    // (client-controlled) filename.
+    const ALLOWED: Record<string, string> = {
+      "image/png": "png",
+      "image/jpeg": "jpg",
+      "image/webp": "webp",
+      "image/gif": "gif",
+    };
+    const ext = ALLOWED[file.type];
+    if (!ext) {
+      toast.error("Photo must be a PNG, JPEG, WebP or GIF.");
+      return;
+    }
     if (file.size > 2 * 1024 * 1024) {
       toast.error("Photo must be under 2 MB.");
       return;
     }
     setUploadingPhoto(true);
-    const ext = file.name.split(".").pop();
     const path = `avatars/${user.id}.${ext}`;
     const { error: upErr } = await supabase.storage
       .from("profiles")
@@ -134,7 +148,7 @@ export function ProfileForm({ user }: Props) {
           <input
             ref={fileRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/jpeg,image/png,image/webp,image/gif"
             className="hidden"
             onChange={handlePhotoChange}
           />
