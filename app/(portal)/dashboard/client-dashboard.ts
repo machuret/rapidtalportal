@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { workHours } from "@/lib/tasks/metrics";
+import { workHours, isOverdue, daysOverdue } from "@/lib/tasks/metrics";
 import type { ClientDashboardProps } from "@/components/dashboard/ClientDashboard";
 
 /** Local-midnight of the most recent Monday. */
@@ -10,9 +10,14 @@ function weekStart(now = new Date()): Date {
   return d;
 }
 
+/** Today as a 'YYYY-MM-DD' local-calendar date (matches how due_date is stored). */
+function localToday(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
 interface TaskRow {
   id: string; title: string; description: string | null; status: string;
-  assigned_to: string | null; completed_at: string | null; updated_at: string;
+  assigned_to: string | null; completed_at: string | null; updated_at: string; due_date: string | null;
 }
 
 /** Assemble everything the client home needs. Service-role reads, client-scoped. */
@@ -25,7 +30,7 @@ export async function renderClientDashboard(clientId: string, fullName: string):
   const [{ data: vaRows }, { data: catRows }, { data: taskRows }, { data: timeRows }, { data: dna }, { count: vaultReady }, { count: taskCount }] = await Promise.all([
     admin.from("users").select("id, full_name, email").eq("client_id", clientId).eq("role", "va").order("full_name"),
     admin.from("task_categories").select("id, name, color").eq("client_id", clientId).order("name"),
-    admin.from("tasks").select("id, title, description, status, assigned_to, completed_at, updated_at")
+    admin.from("tasks").select("id, title, description, status, assigned_to, completed_at, updated_at, due_date")
       .eq("client_id", clientId).is("archived_at", null),
     admin.from("time_entries").select("started_at, ended_at").eq("client_id", clientId).eq("phase", "work").gte("work_date", wkStartDate),
     admin.from("company_dna").select("company_name, services").eq("client_id", clientId).maybeSingle(),
@@ -42,6 +47,21 @@ export async function renderClientDashboard(clientId: string, fullName: string):
     .filter((t) => t.status === "review")
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     .map((t) => ({ id: t.id, title: t.title, description: t.description ?? "", assigneeName: t.assigned_to ? nameById.get(t.assigned_to) ?? null : null, updatedAt: t.updated_at }));
+
+  // Intervention signal: work still in flight that's blown past its due date.
+  // Most-overdue first, capped — this is a nudge, not the full task board.
+  const today = localToday();
+  const overdue = tasks
+    .filter((t) => isOverdue(t, today))
+    .sort((a, b) => (a.due_date as string).localeCompare(b.due_date as string))
+    .slice(0, 6)
+    .map((t) => ({
+      id: t.id,
+      title: t.title,
+      assigneeName: t.assigned_to ? nameById.get(t.assigned_to) ?? null : null,
+      dueDate: t.due_date as string,
+      daysOverdue: daysOverdue(t.due_date as string, today),
+    }));
 
   const completedThisWeek = tasks.filter((t) => t.status === "done" && t.completed_at && t.completed_at >= wkStartIso).length;
   const recentDelivered = tasks
@@ -71,6 +91,7 @@ export async function renderClientDashboard(clientId: string, fullName: string):
     vas,
     categories: (catRows ?? []) as { id: string; name: string; color: string }[],
     awaiting,
+    overdue,
     stats: {
       inProgress: tasks.filter((t) => t.status === "in_progress").length,
       todo: tasks.filter((t) => t.status === "todo").length,

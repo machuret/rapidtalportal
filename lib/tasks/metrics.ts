@@ -34,3 +34,18 @@ export function onTimePct(tasks: { completed_at: string | null; due_date: string
   }
   return den ? Math.round((num / den) * 100) : null;
 }
+
+/**
+ * A task is overdue when it's still being worked (`todo`/`in_progress`) and its
+ * due date is strictly before `today` (a 'YYYY-MM-DD' local date). Tasks in
+ * `review` (delivered, awaiting client approval) or `done` are never overdue —
+ * the client owns those, not the VA.
+ */
+export function isOverdue(task: { status: string; due_date: string | null }, today: string): boolean {
+  return (task.status === "todo" || task.status === "in_progress") && !!task.due_date && task.due_date < today;
+}
+
+/** Whole days a 'YYYY-MM-DD' date is in the past relative to `today`. DST-safe (compares UTC midnights). */
+export function daysOverdue(dueDate: string, today: string): number {
+  return Math.round((Date.parse(today + "T00:00:00Z") - Date.parse(dueDate + "T00:00:00Z")) / 86_400_000);
+}

@@ -1,4 +1,31 @@
-import { sumWorkHours, workHours, isOnTime, onTimePct } from "@/lib/tasks/metrics";
+import { sumWorkHours, workHours, isOnTime, onTimePct, isOverdue, daysOverdue } from "@/lib/tasks/metrics";
+
+describe("isOverdue", () => {
+  const today = "2026-06-16";
+  it("flags in-flight work past its due date", () => {
+    expect(isOverdue({ status: "todo", due_date: "2026-06-15" }, today)).toBe(true);
+    expect(isOverdue({ status: "in_progress", due_date: "2026-06-01" }, today)).toBe(true);
+  });
+  it("does not flag work due today or in the future", () => {
+    expect(isOverdue({ status: "todo", due_date: "2026-06-16" }, today)).toBe(false);
+    expect(isOverdue({ status: "in_progress", due_date: "2026-06-20" }, today)).toBe(false);
+  });
+  it("ignores review/done and tasks with no due date", () => {
+    expect(isOverdue({ status: "review", due_date: "2026-06-01" }, today)).toBe(false);
+    expect(isOverdue({ status: "done", due_date: "2026-06-01" }, today)).toBe(false);
+    expect(isOverdue({ status: "todo", due_date: null }, today)).toBe(false);
+  });
+});
+
+describe("daysOverdue", () => {
+  it("counts whole days between due date and today", () => {
+    expect(daysOverdue("2026-06-15", "2026-06-16")).toBe(1);
+    expect(daysOverdue("2026-06-01", "2026-06-16")).toBe(15);
+  });
+  it("spans month boundaries", () => {
+    expect(daysOverdue("2026-05-31", "2026-06-02")).toBe(2);
+  });
+});
 
 describe("sumWorkHours / workHours", () => {
   it("sums closed entries and ignores open ones", () => {

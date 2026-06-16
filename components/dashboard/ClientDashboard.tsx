@@ -14,13 +14,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   CheckCircle2, Clock, Inbox, Timer, Plus, Loader2, ThumbsUp, RotateCcw,
-  Sparkles, ArrowRight,
+  Sparkles, ArrowRight, AlertTriangle,
 } from "lucide-react";
 
 export interface ClientVA { id: string; name: string }
 export interface ClientCategory { id: string; name: string; color: string }
 export interface AwaitingTask { id: string; title: string; description: string; assigneeName: string | null; updatedAt: string }
 export interface DeliveredTask { id: string; title: string; completedAt: string; assigneeName: string | null }
+export interface OverdueTask { id: string; title: string; assigneeName: string | null; dueDate: string; daysOverdue: number }
 
 export interface ClientDashboardProps {
   clientId: string;
@@ -29,6 +30,7 @@ export interface ClientDashboardProps {
   vas: ClientVA[];
   categories: ClientCategory[];
   awaiting: AwaitingTask[];
+  overdue: OverdueTask[];
   stats: { inProgress: number; todo: number; completedThisWeek: number; hoursThisWeek: number; planHours: number | null };
   recentDelivered: DeliveredTask[];
   onboarding: { dna: boolean; docs: boolean; va: boolean; firstTask: boolean };
@@ -119,6 +121,30 @@ export function ClientDashboard(props: ClientDashboardProps) {
               return s.href ? <Link key={s.key} href={s.href}>{inner}</Link> : <div key={s.key}>{inner}</div>;
             })}
           </div>
+        </div>
+      )}
+
+      {/* Needs attention — work that's blown past its due date */}
+      {props.overdue.length > 0 && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 mb-6">
+          <p className="label-section mb-3 flex items-center gap-2 text-red-300">
+            <AlertTriangle className="w-4 h-4" />
+            Needs attention · {props.overdue.length} overdue
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {props.overdue.map((t) => (
+              <li key={t.id} className="flex items-center gap-2 text-sm">
+                <span className="text-zinc-200 truncate flex-1">{t.title}</span>
+                {t.assigneeName && <span className="text-xs text-zinc-500 shrink-0">{t.assigneeName.split(" ")[0]}</span>}
+                <span className="text-xs font-medium text-red-400 shrink-0 tabular-nums">
+                  {t.daysOverdue === 1 ? "1 day" : `${t.daysOverdue} days`} late
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Link href="/tasks" className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-white mt-3 transition-colors">
+            Review on the board <ArrowRight className="w-3 h-3" />
+          </Link>
         </div>
       )}
 
