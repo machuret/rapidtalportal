@@ -59,7 +59,7 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
 
   const signals = (sigData ?? []) as SignalRow[];
   if (signals.length < MIN_NEW_SIGNALS) {
-    await decay(admin, clientId); // still let stale lessons fade
+    await decayClientMemory(admin, clientId); // still let stale lessons fade
     return { ...empty, reason: "Not enough new feedback yet." };
   }
 
@@ -135,7 +135,7 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
 
   if (candidates.length === 0) {
     await markDistilled();
-    await decay(admin, clientId);
+    await decayClientMemory(admin, clientId);
     return { skipped: false, processedSignals: signals.length, newMemories: 0, reinforced: 0, proposed: 0 };
   }
 
@@ -200,7 +200,7 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
   }
 
   await markDistilled();
-  await decay(admin, clientId);
+  await decayClientMemory(admin, clientId);
 
   if (inserted + reinforced + proposed > 0) {
     const bits: string[] = [];
@@ -214,8 +214,10 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
   return { skipped: false, processedSignals: signals.length, newMemories: inserted, reinforced, proposed };
 }
 
-/** Fade lessons that haven't been reinforced lately; mute the ones that fall too low. */
-async function decay(admin: Admin, clientId: string): Promise<void> {
+/** Fade lessons that haven't been reinforced lately; mute the ones that fall too
+ * low. Exported so the cron can decay idle clients (no new feedback) too —
+ * otherwise stale lessons would never fade for a client that stops rating. */
+export async function decayClientMemory(admin: Admin, clientId: string): Promise<void> {
   const cutoff = new Date(Date.now() - DECAY_DAYS * 86_400_000).toISOString();
   const { data } = await admin
     .from("brain_memory")

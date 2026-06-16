@@ -14,25 +14,16 @@
  * keeps it invisible to RapidTal admins. Do not add a Notebook query here.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { selectFields } from "./profile-fields";
 
 type Admin = SupabaseClient;
 
-/** Company self-model fields, in the order they're most useful to the model. */
-const PROFILE_FIELDS: { key: string; label: string }[] = [
-  { key: "company_name", label: "Company" },
-  { key: "client_type", label: "Type" },
-  { key: "services", label: "Services" },
-  { key: "values", label: "Values" },
-  { key: "target_demographic", label: "Target demographic" },
-  { key: "business_goals", label: "Business goals" },
-  { key: "marketing_goals", label: "Marketing goals" },
-  { key: "team", label: "Team" },
-  { key: "tools_used", label: "Tools they use" },
-  { key: "website_content", label: "Website content" },
-  { key: "brand_voice", label: "Brand voice & tone" },
-  { key: "content_style", label: "Content tone & style" },
-  { key: "internal_rules", label: "Internal rules (must follow)" },
-];
+/** Company self-model fields for prompt injection — the `prompt` concern of the
+ * canonical registry (lib/brain/profile-fields.ts), in model-useful order. */
+const PROFILE_FIELDS: { key: string; label: string }[] = selectFields("prompt").map((f) => ({
+  key: f.key,
+  label: f.promptLabel,
+}));
 
 const PROFILE_SELECT = PROFILE_FIELDS.map((f) => f.key).join(", ");
 

@@ -12,15 +12,13 @@
  * Pure reads; safe to call from a page or the cron.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fieldKeys } from "./profile-fields";
 
 type Admin = SupabaseClient;
 
-// Profile fields that meaningfully feed the Brain (for completeness %).
-const PROFILE_FIELDS = [
-  "company_name", "services", "values", "target_demographic",
-  "business_goals", "marketing_goals", "team", "tools_used",
-  "website_content", "brand_voice", "content_style", "internal_rules",
-];
+// Profile fields that count toward completeness — the `completeness` concern of
+// the canonical registry (lib/brain/profile-fields.ts).
+const PROFILE_FIELDS = fieldKeys("completeness");
 
 export interface BrainScore {
   score: number;          // 0-100

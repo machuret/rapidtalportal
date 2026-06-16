@@ -331,10 +331,20 @@ Deno.serve(async (req: Request) => {
     }
 
     // 1b. Brain memory — learned, authoritative preferences & rules to respect.
+    // Scope-filter to lessons relevant to THIS surface (Ask-the-Vault): global
+    // lessons (no scope) plus those whose surfaces include "vault_answer" or
+    // "all". Mirrors lib/brain/context.ts so a 👎 on, say, content generation
+    // doesn't wrongly reshape vault answers, and vault feedback conditions them.
     const { data: memRows } = await admin.from("brain_memory")
-      .select("kind, content").eq("client_id", clientId).eq("active", true)
-      .order("pinned", { ascending: false }).limit(20);
-    const mem = (memRows ?? []) as { kind: string; content: string }[];
+      .select("kind, content, scope").eq("client_id", clientId).eq("active", true)
+      .order("pinned", { ascending: false }).limit(60);
+    const mem = ((memRows ?? []) as { kind: string; content: string; scope: { surfaces?: string[] } | null }[])
+      .filter((m) => {
+        const s = m.scope?.surfaces;
+        if (!s || s.length === 0) return true;
+        return s.includes("vault_answer") || s.includes("all");
+      })
+      .slice(0, 20);
     if (mem.length) {
       const memLabel: Record<string, string> = { preference: "Prefer", anti_pattern: "Avoid", rule: "Rule" };
       const memText = mem.map((m) => `${memLabel[m.kind] ?? "Note"}: ${m.content}`).join("\n");

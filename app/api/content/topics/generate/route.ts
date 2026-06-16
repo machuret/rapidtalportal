@@ -7,6 +7,7 @@ import { renderPrompt } from "@/lib/prompts/server";
 import { buildBrainContext } from "@/lib/brain/context";
 import { embeddingFit } from "@/lib/brain/embed";
 import { logBrainEvent } from "@/lib/brain/events";
+import { chatProvider, chatModel } from "@/lib/brain/llm";
 
 const bodySchema = z.object({
   client_id: z.string().uuid(),
@@ -51,7 +52,6 @@ function checkRateLimit(clientId: string): { allowed: boolean; remaining: number
 // Below this fit score, the Brain pre-flags a topic as weak/off-brand so a human
 // doesn't waste time on it. Env-tunable.
 const FIT_THRESHOLD = Number(process.env.BRAIN_FIT_THRESHOLD ?? 55);
-const TOPICS_MODEL = process.env.CONTENT_TOPICS_MODEL ?? "gpt-4o-mini";
 
 const VALID_TYPES = new Set(["email", "social", "newsletter", "blog"]);
 
@@ -84,9 +84,12 @@ export const POST = withAuth(async (req, { user }) => {
     );
   }
 
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) {
-    return NextResponse.json({ error: "OpenAI not configured." }, { status: 500 });
+  // Use the shared chat provider (OpenRouter-preferred, OpenAI fallback) so topic
+  // generation runs on the same key as distillation/onboarding instead of
+  // breaking whenever only OPENROUTER_API_KEY is set.
+  const llm = chatProvider();
+  if (!llm) {
+    return NextResponse.json({ error: "No LLM provider configured (set OPENROUTER_API_KEY or OPENAI_API_KEY)." }, { status: 500 });
   }
 
   const admin = createAdminClient();
@@ -118,14 +121,14 @@ export const POST = withAuth(async (req, { user }) => {
 
   let openaiRes: Response;
   try {
-    openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    openaiRes = await fetch(llm.url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiKey}`,
+        Authorization: `Bearer ${llm.key}`,
       },
       body: JSON.stringify({
-        model: TOPICS_MODEL,
+        model: chatModel("CONTENT_TOPICS_MODEL"),
         temperature: 0.8,
         max_tokens: 3000,
         response_format: { type: "json_object" },
@@ -136,14 +139,14 @@ export const POST = withAuth(async (req, { user }) => {
       }),
     });
   } catch (err) {
-    console.error("[topics/generate] OpenAI fetch error:", err);
-    return NextResponse.json({ error: "Failed to reach OpenAI." }, { status: 502 });
+    console.error("[topics/generate] LLM fetch error:", err);
+    return NextResponse.json({ error: `Failed to reach ${llm.provider}.` }, { status: 502 });
   }
 
   if (!openaiRes.ok) {
     const errText = await openaiRes.text();
-    console.error("[topics/generate] OpenAI error:", openaiRes.status, errText);
-    return NextResponse.json({ error: "OpenAI request failed." }, { status: 502 });
+    console.error("[topics/generate] LLM error:", openaiRes.status, errText);
+    return NextResponse.json({ error: `${llm.provider} request failed.` }, { status: 502 });
   }
 
   const completion = await openaiRes.json();

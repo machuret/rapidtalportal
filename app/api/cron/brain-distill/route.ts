@@ -10,7 +10,7 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { distillClientMemory } from "@/lib/brain/distill";
+import { distillClientMemory, decayClientMemory } from "@/lib/brain/distill";
 import { computeBrainScore } from "@/lib/brain/score";
 import { logBrainEvent } from "@/lib/brain/events";
 
@@ -19,6 +19,10 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MAX_CLIENTS_PER_RUN = 25;
+// Idle clients (no new feedback) still get a daily decay + score snapshot so
+// stale lessons fade and the trend line keeps moving. Score is cheap (a few
+// counts), so we can sweep a larger batch than distillation.
+const SNAPSHOT_BATCH = 100;
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
@@ -41,11 +45,8 @@ export async function GET(req: NextRequest) {
 
   const clientIds = Array.from(new Set((pending ?? []).map((r: { client_id: string }) => r.client_id))).slice(0, MAX_CLIENTS_PER_RUN) as string[];
 
-  if (clientIds.length === 0) {
-    await beat({ clients: 0, memories: 0 });
-    return NextResponse.json({ ok: true, clients: 0, memories: 0 });
-  }
-
+  // Phase 1: clients with new feedback → distil + snapshot. (Phase 2 below still
+  // runs even when this is empty, so idle clients always get decay + a snapshot.)
   let newMemories = 0;
   let processed = 0;
   for (const clientId of clientIds) {
@@ -59,8 +60,39 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  await beat({ clients: clientIds.length, memories: newMemories });
-  return NextResponse.json({ ok: true, clients: clientIds.length, processedSignals: processed, newMemories });
+  // ── Phase 2: idle clients ──────────────────────────────────────────────
+  // Clients with no pending feedback are never touched by Phase 1, so their
+  // stale lessons would never decay and their Brain Score would never get a
+  // fresh daily snapshot. Sweep the non-archived clients that don't yet have a
+  // snapshot for today (and weren't just processed above) and run decay + score.
+  let swept = 0;
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const [{ data: allClients }, { data: snappedToday }] = await Promise.all([
+      admin.from("clients").select("id").is("archived_at", null),
+      admin.from("brain_score_history").select("client_id").eq("captured_date", today),
+    ]);
+    const snapped = new Set(((snappedToday ?? []) as { client_id: string }[]).map((r) => r.client_id));
+    const justProcessed = new Set(clientIds);
+    const idle = ((allClients ?? []) as { id: string }[])
+      .map((c) => c.id)
+      .filter((id) => !snapped.has(id) && !justProcessed.has(id))
+      .slice(0, SNAPSHOT_BATCH);
+    for (const cid of idle) {
+      try {
+        await decayClientMemory(admin, cid);
+        await snapshotScore(admin, cid);
+        swept++;
+      } catch (e) {
+        console.error("[cron/brain-distill] idle sweep", cid, e);
+      }
+    }
+  } catch (e) {
+    console.error("[cron/brain-distill] phase 2", e);
+  }
+
+  await beat({ clients: clientIds.length, memories: newMemories, swept });
+  return NextResponse.json({ ok: true, clients: clientIds.length, processedSignals: processed, newMemories, sweptIdle: swept });
 }
 
 // Snapshot today's Brain Score (one row per client per day) and emit a
