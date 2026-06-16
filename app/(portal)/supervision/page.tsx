@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ExportCsv } from "@/components/supervision/ExportCsv";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { Eye, Clock, ChevronRight, CheckCircle2, Target, Inbox, AlertTriangle, NotebookPen } from "lucide-react";
-import { sumWorkHours, isOnTime } from "@/lib/tasks/metrics";
+import { sumWorkHours, isOnTime, isOverdue } from "@/lib/tasks/metrics";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -50,13 +50,15 @@ export default async function SupervisionPage() {
   const times = (timeRes.data ?? []) as { user_id: string; started_at: string; ended_at: string | null }[];
   const tasks = (tasksRes.data ?? []) as { assigned_to: string | null; status: string; updated_at: string; completed_at: string | null; due_date: string | null }[];
 
+  const today = new Date().toISOString().slice(0, 10);
+
   // Outcome-first stats per VA.
   type Stat = {
-    delivered: number; onTimeNum: number; onTimeDen: number; reviewing: number; inProgress: number;
+    delivered: number; onTimeNum: number; onTimeDen: number; reviewing: number; inProgress: number; overdue: number;
     hours: number; logs: number; lastLog: string; lastActive: number;
   };
   const stats: Record<string, Stat> = {};
-  const blank = (): Stat => ({ delivered: 0, onTimeNum: 0, onTimeDen: 0, reviewing: 0, inProgress: 0, hours: 0, logs: 0, lastLog: "", lastActive: 0 });
+  const blank = (): Stat => ({ delivered: 0, onTimeNum: 0, onTimeDen: 0, reviewing: 0, inProgress: 0, overdue: 0, hours: 0, logs: 0, lastLog: "", lastActive: 0 });
   const ensure = (id: string) => (stats[id] ??= blank());
 
   for (const l of logs) { const s = ensure(l.user_id); s.logs++; if (l.log_date > s.lastLog) s.lastLog = l.log_date; s.lastActive = Math.max(s.lastActive, new Date(l.updated_at).getTime()); }
@@ -76,6 +78,7 @@ export default async function SupervisionPage() {
       s.reviewing++;
     } else {
       s.inProgress++;
+      if (isOverdue(t, today)) s.overdue++;
     }
     s.lastActive = Math.max(s.lastActive, new Date(t.updated_at).getTime());
   }
@@ -86,15 +89,17 @@ export default async function SupervisionPage() {
 
   const onTimePct = (s: Stat) => (s.onTimeDen ? Math.round((s.onTimeNum / s.onTimeDen) * 100) : null);
 
-  // Flags lead with the client's action item (work awaiting them), then VA hygiene.
-  const today = new Date().toISOString().slice(0, 10);
+  // Flags lead with the most urgent signal — overdue work — then the client's
+  // action item (work awaiting them), then VA hygiene.
   const daysBetween = (a: string, b: string) => Math.floor((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000);
-  const flagsFor = (id: string): { text: string; action?: boolean }[] => {
-    const s = stats[id]; const f: { text: string; action?: boolean }[] = [];
-    if (s && s.reviewing > 0) f.push({ text: `${s.reviewing} awaiting your review`, action: true });
-    if (!s || !s.lastLog) f.push({ text: "No daily log this month" });
-    else if (daysBetween(s.lastLog, today) >= 3) f.push({ text: `No log for ${daysBetween(s.lastLog, today)} days` });
-    if (s && s.inProgress > 0 && s.delivered === 0) f.push({ text: "Active tasks, nothing delivered yet" });
+  type Flag = { text: string; kind: "alert" | "action" | "warn" };
+  const flagsFor = (id: string): Flag[] => {
+    const s = stats[id]; const f: Flag[] = [];
+    if (s && s.overdue > 0) f.push({ text: `${s.overdue} overdue`, kind: "alert" });
+    if (s && s.reviewing > 0) f.push({ text: `${s.reviewing} awaiting your review`, kind: "action" });
+    if (!s || !s.lastLog) f.push({ text: "No daily log this month", kind: "warn" });
+    else if (daysBetween(s.lastLog, today) >= 3) f.push({ text: `No log for ${daysBetween(s.lastLog, today)} days`, kind: "warn" });
+    if (s && s.inProgress > 0 && s.delivered === 0) f.push({ text: "Active tasks, nothing delivered yet", kind: "warn" });
     return f;
   };
 
@@ -111,6 +116,7 @@ export default async function SupervisionPage() {
       on_time_pct: onTimePct(s) ?? "",
       awaiting_review: s.reviewing,
       in_progress: s.inProgress,
+      overdue: s.overdue,
       hours_worked: Number(s.hours.toFixed(1)),
       daily_logs: s.logs,
       last_log: s.lastLog || "never",
@@ -169,10 +175,13 @@ export default async function SupervisionPage() {
                 {flags.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-3 pl-14">
                     {flags.map((f) => (
-                      <span key={f.text} className={f.action
-                        ? "inline-flex items-center gap-1 text-[11px] font-medium text-blue-300 bg-blue-500/10 rounded-full px-2 py-0.5"
-                        : "inline-flex items-center gap-1 text-[11px] font-medium text-amber-300 bg-amber-500/10 rounded-full px-2 py-0.5"}>
-                        {f.action ? <Inbox className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />} {f.text}
+                      <span key={f.text} className={
+                        f.kind === "alert"
+                          ? "inline-flex items-center gap-1 text-[11px] font-medium text-red-300 bg-red-500/10 rounded-full px-2 py-0.5"
+                          : f.kind === "action"
+                            ? "inline-flex items-center gap-1 text-[11px] font-medium text-blue-300 bg-blue-500/10 rounded-full px-2 py-0.5"
+                            : "inline-flex items-center gap-1 text-[11px] font-medium text-amber-300 bg-amber-500/10 rounded-full px-2 py-0.5"}>
+                        {f.kind === "action" ? <Inbox className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />} {f.text}
                       </span>
                     ))}
                   </div>
