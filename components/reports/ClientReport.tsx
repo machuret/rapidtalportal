@@ -19,6 +19,8 @@ function toPlainText(d: ClientReportData): string {
   L.push(`Work requested: ${d.totals.requested}`);
   if (d.totals.content) L.push(`Content produced: ${d.totals.content}`);
   if (d.totals.toolRuns) L.push(`AI tools used: ${d.totals.toolRuns}`);
+  const sign = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+  L.push("", `vs ${d.prevMonthLabel}: delivered ${sign(d.totals.delivered - d.prevTotals.delivered)}, hours ${sign(Math.round((d.totals.hours - d.prevTotals.hours) * 10) / 10)}`);
   if (d.vaRows.length) {
     L.push("", "Team:");
     for (const v of d.vaRows) L.push(`- ${v.name}: ${v.delivered} delivered${v.onTimePct !== null ? `, ${v.onTimePct}% on time` : ""}, ${v.hours}h`);
@@ -36,6 +38,7 @@ export function ClientReport({ data }: { data: ClientReportData }) {
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
   const t = data.totals;
+  const p = data.prevTotals;
 
   async function copy() {
     try {
@@ -87,13 +90,17 @@ export function ClientReport({ data }: { data: ClientReportData }) {
           </div>
         </div>
 
-        {/* Headline numbers */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-          <Metric value={t.delivered} label="Delivered" />
-          <Metric value={t.onTimePct === null ? "—" : `${t.onTimePct}%`} label="On time" />
-          <Metric value={t.hours} label="Hours worked" />
-          <Metric value={t.requested} label="Requested" />
+        {/* Headline numbers, with month-over-month change vs the prior month */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-2">
+          <Metric value={t.delivered} label="Delivered" delta={t.delivered - p.delivered} dir="up" />
+          <Metric
+            value={t.onTimePct === null ? "—" : `${t.onTimePct}%`} label="On time" dir="up" suffix="pp"
+            delta={t.onTimePct === null || p.onTimePct === null ? null : t.onTimePct - p.onTimePct}
+          />
+          <Metric value={t.hours} label="Hours worked" delta={Math.round((t.hours - p.hours) * 10) / 10} dir="neutral" />
+          <Metric value={t.requested} label="Requested" delta={t.requested - p.requested} dir="neutral" />
         </div>
+        <p className="text-xs text-zinc-400 mb-8">Change vs {data.prevMonthLabel}.</p>
 
         {(t.content > 0 || t.toolRuns > 0) && (
           <p className="text-sm text-zinc-500 mb-8 -mt-3">
@@ -172,11 +179,39 @@ export function ClientReport({ data }: { data: ClientReportData }) {
   );
 }
 
-function Metric({ value, label }: { value: number | string; label: string }) {
+function Metric({
+  value, label, delta, dir = "neutral", suffix = "",
+}: {
+  value: number | string;
+  label: string;
+  delta?: number | null;
+  dir?: "up" | "neutral";
+  suffix?: string;
+}) {
   return (
     <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3.5">
       <p className="text-3xl font-bold text-zinc-900 leading-none tabular-nums">{value}</p>
-      <p className="text-xs text-zinc-500 mt-1.5">{label}</p>
+      <div className="flex items-center justify-between mt-1.5">
+        <p className="text-xs text-zinc-500">{label}</p>
+        <MetricDelta delta={delta} dir={dir} suffix={suffix} />
+      </div>
     </div>
+  );
+}
+
+/** Month-over-month change chip. Up is good for delivered/on-time (green when
+ * positive); hours/requested are neutral (zinc) since neither direction is
+ * inherently "better". Hidden when there's no prior data or no change. */
+function MetricDelta({ delta, dir, suffix }: { delta?: number | null; dir: "up" | "neutral"; suffix: string }) {
+  if (delta == null || delta === 0) return null;
+  const up = delta > 0;
+  const tone = dir === "neutral"
+    ? "text-zinc-400"
+    : up ? "text-green-600" : "text-red-600";
+  const mag = Math.abs(Math.round(delta * 10) / 10);
+  return (
+    <span className={cn("text-xs font-medium tabular-nums", tone)}>
+      {up ? "▲" : "▼"} {mag}{suffix}
+    </span>
   );
 }

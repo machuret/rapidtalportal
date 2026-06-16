@@ -5,17 +5,70 @@ import { isOnTime } from "@/lib/tasks/metrics";
 export interface ReportVARow { name: string; delivered: number; onTimePct: number | null; hours: number }
 export interface ReportCatRow { name: string; color: string; count: number }
 export interface ReportDeliveredItem { title: string; completedAt: string; vaName: string | null; category: string | null }
+export interface ReportTotals { delivered: number; requested: number; hours: number; onTimePct: number | null; content: number; toolRuns: number }
 
 export interface ClientReportData {
   clientName: string;
   monthKey: string;
   monthLabel: string;
   months: { key: string; label: string }[];
-  totals: { delivered: number; requested: number; hours: number; onTimePct: number | null; content: number; toolRuns: number };
+  totals: ReportTotals;
+  /** Same headline totals for the prior month, for month-over-month deltas. */
+  prevTotals: ReportTotals;
+  prevMonthLabel: string;
   vaRows: ReportVARow[];
   categories: ReportCatRow[];
   delivered: ReportDeliveredItem[];
   generatedAt: string;
+}
+
+/** The 'YYYY-MM' month immediately before the given one. */
+export function previousMonthKey(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Headline totals for one month — used for the prior-month comparison. */
+async function monthTotals(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  clientId: string,
+  monthKey: string,
+): Promise<ReportTotals> {
+  const [y, m] = monthKey.split("-").map(Number);
+  const startIso = new Date(Date.UTC(y, m - 1, 1)).toISOString();
+  const nextIso = new Date(Date.UTC(y, m, 1)).toISOString();
+  const startDate = startIso.slice(0, 10);
+  const nextDate = nextIso.slice(0, 10);
+
+  const [{ data: doneRows }, { count: requested }, { data: timeRows }, { count: content }, { count: toolRuns }] = await Promise.all([
+    admin.from("tasks").select("completed_at, due_date").eq("client_id", clientId).eq("status", "done").gte("completed_at", startIso).lt("completed_at", nextIso),
+    admin.from("tasks").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
+    admin.from("time_entries").select("started_at, ended_at").eq("client_id", clientId).eq("phase", "work").gte("work_date", startDate).lt("work_date", nextDate),
+    admin.from("content_pieces").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
+    admin.from("tool_runs").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
+  ]);
+
+  const tasks = (doneRows ?? []) as { completed_at: string | null; due_date: string | null }[];
+  let onNum = 0, onDen = 0;
+  for (const t of tasks) {
+    if (t.due_date && t.completed_at) { onDen++; if (isOnTime(t.completed_at, t.due_date)) onNum++; }
+  }
+  let hoursMs = 0;
+  for (const e of (timeRows ?? []) as { started_at: string; ended_at: string | null }[]) {
+    if (!e.ended_at) continue;
+    hoursMs += new Date(e.ended_at).getTime() - new Date(e.started_at).getTime();
+  }
+  return {
+    delivered: tasks.length,
+    requested: requested ?? 0,
+    hours: Math.round(hoursMs / 360_000) / 10,
+    onTimePct: onDen ? Math.round((onNum / onDen) * 100) : null,
+    content: content ?? 0,
+    toolRuns: toolRuns ?? 0,
+  };
 }
 
 const labelOf = (key: string) =>
@@ -107,6 +160,10 @@ export async function buildClientReport(clientId: string, clientName: string, mo
     .slice(0, 40)
     .map((t) => ({ title: t.title, completedAt: t.completed_at ?? "", vaName: t.assigned_to ? vaName.get(t.assigned_to) ?? null : null, category: t.category_id ? catById.get(t.category_id)?.name ?? null : null }));
 
+  // Prior-month headline totals for the month-over-month comparison.
+  const prevKey = previousMonthKey(monthKey);
+  const prevTotals = await monthTotals(admin, clientId, prevKey);
+
   return {
     clientName,
     monthKey,
@@ -120,6 +177,8 @@ export async function buildClientReport(clientId: string, clientName: string, mo
       content: content ?? 0,
       toolRuns: toolRuns ?? 0,
     },
+    prevTotals,
+    prevMonthLabel: labelOf(prevKey),
     vaRows: vaRowsOut,
     categories,
     delivered,
