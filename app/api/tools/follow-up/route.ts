@@ -32,7 +32,7 @@ export const POST = withTool(
       voice,
     });
 
-    const result = await toolJson<{ touches: Touch[] }>(system, `Initial email:\n${data.email}`, 2500);
+    const result = await toolJson<{ touches: Touch[] }>(system, `Initial email:\n${data.email}`, 2500, undefined, data.clientId);
     if (!result.data?.touches?.length) {
       return NextResponse.json({ error: result.error ?? "Couldn't build the sequence. Try again." }, { status: 502 });
     }

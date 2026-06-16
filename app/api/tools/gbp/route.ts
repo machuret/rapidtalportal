@@ -33,7 +33,7 @@ export const POST = withTool(
 
     const system = await renderPrompt("tools.gbp", { company, context: contextBits });
 
-    const result = await toolJson<{ posts: Post[] }>(system, `Topic: ${data.topic}`, 1800);
+    const result = await toolJson<{ posts: Post[] }>(system, `Topic: ${data.topic}`, 1800, undefined, data.clientId);
     if (!result.data?.posts?.length) {
       return NextResponse.json({ error: result.error ?? "Couldn't generate posts. Try again." }, { status: 502 });
     }

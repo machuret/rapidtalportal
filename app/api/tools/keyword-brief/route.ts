@@ -48,7 +48,7 @@ export const POST = withTool(
         ? `\n\nExisting page copy (improve on it, note what's missing):\n"""\n${data.content}\n"""`
         : "");
 
-    const result = await toolJson<Brief>(system, userMsg, 3000);
+    const result = await toolJson<Brief>(system, userMsg, 3000, undefined, data.clientId);
     if (!result.data?.outline?.length) {
       return NextResponse.json({ error: result.error ?? "Couldn't build the brief. Try again." }, { status: 502 });
     }

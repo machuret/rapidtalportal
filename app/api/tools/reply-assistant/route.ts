@@ -32,7 +32,7 @@ export const POST = withTool(
 
     const userMsg = `Incoming message:\n"""\n${data.message}\n"""${data.context ? `\nContext from the VA: ${data.context}` : ""}`;
 
-    const result = await toolJson<{ replies: ReplyOption[] }>(system, userMsg, 1200, TOOL_MODEL_MINI);
+    const result = await toolJson<{ replies: ReplyOption[] }>(system, userMsg, 1200, TOOL_MODEL_MINI, data.clientId);
     if (!result.data?.replies?.length) {
       return NextResponse.json({ error: result.error ?? "Couldn't draft replies. Try again." }, { status: 502 });
     }

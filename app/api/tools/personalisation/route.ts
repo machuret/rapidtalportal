@@ -23,7 +23,7 @@ export const POST = withTool(
       outreach_style: await getPromptTemplate("style.outreach"),
     });
 
-    const result = await toolJson<{ lines: string[] }>(system, `Prospect website text:\n${data.about}`, 800, TOOL_MODEL_MINI);
+    const result = await toolJson<{ lines: string[] }>(system, `Prospect website text:\n${data.about}`, 800, TOOL_MODEL_MINI, data.clientId);
     if (!result.data?.lines?.length) {
       return NextResponse.json({ error: result.error ?? "Couldn't write the lines. Try again." }, { status: 502 });
     }

@@ -38,7 +38,7 @@ export const POST = withTool(
       sender_context: sender,
     });
 
-    const result = await toolJson<Spintax>(system, `Campaign brief: ${data.brief}${data.audience ? `\nTarget audience: ${data.audience}` : ""}`, 1800);
+    const result = await toolJson<Spintax>(system, `Campaign brief: ${data.brief}${data.audience ? `\nTarget audience: ${data.audience}` : ""}`, 1800, undefined, data.clientId);
     if (!result.data?.body) {
       return NextResponse.json({ error: result.error ?? "Couldn't write the email. Try again." }, { status: 502 });
     }

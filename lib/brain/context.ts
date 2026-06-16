@@ -63,8 +63,10 @@ const MAX_EXAMPLES = 8;
 export async function buildBrainContext(
   admin: Admin,
   clientId: string,
-  opts: { surfaces?: string[] } = {},
+  opts: { surfaces?: string[]; vaultCharLimit?: number; maxMemory?: number } = {},
 ): Promise<BrainContext> {
+  const vaultCharLimit = opts.vaultCharLimit ?? VAULT_CHAR_LIMIT;
+  const maxMemory = opts.maxMemory ?? 40;
   // Which surfaces this task counts as — used to inject only relevant lessons.
   const taskSurfaces = new Set([...(opts.surfaces ?? ["content"]), "all"]);
   const [dnaRes, vaultRes, posTopicsRes, negTopicsRes, signalsRes, memoryRes] = await Promise.all([
@@ -124,7 +126,7 @@ export async function buildBrainContext(
       if (!s || s.length === 0) return true;
       return s.some((x) => taskSurfaces.has(x));
     })
-    .slice(0, 40);
+    .slice(0, maxMemory);
 
   let text = "";
   let hasProfile = false;
@@ -151,7 +153,7 @@ export async function buildBrainContext(
       const snippet = item.ai_summary ?? item.raw_content?.slice(0, 3000) ?? "";
       if (!snippet.trim()) continue;
       const entry = `[${item.category?.toUpperCase() ?? "DOC"}] ${item.title}\n${snippet}\n\n`;
-      if (chars + entry.length > VAULT_CHAR_LIMIT) break;
+      if (chars + entry.length > vaultCharLimit) break;
       block += entry;
       chars += entry.length;
     }

@@ -35,7 +35,7 @@ export const POST = withTool(
       platform_spec: spec,
     });
 
-    const result = await toolJson<{ variants: Ad[] }>(system, `Offer: ${data.offer}`, 1500);
+    const result = await toolJson<{ variants: Ad[] }>(system, `Offer: ${data.offer}`, 1500, undefined, data.clientId);
     if (!result.data?.variants?.length) return NextResponse.json({ error: result.error ?? "Couldn't write ad copy." }, { status: 502 });
 
     const payload = {

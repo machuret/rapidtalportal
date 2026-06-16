@@ -31,7 +31,7 @@ export const POST = withTool(
       locality,
     });
 
-    const result = await toolJson<Groups>(system, `Topic / niche: ${data.topic}`, 1200, TOOL_MODEL_MINI);
+    const result = await toolJson<Groups>(system, `Topic / niche: ${data.topic}`, 1200, TOOL_MODEL_MINI, data.clientId);
     if (!result.data) return NextResponse.json({ error: result.error ?? "Couldn't research hashtags." }, { status: 502 });
 
     const clean = (arr: unknown, n: number) => (Array.isArray(arr) ? arr : []).filter((t) => typeof t === "string" && t.trim()).slice(0, n).map((t) => String(t).trim());

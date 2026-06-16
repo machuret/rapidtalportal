@@ -46,6 +46,8 @@ export const POST = withTool(
       system,
       `Niche / monthly focus: ${data.focus?.trim() || ctx.services}`,
       6000,
+      undefined,
+      data.clientId,
     );
     if (!result.data?.days?.length) {
       return NextResponse.json({ error: result.error ?? "Couldn't build the calendar. Try again." }, { status: 502 });

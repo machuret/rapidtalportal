@@ -26,7 +26,7 @@ export const POST = withTool(
 
     const system = await renderPrompt("tools.hooks", { voice });
 
-    const result = await toolJson<{ hooks: Hook[] }>(system, data.content, 1500, TOOL_MODEL_MINI);
+    const result = await toolJson<{ hooks: Hook[] }>(system, data.content, 1500, TOOL_MODEL_MINI, data.clientId);
     if (!result.data?.hooks?.length) {
       return NextResponse.json({ error: result.error ?? "Couldn't generate hooks. Try again." }, { status: 502 });
     }

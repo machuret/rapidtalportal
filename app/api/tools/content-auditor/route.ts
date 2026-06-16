@@ -34,7 +34,7 @@ export const POST = withTool(
       keyword_note: data.keyword ? ` against the target keyword "${data.keyword}"` : "",
     });
 
-    const result = await toolJson<Audit>(system, data.content, 2500);
+    const result = await toolJson<Audit>(system, data.content, 2500, undefined, data.clientId);
     if (!result.data?.subscores) {
       return NextResponse.json({ error: result.error ?? "Couldn't audit the copy. Try again." }, { status: 502 });
     }

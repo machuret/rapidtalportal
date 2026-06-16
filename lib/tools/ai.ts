@@ -9,6 +9,7 @@ import { assertClientAccess, type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { captureError } from "@/lib/error-tracking";
 import { salvageJson } from "@/lib/tools/json-salvage";
+import { buildBrainContext } from "@/lib/brain/context";
 
 export const TOOL_MODEL = process.env.TOOLS_MODEL || "openai/gpt-4o";
 // High-frequency, low-complexity tools (hashtags, hooks, replies) run on a
@@ -78,6 +79,33 @@ export async function companyContext(clientId: string): Promise<CompanyContext> 
   }
 }
 
+// Brain grounding for tools: the company profile + Vault highlights + the
+// lessons the Brain has learned (scoped to the "tool"/"content" surfaces) so a
+// tool's output reflects what worked/was rejected here — i.e. the tools get
+// smarter from feedback, not just emit it. Cached per client (short TTL) because
+// tools are high-frequency and buildBrainContext does several reads. Trimmed
+// (smaller Vault slice, fewer lessons) so short-form tools aren't token-bloated.
+const GROUNDING_TTL_MS = 30_000;
+const groundingCache = new Map<string, { text: string; at: number }>();
+
+export async function toolGrounding(clientId: string): Promise<string> {
+  const hit = groundingCache.get(clientId);
+  if (hit && Date.now() - hit.at < GROUNDING_TTL_MS) return hit.text;
+  try {
+    const admin = createAdminClient();
+    const brain = await buildBrainContext(admin, clientId, {
+      surfaces: ["tool", "content"],
+      vaultCharLimit: 3500,
+      maxMemory: 15,
+    });
+    const text = brain.text ? `${brain.text}\n` : "";
+    groundingCache.set(clientId, { text, at: Date.now() });
+    return text;
+  } catch {
+    return ""; // grounding is best-effort — never block a tool on it
+  }
+}
+
 /** Fire-and-forget usage record — feeds /tools history + Supervision stats.
  *  Pass the response payload as `output` to make the run reopenable. */
 export function logToolRun(tool: string, clientId: string, userId: string, inputSummary: string, tokens: number, output?: unknown): void {
@@ -92,10 +120,23 @@ export function logToolRun(tool: string, clientId: string, userId: string, input
 
 interface JsonResult<T> { data: T | null; tokens: number; error?: string }
 
-/** OpenRouter call expecting a JSON object; tolerates ```json fences. */
-export async function toolJson<T>(system: string, user: string, maxTokens = 2500, model: string = TOOL_MODEL): Promise<JsonResult<T>> {
+/**
+ * OpenRouter call expecting a JSON object; tolerates ```json fences.
+ *
+ * Pass `groundingClientId` to prepend the client's Brain grounding (profile +
+ * Vault highlights + learned lessons) to the user message, so the tool's output
+ * reflects what worked/was rejected for this client. Best-effort and cached.
+ */
+export async function toolJson<T>(
+  system: string,
+  user: string,
+  maxTokens = 2500,
+  model: string = TOOL_MODEL,
+  groundingClientId?: string,
+): Promise<JsonResult<T>> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return { data: null, tokens: 0, error: "OPENROUTER_API_KEY is not configured." };
+  const userContent = groundingClientId ? `${await toolGrounding(groundingClientId)}${user}` : user;
   try {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -105,7 +146,7 @@ export async function toolJson<T>(system: string, user: string, maxTokens = 2500
         max_tokens: maxTokens,
         temperature: 0.4,
         response_format: { type: "json_object" },
-        messages: [{ role: "system", content: system }, { role: "user", content: user }],
+        messages: [{ role: "system", content: system }, { role: "user", content: userContent }],
       }),
     });
     const json = await res.json();

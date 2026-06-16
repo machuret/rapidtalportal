@@ -35,7 +35,7 @@ export const POST = withTool(
     });
 
     // 3 posts + 3 scripts need headroom — a tight cap truncates the JSON.
-    const result = await toolJson<Repurposed>(system, data.content, 5000);
+    const result = await toolJson<Repurposed>(system, data.content, 5000, undefined, data.clientId);
     if (!result.data?.linkedin) {
       return NextResponse.json({ error: result.error ?? "Couldn't repurpose the post. Try again." }, { status: 502 });
     }

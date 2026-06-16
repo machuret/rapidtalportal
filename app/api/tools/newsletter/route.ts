@@ -30,7 +30,7 @@ export const POST = withTool(
       business_context: bits,
     });
 
-    const result = await toolJson<Newsletter>(system, data.topic, 2500);
+    const result = await toolJson<Newsletter>(system, data.topic, 2500, undefined, data.clientId);
     if (!result.data?.body) return NextResponse.json({ error: result.error ?? "Couldn't write the newsletter." }, { status: 502 });
 
     const payload = {

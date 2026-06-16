@@ -29,7 +29,7 @@ export const POST = withTool(
       voice,
     });
 
-    const result = await toolJson<Carousel>(system, data.topic, 2500);
+    const result = await toolJson<Carousel>(system, data.topic, 2500, undefined, data.clientId);
     if (!result.data?.slides?.length) return NextResponse.json({ error: result.error ?? "Couldn't build the carousel." }, { status: 502 });
 
     const payload = {

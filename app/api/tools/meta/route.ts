@@ -40,7 +40,7 @@ Page context: ${data.content.slice(0, 2000)}`, 400);
       keyword_note: data.keyword ? ` (target keyword: "${data.keyword}")` : "",
     });
 
-    const result = await toolJson<{ variants: Variant[] }>(system, data.content, 1500);
+    const result = await toolJson<{ variants: Variant[] }>(system, data.content, 1500, undefined, data.clientId);
     if (!result.data?.variants?.length) {
       return NextResponse.json({ error: result.error ?? "Couldn't generate variants. Try again." }, { status: 502 });
     }
