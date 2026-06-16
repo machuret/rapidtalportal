@@ -50,7 +50,7 @@ export default async function DashboardPage() {
     supabase.from("crm_contacts").select("id, first_name, last_name, company, status, updated_at").eq("client_id", clientId).is("archived_at", null).order("updated_at", { ascending: false }).limit(8),
     supabase.rpc("get_contact_status_counts", { p_client_id: clientId }),
     supabase.from("vault_items").select("*", { count: "exact", head: true }).eq("client_id", clientId).eq("status", "ready"),
-    supabase.from("sops").select("*", { count: "exact", head: true }).eq("client_id", clientId),
+    supabase.from("sops").select("*", { count: "exact", head: true }).eq("client_id", clientId).is("deleted_at", null),
   ]);
 
   if (kbResult.error)     console.error("[dashboard] kb_entries:", kbResult.error.message);

@@ -65,7 +65,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   // Everything we already have/considered, so we never suggest it again.
   const [{ data: sopRows }, { data: sugRows }] = await Promise.all([
-    scoped(admin.from("sops").select("title"), clientId),
+    scoped(admin.from("sops").select("title").is("deleted_at", null), clientId),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     scoped((admin as any).from("sop_suggestions").select("title"), clientId),
   ]);

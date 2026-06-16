@@ -22,6 +22,7 @@ export default async function SopEditPage({
     .from("sops")
     .select("id, client_id, title, category, subcategory, body, steps, intro, prerequisites, visibility")
     .eq("id", params.id)
+    .is("deleted_at", null)
     .maybeSingle();
   if (!sop) notFound();
 
@@ -39,7 +40,7 @@ export default async function SopEditPage({
   }
 
   // Categories + subcategories for the pickers.
-  let catQuery = admin.from("sops").select("category, subcategory");
+  let catQuery = admin.from("sops").select("category, subcategory").is("deleted_at", null);
   catQuery = isGlobal ? catQuery.is("client_id", null) : catQuery.eq("client_id", s.client_id!);
   const { data: sopRows } = await catQuery;
   const pickerRows = (sopRows ?? []) as unknown as { category: string | null; subcategory: string | null }[];

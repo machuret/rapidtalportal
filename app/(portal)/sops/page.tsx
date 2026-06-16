@@ -22,6 +22,7 @@ export default async function SopsPage() {
     admin
       .from("sops")
       .select("*")
+      .is("deleted_at", null)
       .or(`client_id.eq.${user.client_id},client_id.is.null`)
       .order("category")
       .order("order_index"),

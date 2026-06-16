@@ -172,7 +172,13 @@ export const DELETE = withAuth(async (req, { user }) => {
   const denied = authorizeScope(user, (existing as { client_id: string | null }).client_id);
   if (denied) return denied;
 
-  const { error } = await admin.from("sops").delete().eq("id", parsed.data.id);
+  // Soft delete — stamp deleted_at so the SOP leaves every list but stays
+  // recoverable, and any fork's forked_from pointer survives.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (admin as any)
+    .from("sops")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", parsed.data.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 });

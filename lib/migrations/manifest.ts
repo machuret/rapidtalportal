@@ -84,4 +84,5 @@ export const MIGRATIONS = [
   "076_brain_memory_v2.sql",
   "077_content_outcomes.sql",
   "078_va_leave_allowance.sql",
+  "079_sop_soft_delete.sql",
 ] as const;

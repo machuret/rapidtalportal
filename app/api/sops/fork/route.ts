@@ -28,6 +28,7 @@ export const POST = withAuth(
       .from("sops")
       .select("id, title, category, body, client_id, steps, intro, prerequisites, version")
       .eq("id", parsed.data.sopId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (!src) return NextResponse.json({ error: "SOP not found." }, { status: 404 });
 

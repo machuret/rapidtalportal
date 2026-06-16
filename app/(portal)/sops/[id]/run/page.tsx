@@ -17,6 +17,7 @@ export default async function SopRunPage({ params }: { params: { id: string } })
     .from("sops")
     .select("id, title, body, client_id, steps, intro, prerequisites")
     .eq("id", params.id)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!sop) notFound();

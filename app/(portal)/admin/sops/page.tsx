@@ -16,6 +16,7 @@ export default async function AdminSopsPage() {
     .from("sops")
     .select("*")
     .is("client_id", null)
+    .is("deleted_at", null)
     .order("category")
     .order("order_index");
 

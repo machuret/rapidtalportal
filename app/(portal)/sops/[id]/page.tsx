@@ -14,7 +14,7 @@ export default async function SopDetailPage({ params }: { params: { id: string }
   const { user } = ctx;
 
   const admin = createAdminClient();
-  const { data: sopRow } = await admin.from("sops").select("*").eq("id", params.id).maybeSingle();
+  const { data: sopRow } = await admin.from("sops").select("*").eq("id", params.id).is("deleted_at", null).maybeSingle();
   if (!sopRow) notFound();
   const sop = sopRow as Sop;
 
@@ -44,7 +44,7 @@ export default async function SopDetailPage({ params }: { params: { id: string }
       : null;
 
   // Category suggestions from the same scope.
-  let catQuery = admin.from("sops").select("category");
+  let catQuery = admin.from("sops").select("category").is("deleted_at", null);
   catQuery = isGlobal ? catQuery.is("client_id", null) : catQuery.eq("client_id", sop.client_id!);
   const { data: allSops } = await catQuery;
   const categories = Array.from(

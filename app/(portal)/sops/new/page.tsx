@@ -24,7 +24,7 @@ export default async function SopNewPage({ searchParams }: { searchParams: { sco
   }
 
   const admin = createAdminClient();
-  let catQuery = admin.from("sops").select("category, subcategory");
+  let catQuery = admin.from("sops").select("category, subcategory").is("deleted_at", null);
   catQuery = isGlobal ? catQuery.is("client_id", null) : catQuery.eq("client_id", user.client_id!);
   const { data: sopRows } = await catQuery;
   const rows = (sopRows ?? []) as unknown as { category: string | null; subcategory: string | null }[];
