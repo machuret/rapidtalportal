@@ -3,20 +3,14 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logCrm } from "@/lib/crm/events";
+import { CRM_STATUSES } from "@/lib/crm-config";
 
-const STATUSES = ["lead", "prospect", "active", "inactive", "closed"] as const;
+// Single source of truth for the statuses (also the DB CHECK + UI meta).
+const STATUSES = CRM_STATUSES as [string, ...string[]];
 
 const CONTACT_SELECT =
   "id, client_id, first_name, last_name, email, phone, company, job_title, status, source, tags, notes, archived_at, created_at, updated_at";
-
-/** Fire-and-forget activity trail entry on a contact. */
-function logCrm(contactId: string, clientId: string, userId: string, body: string): void {
-  const admin = createAdminClient();
-  void admin
-    .from("crm_events")
-    .insert({ contact_id: contactId, client_id: clientId, user_id: userId, body })
-    .then(({ error }) => { if (error) console.warn("[crm activity]", error.message); });
-}
 
 const createSchema = z.object({
   clientId:   z.string().uuid(),

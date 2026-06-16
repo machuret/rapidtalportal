@@ -58,9 +58,14 @@ export const POST = withAuth(async (req) => {
     }
   }
 
-  await Promise.all(items.map((i) =>
+  const results = await Promise.all(items.map((i) =>
     sb.from("notebook_pages").update({ sort_order: i.sortOrder, parent_page_id: i.parentPageId }).eq("id", i.id),
   ));
+  // Surface a partial failure instead of returning ok — the previous version
+  // ignored every result, so a dropped update left the tree inconsistent.
+  if (results.some((r) => r.error)) {
+    return NextResponse.json({ error: "Some pages couldn't be reordered — refresh and try again." }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 });

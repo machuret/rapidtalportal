@@ -3,6 +3,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logCrm } from "@/lib/crm/events";
 
 const createSchema = z.object({
   contactId: z.string().uuid(),
@@ -50,6 +51,7 @@ export const POST = withAuth(async (req, { user }) => {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  logCrm(parsed.data.contactId, parsed.data.clientId, user.id, "added a note");
   return NextResponse.json(data, { status: 201 });
 });
 
@@ -74,8 +76,11 @@ export const DELETE = withAuth(async (req, { user }) => {
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.clientId);
 
-  // VAs can only delete their own notes — chain filter BEFORE awaiting
-  const { error } = await (isAdmin ? baseQuery : baseQuery.eq("created_by", user.id));
+  // VAs can only delete their own notes — chain filter BEFORE awaiting.
+  // Return the deleted row's contact_id so we can log the activity-trail entry.
+  const { data: deleted, error } = await (isAdmin ? baseQuery : baseQuery.eq("created_by", user.id)).select("contact_id");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const contactId = ((deleted ?? [])[0] as { contact_id: string } | undefined)?.contact_id;
+  if (contactId) logCrm(contactId, parsed.data.clientId, user.id, "deleted a note");
   return NextResponse.json({ ok: true });
 });

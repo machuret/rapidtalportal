@@ -56,6 +56,16 @@ export const POST = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
 
   if (id) {
+    // Re-validate the close against the STORED start — not the client-supplied
+    // started_at, which a caller could fake to slip a backwards ended_at past
+    // the top-level check and corrupt every downstream hours rollup.
+    const { data: existing } = await admin
+      .from("time_entries").select("started_at").eq("id", id).eq("user_id", user.id).maybeSingle();
+    if (!existing) return NextResponse.json({ error: "Segment not found." }, { status: 404 });
+    if (ended_at) {
+      const closeError = validateSegmentTimes((existing as { started_at: string }).started_at, ended_at);
+      if (closeError) return NextResponse.json({ error: closeError }, { status: 422 });
+    }
     // Close (or update) an existing segment
     const { data, error } = await admin
       .from("time_entries")

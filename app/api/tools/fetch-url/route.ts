@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withTool } from "@/lib/tools/handler";
+import { logToolRun } from "@/lib/tools/ai";
 
 export const maxDuration = 60;
 
@@ -22,7 +23,7 @@ const PRIVATE_IP_RE = /^(localhost|127\.|0\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\
 
 export const POST = withTool(
   { slug: "fetch-url", schema, invalid: "Enter a valid URL." },
-  async ({ data }) => {
+  async ({ data, user }) => {
     try {
       const u = new URL(data.url);
       if (u.protocol !== "https:" || PRIVATE_IP_RE.test(u.hostname)) {
@@ -55,7 +56,9 @@ export const POST = withTool(
           { status: 422 },
         );
       }
-      return NextResponse.json({ content: content.slice(0, 30000), title: json?.data?.metadata?.title ?? null });
+      const title = json?.data?.metadata?.title ?? null;
+      logToolRun("fetch-url", data.clientId, user.id, data.url.slice(0, 80), 0, { title });
+      return NextResponse.json({ content: content.slice(0, 30000), title });
     } catch {
       return NextResponse.json({ error: "Fetch failed — paste the content instead." }, { status: 502 });
     }
