@@ -21,7 +21,9 @@ export default async function SopRunPage({ params }: { params: { id: string } })
     .maybeSingle();
 
   if (!sop) notFound();
-  const s = sop as {
+  // Cast via unknown: the generated DB types don't yet include `visibility`
+  // (regenerate types/database.ts to remove this — see audit).
+  const s = sop as unknown as {
     id: string; title: string; body: string; client_id: string | null;
     steps: { title: string; detail: string; tip?: string }[] | null;
     intro: string | null; prerequisites: string[] | null; visibility: string | null;
