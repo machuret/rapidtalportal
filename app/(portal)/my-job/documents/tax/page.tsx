@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DocumentShell } from "@/components/my-job/DocumentShell";
-import { periodEarnings, fmtMoney, type PayContract, type WorkedDay } from "@/lib/my-job/pay";
+import { periodEarnings, weekdaysInMonth, fmtMoney, type PayContract, type WorkedDay } from "@/lib/my-job/pay";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export default async function TaxSummaryPage({ searchParams }: { searchParams: {
   const months = Array.from({ length: 12 }, (_, i) => {
     const key = `${year}-${String(i + 1).padStart(2, "0")}`;
     const monthDays = days.filter((d) => d.work_date.startsWith(key));
-    const earn = periodEarnings(contract, monthDays, 1);
+    const earn = periodEarnings(contract, monthDays, 1, weekdaysInMonth(year, i + 1));
     return { key, label: new Date(year, i, 1).toLocaleDateString("en", { month: "long" }), ...earn };
   });
   const total = months.reduce((s, m) => s + (m.amount ?? 0), 0);

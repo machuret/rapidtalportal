@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DocumentShell } from "@/components/my-job/DocumentShell";
-import { periodEarnings, fmtMoney, type PayContract, type WorkedDay } from "@/lib/my-job/pay";
+import { periodEarnings, weekdaysInMonth, fmtMoney, type PayContract, type WorkedDay } from "@/lib/my-job/pay";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +38,8 @@ export default async function InvoicePage({ searchParams }: { searchParams: { mo
   const days = (dayRows ?? []) as (WorkedDay & { note: string | null })[];
   const p = profile as { address: string | null; personal_email: string | null; payment_details: string | null } | null;
 
-  const earn = periodEarnings(contract, days, 1);
+  // Monthly contracts prorate by the weekdays in this month (capped at full).
+  const earn = periodEarnings(contract, days, 1, weekdaysInMonth(Number(month.slice(0, 4)), Number(month.slice(5, 7))));
   const ccy = contract?.currency ?? "USD";
   const invoiceNo = `INV-${month.replace("-", "")}-${user.id.slice(0, 4).toUpperCase()}`;
 
