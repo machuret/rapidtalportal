@@ -31,6 +31,10 @@ jobs:
       - name: Deploy functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        # Deploy ALL edge functions, not just two — a correct edit to any of the
+        # others would otherwise silently never reach prod on push.
         run: |
-          supabase functions deploy vault-ask content-generate \
+          supabase functions deploy \
+            vault-ask content-generate kb-generate company-dna-scrape \
+            vault-crawl vault-delete vault-process send-message \
             --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
