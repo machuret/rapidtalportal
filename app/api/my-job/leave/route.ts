@@ -42,6 +42,21 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   const admin = createAdminClient();
+
+  // Reject a request that overlaps an existing pending/approved one, so the same
+  // days can't be double-booked (and double-counted against the balance).
+  const { data: clash } = await admin
+    .from("va_leave_requests")
+    .select("id")
+    .eq("user_id", user.id)
+    .in("status", ["pending", "approved"])
+    .lte("start_date", parsed.data.end_date)
+    .gte("end_date", parsed.data.start_date)
+    .limit(1);
+  if (clash && clash.length > 0) {
+    return NextResponse.json({ error: "You already have a leave request overlapping those dates." }, { status: 409 });
+  }
+
   const { data, error } = await admin
     .from("va_leave_requests")
     .insert({ user_id: user.id, client_id: user.client_id, ...parsed.data })
@@ -87,11 +102,17 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
 
   const admin = createAdminClient();
-  const { data: row } = await admin.from("va_leave_requests").select("client_id, user_id").eq("id", parsed.data.id).maybeSingle();
-  const r = row as { client_id: string | null; user_id: string } | null;
+  const { data: row } = await admin.from("va_leave_requests").select("client_id, user_id, status").eq("id", parsed.data.id).maybeSingle();
+  const r = row as { client_id: string | null; user_id: string; status: string } | null;
   if (!r) return NextResponse.json({ error: "Request not found." }, { status: 404 });
   const denied = assertClientAccess(user, r.client_id ?? "");
   if (denied) return denied;
+
+  // Only pending requests can be decided — re-reviewing a decided one would
+  // re-fire notifications and (for declined→approved) re-count the balance.
+  if (r.status !== "pending") {
+    return NextResponse.json({ error: `This request was already ${r.status}.` }, { status: 409 });
+  }
 
   const { data, error } = await admin
     .from("va_leave_requests")

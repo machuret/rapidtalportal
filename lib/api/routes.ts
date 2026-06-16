@@ -38,7 +38,6 @@ export const ROUTES = {
     unindexed: () => "/api/vault/unindexed",
     text: () => "/api/vault/text",
     url: () => "/api/vault/url",
-    crawl: () => "/api/vault/crawl",
     crawlSite: () => "/api/vault/crawl-site",
     crawlSiteAdvance: () => "/api/vault/crawl-site/advance",
     upload: () => "/api/vault/upload",

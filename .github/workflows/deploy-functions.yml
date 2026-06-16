@@ -36,5 +36,5 @@ jobs:
         run: |
           supabase functions deploy \
             vault-ask content-generate kb-generate company-dna-scrape \
-            vault-crawl vault-delete vault-process send-message \
+            vault-delete vault-process send-message \
             --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
