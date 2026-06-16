@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, CalendarDays, Loader2, Trash2, Save, MessageSquare, Settings2, Repeat } from "lucide-react";
+import { Plus, CalendarDays, Loader2, Trash2, Save, MessageSquare, Settings2, Repeat, Inbox, ThumbsUp, RotateCcw } from "lucide-react";
 import { TaskActivity } from "./TaskActivity";
 
 export type TaskStatus = "todo" | "in_progress" | "review" | "done";
@@ -367,6 +367,25 @@ function TaskDialog({
   const [priority, setPriority] = useState(task?.priority ?? 2);
   const [categoryId, setCategoryId] = useState(task?.category_id ?? "");
   const [busy, setBusy] = useState(false);
+  const [reviewNote, setReviewNote] = useState("");
+
+  // Admins can sign off a card that's awaiting review without leaving the board
+  // (the structured note + VA notification only fire through this path — dragging
+  // a Review card straight to Done would skip them).
+  const canReview = isAdmin && mode === "edit" && task?.status === "review";
+
+  async function decide(decision: "approve" | "changes") {
+    if (!task || busy) return;
+    if (decision === "changes" && !reviewNote.trim()) return;
+    setBusy(true);
+    try {
+      const updated = await api.post<Task>(ROUTES.taskReview(), {
+        id: task.id, decision, note: reviewNote.trim() || undefined,
+      });
+      toast.success(decision === "approve" ? "Approved — your VA has been notified." : "Sent back with your notes.");
+      onSaved(updated);
+    } catch { /* api-client surfaces a toast */ } finally { setBusy(false); }
+  }
 
   async function save() {
     if (title.trim().length < 1 || busy) return;
@@ -423,6 +442,27 @@ function TaskDialog({
           <DialogTitle>{mode === "create" ? "New task" : canWrite ? "Edit task" : "Task"}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4 mt-2">
+          {canReview && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 flex flex-col gap-2.5">
+              <p className="text-sm font-medium text-amber-200 flex items-center gap-1.5">
+                <Inbox className="w-4 h-4" /> Awaiting your review
+              </p>
+              <Textarea
+                value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} rows={2}
+                placeholder="Optional note for your VA (required to request changes)…"
+                className="bg-zinc-800 border-zinc-700"
+              />
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" size="sm" disabled={busy || !reviewNote.trim()}
+                  onClick={() => decide("changes")} className="gap-1.5 border-zinc-700">
+                  <RotateCcw className="w-3.5 h-3.5" /> Request changes
+                </Button>
+                <Button type="button" size="sm" disabled={busy} onClick={() => decide("approve")} className="gap-1.5">
+                  {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ThumbsUp className="w-3.5 h-3.5" />} Approve
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label>Title</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canWrite}
