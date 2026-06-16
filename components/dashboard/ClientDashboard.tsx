@@ -22,6 +22,7 @@ export interface ClientCategory { id: string; name: string; color: string }
 export interface AwaitingTask { id: string; title: string; description: string; assigneeName: string | null; updatedAt: string }
 export interface DeliveredTask { id: string; title: string; completedAt: string; assigneeName: string | null }
 export interface OverdueTask { id: string; title: string; assigneeName: string | null; dueDate: string; daysOverdue: number }
+export interface DueSoonTask { id: string; title: string; assigneeName: string | null; dueDate: string; daysUntil: number }
 
 export interface ClientDashboardProps {
   clientId: string;
@@ -31,6 +32,7 @@ export interface ClientDashboardProps {
   categories: ClientCategory[];
   awaiting: AwaitingTask[];
   overdue: OverdueTask[];
+  dueSoon: DueSoonTask[];
   stats: { inProgress: number; todo: number; completedThisWeek: number; hoursThisWeek: number; planHours: number | null };
   recentDelivered: DeliveredTask[];
   onboarding: { dna: boolean; docs: boolean; va: boolean; firstTask: boolean };
@@ -42,6 +44,9 @@ const rel = (iso: string) => {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return formatDate(iso, { day: "numeric", month: "short" });
 };
+
+const dueLabel = (daysUntil: number) =>
+  daysUntil <= 0 ? "due today" : daysUntil === 1 ? "due tomorrow" : `due in ${daysUntil} days`;
 
 export function ClientDashboard(props: ClientDashboardProps) {
   const router = useRouter();
@@ -124,12 +129,16 @@ export function ClientDashboard(props: ClientDashboardProps) {
         </div>
       )}
 
-      {/* Needs attention — work that's blown past its due date */}
-      {props.overdue.length > 0 && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 mb-6">
-          <p className="label-section mb-3 flex items-center gap-2 text-red-300">
-            <AlertTriangle className="w-4 h-4" />
-            Needs attention · {props.overdue.length} overdue
+      {/* Needs attention — overdue work (red) and what's coming due in 48h (amber).
+          Border leads with the worst tier present. */}
+      {(props.overdue.length > 0 || props.dueSoon.length > 0) && (
+        <div className={cn("rounded-xl border p-4 mb-6",
+          props.overdue.length > 0 ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5")}>
+          <p className="label-section mb-3 flex items-center gap-2 text-zinc-200">
+            <AlertTriangle className={cn("w-4 h-4", props.overdue.length > 0 ? "text-red-300" : "text-amber-300")} />
+            Needs attention
+            {props.overdue.length > 0 && <span className="text-red-300">· {props.overdue.length} overdue</span>}
+            {props.dueSoon.length > 0 && <span className="text-amber-300">· {props.dueSoon.length} due soon</span>}
           </p>
           <ul className="flex flex-col gap-1.5">
             {props.overdue.map((t) => (
@@ -139,6 +148,13 @@ export function ClientDashboard(props: ClientDashboardProps) {
                 <span className="text-xs font-medium text-red-400 shrink-0 tabular-nums">
                   {t.daysOverdue === 1 ? "1 day" : `${t.daysOverdue} days`} late
                 </span>
+              </li>
+            ))}
+            {props.dueSoon.map((t) => (
+              <li key={t.id} className="flex items-center gap-2 text-sm">
+                <span className="text-zinc-200 truncate flex-1">{t.title}</span>
+                {t.assigneeName && <span className="text-xs text-zinc-500 shrink-0">{t.assigneeName.split(" ")[0]}</span>}
+                <span className="text-xs font-medium text-amber-400 shrink-0 tabular-nums">{dueLabel(t.daysUntil)}</span>
               </li>
             ))}
           </ul>

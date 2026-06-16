@@ -49,3 +49,20 @@ export function isOverdue(task: { status: string; due_date: string | null }, tod
 export function daysOverdue(dueDate: string, today: string): number {
   return Math.round((Date.parse(today + "T00:00:00Z") - Date.parse(dueDate + "T00:00:00Z")) / 86_400_000);
 }
+
+/** Whole days a 'YYYY-MM-DD' date is ahead of `today` (negative if past). DST-safe. */
+export function daysUntil(dueDate: string, today: string): number {
+  return Math.round((Date.parse(dueDate + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 86_400_000);
+}
+
+/**
+ * Due soon = still being worked (`todo`/`in_progress`), not yet overdue, and due
+ * within `withinDays` (default 2) of `today` inclusive — i.e. the proactive
+ * window before {@link isOverdue} kicks in. Mutually exclusive with isOverdue.
+ */
+export function isDueSoon(task: { status: string; due_date: string | null }, today: string, withinDays = 2): boolean {
+  if (task.status !== "todo" && task.status !== "in_progress") return false;
+  if (!task.due_date) return false;
+  const d = daysUntil(task.due_date, today);
+  return d >= 0 && d <= withinDays;
+}

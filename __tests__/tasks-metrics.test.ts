@@ -1,4 +1,30 @@
-import { sumWorkHours, workHours, isOnTime, onTimePct, isOverdue, daysOverdue } from "@/lib/tasks/metrics";
+import { sumWorkHours, workHours, isOnTime, onTimePct, isOverdue, daysOverdue, isDueSoon, daysUntil } from "@/lib/tasks/metrics";
+
+describe("isDueSoon / daysUntil", () => {
+  const today = "2026-06-16";
+  it("flags in-flight work due within the next 2 days (inclusive of today)", () => {
+    expect(isDueSoon({ status: "todo", due_date: "2026-06-16" }, today)).toBe(true);      // today
+    expect(isDueSoon({ status: "in_progress", due_date: "2026-06-17" }, today)).toBe(true); // tomorrow
+    expect(isDueSoon({ status: "todo", due_date: "2026-06-18" }, today)).toBe(true);       // +2
+  });
+  it("does not flag work due further out, or already overdue", () => {
+    expect(isDueSoon({ status: "todo", due_date: "2026-06-19" }, today)).toBe(false); // +3
+    expect(isDueSoon({ status: "todo", due_date: "2026-06-15" }, today)).toBe(false); // past → overdue, not soon
+  });
+  it("ignores review/done and no due date", () => {
+    expect(isDueSoon({ status: "review", due_date: "2026-06-16" }, today)).toBe(false);
+    expect(isDueSoon({ status: "done", due_date: "2026-06-16" }, today)).toBe(false);
+    expect(isDueSoon({ status: "todo", due_date: null }, today)).toBe(false);
+  });
+  it("is mutually exclusive with isOverdue", () => {
+    const t = { status: "todo", due_date: "2026-06-15" };
+    expect(isOverdue(t, today) && isDueSoon(t, today)).toBe(false);
+  });
+  it("daysUntil is signed", () => {
+    expect(daysUntil("2026-06-18", today)).toBe(2);
+    expect(daysUntil("2026-06-14", today)).toBe(-2);
+  });
+});
 
 describe("isOverdue", () => {
   const today = "2026-06-16";

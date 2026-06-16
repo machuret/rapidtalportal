@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ExportCsv } from "@/components/supervision/ExportCsv";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { Eye, Clock, ChevronRight, CheckCircle2, Target, Inbox, AlertTriangle, NotebookPen } from "lucide-react";
-import { sumWorkHours, isOnTime, isOverdue } from "@/lib/tasks/metrics";
+import { sumWorkHours, isOnTime, isOverdue, isDueSoon } from "@/lib/tasks/metrics";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -54,11 +54,11 @@ export default async function SupervisionPage() {
 
   // Outcome-first stats per VA.
   type Stat = {
-    delivered: number; onTimeNum: number; onTimeDen: number; reviewing: number; inProgress: number; overdue: number;
+    delivered: number; onTimeNum: number; onTimeDen: number; reviewing: number; inProgress: number; overdue: number; dueSoon: number;
     hours: number; logs: number; lastLog: string; lastActive: number;
   };
   const stats: Record<string, Stat> = {};
-  const blank = (): Stat => ({ delivered: 0, onTimeNum: 0, onTimeDen: 0, reviewing: 0, inProgress: 0, overdue: 0, hours: 0, logs: 0, lastLog: "", lastActive: 0 });
+  const blank = (): Stat => ({ delivered: 0, onTimeNum: 0, onTimeDen: 0, reviewing: 0, inProgress: 0, overdue: 0, dueSoon: 0, hours: 0, logs: 0, lastLog: "", lastActive: 0 });
   const ensure = (id: string) => (stats[id] ??= blank());
 
   for (const l of logs) { const s = ensure(l.user_id); s.logs++; if (l.log_date > s.lastLog) s.lastLog = l.log_date; s.lastActive = Math.max(s.lastActive, new Date(l.updated_at).getTime()); }
@@ -79,6 +79,7 @@ export default async function SupervisionPage() {
     } else {
       s.inProgress++;
       if (isOverdue(t, today)) s.overdue++;
+      else if (isDueSoon(t, today)) s.dueSoon++;
     }
     s.lastActive = Math.max(s.lastActive, new Date(t.updated_at).getTime());
   }
@@ -97,6 +98,7 @@ export default async function SupervisionPage() {
     const s = stats[id]; const f: Flag[] = [];
     if (s && s.overdue > 0) f.push({ text: `${s.overdue} overdue`, kind: "alert" });
     if (s && s.reviewing > 0) f.push({ text: `${s.reviewing} awaiting your review`, kind: "action" });
+    if (s && s.dueSoon > 0) f.push({ text: `${s.dueSoon} due soon`, kind: "warn" });
     if (!s || !s.lastLog) f.push({ text: "No daily log this month", kind: "warn" });
     else if (daysBetween(s.lastLog, today) >= 3) f.push({ text: `No log for ${daysBetween(s.lastLog, today)} days`, kind: "warn" });
     if (s && s.inProgress > 0 && s.delivered === 0) f.push({ text: "Active tasks, nothing delivered yet", kind: "warn" });
@@ -117,6 +119,7 @@ export default async function SupervisionPage() {
       awaiting_review: s.reviewing,
       in_progress: s.inProgress,
       overdue: s.overdue,
+      due_soon: s.dueSoon,
       hours_worked: Number(s.hours.toFixed(1)),
       daily_logs: s.logs,
       last_log: s.lastLog || "never",

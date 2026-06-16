@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { workHours, isOverdue, daysOverdue } from "@/lib/tasks/metrics";
+import { workHours, isOverdue, daysOverdue, isDueSoon, daysUntil } from "@/lib/tasks/metrics";
 import type { ClientDashboardProps } from "@/components/dashboard/ClientDashboard";
 
 /** Local-midnight of the most recent Monday. */
@@ -63,6 +63,19 @@ export async function renderClientDashboard(clientId: string, fullName: string):
       daysOverdue: daysOverdue(t.due_date as string, today),
     }));
 
+  // Proactive tier: in-flight work due in the next 48h (soonest first).
+  const dueSoon = tasks
+    .filter((t) => isDueSoon(t, today))
+    .sort((a, b) => (a.due_date as string).localeCompare(b.due_date as string))
+    .slice(0, 6)
+    .map((t) => ({
+      id: t.id,
+      title: t.title,
+      assigneeName: t.assigned_to ? nameById.get(t.assigned_to) ?? null : null,
+      dueDate: t.due_date as string,
+      daysUntil: daysUntil(t.due_date as string, today),
+    }));
+
   const completedThisWeek = tasks.filter((t) => t.status === "done" && t.completed_at && t.completed_at >= wkStartIso).length;
   const recentDelivered = tasks
     .filter((t) => t.status === "done" && t.completed_at)
@@ -92,6 +105,7 @@ export async function renderClientDashboard(clientId: string, fullName: string):
     categories: (catRows ?? []) as { id: string; name: string; color: string }[],
     awaiting,
     overdue,
+    dueSoon,
     stats: {
       inProgress: tasks.filter((t) => t.status === "in_progress").length,
       todo: tasks.filter((t) => t.status === "todo").length,
