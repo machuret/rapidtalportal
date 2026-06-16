@@ -5,15 +5,34 @@
  * invariants that matter are that it never throws, skips cleanly when unconfigured,
  * reports failure rather than crashing the caller, and escapes interpolated text.
  */
-import { sendEmail, emailLayout, escapeHtml, emailConfigured } from "@/lib/email";
+import { sendEmail, emailLayout, escapeHtml, emailConfigured, appUrl } from "@/lib/email";
 
 const realFetch = global.fetch;
 const realKey = process.env.RESEND_API_KEY;
+const realAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+const realAppUrl2 = process.env.APP_URL;
 
 afterEach(() => {
   global.fetch = realFetch;
   if (realKey === undefined) delete process.env.RESEND_API_KEY;
   else process.env.RESEND_API_KEY = realKey;
+  if (realAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+  else process.env.NEXT_PUBLIC_APP_URL = realAppUrl;
+  if (realAppUrl2 === undefined) delete process.env.APP_URL;
+  else process.env.APP_URL = realAppUrl2;
+});
+
+describe("appUrl", () => {
+  test("prefers NEXT_PUBLIC_APP_URL and strips trailing slashes", () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com/";
+    expect(appUrl()).toBe("https://app.example.com");
+  });
+  test("falls back to the production domain when nothing is set", () => {
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    delete process.env.APP_URL;
+    expect(appUrl()).toMatch(/^https:\/\//);
+    expect(appUrl().endsWith("/")).toBe(false);
+  });
 });
 
 describe("escapeHtml", () => {

@@ -28,6 +28,19 @@ export function emailConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
 }
 
+/**
+ * The app's public base URL, for absolute links in emails (no trailing slash).
+ * Falls through common env vars to the production domain so CTAs always resolve.
+ */
+export function appUrl(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+    "https://rapidtal.online";
+  return raw.replace(/\/+$/, "");
+}
+
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM || "RapidTal <noreply@rapidtal.online>";

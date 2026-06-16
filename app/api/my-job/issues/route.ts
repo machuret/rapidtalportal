@@ -52,6 +52,15 @@ export const POST = withAuth(async (req, { user }) => {
     title: `Issue raised: ${parsed.data.category ?? "other"}`,
     body: `${name}: ${parsed.data.subject}`,
     href: ISSUE_HREF,
+    email: {
+      subject: `Issue raised by ${name}: ${parsed.data.subject.slice(0, 80)}`,
+      heading: "A VA raised an issue for mediation",
+      paragraphs: [
+        `${name} raised a ${parsed.data.category ?? "general"} issue: "${parsed.data.subject}".`,
+        "Review it and follow up in the admin portal.",
+      ],
+      ctaLabel: "Open the issue",
+    },
   });
   return NextResponse.json({ issue: data });
 });

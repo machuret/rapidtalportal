@@ -61,6 +61,15 @@ export const POST = withAuth(async (req, { user }) => {
       title: "Leave request",
       body: `${name} requested ${parsed.data.leave_type ?? "annual"} leave ${parsed.data.start_date} → ${parsed.data.end_date}.`,
       href: "/my-job",
+      email: {
+        subject: `Leave request from ${name}`,
+        heading: "A team member requested leave",
+        paragraphs: [
+          `${name} requested ${parsed.data.leave_type ?? "annual"} leave from ${parsed.data.start_date} to ${parsed.data.end_date}.`,
+          "Review and approve or decline it in the portal.",
+        ],
+        ctaLabel: "Review the request",
+      },
     });
   }
   return NextResponse.json({ request: data });
@@ -98,6 +107,17 @@ export const PATCH = withAuth(async (req, { user }) => {
     title: `Leave ${parsed.data.status}`,
     body: `Your leave request was ${parsed.data.status}.`,
     href: "/my-job",
+    email: {
+      subject: `Your leave request was ${parsed.data.status}`,
+      heading: `Leave ${parsed.data.status}`,
+      paragraphs: [
+        `Your leave request has been ${parsed.data.status}.`,
+        parsed.data.status === "approved"
+          ? "It's been recorded against your leave balance. Enjoy your time off!"
+          : "If you have questions, reach out to your client admin.",
+      ],
+      ctaLabel: "View in My Job",
+    },
   });
   return NextResponse.json({ request: data });
 }, { roles: ADMIN });

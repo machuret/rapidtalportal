@@ -108,6 +108,15 @@ export const POST = withAuth(async (req, { user }) => {
       type: "task_assigned",
       title: `New task: ${parsed.data.title.trim().slice(0, 120)}`,
       href: "/tasks",
+      email: {
+        subject: `New task assigned: ${parsed.data.title.trim().slice(0, 80)}`,
+        heading: "You've been assigned a new task",
+        paragraphs: [
+          `"${parsed.data.title.trim()}" has been assigned to you.`,
+          ...(parsed.data.description?.trim() ? [parsed.data.description.trim().slice(0, 500)] : []),
+        ],
+        ctaLabel: "Open the task board",
+      },
     });
   }
 
@@ -197,6 +206,12 @@ export const PATCH = withAuth(async (req, { user }) => {
       type: "task_assigned",
       title: `Task assigned to you: ${updated.title.slice(0, 120)}`,
       href: "/tasks",
+      email: {
+        subject: `Task assigned to you: ${updated.title.slice(0, 80)}`,
+        heading: "A task was assigned to you",
+        paragraphs: [`"${updated.title}" has been assigned to you.`],
+        ctaLabel: "Open the task board",
+      },
     });
   }
   // A VA moved a card into Review → tell the client admins.
@@ -207,6 +222,12 @@ export const PATCH = withAuth(async (req, { user }) => {
         type: "task_review",
         title: `Ready for review: ${updated.title.slice(0, 120)}`,
         href: "/tasks",
+        email: {
+          subject: `Ready for your review: ${updated.title.slice(0, 80)}`,
+          heading: "Work is ready for your review",
+          paragraphs: [`"${updated.title}" has been marked ready for review. Approve it or request changes in the portal.`],
+          ctaLabel: "Review the work",
+        },
       }),
     );
   }

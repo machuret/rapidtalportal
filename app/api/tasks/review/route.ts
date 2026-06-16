@@ -73,6 +73,15 @@ export const POST = withAuth(async (req, { user }) => {
       title: approve ? `Approved: ${task.title.slice(0, 110)}` : `Changes requested: ${task.title.slice(0, 100)}`,
       body: parsed.data.note?.trim()?.slice(0, 200),
       href: "/tasks",
+      email: {
+        subject: approve ? `Approved: ${task.title.slice(0, 80)}` : `Changes requested: ${task.title.slice(0, 70)}`,
+        heading: approve ? "Your work was approved" : "Changes were requested",
+        paragraphs: [
+          approve ? `"${task.title}" was approved. Nice work!` : `"${task.title}" was sent back for changes.`,
+          ...(parsed.data.note?.trim() ? [`Note: ${parsed.data.note.trim().slice(0, 500)}`] : []),
+        ],
+        ctaLabel: "Open the task board",
+      },
     });
   }
 
