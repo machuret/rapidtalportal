@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { validateSegmentTimes } from "@/lib/tasks/time-entry-validate";
 import { z } from "zod";
 
 // ── GET /api/time-entries?date=YYYY-MM-DD ──────────────────────────────────
@@ -45,8 +46,14 @@ export const POST = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
-  const admin = createAdminClient();
   const { id, work_date, phase, started_at, ended_at, is_manual, notes, category } = parsed.data;
+
+  // Reject non-parseable or backwards times — they silently corrupt every
+  // hours rollup (Supervision / My Team / Reports) downstream.
+  const timeError = validateSegmentTimes(started_at, ended_at);
+  if (timeError) return NextResponse.json({ error: timeError }, { status: 422 });
+
+  const admin = createAdminClient();
 
   if (id) {
     // Close (or update) an existing segment
