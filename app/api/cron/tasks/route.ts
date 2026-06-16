@@ -5,6 +5,9 @@
  *      collapsed, never bursted), then roll each recurrence to its next run.
  *   2. Archive stale "done" cards — completed longer ago than TASK_ARCHIVE_DAYS
  *      (default 30). Archived cards leave the board but still count as achieved.
+ *   3. Purge old read notifications — read longer ago than
+ *      NOTIFICATION_RETENTION_DAYS (default 60) so the table doesn't grow
+ *      unbounded. Unread notifications are always kept.
  *
  * Auth: Vercel attaches `Authorization: Bearer <CRON_SECRET>` to cron requests
  * when CRON_SECRET is set. We reject anything else, so the endpoint is not a
@@ -19,6 +22,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const ARCHIVE_DAYS = Number(process.env.TASK_ARCHIVE_DAYS ?? 30);
+const NOTIFICATION_RETENTION_DAYS = Number(process.env.NOTIFICATION_RETENTION_DAYS ?? 60);
 
 interface RecurrenceRow {
   id: string; client_id: string; created_by: string | null; assigned_to: string | null;
@@ -97,12 +101,25 @@ export async function GET(req: NextRequest) {
 
   const archived = (archivedRows ?? []).length;
 
+  // ---- 3. Purge old read notifications ----------------------------------
+  // Only ever delete notifications the user has already read — unread ones are
+  // kept regardless of age so nothing is missed.
+  const notifCutoff = new Date(now.getTime() - NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { data: purgedRows } = await admin
+    .from("notifications")
+    .delete()
+    .not("read_at", "is", null)
+    .lt("read_at", notifCutoff)
+    .select("id");
+
+  const purgedNotifications = (purgedRows ?? []).length;
+
   // Heartbeat: /admin/health flags a cron that hasn't run on schedule.
   await admin.from("cron_heartbeats").upsert({
     name: "tasks",
     ran_at: now.toISOString(),
-    detail: { spawned, archived },
+    detail: { spawned, archived, purgedNotifications },
   });
 
-  return NextResponse.json({ ok: true, today, spawned, archived });
+  return NextResponse.json({ ok: true, today, spawned, archived, purgedNotifications });
 }
