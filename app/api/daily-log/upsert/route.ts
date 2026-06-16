@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { format } from "date-fns";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { todayInTimezone } from "@/lib/date-tz";
 
 const schema = z.object({
   log_date:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -22,11 +22,17 @@ export const POST = withAuth(async (req, { user }) => {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid input.", issues: parsed.error.flatten() }, { status: 400 });
 
+  const admin = createAdminClient();
+
   // VAs may only write today's log — prevents backdating / future-dating entries.
   // Admins (client_admin, super_admin) are exempt so they can backfill if needed.
+  // "Today" is computed in the VA's own timezone, not the server's UTC, so a VA
+  // east/west of UTC isn't wrongly blocked around the day boundary.
   const isAdmin = user.role === "client_admin" || user.role === "super_admin";
   if (!isAdmin) {
-    const today = format(new Date(), "yyyy-MM-dd");
+    const { data: me } = await admin.from("users").select("timezone").eq("id", user.id).maybeSingle();
+    const tz = (me as { timezone: string | null } | null)?.timezone ?? null;
+    const today = todayInTimezone(tz);
     if (parsed.data.log_date !== today) {
       return NextResponse.json(
         { error: `Logs can only be submitted for today (${today}).` },
@@ -35,7 +41,6 @@ export const POST = withAuth(async (req, { user }) => {
     }
   }
 
-  const admin = createAdminClient();
   const { data, error } = await admin
     .from("daily_logs")
     .upsert({
