@@ -38,7 +38,7 @@ export const POST = withSuperAdmin(async (req) => {
   if (!va || va.role !== "va" || va.client_id !== clientId) {
     return NextResponse.json({ error: "VA must belong to the selected client." }, { status: 422 });
   }
-  if (!cl || !["client_admin", "client"].includes(cl.role) || cl.client_id !== clientId) {
+  if (!cl || cl.role !== "client_admin" || cl.client_id !== clientId) {
     return NextResponse.json({ error: "Client contact must belong to the selected client." }, { status: 422 });
   }
 

@@ -24,30 +24,45 @@ export default async function AdminPlacementsPage() {
   const orgOf = (id: string) => (clients ?? []).find((c) => c.id === id)?.name ?? null;
 
   const placements = (placementRows ?? []) as { id: string; client_id: string; va_user_id: string; client_user_id: string; status: string }[];
+  const ids = placements.map((p) => p.id);
 
   // Per-placement METADATA ONLY — page counts (no titles/content) + the last
-  // activity event. Admins never read notebook_pages content.
-  const rows: AdminPlacementRow[] = await Promise.all(placements.map(async (p) => {
-    const [{ count }, { data: act }] = await Promise.all([
-      admin.from("notebook_pages").select("id", { count: "exact", head: true }).eq("placement_id", p.id).eq("is_archived", false),
-      admin.from("notebook_activity").select("actor_role, created_at").eq("placement_id", p.id).order("created_at", { ascending: false }).limit(1),
-    ]);
-    const last = (act ?? [])[0] as { actor_role: string; created_at: string } | undefined;
+  // activity event. Admins never read notebook_pages content. Fetched in TWO
+  // aggregate queries (was 2 per placement = an N+1) and tallied in code.
+  const [{ data: pageRows }, { data: activityRows }] = ids.length
+    ? await Promise.all([
+        admin.from("notebook_pages").select("placement_id").eq("is_archived", false).in("placement_id", ids),
+        admin.from("notebook_activity").select("placement_id, actor_role, created_at").in("placement_id", ids).order("created_at", { ascending: false }).limit(10000),
+      ])
+    : [{ data: [] as { placement_id: string }[] }, { data: [] as { placement_id: string; actor_role: string; created_at: string }[] }];
+
+  const pageCount = new Map<string, number>();
+  for (const r of (pageRows ?? []) as { placement_id: string }[]) {
+    pageCount.set(r.placement_id, (pageCount.get(r.placement_id) ?? 0) + 1);
+  }
+  const lastAct = new Map<string, { actor_role: string; created_at: string }>();
+  for (const a of (activityRows ?? []) as { placement_id: string; actor_role: string; created_at: string }[]) {
+    // Rows are newest-first, so the first seen per placement is the latest.
+    if (!lastAct.has(a.placement_id)) lastAct.set(a.placement_id, { actor_role: a.actor_role, created_at: a.created_at });
+  }
+
+  const rows: AdminPlacementRow[] = placements.map((p) => {
+    const last = lastAct.get(p.id);
     return {
       id: p.id,
       status: p.status,
       vaName: nameOf(p.va_user_id),
       clientPersonName: nameOf(p.client_user_id),
       orgName: orgOf(p.client_id),
-      pageCount: count ?? 0,
+      pageCount: pageCount.get(p.id) ?? 0,
       lastActivityAt: last?.created_at ?? null,
       lastActorRole: last?.actor_role ?? null,
     };
-  }));
+  });
 
   const vas = (users ?? []).filter((u) => u.role === "va" && u.client_id)
     .map((u) => ({ id: u.id, name: u.full_name ?? u.email, clientId: u.client_id as string }));
-  const clientContacts = (users ?? []).filter((u) => ["client_admin", "client"].includes(u.role) && u.client_id)
+  const clientContacts = (users ?? []).filter((u) => u.role === "client_admin" && u.client_id)
     .map((u) => ({ id: u.id, name: u.full_name ?? u.email, clientId: u.client_id as string }));
 
   return (

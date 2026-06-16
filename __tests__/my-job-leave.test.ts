@@ -69,4 +69,10 @@ describe("summariseLeaveTaken", () => {
   it("scopes to the requested year (Dec 29–31 2025 = 3 weekdays)", () => {
     expect(summariseLeaveTaken(rows, 2025)).toEqual({ annual: 3, sick: 0, personal: 0, unpaid: 0, total: 3 });
   });
+
+  it("splits a year-spanning request across both calendar years", () => {
+    const spanning = [{ start_date: "2025-12-29", end_date: "2026-01-02", leave_type: "annual", status: "approved" }];
+    expect(summariseLeaveTaken(spanning, 2025).annual).toBe(3); // Dec 29 Mon, 30 Tue, 31 Wed
+    expect(summariseLeaveTaken(spanning, 2026).annual).toBe(2); // Jan 1 Thu, 2 Fri
+  });
 });

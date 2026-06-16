@@ -31,6 +31,40 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
+
+  // Re-rating the same artifact updates the existing signal instead of inserting
+  // a duplicate (which would inflate source_count and re-distil the same input).
+  // created_at is bumped + distilled_at cleared so the change is re-distilled.
+  if (parsed.data.artifact_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: prior } = await (admin as any)
+      .from("brain_signals").select("id")
+      .eq("user_id", user.id).eq("surface", parsed.data.surface).eq("artifact_id", parsed.data.artifact_id)
+      .order("created_at", { ascending: false }).limit(1);
+    const existing = (prior ?? [])[0] as { id: string } | undefined;
+    if (existing) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (admin as any)
+        .from("brain_signals")
+        .update({
+          rating:        parsed.data.rating,
+          reason:        parsed.data.reason ?? null,
+          artifact_text: parsed.data.artifact_text,
+          context:       parsed.data.context ?? {},
+          distilled_at:  null,
+          created_at:    new Date().toISOString(),
+        })
+        .eq("id", existing.id)
+        .select("id")
+        .single();
+      if (error) {
+        console.error("[brain/signals re-rate]", error.code, error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json(data, { status: 200 });
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("brain_signals")

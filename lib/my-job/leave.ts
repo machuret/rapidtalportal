@@ -74,18 +74,22 @@ export function businessDaysInclusive(
 }
 
 /**
- * Business days of APPROVED leave whose `start_date` falls in `year`, grouped by
- * type. Non-approved requests and other years are ignored; an unrecognised
- * `leave_type` is bucketed as `annual`.
+ * Business days of APPROVED leave that FALL WITHIN `year`, grouped by type.
+ * Year-spanning requests are clipped to the year, so a Dec→Jan request counts
+ * its December days in one year and its January days in the next instead of
+ * dumping the whole request into the start year. An unrecognised `leave_type`
+ * is bucketed as `annual`.
  */
 export function summariseLeaveTaken(rows: LeaveRequestLike[], year: number): LeaveSummary {
   const sum: LeaveSummary = { annual: 0, sick: 0, personal: 0, unpaid: 0, total: 0 };
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
   for (const r of rows) {
     if (r.status !== "approved") continue;
-    const startYear = new Date(`${r.start_date}T00:00:00Z`).getUTCFullYear();
-    if (startYear !== year) continue;
-
-    const days = businessDaysInclusive(r.start_date, r.end_date);
+    // Clip the request to the requested calendar year before counting.
+    const clipStart = r.start_date < yearStart ? yearStart : r.start_date;
+    const clipEnd = r.end_date > yearEnd ? yearEnd : r.end_date;
+    const days = businessDaysInclusive(clipStart, clipEnd);
     if (days === 0) continue;
 
     const key: LeaveType = LEAVE_TYPES.includes(r.leave_type as LeaveType)
