@@ -17,6 +17,22 @@
 export type LeaveType = "annual" | "sick" | "personal" | "unpaid";
 const LEAVE_TYPES: readonly LeaveType[] = ["annual", "sick", "personal", "unpaid"];
 
+/**
+ * Fallback annual paid-leave entitlement (working days) when a contract hasn't
+ * set one. 20 days = the Australian full-time statutory minimum.
+ */
+export const DEFAULT_ANNUAL_LEAVE_DAYS = 20;
+
+/** Effective annual allowance: the contract value, or the default when unset. */
+export function effectiveAnnualAllowance(contractDays: number | null | undefined): number {
+  return contractDays == null ? DEFAULT_ANNUAL_LEAVE_DAYS : contractDays;
+}
+
+/** Days of annual leave still available (never negative). */
+export function annualRemaining(allowance: number, takenAnnual: number): number {
+  return Math.max(0, allowance - takenAnnual);
+}
+
 export interface LeaveRequestLike {
   start_date: string; // yyyy-mm-dd
   end_date: string;   // yyyy-mm-dd

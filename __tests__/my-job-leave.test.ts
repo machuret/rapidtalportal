@@ -1,4 +1,30 @@
-import { businessDaysInclusive, summariseLeaveTaken } from "@/lib/my-job/leave";
+import {
+  businessDaysInclusive,
+  summariseLeaveTaken,
+  effectiveAnnualAllowance,
+  annualRemaining,
+  DEFAULT_ANNUAL_LEAVE_DAYS,
+} from "@/lib/my-job/leave";
+
+describe("effectiveAnnualAllowance", () => {
+  it("uses the contract value when set (including 0)", () => {
+    expect(effectiveAnnualAllowance(25)).toBe(25);
+    expect(effectiveAnnualAllowance(0)).toBe(0);
+  });
+  it("falls back to the default when null/undefined", () => {
+    expect(effectiveAnnualAllowance(null)).toBe(DEFAULT_ANNUAL_LEAVE_DAYS);
+    expect(effectiveAnnualAllowance(undefined)).toBe(DEFAULT_ANNUAL_LEAVE_DAYS);
+  });
+});
+
+describe("annualRemaining", () => {
+  it("subtracts taken from allowance", () => {
+    expect(annualRemaining(20, 8)).toBe(12);
+  });
+  it("never goes negative", () => {
+    expect(annualRemaining(20, 25)).toBe(0);
+  });
+});
 
 describe("businessDaysInclusive", () => {
   it("counts a single weekday as 1", () => {

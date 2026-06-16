@@ -17,6 +17,7 @@ export interface ContractInit {
   payment_method: string | null; payment_schedule: string | null;
   start_date: string | null; weekly_hours: number | null;
   notice_period: string | null; next_review_date: string | null;
+  annual_leave_days: number | null;
   contract_name: string | null;
 }
 
@@ -33,6 +34,7 @@ export function VaContractEditor({ vaId, initial }: { vaId: string; initial: Con
     weekly_hours: initial?.weekly_hours != null ? String(initial.weekly_hours) : "",
     notice_period: initial?.notice_period ?? "",
     next_review_date: initial?.next_review_date ?? "",
+    annual_leave_days: initial?.annual_leave_days != null ? String(initial.annual_leave_days) : "",
   });
 
   function set<K extends keyof typeof f>(k: K, v: string) { setF((p) => ({ ...p, [k]: v })); }
@@ -94,6 +96,7 @@ export function VaContractEditor({ vaId, initial }: { vaId: string; initial: Con
         weekly_hours: f.weekly_hours ? Number(f.weekly_hours) : null,
         notice_period: f.notice_period.trim() || null,
         next_review_date: f.next_review_date || null,
+        annual_leave_days: f.annual_leave_days ? Number(f.annual_leave_days) : null,
       }, { showErrorToast: false });
       toast.success("Contract terms saved.");
       setOpen(false);
@@ -134,6 +137,7 @@ export function VaContractEditor({ vaId, initial }: { vaId: string; initial: Con
         <div className="flex flex-col gap-1"><label className={lbl}>Start date</label><input type="date" value={f.start_date} onChange={(e) => set("start_date", e.target.value)} className={input} /></div>
         <div className="flex flex-col gap-1"><label className={lbl}>Notice period</label><input value={f.notice_period} onChange={(e) => set("notice_period", e.target.value)} placeholder="30 days" className={input} /></div>
         <div className="flex flex-col gap-1"><label className={lbl}>Next review date</label><input type="date" value={f.next_review_date} onChange={(e) => set("next_review_date", e.target.value)} className={input} /></div>
+        <div className="flex flex-col gap-1"><label className={lbl}>Annual leave (days)</label><input type="number" min="0" max="366" step="1" value={f.annual_leave_days} onChange={(e) => set("annual_leave_days", e.target.value)} placeholder="20" className={input} /></div>
       </div>
 
       {/* Signed contract PDF */}

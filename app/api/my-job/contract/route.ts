@@ -43,6 +43,7 @@ const putSchema = z.object({
   weekly_hours: z.number().nonnegative().max(168).nullable().optional(),
   notice_period: z.string().max(100).nullable().optional(),
   next_review_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  annual_leave_days: z.number().int().min(0).max(366).nullable().optional(),
 });
 
 export const PUT = withAuth(async (req, { user }) => {

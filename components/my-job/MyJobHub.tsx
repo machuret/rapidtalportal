@@ -10,7 +10,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import { summariseLeaveTaken } from "@/lib/my-job/leave";
+import { summariseLeaveTaken, effectiveAnnualAllowance, annualRemaining } from "@/lib/my-job/leave";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { differenceInCalendarMonths, addMonths, format } from "date-fns";
@@ -27,6 +27,7 @@ export interface Contract {
   payment_method: string | null; payment_schedule: string | null;
   start_date: string | null; weekly_hours: number | null;
   notice_period: string | null; next_review_date: string | null;
+  annual_leave_days: number | null;
   contract_path: string | null; contract_name: string | null;
 }
 export interface DayRow { id: string; work_date: string; hours: number | null; note: string | null }
@@ -97,7 +98,7 @@ export function MyJobHub({ vaTimezone, contract, initialDays, initialLeave, init
 
       {tab === "overview" && <Overview contract={contract} vaTimezone={vaTimezone} />}
       {tab === "days" && <DaysTab initial={initialDays} />}
-      {tab === "leave" && <LeaveTab initial={initialLeave} />}
+      {tab === "leave" && <LeaveTab initial={initialLeave} allowanceDays={contract?.annual_leave_days ?? null} />}
       {tab === "team-leave" && isAdmin && <TeamLeaveTab initial={initialTeamLeave} />}
       {tab === "holidays" && <HolidayCalendars />}
       {tab === "documents" && <DocumentsTab />}
@@ -309,7 +310,7 @@ function DaysTab({ initial }: { initial: DayRow[] }) {
 const LEAVE_TINT: Record<string, string> = {
   pending: "bg-amber-500/15 text-amber-300", approved: "bg-green-500/15 text-green-300", declined: "bg-red-500/15 text-red-300",
 };
-function LeaveTab({ initial }: { initial: LeaveRow[] }) {
+function LeaveTab({ initial, allowanceDays }: { initial: LeaveRow[]; allowanceDays: number | null }) {
   const [rows, setRows] = useState<LeaveRow[]>(initial);
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -319,6 +320,8 @@ function LeaveTab({ initial }: { initial: LeaveRow[] }) {
 
   const thisYear = new Date().getFullYear();
   const taken = useMemo(() => summariseLeaveTaken(rows, thisYear), [rows, thisYear]);
+  const allowance = effectiveAnnualAllowance(allowanceDays);
+  const remaining = annualRemaining(allowance, taken.annual);
 
   async function request() {
     if (saving || !start || !end) return;
@@ -381,9 +384,15 @@ function LeaveTab({ initial }: { initial: LeaveRow[] }) {
             </div>
           ))}
         </div>
-        <p className="text-xs text-zinc-500 mt-3">
-          {taken.total} working {taken.total === 1 ? "day" : "days"} taken so far this year.
-        </p>
+        <div className="flex items-center justify-between gap-3 mt-4 pt-3 border-t border-zinc-800">
+          <p className="text-xs text-zinc-500">
+            {taken.total} working {taken.total === 1 ? "day" : "days"} taken so far this year.
+          </p>
+          <p className="text-xs text-zinc-300">
+            <span className="font-semibold text-zinc-100">{remaining}</span>
+            <span className="text-zinc-500"> of {allowance} annual {allowance === 1 ? "day" : "days"} left</span>
+          </p>
+        </div>
       </div>
 
       {rows.length === 0 ? <p className="text-sm text-zinc-500">No leave requests yet.</p> : (

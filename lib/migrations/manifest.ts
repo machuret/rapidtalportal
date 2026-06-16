@@ -83,4 +83,5 @@ export const MIGRATIONS = [
   "075_backfill_vault_feedback_signals.sql",
   "076_brain_memory_v2.sql",
   "077_content_outcomes.sql",
+  "078_va_leave_allowance.sql",
 ] as const;
