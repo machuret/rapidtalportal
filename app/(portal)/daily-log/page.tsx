@@ -23,6 +23,10 @@ export default async function DailyLogPage({
   if (user.role === "client_admin") redirect("/dashboard");
 
   const admin = createAdminClient();
+  // Compute 'today' once on the server and pass it down — the client components
+  // must NOT derive it from new Date() at render (server UTC vs browser tz =
+  // hydration mismatch near the day boundary).
+  const today = format(new Date(), "yyyy-MM-dd");
   // Only super_admin reaches the manager view now (client_admin is redirected
   // above; clients read VA logs via My Team).
   const isClientAdmin = user.role === "super_admin";
@@ -46,7 +50,6 @@ export default async function DailyLogPage({
     let selectedHistory: { log_date: string; mood: Mood | null }[] = [];
 
     if (selectedId) {
-      const today = format(new Date(), "yyyy-MM-dd");
       const since = format(subDays(new Date(), 29), "yyyy-MM-dd");
 
       const [logRes, histRes] = await Promise.all([
@@ -71,12 +74,12 @@ export default async function DailyLogPage({
         initialLog={selectedLog}
         initialNotes={selectedNotes}
         initialHistory={selectedHistory}
+        today={today}
       />
     );
   }
 
   // ── VA: see their own log ──
-  const today = format(new Date(), "yyyy-MM-dd");
   const since = format(subDays(new Date(), 29), "yyyy-MM-dd");
 
   const [todayResult, historyResult] = await Promise.all([
@@ -101,6 +104,7 @@ export default async function DailyLogPage({
         initialLog={todayLog}
         initialNotes={todayNotes}
         initialHistory={history}
+        today={today}
       />
     </div>
   );

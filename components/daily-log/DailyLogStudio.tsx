@@ -26,6 +26,11 @@ interface Props {
   initialLog:     DailyLog | null;
   initialNotes:   DailyLogNote[];
   initialHistory: HistoryEntry[];
+  /** Server-computed 'today' (yyyy-MM-dd). Passed in (not derived from
+   *  `new Date()` at render) so SSR and the client hydrate identically — the
+   *  server renders in UTC and the browser in the user's tz, which otherwise
+   *  triggers React hydration mismatches (#418/#422/#425) near a day boundary. */
+  today:          string;
   readOnly?:      boolean;
   viewingUserId?: string; // When set (admin viewing a VA), date nav fetches this user's log
 }
@@ -46,8 +51,7 @@ const SECTIONS = [
   { key: "goals_tomorrow", label: "📅 Goals for Tomorrow", placeholder: "What are your top priorities tomorrow?" },
 ] as const;
 
-export function DailyLogStudio({ initialLog, initialNotes, initialHistory, readOnly = false, viewingUserId }: Props) {
-  const today = format(new Date(), "yyyy-MM-dd");
+export function DailyLogStudio({ initialLog, initialNotes, initialHistory, today, readOnly = false, viewingUserId }: Props) {
   const [activeDate, setActiveDate] = useState(today);
   const isActiveToday = activeDate === today;
   const isReadOnly = readOnly || !isActiveToday;
@@ -201,11 +205,13 @@ export function DailyLogStudio({ initialLog, initialNotes, initialHistory, readO
 
   const last30 = useMemo(() =>
     Array.from({ length: 30 }, (_, i) => {
-      const d = format(subDays(new Date(), 29 - i), "yyyy-MM-dd");
+      // Derive from the server `today` (not new Date()) so the strip is
+      // deterministic between SSR and hydration.
+      const d = format(subDays(parseISO(today), 29 - i), "yyyy-MM-dd");
       const h = historyMap.get(d);
       return { date: d, mood: h?.mood ?? null, hasEntry: !!h };
     }),
-    [historyMap]
+    [historyMap, today]
   );
 
   const activeMood = useMemo(
@@ -242,7 +248,7 @@ export function DailyLogStudio({ initialLog, initialNotes, initialHistory, readO
           <Button
             variant="outline" size="sm"
             className="border-zinc-700 text-xs"
-            onClick={() => loadDate(format(new Date(), "yyyy-MM-dd"))}
+            onClick={() => loadDate(today)}
             disabled={isActiveToday}
           >
             Today

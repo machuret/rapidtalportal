@@ -19,6 +19,7 @@ interface Props {
   initialLog: DailyLog | null;
   initialNotes: DailyLogNote[];
   initialHistory: { log_date: string; mood: Mood | null }[];
+  today: string; // server-computed; forwarded so DailyLogStudio hydrates deterministically
 }
 
 export function ClientAdminLogViewer({
@@ -27,6 +28,7 @@ export function ClientAdminLogViewer({
   initialLog,
   initialNotes,
   initialHistory,
+  today,
 }: Props) {
   const router = useRouter();
 
@@ -80,6 +82,7 @@ export function ClientAdminLogViewer({
           initialLog={initialLog}
           initialNotes={initialNotes}
           initialHistory={initialHistory}
+          today={today}
           readOnly
           viewingUserId={selectedEmployeeId}
         />

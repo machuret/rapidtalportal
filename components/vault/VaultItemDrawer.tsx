@@ -13,7 +13,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { vaultListKeys } from "@/hooks/useVaultList";
 import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
-import { cn } from "@/lib/utils";
+import { cn, formatNumber } from "@/lib/utils";
 
 const CATEGORIES: { value: VaultCategory; label: string; color: string }[] =
   VAULT_CATEGORY_KEYS.map((value) => ({
@@ -162,7 +162,7 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
               className="bg-zinc-900 border-zinc-700 text-zinc-100 font-mono text-xs leading-relaxed resize-none min-h-[300px]"
               placeholder="Document content…"
             />
-            <p className="text-xs text-zinc-600">{content.length.toLocaleString()} characters</p>
+            <p className="text-xs text-zinc-600">{formatNumber(content.length)} characters</p>
           </div>
 
           {/* AI summary preview */}

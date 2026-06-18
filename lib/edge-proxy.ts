@@ -57,7 +57,22 @@ export async function proxyToEdgeFunction(
       body: JSON.stringify(body),
     });
 
-    const data = await res.json();
+    // Parse defensively — some edge functions (e.g. vault-process) return an
+    // empty body, which would make res.json() throw "Unexpected end of JSON
+    // input" and surface as a 502 in /admin/errors.
+    const raw = await res.text();
+    let data: unknown = {};
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        captureError("proxy", new Error(`Non-JSON response from edge:${functionName} (status ${res.status})`), { userId: user.id, url: `edge:${functionName}` });
+        return NextResponse.json(
+          { error: "The edge function returned an unexpected response." },
+          { status: res.status >= 400 ? res.status : 502 },
+        );
+      }
+    }
     return NextResponse.json(data, { status: res.status });
   } catch (err) {
     captureError("proxy", err, { userId: user.id, url: `edge:${functionName}` });

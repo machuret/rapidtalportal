@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Trash2, Loader2, Undo2, ChevronDown, ChevronRight } from "lucide-react";
 
@@ -63,7 +64,7 @@ export function SopTrash({ initial }: { initial: TrashedSop[] }) {
                 <p className="text-sm text-zinc-200 truncate">{s.title}</p>
                 <p className="text-xs text-zinc-500">
                   {s.category || "General"}
-                  {s.deleted_at ? ` · deleted ${new Date(s.deleted_at).toLocaleDateString()}` : ""}
+                  {s.deleted_at ? ` · deleted ${formatDate(s.deleted_at)}` : ""}
                 </p>
               </div>
               <Button

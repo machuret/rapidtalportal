@@ -1,6 +1,6 @@
 "use client";
 
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, formatNumber } from "@/lib/utils";
 import type { DbVaultItem } from "@/types/database";
 import { CategoryBadge } from "@/components/shared/CategoryBadge";
 import {
@@ -162,7 +162,7 @@ export function VaultItemRow({
               <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap font-mono">
                 {item.raw_content.slice(0, 400)}
                 {item.raw_content.length > 400 && (
-                  <span className="text-zinc-600"> …{(item.raw_content.length - 400).toLocaleString()} more characters</span>
+                  <span className="text-zinc-600"> …{formatNumber(item.raw_content.length - 400)} more characters</span>
                 )}
               </p>
             </div>

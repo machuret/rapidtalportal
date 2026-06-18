@@ -6,7 +6,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { RelativeTime } from "@/components/ui/RelativeTime";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,13 +38,6 @@ export interface ClientDashboardProps {
   recentDelivered: DeliveredTask[];
   onboarding: { dna: boolean; docs: boolean; va: boolean; firstTask: boolean };
 }
-
-const rel = (iso: string) => {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return formatDate(iso, { day: "numeric", month: "short" });
-};
 
 const dueLabel = (daysUntil: number) =>
   daysUntil <= 0 ? "due today" : daysUntil === 1 ? "due tomorrow" : `due in ${daysUntil} days`;
@@ -187,7 +181,7 @@ export function ClientDashboard(props: ClientDashboardProps) {
                   <p className="text-sm font-medium text-zinc-100">{t.title}</p>
                   {t.description.trim() && <p className="text-xs text-zinc-500 mt-1 line-clamp-2 whitespace-pre-wrap">{t.description}</p>}
                   <div className="flex items-center gap-2 mt-2.5">
-                    <span className="text-xs text-zinc-500 mr-auto">{t.assigneeName ? `from ${t.assigneeName.split(" ")[0]}` : ""} · {rel(t.updatedAt)}</span>
+                    <span className="text-xs text-zinc-500 mr-auto">{t.assigneeName ? `from ${t.assigneeName.split(" ")[0]}` : ""} · <RelativeTime value={t.updatedAt} /></span>
                     <Button size="sm" variant="outline" className="gap-1 h-7 border-zinc-700"
                       disabled={busy === t.id} onClick={() => setChangesFor(t)}>
                       <RotateCcw className="w-3 h-3" /> Changes
@@ -213,7 +207,7 @@ export function ClientDashboard(props: ClientDashboardProps) {
                 <li key={t.id} className="flex items-center gap-2 text-sm">
                   <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" />
                   <span className="text-zinc-300 truncate flex-1">{t.title}</span>
-                  <span className="text-xs text-zinc-600 shrink-0">{rel(t.completedAt)}</span>
+                  <span className="text-xs text-zinc-600 shrink-0"><RelativeTime value={t.completedAt} /></span>
                 </li>
               ))}
             </ul>
