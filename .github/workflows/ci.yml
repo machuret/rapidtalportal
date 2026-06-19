@@ -70,6 +70,5 @@ jobs:
             kb-generate/index.ts \
             send-message/index.ts \
             vault-ask/index.ts \
-            vault-crawl/index.ts \
             vault-delete/index.ts \
             vault-process/index.ts
