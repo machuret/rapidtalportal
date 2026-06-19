@@ -6,6 +6,7 @@ import { useDna } from "@/hooks/useDna";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { profileGaps } from "@/lib/brain/gaps";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +20,10 @@ interface DnaFormProps {
   clientId: string;
   readOnly: boolean;
 }
+
+// Static decile width classes (Tailwind JIT needs literals; inline styles are
+// disallowed by the styles guard). Mirrors the dashboard setup meter.
+const PCT_WIDTH = ["w-0", "w-[10%]", "w-[20%]", "w-[30%]", "w-[40%]", "w-[50%]", "w-[60%]", "w-[70%]", "w-[80%]", "w-[90%]", "w-full"];
 
 const fields: { key: keyof DbCompanyDna; label: string; multiline?: boolean }[] = [
   { key: "company_name", label: "Company Name" },
@@ -177,23 +182,40 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
 
   return (
     <form onSubmit={handleSave} className="flex flex-col gap-5">
-      {/* Brain 2.0 (F): proactive gap questions — what's missing, highest-impact first */}
-      {gaps.gaps.length > 0 && (
-        <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Brain className="w-4 h-4 text-orange-400" />
-            <h3 className="text-sm font-semibold text-white">Make your Brain smarter — {gaps.completionPct}% complete</h3>
+      {/* Completeness meter — always shown so progress (and "done") is tangible;
+          this profile powers every AI answer, draft and tool. */}
+      {(() => {
+        const pct = gaps.completionPct;
+        const complete = gaps.gaps.length === 0;
+        return (
+          <div className={cn("rounded-xl border p-4", complete ? "border-green-500/30 bg-green-500/5" : "border-orange-500/30 bg-orange-500/5")}>
+            <div className="flex items-center gap-2 mb-1">
+              <Brain className={cn("w-4 h-4", complete ? "text-green-400" : "text-orange-400")} />
+              <h3 className="text-sm font-semibold text-white flex-1">
+                {complete ? "Your Company Brain is fully set up 🎉" : "Make your Brain smarter"}
+              </h3>
+              <span className="text-xs font-semibold tabular-nums text-zinc-200">{pct}%</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden my-2">
+              <div className={cn("h-full rounded-full transition-all", complete ? "bg-green-400" : "bg-orange-400", PCT_WIDTH[Math.max(0, Math.min(10, Math.round(pct / 10)))])} />
+            </div>
+            {complete ? (
+              <p className="text-xs text-zinc-400">Every field is filled — the Brain uses all of it in every answer, draft and tool. Keep it current as the business changes.</p>
+            ) : (
+              <>
+                <p className="text-xs text-zinc-400 mb-2">A few quick answers fill the biggest gaps — each one makes every AI feature sharper:</p>
+                <ul className="flex flex-col gap-1">
+                  {gaps.gaps.slice(0, 4).map((g) => (
+                    <li key={g.key} className="text-xs text-zinc-300 flex items-start gap-1.5">
+                      <span className="text-orange-400">•</span>{g.question}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
-          <p className="text-xs text-zinc-400 mb-2">A few quick answers fill the biggest gaps:</p>
-          <ul className="flex flex-col gap-1">
-            {gaps.gaps.slice(0, 4).map((g) => (
-              <li key={g.key} className="text-xs text-zinc-300 flex items-start gap-1.5">
-                <span className="text-orange-400">•</span>{g.question}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Brain 2.0 (F): draft empty fields from the Vault */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
