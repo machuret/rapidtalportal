@@ -98,7 +98,6 @@ const clientAdminLinks: NavItem[] = [
   { href: "/ask",            label: "Ask the Vault",   icon: Sparkles },
   { href: "/brain",          label: "Company Brain",   icon: Brain },
   { href: "/brain-analytics",label: "Brain Analytics", icon: BarChart3 },
-  { href: "/company-report", label: "Company Report",  icon: FileBarChart },
   { section: "Tools" },
   { href: "/crm",            label: "CRM",             icon: ContactRound },
   { href: "/access",         label: "Access",          icon: KeyRound },

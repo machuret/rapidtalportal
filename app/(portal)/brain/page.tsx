@@ -3,6 +3,7 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeBrainScore } from "@/lib/brain/score";
 import { BrainHome, type BrainEventRow } from "@/components/brain/BrainHome";
+import { KnowledgeCoverage } from "@/components/brain/KnowledgeCoverage";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Company Brain — RapidTal" };
@@ -45,5 +46,16 @@ export default async function BrainPage() {
     lift = { baseline, recent, delta: recent - baseline };
   }
 
-  return <BrainHome clientName={client?.name ?? "your business"} score={score} events={events} trend={trend} lift={lift} />;
+  return (
+    <>
+      <BrainHome clientName={client?.name ?? "your business"} score={score} events={events} trend={trend} lift={lift} />
+      {/* "What the Vault knows" — folded in from the retired Company Report nav
+          entry so client admins have one Company Brain home, not three. */}
+      <div className="max-w-5xl mt-10 pt-8 border-t border-zinc-800">
+        <h2 className="text-xl font-bold text-white tracking-tight mb-1">What your brain knows</h2>
+        <p className="text-zinc-400 text-sm mb-6">Coverage, gaps and the documents behind every answer — the more you add, the more complete it gets.</p>
+        <KnowledgeCoverage clientId={clientId} clientName={client?.name ?? ""} canCurate={user.role === "client_admin" || user.role === "super_admin"} />
+      </div>
+    </>
+  );
 }
