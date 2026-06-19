@@ -25,12 +25,23 @@ export default async function TeamPage() {
   const admin = createAdminClient();
   const since = format(subDays(new Date(), 6), "yyyy-MM-dd");
 
-  const { data: vas } = await admin
-    .from("users")
-    .select("id, full_name, email, phone, birthday, avatar_url, created_at")
-    .eq("client_id", user.client_id)
-    .eq("role", "va")
-    .order("full_name");
+  // VAs and the client's pending leave are independent (both scoped by
+  // client_id) — fetch together. The per-VA logs below need the VA ids, so they
+  // follow.
+  const [{ data: vas }, { data: leaveRows }] = await Promise.all([
+    admin
+      .from("users")
+      .select("id, full_name, email, phone, birthday, avatar_url, created_at")
+      .eq("client_id", user.client_id)
+      .eq("role", "va")
+      .order("full_name"),
+    admin
+      .from("va_leave_requests")
+      .select("id, user_id, start_date, end_date, leave_type, reason, status")
+      .eq("client_id", user.client_id)
+      .eq("status", "pending")
+      .order("start_date"),
+  ]);
 
   const vaList = vas ?? [];
 
@@ -52,15 +63,10 @@ export default async function TeamPage() {
     summaryMap[l.user_id].push(l);
   }
 
-  // Pending leave for the client (relocated here from My Job, which is an
-  // employee page a client shouldn't have to visit).
+  // Pending leave (fetched above with the VAs) — map to display names now that
+  // we have both. (Relocated here from My Job, which is an employee page a
+  // client shouldn't have to visit.)
   const nameById = new Map(vaList.map((v) => [v.id, v.full_name ?? v.email]));
-  const { data: leaveRows } = await admin
-    .from("va_leave_requests")
-    .select("id, user_id, start_date, end_date, leave_type, reason, status")
-    .eq("client_id", user.client_id)
-    .eq("status", "pending")
-    .order("start_date");
   const pendingLeave: PendingLeave[] = ((leaveRows ?? []) as { id: string; user_id: string; start_date: string; end_date: string; leave_type: string | null; reason: string | null }[])
     .map((r) => ({ id: r.id, userName: nameById.get(r.user_id) ?? "VA", start_date: r.start_date, end_date: r.end_date, leave_type: r.leave_type, reason: r.reason }));
 
