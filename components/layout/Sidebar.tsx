@@ -79,22 +79,28 @@ const vaLinks: NavItem[] = [
 // communicate — lead. The VA/AI work tools (which a client *can* open but their
 // VA mostly drives) are grouped under "Workspace" so the top level reads like a
 // client product, not the VA's.
+// Grouped by job-to-be-done so a non-technical client isn't faced with a flat
+// wall of 17 links. The three AI-insight surfaces (Company Brain / Company
+// Report / Brain Analytics) are deliberately co-located so it's clear they're
+// related views of the same thing.
 const clientAdminLinks: NavItem[] = [
   { href: "/dashboard",      label: "Dashboard",       icon: LayoutDashboard },
+  { section: "Team & work" },
   { href: "/tasks",          label: "Tasks",           icon: KanbanSquare },
-  { href: "/notebook",       label: "Notebook",        icon: Notebook },
   { href: "/messages",       label: "Messages",        icon: MessageSquare },
+  { href: "/notebook",       label: "Notebook",        icon: Notebook },
   { href: "/supervision",    label: "Supervision",     icon: Eye },
   { href: "/team",           label: "My Team",         icon: UsersRound },
   { href: "/reports",        label: "Reports",         icon: FileBarChart },
-  { href: "/brain",          label: "Company Brain",   icon: Brain },
-  { href: "/brain-analytics",label: "Brain Analytics", icon: BarChart3 },
-  { section: "Workspace" },
-  { href: "/ask",            label: "Ask the Vault",   icon: Sparkles },
-  { href: "/company-report", label: "Company Report",  icon: Brain },
-  { href: "/crm",            label: "CRM",             icon: ContactRound },
+  { section: "Your AI & knowledge" },
   { href: "/company-dna",    label: "Company DNA",     icon: Dna },
   { href: "/vault",          label: "Vault",           icon: Archive },
+  { href: "/ask",            label: "Ask the Vault",   icon: Sparkles },
+  { href: "/brain",          label: "Company Brain",   icon: Brain },
+  { href: "/brain-analytics",label: "Brain Analytics", icon: BarChart3 },
+  { href: "/company-report", label: "Company Report",  icon: FileBarChart },
+  { section: "Tools" },
+  { href: "/crm",            label: "CRM",             icon: ContactRound },
   { href: "/access",         label: "Access",          icon: KeyRound },
   { section: "Account" },
   { href: "/guide",          label: "Guide",           icon: BookOpen },
