@@ -13,35 +13,24 @@ export default async function AdminSopsPage() {
   const ctx = await requireSuperAdmin();
 
   const admin = createAdminClient();
-  const { data: sops } = await admin
-    .from("sops")
-    .select("*")
-    .is("client_id", null)
-    .is("deleted_at", null)
-    .order("category")
-    .order("order_index");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const a = admin as any;
+
+  // All independent global-library reads in ONE round-trip (was a 5-query
+  // sequential waterfall): SOPs, the trash, the idea backlog, the VA picker and
+  // the managed categories. `runs` depends on the SOP ids, so it follows below.
+  const [{ data: sops }, { data: trashed }, { data: suggestionRows }, { data: vaRows }, { data: managed }] = await Promise.all([
+    admin.from("sops").select("*").is("client_id", null).is("deleted_at", null).order("category").order("order_index"),
+    admin.from("sops").select("id, title, category, deleted_at").is("client_id", null).not("deleted_at", "is", null).order("deleted_at", { ascending: false }).limit(50),
+    a.from("sop_suggestions").select("id, title, scope, category, step_count, status, created_at").is("client_id", null).eq("status", "open").order("created_at", { ascending: false }),
+    admin.from("users").select("id, full_name, email").eq("role", "va").order("full_name"),
+    a.from("sop_categories").select("kind, name, parent").is("client_id", null),
+  ]);
 
   const sopList = (sops ?? []) as Sop[];
-
-  // Soft-deleted global SOPs, newest first — restorable from the Trash panel.
-  const { data: trashed } = await admin
-    .from("sops")
-    .select("id, title, category, deleted_at")
-    .is("client_id", null)
-    .not("deleted_at", "is", null)
-    .order("deleted_at", { ascending: false })
-    .limit(50);
   const trashedSops = (trashed ?? []) as TrashedSop[];
-
-  // Open SOP-idea backlog (global scope).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: suggestionRows } = await (admin as any)
-    .from("sop_suggestions")
-    .select("id, title, scope, category, step_count, status, created_at")
-    .is("client_id", null)
-    .eq("status", "open")
-    .order("created_at", { ascending: false });
   const suggestions = (suggestionRows ?? []) as SopSuggestion[];
+  const vaOptions = ((vaRows ?? []) as { id: string; full_name: string | null; email: string }[]).map((v) => ({ id: v.id, name: v.full_name || v.email }));
 
   // Adoption stats: how often each library SOP has been run / completed / by how many VAs.
   const usage: Record<string, { runs: number; completions: number; users: number }> = {};
@@ -60,10 +49,6 @@ export default async function AdminSopsPage() {
     for (const [k, v] of Object.entries(tmp)) usage[k] = { runs: v.runs, completions: v.completions, users: v.users.size };
   }
 
-  // All VAs (across clients) — bulk "restrict to VAs" picker for global SOPs.
-  const { data: vaRows } = await admin.from("users").select("id, full_name, email").eq("role", "va").order("full_name");
-  const vaOptions = ((vaRows ?? []) as { id: string; full_name: string | null; email: string }[]).map((v) => ({ id: v.id, name: v.full_name || v.email }));
-
   // Category → Subcategory tree (counts from SOPs, unioned with managed entries
   // incl. empty ones). Subcategories nest under their parent category.
   const catMap = new Map<string, { count: number; subs: Map<string, number> }>();
@@ -78,8 +63,6 @@ export default async function AdminSopsPage() {
     const sub = (s.subcategory ?? "").trim();
     if (sub) node.subs.set(sub, (node.subs.get(sub) ?? 0) + 1);
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: managed } = await (admin as any).from("sop_categories").select("kind, name, parent").is("client_id", null);
   for (const m of (managed ?? []) as { kind: string; name: string; parent: string | null }[]) {
     if (m.kind === "category") ensureCat(m.name);
     else { const node = ensureCat(m.parent || "General"); if (!node.subs.has(m.name)) node.subs.set(m.name, 0); }

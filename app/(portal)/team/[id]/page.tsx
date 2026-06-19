@@ -38,45 +38,43 @@ export default async function VaDetailPage({ params }: { params: { id: string } 
 
   const admin = createAdminClient();
 
-  // Verify the VA belongs to this client — select all profile fields
-  const { data: va } = await admin
-    .from("users")
-    .select("id, full_name, email, phone, birthday, avatar_url, created_at, salary, payment_terms, payment_details, whatsapp, personal_email, address, timezone, skills")
-    .eq("id", params.id)
-    .eq("client_id", user.client_id)
-    .eq("role", "va")
-    .single();
+  const since30 = format(subDays(new Date(), 29), "yyyy-MM-dd"); // logs window
+  const since14 = format(subDays(new Date(), 13), "yyyy-MM-dd"); // time-entries window
 
-  if (!va) notFound();
-
-  // Last 30 days of logs + last 14 days of time entries
-  const since30 = format(subDays(new Date(), 29), "yyyy-MM-dd");
-  const since14 = format(subDays(new Date(), 13), "yyyy-MM-dd");
-
-  const [{ data: rawLogs }, { data: rawTimeEntries }] = await Promise.all([
+  // All keyed by params.id — fetch the VA profile, logs, time and contract in ONE
+  // round-trip (was 3 sequential), then verify access. Logs/time/contract for a
+  // wrong-tenant id simply return nothing and we notFound() before using them.
+  const [{ data: va }, { data: rawLogs }, { data: rawTimeEntries }, { data: contractRow }] = await Promise.all([
+    admin
+      .from("users")
+      .select("id, full_name, email, phone, birthday, avatar_url, created_at, salary, payment_terms, payment_details, whatsapp, personal_email, address, timezone, skills")
+      .eq("id", params.id)
+      .eq("client_id", user.client_id)
+      .eq("role", "va")
+      .single(),
     admin
       .from("daily_logs")
       .select("id, log_date, mood, tasks_done, positives, challenges, goals_achieved, goals_tomorrow, admin_feedback, updated_at")
-      .eq("user_id", va.id)
+      .eq("user_id", params.id)
       .gte("log_date", since30)
       .order("log_date", { ascending: false }),
     admin
       .from("time_entries")
       .select("id, work_date, phase, started_at, ended_at")
-      .eq("user_id", va.id)
+      .eq("user_id", params.id)
       .gte("work_date", since14)
       .order("work_date", { ascending: false }),
+    admin
+      .from("va_job_contracts")
+      .select("rate, currency, pay_period, payment_method, payment_schedule, start_date, weekly_hours, notice_period, next_review_date, annual_leave_days, contract_name")
+      .eq("user_id", params.id)
+      .maybeSingle(),
   ]);
+
+  if (!va) notFound();
 
   const logs = rawLogs ?? [];
   const timeEntries = rawTimeEntries ?? [];
-
-  // Job & contract terms (My Job → Overview key terms).
-  const { data: contractRow } = await admin
-    .from("va_job_contracts")
-    .select("rate, currency, pay_period, payment_method, payment_schedule, start_date, weekly_hours, notice_period, next_review_date, annual_leave_days, contract_name")
-    .eq("user_id", va.id)
-    .maybeSingle();
   const contract = (contractRow as ContractInit | null) ?? null;
 
   // Aggregate time per day

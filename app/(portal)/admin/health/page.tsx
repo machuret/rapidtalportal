@@ -18,13 +18,14 @@ export default async function AdminHealthPage() {
 
   const admin = createAdminClient();
 
-  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, { data: items }, { data: chunkRows }, { count: recentErrorCount }] = await Promise.all([
+  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, { data: items }, { count: recentErrorCount }] = await Promise.all([
     admin.from("schema_migrations").select("version"),
     admin.rpc("health_schema_check"),
     admin.from("cron_heartbeats").select("name, ran_at, detail"),
     admin.from("clients").select("id, name").is("archived_at", null).order("name"),
-    admin.from("vault_items").select("id, client_id, status, index_error"),
-    admin.from("vault_chunks").select("item_id"),
+    // indexed_at marks an item as embedded (same signal score.ts uses) — so we
+    // no longer load the entire vault_chunks table just to tell which are indexed.
+    admin.from("vault_items").select("client_id, status, index_error, indexed_at"),
     admin.from("app_errors").select("id", { count: "exact", head: true })
       .gte("created_at", new Date(Date.now() - 24 * 3_600_000).toISOString()),
   ]);
@@ -66,14 +67,20 @@ export default async function AdminHealthPage() {
   const beatByName = new Map(((beats ?? []) as { name: string; ran_at: string; detail: Record<string, unknown> }[]).map((b) => [b.name, b]));
 
   // ── Per-client brain health ───────────────────────────────────────────────
-  const chunkedItems = new Set(((chunkRows ?? []) as { item_id: string }[]).map((c) => c.item_id));
+  // One pass over items → per-client tallies (was an O(items × clients) nested
+  // filter, plus a full vault_chunks load — both removed).
+  type Tally = { total: number; ready: number; indexed: number; errored: number };
+  const byClient = new Map<string, Tally>();
+  for (const i of (items ?? []) as { client_id: string; status: string; index_error: string | null; indexed_at: string | null }[]) {
+    const t = byClient.get(i.client_id) ?? { total: 0, ready: 0, indexed: 0, errored: 0 };
+    t.total++;
+    if (i.status === "ready") { t.ready++; if (i.indexed_at) t.indexed++; }
+    if (i.status === "error" || i.index_error) t.errored++;
+    byClient.set(i.client_id, t);
+  }
   const rows = ((clients ?? []) as { id: string; name: string }[]).map((c) => {
-    const mine = ((items ?? []) as { id: string; client_id: string; status: string; index_error: string | null }[])
-      .filter((i) => i.client_id === c.id);
-    const ready = mine.filter((i) => i.status === "ready");
-    const indexed = ready.filter((i) => chunkedItems.has(i.id));
-    const errored = mine.filter((i) => i.status === "error" || i.index_error);
-    return { ...c, total: mine.length, ready: ready.length, indexed: indexed.length, errored: errored.length };
+    const t = byClient.get(c.id) ?? { total: 0, ready: 0, indexed: 0, errored: 0 };
+    return { ...c, ...t };
   });
 
   const ok = (v: boolean) => (v
