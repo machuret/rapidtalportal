@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { workHours, isOverdue, daysOverdue, isDueSoon, daysUntil } from "@/lib/tasks/metrics";
+import { profileGaps, PROFILE_FIELD_DEFS } from "@/lib/brain/gaps";
 import type { ClientDashboardProps } from "@/components/dashboard/ClientDashboard";
 
 /** Local-midnight of the most recent Monday. */
@@ -33,7 +34,7 @@ export async function renderClientDashboard(clientId: string, fullName: string):
     admin.from("tasks").select("id, title, description, status, assigned_to, completed_at, updated_at, due_date")
       .eq("client_id", clientId).is("archived_at", null),
     admin.from("time_entries").select("started_at, ended_at").eq("client_id", clientId).eq("phase", "work").gte("work_date", wkStartDate),
-    admin.from("company_dna").select("company_name, services").eq("client_id", clientId).maybeSingle(),
+    admin.from("company_dna").select(PROFILE_FIELD_DEFS.map((f) => f.key).join(", ")).eq("client_id", clientId).maybeSingle(),
     admin.from("vault_items").select("id", { count: "exact", head: true }).eq("client_id", clientId).eq("status", "ready"),
     admin.from("tasks").select("id", { count: "exact", head: true }).eq("client_id", clientId),
   ]);
@@ -95,7 +96,10 @@ export async function renderClientDashboard(clientId: string, fullName: string):
     if (sum > 0) planHours = Math.round(sum);
   }
 
-  const dnaRow = dna as { company_name: string | null; services: string | null } | null;
+  // Company-Brain profile completeness drives the "Get the most" setup panel —
+  // it's the keystone the whole AI layer feeds on. Reuses the canonical gap
+  // analysis (lib/brain/gaps.ts) so the dashboard, /company-dna and /brain agree.
+  const gaps = profileGaps((dna ?? null) as Record<string, unknown> | null);
 
   return {
     clientId,
@@ -114,8 +118,12 @@ export async function renderClientDashboard(clientId: string, fullName: string):
       planHours,
     },
     recentDelivered,
-    onboarding: {
-      dna: !!(dnaRow && (dnaRow.company_name?.trim() || dnaRow.services?.trim())),
+    setup: {
+      profilePct: gaps.completionPct,
+      filledCount: gaps.filledCount,
+      totalFields: gaps.total,
+      // The most impactful unanswered profile questions to surface inline.
+      topGaps: gaps.gaps.slice(0, 3).map((g) => ({ label: g.label, question: g.question })),
       docs: (vaultReady ?? 0) > 0,
       va: vas.length > 0,
       firstTask: (taskCount ?? 0) > 0,

@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   CheckCircle2, Clock, Inbox, Timer, Plus, Loader2, ThumbsUp, RotateCcw,
-  Sparkles, ArrowRight, AlertTriangle,
+  Sparkles, ArrowRight, AlertTriangle, Dna, BookOpen,
 } from "lucide-react";
 
 export interface ClientVA { id: string; name: string }
@@ -36,8 +36,21 @@ export interface ClientDashboardProps {
   dueSoon: DueSoonTask[];
   stats: { inProgress: number; todo: number; completedThisWeek: number; hoursThisWeek: number; planHours: number | null };
   recentDelivered: DeliveredTask[];
-  onboarding: { dna: boolean; docs: boolean; va: boolean; firstTask: boolean };
+  setup: {
+    profilePct: number;
+    filledCount: number;
+    totalFields: number;
+    topGaps: { label: string; question: string }[];
+    docs: boolean;
+    va: boolean;
+    firstTask: boolean;
+  };
 }
+
+// Decile width classes (static literals so Tailwind JIT keeps them; inline
+// styles are disallowed and dynamic arbitrary widths can't be compiled).
+const PCT_WIDTH = ["w-0", "w-[10%]", "w-[20%]", "w-[30%]", "w-[40%]", "w-[50%]", "w-[60%]", "w-[70%]", "w-[80%]", "w-[90%]", "w-full"];
+const widthClass = (pct: number) => PCT_WIDTH[Math.max(0, Math.min(10, Math.round(pct / 10)))];
 
 const dueLabel = (daysUntil: number) =>
   daysUntil <= 0 ? "due today" : daysUntil === 1 ? "due tomorrow" : `due in ${daysUntil} days`;
@@ -68,14 +81,13 @@ export function ClientDashboard(props: ClientDashboardProps) {
     } catch { /* api-client toasts */ } finally { setBusy(null); }
   }
 
-  const onboardingSteps = [
-    { key: "dna", done: props.onboarding.dna, label: "Fill in your Company DNA", desc: "Tell the AI who you are — the more it knows, the better it answers.", href: "/company-dna", optional: false },
-    { key: "docs", done: props.onboarding.docs, label: "Add a few key documents", desc: "Optional — drop in SOPs, guides or policies so your VA and the AI can use them.", href: "/vault", optional: true },
-    { key: "va", done: props.onboarding.va, label: "Meet your VA", desc: vas.length ? `You're working with ${vaNames}.` : "Your VA will appear here once you're placed.", href: "/team", optional: false },
-    { key: "firstTask", done: props.onboarding.firstTask, label: "Request your first task", desc: "Tell your VA what you need done.", href: null, optional: false },
-  ];
-  // Onboarding is "complete" when all NON-optional steps are done.
-  const onboardingDone = onboardingSteps.filter((s) => !s.optional).every((s) => s.done);
+  const { setup } = props;
+  // Company DNA is the keystone — it powers every AI answer/draft/tool, so it's
+  // weighted heaviest in the single "setup" number; the rest are milestones.
+  const dnaDone = setup.profilePct >= 70;
+  const overallPct = Math.round(0.6 * setup.profilePct + 0.15 * (setup.va ? 100 : 0) + 0.15 * (setup.firstTask ? 100 : 0) + 0.10 * (setup.docs ? 100 : 0));
+  // "Core" complete = the required milestones; docs is recommended, not required.
+  const coreComplete = dnaDone && setup.va && setup.firstTask;
 
   return (
     <div className="max-w-5xl">
@@ -93,33 +105,68 @@ export function ClientDashboard(props: ClientDashboardProps) {
         </Button>
       </div>
 
-      {/* Onboarding (until the required steps are done) */}
-      {!onboardingDone && (
+      {/* Get the most from RapidTal — a persistent setup & value guide. Shows the
+          full panel until the core is set up, then collapses to a slim "what next"
+          bar so there's always a path to more value. */}
+      {coreComplete ? (
+        <div className="surface-card px-4 py-3 mb-6 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+          <span className="text-sm text-zinc-200">You&apos;re set up{overallPct < 100 ? ` · ${overallPct}% complete` : ""}.</span>
+          {!setup.docs && (
+            <Link href="/vault" className="text-xs text-zinc-400 hover:text-white inline-flex items-center gap-1 transition-colors">
+              Add documents to sharpen answers <ArrowRight className="w-3 h-3" />
+            </Link>
+          )}
+          <Link href="/guide" className="text-xs text-zinc-400 hover:text-white inline-flex items-center gap-1 transition-colors ml-auto">
+            <BookOpen className="w-3 h-3" /> Tips to get more value
+          </Link>
+        </div>
+      ) : (
         <div className="surface-card p-4 mb-6">
-          <p className="label-section mb-3 flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> Get set up</p>
-          <div className="grid sm:grid-cols-2 gap-2.5">
-            {onboardingSteps.map((s) => {
-              const inner = (
-                <div className={cn("flex items-start gap-3 rounded-lg border p-3 h-full transition-colors",
-                  s.done ? "border-green-500/20 bg-green-500/5" : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700")}>
-                  {s.done
-                    ? <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
-                    : <div className="w-4 h-4 rounded-full border border-zinc-600 shrink-0 mt-0.5" />}
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-zinc-100">
-                      {s.label}{s.optional && <span className="text-zinc-500 font-normal"> · optional</span>}
-                    </p>
-                    <p className="text-xs text-zinc-500 mt-0.5">{s.desc}</p>
-                  </div>
-                  {!s.done && <ArrowRight className="w-3.5 h-3.5 text-zinc-600 shrink-0 ml-auto mt-1" />}
-                </div>
-              );
-              if (s.key === "firstTask" && !s.done) {
-                return <button key={s.key} onClick={() => setRequestOpen(true)} className="text-left">{inner}</button>;
-              }
-              return s.href ? <Link key={s.key} href={s.href}>{inner}</Link> : <div key={s.key}>{inner}</div>;
-            })}
+          <div className="flex flex-wrap items-end justify-between gap-2 mb-1">
+            <p className="label-section flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> Get the most from RapidTal</p>
+            <span className="text-xs text-zinc-400">Setup <span className="text-zinc-100 font-semibold tabular-nums">{overallPct}%</span></span>
           </div>
+          <p className="text-xs text-zinc-500 mb-2">A complete setup makes your VA — and every AI feature — noticeably sharper. Finish these and you&apos;re away.</p>
+          <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden mb-4">
+            <div className={cn("h-full bg-amber-400 rounded-full transition-all", widthClass(overallPct))} />
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            {/* Keystone: Company DNA */}
+            <Link href="/company-dna" className={cn("block rounded-lg border p-3 transition-colors",
+              dnaDone ? "border-green-500/20 bg-green-500/5" : "border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50")}>
+              <div className="flex items-center gap-2">
+                <Dna className={cn("w-4 h-4 shrink-0", dnaDone ? "text-green-400" : "text-amber-300")} />
+                <p className="text-sm font-medium text-zinc-100 flex-1">Complete your Company DNA <span className="text-zinc-500 font-normal">· start here</span></p>
+                <span className="text-xs font-semibold tabular-nums text-zinc-200">{setup.profilePct}%</span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-1 pl-6">The one that matters most — it powers every AI answer, draft and tool. The more you fill in, the sharper everything gets.</p>
+              <div className="h-1 rounded-full bg-zinc-800 overflow-hidden my-2 ml-6">
+                <div className={cn("h-full rounded-full", dnaDone ? "bg-green-400" : "bg-amber-400", widthClass(setup.profilePct))} />
+              </div>
+              {setup.topGaps.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pl-6">
+                  {setup.topGaps.map((g) => (
+                    <span key={g.label} className="text-[11px] text-amber-200/90 bg-amber-500/10 rounded-full px-2 py-0.5">{g.label}</span>
+                  ))}
+                  <span className="text-[11px] text-zinc-500 inline-flex items-center gap-0.5">answer these <ArrowRight className="w-3 h-3" /></span>
+                </div>
+              )}
+            </Link>
+
+            {/* Required milestones + one recommended (docs). */}
+            <SetupRow done={setup.va} label="Meet your VA"
+              desc={vas.length ? `You're working with ${vaNames}.` : "Your VA appears here once you're placed."} href="/team" />
+            <SetupRow done={setup.firstTask} label="Request your first task"
+              desc="Tell your VA what you need done — it lands on the shared board." onClick={() => setRequestOpen(true)} />
+            <SetupRow done={setup.docs} optional label="Add key documents"
+              desc="Drop in SOPs, guides or policies so answers cite your real material." href="/vault" />
+          </div>
+
+          <Link href="/guide" className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-white mt-3 transition-colors">
+            <BookOpen className="w-3 h-3" /> New here? Take the 2-minute tour
+          </Link>
         </div>
       )}
 
@@ -245,6 +292,28 @@ function Stat({ icon: Icon, tint, label, value, suffix }: { icon: typeof Inbox; 
       <p className="text-xs text-zinc-500 mt-1">{label}</p>
     </div>
   );
+}
+
+/** A compact setup milestone row (link, action button, or static). */
+function SetupRow({ done, label, desc, href, onClick, optional }: {
+  done: boolean; label: string; desc: string; href?: string; onClick?: () => void; optional?: boolean;
+}) {
+  const inner = (
+    <div className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors",
+      done ? "border-green-500/20 bg-green-500/5" : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700")}>
+      {done
+        ? <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
+        : <div className="w-4 h-4 rounded-full border border-zinc-600 shrink-0 mt-0.5" />}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-zinc-100">{label}{optional && <span className="text-zinc-500 font-normal"> · recommended</span>}</p>
+        <p className="text-xs text-zinc-500 mt-0.5">{desc}</p>
+      </div>
+      {!done && <ArrowRight className="w-3.5 h-3.5 text-zinc-600 shrink-0 mt-1" />}
+    </div>
+  );
+  if (onClick) return <button onClick={onClick} className="text-left w-full">{inner}</button>;
+  if (href) return <Link href={href}>{inner}</Link>;
+  return <div>{inner}</div>;
 }
 
 function RequestWorkDialog({ clientId, vas, categories, onClose, onCreated }: {
