@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { AddContactForm } from "@/components/crm/AddContactForm";
 
+export const dynamic = "force-dynamic";
+
 export default async function AddContactPage() {
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");

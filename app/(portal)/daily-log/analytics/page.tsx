@@ -5,6 +5,8 @@ import { format, subDays } from "date-fns";
 import { DailyLogAnalytics } from "@/components/daily-log/DailyLogAnalytics";
 import type { AnalyticsEntry } from "@/types/daily-log";
 
+export const dynamic = "force-dynamic";
+
 export default async function DailyLogAnalyticsPage({
   searchParams,
 }: {

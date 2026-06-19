@@ -1,13 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { CLIENT_GUIDE, type GuideGroup } from "@/lib/client-guide";
 import { ChevronDown, ChevronRight, CheckCircle2, Lightbulb, Target } from "lucide-react";
 
+/** Slug for a guide item's anchor, so PageIntro can deep-link to it. */
+const slug = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
 /** Collapsible, plain-language guide. Renders the client guide by default, or
- *  any set of groups passed in (e.g. the VA guide). */
+ *  any set of groups passed in (e.g. the VA guide). Honours ?open=<item title>
+ *  so a page's "Learn more →" link opens and scrolls to the right item. */
 export function ClientGuide({ groups = CLIENT_GUIDE }: { groups?: GuideGroup[] }) {
-  const [open, setOpen] = useState<string | null>(groups[0]?.items[0]?.title ?? null);
+  const params = useSearchParams();
+  const requested = params.get("open");
+  const known = requested && groups.some((g) => g.items.some((i) => i.title === requested)) ? requested : null;
+  const [open, setOpen] = useState<string | null>(known ?? groups[0]?.items[0]?.title ?? null);
+
+  // Deep-link: open + scroll to the requested item once on mount.
+  useEffect(() => {
+    if (!known) return;
+    setOpen(known);
+    const el = document.getElementById(`guide-${slug(known)}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [known]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -19,7 +35,7 @@ export function ClientGuide({ groups = CLIENT_GUIDE }: { groups?: GuideGroup[] }
             {group.items.map((item) => {
               const isOpen = open === item.title;
               return (
-                <div key={item.title} className="surface-card overflow-hidden">
+                <div key={item.title} id={`guide-${slug(item.title)}`} className="surface-card overflow-hidden scroll-mt-4">
                   <button onClick={() => setOpen(isOpen ? null : item.title)} className="w-full flex items-center gap-2 px-4 py-3 text-left">
                     <span className="font-semibold text-zinc-100 flex-1">{item.title}</span>
                     {isOpen ? <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0" /> : <ChevronRight className="w-4 h-4 text-zinc-500 shrink-0" />}

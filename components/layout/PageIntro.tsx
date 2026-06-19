@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Lightbulb, X, HelpCircle } from "lucide-react";
+import Link from "next/link";
+import { Lightbulb, X, HelpCircle, ArrowRight } from "lucide-react";
 import { PAGE_INTROS } from "@/lib/page-intros";
 
 /**
@@ -49,6 +50,14 @@ export function PageIntro({ id }: { id: keyof typeof PAGE_INTROS }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-zinc-200">{copy.title}</p>
         <p className="text-sm text-zinc-400 leading-relaxed mt-0.5">{copy.body}</p>
+        {copy.guide && (
+          <Link
+            href={`/guide?open=${encodeURIComponent(copy.guide)}`}
+            className="inline-flex items-center gap-1 text-xs font-medium text-amber-300/90 hover:text-amber-200 transition-colors mt-2"
+          >
+            Learn more in the Guide <ArrowRight className="w-3 h-3" />
+          </Link>
+        )}
       </div>
       <button onClick={dismiss} title="Got it" className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors shrink-0">
         <X className="w-3.5 h-3.5" />

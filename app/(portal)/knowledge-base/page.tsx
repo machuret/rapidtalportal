@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
  * consolidation): one Business Brain with Documents and Q&A Knowledge tabs.
  * This stub keeps old links and bookmarks working.
  */
+export const dynamic = "force-dynamic";
+
 export default function KnowledgeBaseRedirect() {
   redirect("/vault/knowledge");
 }

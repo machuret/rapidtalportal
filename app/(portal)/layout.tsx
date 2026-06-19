@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 import { ErrorReporter } from "@/components/layout/ErrorReporter";
+import { HelpFab } from "@/components/layout/HelpFab";
 
 export default async function PortalLayout({
   children,
@@ -75,6 +76,7 @@ export default async function PortalLayout({
           <QueryProvider>{children}</QueryProvider>
         </div>
       </main>
+      <HelpFab />
     </div>
   );
 }
