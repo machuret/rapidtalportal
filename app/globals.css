@@ -22,30 +22,33 @@
     --red-300: 252 165 165;     --red-400: 248 113 113;
     --purple-300: 216 180 254;  --purple-400: 192 132 252;
     --violet-300: 196 181 253;  --violet-400: 167 139 250;
-    --orange-300: 253 186 116;  --orange-400: 251 146 60;
+    --orange-300: 255 154 102;  --orange-400: 255 122 47;
     --emerald-300: 110 231 183; --emerald-400: 52 211 153;
     --sky-300: 125 211 252;     --sky-400: 56 189 248;
 
-    /* ── Shadcn/ui compatibility tokens (dark-tuned) ─────────────────────── */
-    --background: 240 10% 3.9%;       /* zinc-950 */
-    --foreground: 0 0% 98%;           /* zinc-50  */
-    --card: 240 3.7% 11%;             /* zinc-900 */
+    /* Brand accent — exact #F05A00 / hover #FF7A2F (light overrides below). */
+    --orange-500: 240 90 0;     --orange-600: 204 76 0;
+
+    /* ── Shadcn/ui compatibility tokens (neutral-warm dark) ──────────────── */
+    --background: 0 0% 5%;            /* #0D0D0D */
+    --foreground: 0 0% 98%;
+    --card: 0 0% 8%;                 /* #151515 */
     --card-foreground: 0 0% 98%;
-    --popover: 240 3.7% 11%;
+    --popover: 0 0% 8%;
     --popover-foreground: 0 0% 98%;
-    --primary: 24 95% 53%;            /* orange-500 — brand, edgy on black */
-    --primary-foreground: 24 30% 6%;  /* near-black — high contrast ON orange */
-    --secondary: 240 3.7% 25%;        /* zinc-700 */
+    --primary: 22 100% 47%;          /* brand orange #F05A00 */
+    --primary-foreground: 0 0% 100%; /* white on orange */
+    --secondary: 0 0% 17%;
     --secondary-foreground: 0 0% 95%;
-    --muted: 240 3.7% 15%;            /* zinc-800 */
-    --muted-foreground: 240 5% 64.9%; /* zinc-400 */
-    --accent: 240 3.7% 25%;
+    --muted: 0 0% 11%;               /* #1C1C1C */
+    --muted-foreground: 0 0% 66%;    /* #A8A8A8 */
+    --accent: 0 0% 17%;
     --accent-foreground: 0 0% 95%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 25%;           /* zinc-700 */
-    --input: 240 3.7% 15%;            /* zinc-800 */
-    --ring: 24 95% 53%;               /* orange-500 — branded focus ring */
+    --border: 0 0% 14%;              /* #242424 */
+    --input: 0 0% 11%;               /* #1C1C1C */
+    --ring: 22 100% 47%;              /* brand orange #F05A00 focus ring */
     --radius: 0.5rem;
 
     /* ── Palette source of truth (space-separated RGB channels) ──────────────
@@ -54,33 +57,33 @@
        values reskins the ENTIRE app — including /opacity, hover:, gradients
        and shadcn internals — with no component edits. To rebrand or add a
        light theme, override these vars (e.g. under a [data-theme] selector). */
-    --zinc-50:  250 250 250;
-    --zinc-100: 244 244 245;
-    --zinc-200: 228 228 231;
-    --zinc-300: 212 212 216;
-    --zinc-400: 161 161 170;
-    --zinc-500: 113 113 122;
-    --zinc-600: 82 82 91;
-    --zinc-700: 63 63 70;
-    --zinc-800: 39 39 42;
-    --zinc-900: 24 24 27;
-    --zinc-950: 9 9 11;
+    /* Revamp palette — neutral-warm dark (design #0D0D0D…#FAFAFA). */
+    --zinc-50:  250 250 250;  /* primary text  (#FAFAFA) */
+    --zinc-100: 238 238 238;
+    --zinc-200: 220 220 220;
+    --zinc-300: 196 196 196;
+    --zinc-400: 168 168 168;  /* secondary text (#A8A8A8) */
+    --zinc-500: 110 110 110;  /* tertiary text  (#6E6E6E) */
+    --zinc-600: 64 64 64;     /* strong border  (#333) */
+    --zinc-700: 44 44 44;     /* default border (#242424) */
+    --zinc-800: 32 32 32;     /* inputs / nested / subtle (#1C1C1C) */
+    --zinc-900: 21 21 21;     /* cards          (#151515) */
+    --zinc-950: 13 13 13;     /* page bg        (#0D0D0D) */
 
     /* ── Surface tokens ──────────────────────────────────────────────────── */
-    --surface-base:    #09090b; /* zinc-950 — page background     */
-    --surface-raised:  #18181b; /* zinc-900 — cards               */
-    --surface-overlay: #27272a; /* zinc-800 — inputs, nested cards */
-    --surface-subtle:  #3f3f46; /* zinc-700 — borders, dividers    */
+    --surface-base:    #0d0d0d; /* page background     */
+    --surface-raised:  #151515; /* cards               */
+    --surface-overlay: #1c1c1c; /* inputs, nested cards */
+    --surface-subtle:  #242424; /* borders, dividers    */
 
     /* ── Text tokens ─────────────────────────────────────────────────────── */
-    --text-primary:   #fafafa; /* zinc-50  — headings, values      */
-    --text-secondary: #a1a1aa; /* zinc-400 — 4.6:1 on zinc-900 ✓  */
-    --text-tertiary:  #71717a; /* zinc-500 — 4.5:1 on zinc-900 ✓  */
-    /* zinc-600 (#52525b) is ~3:1 — decorative only, never a text token.       */
+    --text-primary:   #fafafa;
+    --text-secondary: #a8a8a8;
+    --text-tertiary:  #6e6e6e;
 
     /* ── Border tokens ───────────────────────────────────────────────────── */
-    --border-subtle:  #27272a; /* zinc-800 */
-    --border-default: #3f3f46; /* zinc-700 */
+    --border-subtle:  #1c1c1c;
+    --border-default: #242424;
 
     /* ── Brand accent tokens ─────────────────────────────────────────────── */
     --accent-blue:   #60a5fa; /* blue-400   */
@@ -152,61 +155,64 @@
      ════════════════════════════════════════════════════════════════════════ */
   :root[data-theme="light"] {
     color-scheme: light;
-    --white: 24 24 27; /* `text-white` headings become near-black on light */
+    --white: 23 19 13; /* `text-white` headings become warm near-black */
 
-    /* Inverted, contrast-tuned grayscale */
-    --zinc-50:  9 9 11;       /* primary text / headings */
-    --zinc-100: 24 24 27;
-    --zinc-200: 39 39 42;
-    --zinc-300: 63 63 70;
-    --zinc-400: 82 82 91;     /* secondary text — ~7:1 on white */
-    --zinc-500: 113 113 122;  /* tertiary text */
-    --zinc-600: 161 161 170;  /* faint / decorative */
-    --zinc-700: 212 212 216;  /* default borders */
-    --zinc-800: 241 241 243;  /* inputs, nested cards, subtle borders */
+    /* Warm cream grayscale (design: page #F1EEE9 … text #17130D) */
+    --zinc-50:  23 19 13;     /* primary text  (#17130D) */
+    --zinc-100: 38 33 27;
+    --zinc-200: 60 54 46;
+    --zinc-300: 90 83 72;
+    --zinc-400: 110 102 92;   /* secondary text (#6E665C) */
+    --zinc-500: 130 122 110;  /* tertiary text */
+    --zinc-600: 163 154 140;  /* faint / decorative (#A39A8C) */
+    --zinc-700: 219 212 201;  /* default borders (#DBD4C9) */
+    --zinc-800: 244 240 233;  /* inputs, nested, hover, subtle */
     --zinc-900: 255 255 255;  /* cards */
-    --zinc-950: 248 248 249;  /* page background */
+    --zinc-950: 241 238 233;  /* page background (#F1EEE9) */
 
-    /* shadcn/ui tokens */
-    --background: 0 0% 97%;
-    --foreground: 240 10% 4%;
+    /* shadcn/ui tokens (warm) */
+    --background: 36 24% 92%;        /* #F1EEE9 */
+    --foreground: 36 28% 9%;         /* #17130D */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 4%;
+    --card-foreground: 36 28% 9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 4%;
-    --secondary: 240 5% 90%;
-    --secondary-foreground: 240 10% 10%;
-    --muted: 240 5% 94%;
-    --muted-foreground: 240 4% 40%;
-    --accent: 240 5% 90%;
-    --accent-foreground: 240 10% 10%;
-    --border: 240 6% 85%;
-    --input: 240 6% 90%;
+    --popover-foreground: 36 28% 9%;
+    --secondary: 38 20% 90%;
+    --secondary-foreground: 36 20% 14%;
+    --muted: 40 33% 96%;             /* #FAF8F4 */
+    --muted-foreground: 33 11% 40%;  /* #6E665C */
+    --accent: 38 20% 90%;
+    --accent-foreground: 36 20% 14%;
+    --border: 35 20% 81%;            /* #DBD4C9 */
+    --input: 35 24% 89%;
 
-    /* Surface / text / border hex tokens */
-    --surface-base:    #f8f8f9;
+    /* Surface / text / border hex tokens (warm) */
+    --surface-base:    #f1eee9;
     --surface-raised:  #ffffff;
-    --surface-overlay: #f1f1f3;
-    --surface-subtle:  #d4d4d8;
-    --text-primary:    #09090b;
-    --text-secondary:  #52525b;
-    --text-tertiary:   #71717a;
-    --border-subtle:   #e4e4e7;
-    --border-default:  #d4d4d8;
+    --surface-overlay: #faf8f4;
+    --surface-subtle:  #dbd4c9;
+    --text-primary:    #17130d;
+    --text-secondary:  #6e665c;
+    --text-tertiary:   #a39a8c;
+    --border-subtle:   #e8e3db;
+    --border-default:  #dbd4c9;
 
-    /* Softer shadows for a light surface */
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
-    --shadow-lg: 0 16px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.05);
+    /* Soft warm shadows */
+    --shadow-sm: 0 1px 2px rgba(30,22,12,0.06);
+    --shadow-md: 0 1px 3px rgba(30,22,12,0.07), 0 10px 30px rgba(30,22,12,0.05);
+    --shadow-lg: 0 16px 40px rgba(30,22,12,0.12), 0 0 0 1px rgba(30,22,12,0.05);
 
-    /* Accents darkened (≈ -600/-700) so icons/status text stay readable on white */
-    --blue-300: 37 99 235;     --blue-400: 37 99 235;
-    --green-300: 21 128 61;    --green-400: 22 163 74;
-    --amber-300: 180 83 9;     --amber-400: 180 83 9;
-    --red-300: 220 38 38;      --red-400: 220 38 38;
+    /* Brand orange — light accent #E65300 / #F05A00 */
+    --orange-500: 230 83 0;    --orange-600: 200 72 0;
+    --orange-400: 240 90 0;    --orange-300: 240 90 0;
+
+    /* Other accents darkened (≈ -600/-700) so they stay readable on cream */
+    --blue-300: 35 86 199;     --blue-400: 35 86 199;
+    --green-300: 27 127 60;    --green-400: 27 127 60;
+    --amber-300: 164 102 10;   --amber-400: 164 102 10;
+    --red-300: 194 51 42;      --red-400: 194 51 42;
     --purple-300: 147 51 234;  --purple-400: 147 51 234;
     --violet-300: 124 58 237;  --violet-400: 124 58 237;
-    --orange-300: 234 88 12;   --orange-400: 234 88 12;
     --emerald-300: 5 150 105;  --emerald-400: 5 150 105;
     --sky-300: 2 132 199;      --sky-400: 2 132 199;
   }
@@ -220,17 +226,17 @@
   }
   :root[data-theme="light"] input::placeholder,
   :root[data-theme="light"] textarea::placeholder {
-    color: #a1a1aa;
+    color: #a39a8c;
   }
 
   /* Re-pin a subtree to dark token values — used to keep print documents and
      the report sheet white-with-dark-text regardless of the app theme. */
   [data-theme="dark"] {
     --white: 255 255 255;
-    --zinc-50: 250 250 250; --zinc-100: 244 244 245; --zinc-200: 228 228 231;
-    --zinc-300: 212 212 216; --zinc-400: 161 161 170; --zinc-500: 113 113 122;
-    --zinc-600: 82 82 91; --zinc-700: 63 63 70; --zinc-800: 39 39 42;
-    --zinc-900: 24 24 27; --zinc-950: 9 9 11;
+    --zinc-50: 250 250 250; --zinc-100: 238 238 238; --zinc-200: 220 220 220;
+    --zinc-300: 196 196 196; --zinc-400: 168 168 168; --zinc-500: 110 110 110;
+    --zinc-600: 64 64 64; --zinc-700: 44 44 44; --zinc-800: 32 32 32;
+    --zinc-900: 21 21 21; --zinc-950: 13 13 13;
   }
 
   /* ── Reset ──────────────────────────────────────────────────────────────── */
@@ -259,12 +265,12 @@
   input:not([type="range"]),
   textarea,
   select {
-    color: #f4f4f5;           /* zinc-100 */
-    background-color: #27272a; /* zinc-800 */
+    color: #fafafa;
+    background-color: #1c1c1c;
   }
   input::placeholder,
   textarea::placeholder {
-    color: #71717a; /* zinc-500 */
+    color: #6e6e6e;
   }
 
   /* ── Headings — fluid scale with clamp() for mobile ─────────────────────── */

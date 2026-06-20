@@ -15,6 +15,8 @@ const config: Config = {
       // Without this, font-sans maps to system-ui, not Inter.
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui"],
+        display: ["var(--font-display)", "ui-sans-serif", "system-ui"], // Bebas Neue — logo, hero, big numbers
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],         // JetBrains Mono — overlines, badges
       },
 
       // ── Z-index — token-bridged, removes need for inline style={{ zIndex }} 
@@ -147,7 +149,7 @@ const config: Config = {
         red:     { ...twColors.red,     300: "rgb(var(--red-300) / <alpha-value>)",     400: "rgb(var(--red-400) / <alpha-value>)" },
         purple:  { ...twColors.purple,  300: "rgb(var(--purple-300) / <alpha-value>)",  400: "rgb(var(--purple-400) / <alpha-value>)" },
         violet:  { ...twColors.violet,  300: "rgb(var(--violet-300) / <alpha-value>)",  400: "rgb(var(--violet-400) / <alpha-value>)" },
-        orange:  { ...twColors.orange,  300: "rgb(var(--orange-300) / <alpha-value>)",  400: "rgb(var(--orange-400) / <alpha-value>)" },
+        orange:  { ...twColors.orange,  300: "rgb(var(--orange-300) / <alpha-value>)",  400: "rgb(var(--orange-400) / <alpha-value>)", 500: "rgb(var(--orange-500) / <alpha-value>)", 600: "rgb(var(--orange-600) / <alpha-value>)" },
         emerald: { ...twColors.emerald, 300: "rgb(var(--emerald-300) / <alpha-value>)", 400: "rgb(var(--emerald-400) / <alpha-value>)" },
         sky:     { ...twColors.sky,     300: "rgb(var(--sky-300) / <alpha-value>)",     400: "rgb(var(--sky-400) / <alpha-value>)" },
       },
