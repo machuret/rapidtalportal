@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { cookies } from "next/headers";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -15,11 +16,16 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Theme is read server-side from the cookie and set on <html> before paint,
+  // so there's no flash. Default is dark. The toggle (Profile → Appearance)
+  // flips the cookie + data-theme live.
+  const theme = cookies().get("theme")?.value === "light" ? "light" : "dark";
+
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" data-theme={theme} className={inter.variable}>
       <body className="font-sans">
         {children}
-        <Toaster richColors />
+        <Toaster richColors theme={theme} />
       </body>
     </html>
   );

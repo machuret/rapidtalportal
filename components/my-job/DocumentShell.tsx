@@ -22,7 +22,9 @@ export function DocumentShell({ children, backHref = "/my-job" }: { children: Re
         </button>
       </div>
 
-      <div className="bg-white text-zinc-900 rounded-xl shadow-2xl mx-auto max-w-[210mm] p-10 md:p-14 print:shadow-none print:rounded-none print:p-10 print:max-w-none">
+      {/* The paper is always a white sheet with dark text — re-pin to dark token
+          values so it renders correctly whether the app is in light or dark. */}
+      <div data-theme="dark" className="bg-white text-zinc-900 rounded-xl shadow-2xl mx-auto max-w-[210mm] p-10 md:p-14 print:shadow-none print:rounded-none print:p-10 print:max-w-none">
         {children}
       </div>
 

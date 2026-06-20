@@ -91,6 +91,11 @@ const config: Config = {
         input:  "hsl(var(--input))",
         ring:   "hsl(var(--ring))",
 
+        // `white` routed through a var too, so the ~200 `text-white` headings/
+        // values flip in light mode. Surfaces that must stay white live in a
+        // data-theme="dark" wrapper (see globals.css).
+        white: "rgb(var(--white) / <alpha-value>)",
+
         // ── zinc scale routed through CSS vars ──────────────────────────────
         // Every zinc-* utility already used across the app now reads from
         // --zinc-* in globals.css. <alpha-value> keeps /opacity modifiers

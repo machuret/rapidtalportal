@@ -75,8 +75,9 @@ export function ClientReport({ data }: { data: ClientReportData }) {
         </div>
       </div>
 
-      {/* The document sheet — light so it reads like a real report and prints clean. */}
-      <div className="report-sheet bg-white text-zinc-900 rounded-xl border border-zinc-200 shadow-xl mx-auto max-w-3xl p-8 sm:p-10">
+      {/* The document sheet — always light (reads like a real report and prints
+          clean). data-theme="dark" re-pins tokens so it stays white in either app theme. */}
+      <div data-theme="dark" className="report-sheet bg-white text-zinc-900 rounded-xl border border-zinc-200 shadow-xl mx-auto max-w-3xl p-8 sm:p-10">
         {/* Letterhead */}
         <div className="flex items-start justify-between border-b border-zinc-200 pb-5 mb-6">
           <div>

@@ -8,6 +8,12 @@
     /* Prevents white flash on browser-native inputs, scrollbars, selects    */
     color-scheme: dark;
 
+    /* `white` is routed through this var in tailwind.config.ts so the ~200
+       `text-white` headings/values flip in light mode with no component edits.
+       Surfaces that must STAY white (print docs, the report sheet) live in a
+       data-theme="dark" wrapper that re-pins it to 255. */
+    --white: 255 255 255;
+
     /* ── Shadcn/ui compatibility tokens (dark-tuned) ─────────────────────── */
     --background: 240 10% 3.9%;       /* zinc-950 */
     --foreground: 0 0% 98%;           /* zinc-50  */
@@ -124,6 +130,84 @@
     --ease-standard: cubic-bezier(0.4, 0, 0.2, 1); /* enter + exit */
     --ease-out:      cubic-bezier(0, 0, 0.2, 1);   /* enter        */
     --ease-in:       cubic-bezier(0.4, 0, 1, 1);   /* exit         */
+  }
+
+  /* ════════════════════════════════════════════════════════════════════════
+     LIGHT THEME — set <html data-theme="light">. Because every zinc-* utility
+     (and `white`) is var-backed, overriding these reskins the whole app with no
+     component edits. The zinc scale is inverted (50 = darkest text … 950 = page
+     bg) and contrast-tuned for white. `:root[data-theme]` beats `:root`.
+     ════════════════════════════════════════════════════════════════════════ */
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --white: 24 24 27; /* `text-white` headings become near-black on light */
+
+    /* Inverted, contrast-tuned grayscale */
+    --zinc-50:  9 9 11;       /* primary text / headings */
+    --zinc-100: 24 24 27;
+    --zinc-200: 39 39 42;
+    --zinc-300: 63 63 70;
+    --zinc-400: 82 82 91;     /* secondary text — ~7:1 on white */
+    --zinc-500: 113 113 122;  /* tertiary text */
+    --zinc-600: 161 161 170;  /* faint / decorative */
+    --zinc-700: 212 212 216;  /* default borders */
+    --zinc-800: 241 241 243;  /* inputs, nested cards, subtle borders */
+    --zinc-900: 255 255 255;  /* cards */
+    --zinc-950: 248 248 249;  /* page background */
+
+    /* shadcn/ui tokens */
+    --background: 0 0% 97%;
+    --foreground: 240 10% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 4%;
+    --secondary: 240 5% 90%;
+    --secondary-foreground: 240 10% 10%;
+    --muted: 240 5% 94%;
+    --muted-foreground: 240 4% 40%;
+    --accent: 240 5% 90%;
+    --accent-foreground: 240 10% 10%;
+    --border: 240 6% 85%;
+    --input: 240 6% 90%;
+
+    /* Surface / text / border hex tokens */
+    --surface-base:    #f8f8f9;
+    --surface-raised:  #ffffff;
+    --surface-overlay: #f1f1f3;
+    --surface-subtle:  #d4d4d8;
+    --text-primary:    #09090b;
+    --text-secondary:  #52525b;
+    --text-tertiary:   #71717a;
+    --border-subtle:   #e4e4e7;
+    --border-default:  #d4d4d8;
+
+    /* Softer shadows for a light surface */
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+    --shadow-lg: 0 16px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.05);
+  }
+
+  /* Native inputs in light mode (the dark rule below uses hardcoded hex). */
+  :root[data-theme="light"] input:not([type="range"]),
+  :root[data-theme="light"] textarea,
+  :root[data-theme="light"] select {
+    color: #18181b;
+    background-color: #ffffff;
+  }
+  :root[data-theme="light"] input::placeholder,
+  :root[data-theme="light"] textarea::placeholder {
+    color: #a1a1aa;
+  }
+
+  /* Re-pin a subtree to dark token values — used to keep print documents and
+     the report sheet white-with-dark-text regardless of the app theme. */
+  [data-theme="dark"] {
+    --white: 255 255 255;
+    --zinc-50: 250 250 250; --zinc-100: 244 244 245; --zinc-200: 228 228 231;
+    --zinc-300: 212 212 216; --zinc-400: 161 161 170; --zinc-500: 113 113 122;
+    --zinc-600: 82 82 91; --zinc-700: 63 63 70; --zinc-800: 39 39 42;
+    --zinc-900: 24 24 27; --zinc-950: 9 9 11;
   }
 
   /* ── Reset ──────────────────────────────────────────────────────────────── */
