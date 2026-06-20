@@ -255,7 +255,6 @@
   body {
     @apply bg-zinc-950 text-zinc-50 antialiased;
     font-size: var(--text-base);
-    font-feature-settings: "cv11", "ss01"; /* Inter: tabular nums + stylistic set */
     text-rendering: optimizeLegibility;
   }
 

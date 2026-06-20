@@ -49,7 +49,7 @@ export default async function DashboardPage() {
     supabase.from("daily_logs").select("id").eq("user_id", user.id).eq("log_date", today).maybeSingle(),
     supabase.from("time_entries").select("started_at, ended_at").eq("user_id", user.id).eq("phase", "work").gte("work_date", wkStart),
     supabase.from("va_job_contracts").select("weekly_hours").eq("user_id", user.id).maybeSingle(),
-    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("type", "message").is("read_at", null),
+    supabase.from("messages").select("id", { count: "exact", head: true }).eq("client_id", clientId).neq("sender_id", user.id).not("read_by", "cs", `{${user.id}}`),
     supabase.from("task_events").select("id, kind, body, user_id, created_at, task_id").eq("client_id", clientId).order("created_at", { ascending: false }).limit(6),
     supabase.from("task_categories").select("id, name").eq("client_id", clientId),
     supabase.from("users").select("id, full_name, email").eq("client_id", clientId),
