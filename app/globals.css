@@ -14,6 +14,18 @@
        data-theme="dark" wrapper that re-pins it to 255. */
     --white: 255 255 255;
 
+    /* Accent foreground shades (300/400) — stock Tailwind by default; the
+       [data-theme=light] block below darkens them for contrast on white. */
+    --blue-300: 147 197 253;    --blue-400: 96 165 250;
+    --green-300: 134 239 172;   --green-400: 74 222 128;
+    --amber-300: 252 211 77;    --amber-400: 251 191 36;
+    --red-300: 252 165 165;     --red-400: 248 113 113;
+    --purple-300: 216 180 254;  --purple-400: 192 132 252;
+    --violet-300: 196 181 253;  --violet-400: 167 139 250;
+    --orange-300: 253 186 116;  --orange-400: 251 146 60;
+    --emerald-300: 110 231 183; --emerald-400: 52 211 153;
+    --sky-300: 125 211 252;     --sky-400: 56 189 248;
+
     /* ── Shadcn/ui compatibility tokens (dark-tuned) ─────────────────────── */
     --background: 240 10% 3.9%;       /* zinc-950 */
     --foreground: 0 0% 98%;           /* zinc-50  */
@@ -186,6 +198,17 @@
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
     --shadow-lg: 0 16px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.05);
+
+    /* Accents darkened (≈ -600/-700) so icons/status text stay readable on white */
+    --blue-300: 37 99 235;     --blue-400: 37 99 235;
+    --green-300: 21 128 61;    --green-400: 22 163 74;
+    --amber-300: 180 83 9;     --amber-400: 180 83 9;
+    --red-300: 220 38 38;      --red-400: 220 38 38;
+    --purple-300: 147 51 234;  --purple-400: 147 51 234;
+    --violet-300: 124 58 237;  --violet-400: 124 58 237;
+    --orange-300: 234 88 12;   --orange-400: 234 88 12;
+    --emerald-300: 5 150 105;  --emerald-400: 5 150 105;
+    --sky-300: 2 132 199;      --sky-400: 2 132 199;
   }
 
   /* Native inputs in light mode (the dark rule below uses hardcoded hex). */

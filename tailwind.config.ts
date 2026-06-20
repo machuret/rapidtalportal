@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import twColors from "tailwindcss/colors";
 
 const config: Config = {
   // Always-dark app — use media strategy so no .dark class is needed
@@ -135,6 +136,20 @@ const config: Config = {
           DEFAULT: "rgb(var(--zinc-700) / <alpha-value>)",
           strong:  "rgb(var(--zinc-600) / <alpha-value>)",
         },
+
+        // ── Accent foreground shades routed through vars ────────────────────
+        // Only the 300/400 (text/icon) shades — spread keeps 500/600/gradients
+        // intact. In light mode globals.css points these at darker values so
+        // accents stay readable on white. (Defaults = stock Tailwind.)
+        blue:    { ...twColors.blue,    300: "rgb(var(--blue-300) / <alpha-value>)",    400: "rgb(var(--blue-400) / <alpha-value>)" },
+        green:   { ...twColors.green,   300: "rgb(var(--green-300) / <alpha-value>)",   400: "rgb(var(--green-400) / <alpha-value>)" },
+        amber:   { ...twColors.amber,   300: "rgb(var(--amber-300) / <alpha-value>)",   400: "rgb(var(--amber-400) / <alpha-value>)" },
+        red:     { ...twColors.red,     300: "rgb(var(--red-300) / <alpha-value>)",     400: "rgb(var(--red-400) / <alpha-value>)" },
+        purple:  { ...twColors.purple,  300: "rgb(var(--purple-300) / <alpha-value>)",  400: "rgb(var(--purple-400) / <alpha-value>)" },
+        violet:  { ...twColors.violet,  300: "rgb(var(--violet-300) / <alpha-value>)",  400: "rgb(var(--violet-400) / <alpha-value>)" },
+        orange:  { ...twColors.orange,  300: "rgb(var(--orange-300) / <alpha-value>)",  400: "rgb(var(--orange-400) / <alpha-value>)" },
+        emerald: { ...twColors.emerald, 300: "rgb(var(--emerald-300) / <alpha-value>)", 400: "rgb(var(--emerald-400) / <alpha-value>)" },
+        sky:     { ...twColors.sky,     300: "rgb(var(--sky-300) / <alpha-value>)",     400: "rgb(var(--sky-400) / <alpha-value>)" },
       },
 
       // ── Box shadows — elevation system ────────────────────────────────────
