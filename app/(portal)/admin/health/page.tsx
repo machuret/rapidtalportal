@@ -1,6 +1,7 @@
 import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MIGRATIONS } from "@/lib/migrations/manifest";
+import { emailConfigured } from "@/lib/email";
 import { cn } from "@/lib/utils";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Activity, CheckCircle2, XCircle, AlertTriangle, Database, Clock, Brain, KeyRound } from "lucide-react";
@@ -57,6 +58,7 @@ export default async function AdminHealthPage() {
   // optional. Surface both so a silent no-op is visible.
   const chatConfigured = !!(process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY);
   const embeddingsConfigured = !!process.env.OPENAI_API_KEY;
+  const emailReady = emailConfigured();
 
   // ── Cron heartbeats ───────────────────────────────────────────────────────
   const EXPECTED_CRONS: { name: string; staleAfterH: number }[] = [
@@ -240,6 +242,14 @@ export default async function AdminHealthPage() {
           <p className="text-xs text-zinc-500 mt-3">
             Signals turn into lessons via the <code className="bg-zinc-800 px-1 py-0.5 rounded">brain-distill</code> cron (daily) or the “Distill now” button on Brain Analytics. Proposed lessons await admin approval in the memory panel.
           </p>
+          <div className="mt-3 pt-3 border-t border-zinc-800 flex items-start gap-2 text-sm">
+            <KeyRound className={cn("w-4 h-4 shrink-0 mt-0.5", emailReady ? "text-green-400" : "text-amber-400")} />
+            <span className={emailReady ? "text-zinc-400" : "text-amber-300"}>
+              {emailReady
+                ? "Transactional email configured (Resend) — notification emails will send (respecting each user's preferences)."
+                : "Email off — RESEND_API_KEY not set. In-app notifications still work; no emails are sent until it's configured and the sending domain is verified."}
+            </span>
+          </div>
         </section>
 
         {/* Per-client brain health */}

@@ -85,4 +85,5 @@ export const MIGRATIONS = [
   "077_content_outcomes.sql",
   "078_va_leave_allowance.sql",
   "079_sop_soft_delete.sql",
+  "080_notification_prefs.sql",
 ] as const;

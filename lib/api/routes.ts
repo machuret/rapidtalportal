@@ -114,6 +114,7 @@ export const ROUTES = {
   timeEntries: () => "/api/time-entries",
   team: (id: string) => `/api/team/${id}`,
   profile: () => "/api/profile",
+  profileNotifications: () => "/api/profile/notifications",
   messages: {
     list: (clientId: string) => `/api/messages?clientId=${clientId}`,
     send: () => "/api/messages/send",
