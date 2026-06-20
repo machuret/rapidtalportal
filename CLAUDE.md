@@ -48,9 +48,14 @@ guarantee that admins have zero content access. Admins only ever see Notebook
 
 ## Conventions you must follow
 
-- **Styling tokens only.** No arbitrary hex, no new inline styles —
-  `scripts/styles-guard.mjs` (`pnpm styles:check`) blocks them. Use the
-  zinc/token palette already in use.
+- **Styling tokens only.** No arbitrary hex, no new inline styles, and **no new
+  arbitrary design values** (`text-[13px]`, `p-[18px]`, `rounded-[10px]`, literal
+  `rgba()` in classes) — `scripts/styles-guard.mjs` (`pnpm styles:check`) blocks
+  them: undefined-var + arbitrary-hex are hard fails; raw-hex, inline-style and
+  arbitrary-value are forward-only ratchets baselined in
+  `scripts/styles-baseline.json` (clean a file, then `pnpm styles:baseline` to
+  ratchet down). Use the zinc/token palette and the `text-xs…`/`rounded-lg`
+  scale. Full architecture + migration playbook: **`docs/STYLING.md`**.
 - **API routes**: prefer the `withAuth` / `withSuperAdmin` wrappers in
   `lib/api/with-auth.ts` (they centralise auth, role checks, and error capture).
   Many older routes call `requireApiAuth` directly — fine, but new routes should
