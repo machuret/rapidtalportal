@@ -2,10 +2,9 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { VaDashboard } from "@/components/dashboard/VaDashboard";
-import { VaDayStrip, AdminTeamStrip } from "@/components/dashboard/DayStrips";
 import { ClientDashboard } from "@/components/dashboard/ClientDashboard";
 import { renderClientDashboard } from "./client-dashboard";
-import { sumWorkHours } from "@/lib/tasks/metrics";
+import { workHours } from "@/lib/tasks/metrics";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard — RapidTal" };
@@ -38,79 +37,76 @@ export default async function DashboardPage() {
 
   const supabase = createAdminClient();
   const clientId = user.client_id;
+  const today = new Date().toISOString().slice(0, 10);
+  // Monday of the current week (UTC).
+  const wkStart = (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); })();
 
   const [
-    kbResult,
-    recentResult,
-    statusResult,
-    vaultResult,
-    sopsResult,
+    { data: taskRows }, { data: myLog }, { data: timeWeek }, { data: contract },
+    { count: unread }, { data: eventRows }, { data: catRows }, { data: userRows },
   ] = await Promise.all([
-    supabase.from("kb_entries").select("id, question, answer").eq("client_id", clientId).order("generated_at", { ascending: false }).limit(50),
-    supabase.from("crm_contacts").select("id, first_name, last_name, company, status, updated_at").eq("client_id", clientId).is("archived_at", null).order("updated_at", { ascending: false }).limit(8),
-    supabase.rpc("get_contact_status_counts", { p_client_id: clientId }),
-    supabase.from("vault_items").select("*", { count: "exact", head: true }).eq("client_id", clientId).eq("status", "ready"),
-    supabase.from("sops").select("*", { count: "exact", head: true }).eq("client_id", clientId).is("deleted_at", null),
+    supabase.from("tasks").select("id, title, status, due_date, priority, category_id").eq("client_id", clientId).eq("assigned_to", user.id).neq("status", "done").order("due_date", { ascending: true, nullsFirst: false }),
+    supabase.from("daily_logs").select("id").eq("user_id", user.id).eq("log_date", today).maybeSingle(),
+    supabase.from("time_entries").select("started_at, ended_at").eq("user_id", user.id).eq("phase", "work").gte("work_date", wkStart),
+    supabase.from("va_job_contracts").select("weekly_hours").eq("user_id", user.id).maybeSingle(),
+    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("type", "message").is("read_at", null),
+    supabase.from("task_events").select("id, kind, body, user_id, created_at, task_id").eq("client_id", clientId).order("created_at", { ascending: false }).limit(6),
+    supabase.from("task_categories").select("id, name").eq("client_id", clientId),
+    supabase.from("users").select("id, full_name, email").eq("client_id", clientId),
   ]);
 
-  if (kbResult.error)     console.error("[dashboard] kb_entries:", kbResult.error.message);
-  if (recentResult.error) console.error("[dashboard] crm_contacts recent:", recentResult.error.message);
-  if (statusResult.error) console.error("[dashboard] status_counts:", statusResult.error.message);
-  if (vaultResult.error)  console.error("[dashboard] vault_items:", vaultResult.error.message);
-  if (sopsResult.error)   console.error("[dashboard] sops:", sopsResult.error.message);
+  const myTasks = (taskRows ?? []) as { id: string; title: string; status: string; due_date: string | null; priority: number; category_id: string | null }[];
+  const catName = new Map(((catRows ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
+  const userName = new Map(((userRows ?? []) as { id: string; full_name: string | null; email: string }[]).map((u) => [u.id, u.full_name ?? u.email]));
 
-  const statusCounts = (statusResult.data ?? []) as { status: string; count: number }[];
+  const hours = workHours((timeWeek ?? []) as { started_at: string; ended_at: string | null }[]);
+  const weeklyGoal = (contract as { weekly_hours: number | null } | null)?.weekly_hours ?? null;
 
-  // ── Role-aware day strip ─────────────────────────────────────────────
-  const isAdmin = user.role === "client_admin";
-  const today = new Date().toISOString().slice(0, 10);
-  let topSlot: React.ReactNode = null;
+  const dueToday = myTasks.filter((t) => t.due_date === today);
+  const reviewTasks = myTasks.filter((t) => t.status === "review");
+  const activeTasks = myTasks
+    .filter((t) => t.status === "todo" || t.status === "in_progress")
+    .slice(0, 6)
+    .map((t) => ({ id: t.id, title: t.title, status: t.status, due_date: t.due_date, priority: t.priority, category: t.category_id ? (catName.get(t.category_id) ?? null) : null }));
 
-  if (isAdmin) {
-    const [{ data: vas }, { data: logsToday }, { data: openTaskRows }, { data: timeToday }] = await Promise.all([
-      supabase.from("users").select("id").eq("client_id", clientId).eq("role", "va"),
-      supabase.from("daily_logs").select("user_id").eq("client_id", clientId).eq("log_date", today),
-      supabase.from("tasks").select("id, status").eq("client_id", clientId).neq("status", "done"),
-      supabase.from("time_entries").select("started_at, ended_at").eq("client_id", clientId).eq("phase", "work").eq("work_date", today),
-    ]);
-    const open = (openTaskRows ?? []) as { status: string }[];
-    const hoursToday = sumWorkHours((timeToday ?? []) as { started_at: string; ended_at: string | null }[]);
-    topSlot = (
-      <AdminTeamStrip
-        vaCount={(vas ?? []).length}
-        loggedToday={new Set(((logsToday ?? []) as { user_id: string }[]).map((l) => l.user_id)).size}
-        openTasks={open.length}
-        reviewTasks={open.filter((t) => t.status === "review").length}
-        hoursToday={hoursToday}
-      />
-    );
-  } else {
-    const [{ data: myTasks }, { data: myLog }] = await Promise.all([
-      supabase.from("tasks").select("id, status, due_date").eq("client_id", clientId).eq("assigned_to", user.id).neq("status", "done"),
-      supabase.from("daily_logs").select("id").eq("user_id", user.id).eq("log_date", today).maybeSingle(),
-    ]);
-    const open = (myTasks ?? []) as { due_date: string | null }[];
-    topSlot = (
-      <VaDayStrip
-        openTasks={open.length}
-        dueToday={open.filter((t) => t.due_date === today).length}
-        overdue={open.filter((t) => t.due_date && t.due_date < today).length}
-        loggedToday={!!myLog}
-      />
-    );
+  // Resolve task titles for the activity feed (events may reference others' tasks).
+  const titleById = new Map(myTasks.map((t) => [t.id, t.title]));
+  const missing = Array.from(new Set(((eventRows ?? []) as { task_id: string }[]).map((e) => e.task_id))).filter((id) => !titleById.has(id));
+  if (missing.length) {
+    const { data: evTasks } = await supabase.from("tasks").select("id, title").in("id", missing);
+    for (const t of (evTasks ?? []) as { id: string; title: string }[]) titleById.set(t.id, t.title);
   }
+  const activity = ((eventRows ?? []) as { id: string; kind: string; body: string; user_id: string | null; created_at: string; task_id: string }[])
+    .map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      body: e.body,
+      actor: e.user_id ? (userName.get(e.user_id) ?? "Someone") : "System",
+      taskTitle: titleById.get(e.task_id) ?? null,
+      createdAt: e.created_at,
+    }));
+
+  const dateLabel = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
   return (
     <VaDashboard
-      userName={user.full_name ?? user.email}
-      userId={user.id}
+      firstName={(user.full_name ?? user.email).split(" ")[0]}
+      dateLabel={dateLabel}
+      todayIso={today}
       clientName={client?.name ?? ""}
-      kbEntries={(kbResult.data ?? []) as { id: string; question: string; answer: string }[]}
-      recentContacts={(recentResult.data ?? []) as { id: string; first_name: string; last_name: string | null; company: string | null; status: string; updated_at: string }[]}
-      statusCounts={statusCounts}
-      vaultCount={vaultResult.count ?? 0}
-      sopCount={sopsResult.count ?? 0}
-      topSlot={topSlot}
+      userId={user.id}
+      kpis={{
+        dueToday: dueToday.length,
+        highPriority: dueToday.filter((t) => t.priority >= 3).length,
+        hours,
+        weeklyGoal,
+        pendingReview: reviewTasks.length,
+        reviewOverdue: reviewTasks.filter((t) => t.due_date && t.due_date < today).length,
+        unread: unread ?? 0,
+      }}
+      activeTasks={activeTasks}
+      activity={activity}
+      loggedToday={!!myLog}
     />
   );
 }

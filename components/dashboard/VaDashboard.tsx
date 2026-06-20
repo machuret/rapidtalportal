@@ -1,271 +1,192 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { BookOpen, ContactRound, Search, ChevronDown, ChevronUp, Copy, Check, Plus, ArrowRight, PenLine, ListChecks, Dna, Sparkles } from "lucide-react";
-import { CRM_STATUS_META } from "@/lib/crm-config";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { CheckCircle2, Clock, ClipboardCheck, MessageSquare, NotebookPen, Wand2, ArrowRight, Activity } from "lucide-react";
+import { formatDate } from "@/lib/utils";
+import { RelativeTime } from "@/components/ui/RelativeTime";
 import { TimeTracker } from "@/components/dashboard/TimeTracker";
 
-interface KbEntry {
-  id: string;
-  question: string;
-  answer: string;
+interface Kpis {
+  dueToday: number; highPriority: number;
+  hours: number; weeklyGoal: number | null;
+  pendingReview: number; reviewOverdue: number;
+  unread: number;
 }
-
-interface RecentContact {
-  id: string;
-  first_name: string;
-  last_name: string | null;
-  company: string | null;
-  status: string;
-  updated_at: string;
+interface ActiveTask {
+  id: string; title: string; status: string; due_date: string | null; priority: number; category: string | null;
 }
-
-interface StatusCount {
-  status: string;
-  count: number;
+interface ActivityItem {
+  id: string; kind: string; body: string; actor: string; taskTitle: string | null; createdAt: string;
 }
 
 interface VaDashboardProps {
-  userName: string;
+  firstName: string;
+  dateLabel: string;
+  todayIso: string;
   clientName: string;
   userId: string;
-  kbEntries: KbEntry[];
-  recentContacts: RecentContact[];
-  statusCounts: StatusCount[];
-  vaultCount: number;
-  sopCount: number;
-  /** Role-aware "my day" / "team today" strip, server-rendered by the page. */
-  topSlot?: React.ReactNode;
+  kpis: Kpis;
+  activeTasks: ActiveTask[];
+  activity: ActivityItem[];
+  loggedToday: boolean;
 }
 
+const PRIORITY: Record<number, { label: string; cls: string }> = {
+  4: { label: "Urgent", cls: "text-red-400 bg-red-500/10" },
+  3: { label: "High",   cls: "text-amber-400 bg-amber-500/10" },
+  2: { label: "Normal", cls: "text-zinc-400 bg-zinc-800" },
+  1: { label: "Low",    cls: "text-zinc-500 bg-zinc-800" },
+};
+const STATUS_PROGRESS: Record<string, string> = { todo: "w-1/12", in_progress: "w-7/12" };
+const initials = (name: string) => name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
 
-export function VaDashboard({ userName, clientName, userId, kbEntries, recentContacts, statusCounts, vaultCount, sopCount, topSlot }: VaDashboardProps) {
-  const [kbSearch, setKbSearch] = useState("");
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
+export function VaDashboard({ firstName, dateLabel, todayIso, clientName, userId, kpis, activeTasks, activity, loggedToday }: VaDashboardProps) {
+  const [greeting, setGreeting] = useState("Hello");
+  useEffect(() => {
+    const h = new Date().getHours();
+    setGreeting(h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening");
+  }, []);
 
-  const filteredKb = kbEntries.filter(e =>
-    !kbSearch || e.question.toLowerCase().includes(kbSearch.toLowerCase()) || e.answer.toLowerCase().includes(kbSearch.toLowerCase())
-  ).slice(0, 8);
-
-  async function copyAnswer(id: string, text: string) {
-    await navigator.clipboard.writeText(text);
-    setCopied(id);
-    setTimeout(() => setCopied(null), 2000);
-  }
-
-  const isEmpty = kbEntries.length === 0;
+  const goalPct = kpis.weeklyGoal ? Math.round((kpis.hours / kpis.weeklyGoal) * 100) : null;
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Good day, {userName} 👋</h1>
-        <p className="text-zinc-400 text-sm mt-1 leading-relaxed">{clientName || "Welcome to your portal"}</p>
-      </div>
-
-      {/* Role-aware day strip */}
-      {topSlot}
-
-      {/* Getting started banner — shown when KB is empty */}
-      {isEmpty && (
-        <div className="rounded-xl border border-zinc-700 bg-zinc-900 px-6 py-5">
-          <p className="font-semibold text-sm mb-1">Your workspace is ready — here&apos;s what you can do right now:</p>
-          <p className="text-zinc-400 text-xs mb-4">The Knowledge Base will appear once your admin adds documents. In the meantime you can already:</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {[
-              { href: "/crm",     Icon: ContactRound, label: "Add your first contact",    desc: "Start tracking leads and clients",      color: "text-green-400"  },
-              { href: "/content", Icon: Sparkles,     label: "Generate content",           desc: "Write emails, posts & blogs with AI",  color: "text-pink-400"   },
-              { href: "/sops",    Icon: ListChecks,   label: "Browse SOPs",                desc: "Find your team's step-by-step guides", color: "text-amber-400"  },
-            ].map(({ href, Icon, label, desc, color }) => (
-              <Link key={href} href={href} className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-800/40 px-4 py-3 hover:bg-zinc-800 transition-colors">
-                <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${color}`} />
-                <div>
-                  <p className="text-sm font-medium">{label}</p>
-                  <p className="text-xs text-zinc-500 mt-0.5">{desc}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
+    <div className="flex flex-col gap-5">
+      {/* Hero */}
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <p className="font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-zinc-500 mb-2">{dateLabel}</p>
+          <h1 className="font-display text-[42px] leading-[0.95] tracking-[0.02em] text-zinc-50 mb-2" suppressHydrationWarning>{greeting}, {firstName}</h1>
+          <p className="text-[14.5px] text-zinc-400">
+            You have <strong className="text-zinc-50 font-semibold">{kpis.dueToday} task{kpis.dueToday !== 1 ? "s" : ""}</strong> due today and{" "}
+            <strong className="text-zinc-50 font-semibold">{kpis.pendingReview} item{kpis.pendingReview !== 1 ? "s" : ""}</strong> awaiting client review.
+          </p>
         </div>
-      )}
-
-      {/* Stat strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "KB Answers",      value: kbEntries.length,                                              href: "/vault/knowledge", color: "text-blue-400"   },
-          { label: "Vault Docs",      value: vaultCount,                                                    href: "/vault",          color: "text-purple-400" },
-          { label: "SOPs",            value: sopCount,                                                      href: "/sops",           color: "text-amber-400"  },
-          { label: "Active Contacts", value: statusCounts.find(s => s.status === "active")?.count ?? 0,     href: "/crm",            color: "text-green-400"  },
-        ].map(s => (
-          <Link key={s.label} href={s.href} className="surface-card px-4 py-4 hover:bg-zinc-800 transition-colors block">
-            <p className={`stat-value ${s.color}`}>{s.value}</p>
-            <p className="label-section mt-2">{s.label}</p>
+        <div className="flex gap-2.5">
+          <Link href="/daily-log" className="inline-flex items-center gap-2 text-[13px] font-semibold text-zinc-50 bg-zinc-900 border border-zinc-700 rounded-[10px] px-4 py-2.5 hover:border-zinc-600 transition-colors">
+            <NotebookPen className="w-4 h-4" /> {loggedToday ? "Daily Log ✓" : "Daily Log"}
           </Link>
-        ))}
+          <Link href="/compose" className="inline-flex items-center gap-2 text-[13px] font-bold text-white bg-orange-500 border border-orange-500 rounded-[10px] px-[18px] py-2.5 shadow-[0_6px_18px_rgba(240,90,0,0.28)] hover:bg-orange-400 transition-colors">
+            <Wand2 className="w-4 h-4" /> Compose
+          </Link>
+        </div>
       </div>
 
-      {/* Main two-column panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Kpi label="Tasks Due Today" value={kpis.dueToday} unit="tasks" icon={CheckCircle2} tile="text-amber-400 bg-amber-500/10"
+          delta={kpis.highPriority > 0 ? `${kpis.highPriority} high priority` : "all clear"} deltaCls={kpis.highPriority > 0 ? "text-amber-400" : "text-zinc-500"} />
+        <Kpi label="Hours Logged" value={kpis.hours} unit="h" icon={Clock} tile="text-blue-400 bg-blue-500/10"
+          delta={goalPct !== null ? `${goalPct}% to weekly goal` : "this week"} deltaCls="text-green-400" />
+        <Kpi label="Pending Review" value={kpis.pendingReview} unit="items" icon={ClipboardCheck} tile="text-orange-500 bg-orange-500/10"
+          delta={kpis.reviewOverdue > 0 ? `${kpis.reviewOverdue} overdue with client` : "with client"} deltaCls={kpis.reviewOverdue > 0 ? "text-red-400" : "text-zinc-500"} />
+        <Kpi label="Unread Messages" value={kpis.unread} unit="new" icon={MessageSquare} tile="text-purple-400 bg-purple-500/10"
+          delta={clientName ? `From ${clientName}` : "—"} deltaCls="text-zinc-500" />
+      </div>
 
-        {/* KB Quick Lookup */}
-        <div className="surface-card flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-            <div className="flex items-center gap-2 font-semibold">
-              <BookOpen className="w-4 h-4 text-blue-400" />
-              KB Quick Lookup
-            </div>
-            <Link href="/vault/knowledge" className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1">
-              All answers <ArrowRight className="w-3 h-3" />
-            </Link>
+      {/* Active Tasks + Recent Activity */}
+      <div className="grid lg:grid-cols-[1.65fr_1fr] gap-5 items-start">
+        {/* Active Tasks */}
+        <section className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2.5 px-5 py-4">
+            <h2 className="text-base font-bold text-zinc-50">Active Tasks</h2>
+            <span className="font-mono text-[11px] text-zinc-500 bg-zinc-800 rounded-md px-1.5 py-0.5">{activeTasks.length}</span>
           </div>
-          {kbEntries.length > 0 && (
-            <div className="px-4 pt-3 pb-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
-                <Input
-                  value={kbSearch}
-                  onChange={e => setKbSearch(e.target.value)}
-                  placeholder="Search questions…"
-                  className="pl-8 h-8 text-sm bg-zinc-800 border-zinc-700"
-                />
-              </div>
-            </div>
-          )}
-          <div className="flex-1 overflow-y-auto max-h-96 px-4 pb-4 flex flex-col gap-2 pt-2">
-            {kbEntries.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
-                <BookOpen className="w-8 h-8 text-zinc-700" />
-                <div>
-                  <p className="text-sm font-medium text-zinc-400">Knowledge Base not set up yet</p>
-                  <p className="text-xs text-zinc-500 mt-1">Your admin needs to add documents to the Vault<br/>and generate the KB. Check back soon.</p>
-                </div>
-                <Link href="/company-dna">
-                  <Button variant="outline" size="sm">
-                    <Dna className="w-3.5 h-3.5" /> View Company Info
-                  </Button>
-                </Link>
-              </div>
-            ) : filteredKb.length === 0 ? (
-              <p className="text-zinc-600 text-sm py-6 text-center">No results for &quot;{kbSearch}&quot;</p>
-            ) : filteredKb.map(e => (
-              <div key={e.id} className="rounded-lg bg-zinc-800 border border-zinc-700/50">
-                <button
-                  className="w-full flex items-start justify-between gap-2 px-3 py-2.5 text-left"
-                  onClick={() => setExpanded(expanded === e.id ? null : e.id)}
-                >
-                  <p className="text-sm font-medium leading-snug">{e.question}</p>
-                  {expanded === e.id
-                    ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
-                    : <ChevronDown className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />}
-                </button>
-                {expanded === e.id && (
-                  <div className="px-3 pb-3 border-t border-zinc-700/50 pt-2.5">
-                    <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">{e.answer}</p>
-                    <button
-                      onClick={() => copyAnswer(e.id, e.answer)}
-                      className="mt-2 flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-                    >
-                      {copied === e.id ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
-                      {copied === e.id ? "Copied!" : "Copy answer"}
-                    </button>
+          {activeTasks.length === 0 ? (
+            <p className="px-5 pb-6 text-sm text-zinc-500 border-t border-zinc-800 pt-5">Nothing in progress right now. Pick up a task from the board.</p>
+          ) : (
+            activeTasks.map((t) => {
+              const pri = PRIORITY[t.priority] ?? PRIORITY[2];
+              const overdue = t.due_date && t.due_date < todayIso;
+              const isToday = t.due_date === todayIso;
+              return (
+                <Link key={t.id} href="/tasks" className="flex items-center gap-3.5 px-5 py-3 border-t border-zinc-800 hover:bg-zinc-800/60 transition-colors">
+                  <span className="w-5 h-5 shrink-0 rounded-md border-[1.6px] border-zinc-600" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13.5px] font-semibold text-zinc-50 truncate">{t.title}</p>
+                    <div className="flex items-center gap-2 mt-1 text-[11.5px] text-zinc-500">
+                      <span>{t.category ?? "Uncategorised"}</span>
+                      <span className="w-[3px] h-[3px] rounded-full bg-zinc-600" />
+                      <span className="font-semibold text-zinc-400">{t.status === "in_progress" ? "In progress" : "To do"}</span>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* CRM Panel */}
-        <div className="surface-card flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-            <div className="flex items-center gap-2 font-semibold">
-              <ContactRound className="w-4 h-4 text-green-400" />
-              CRM
-            </div>
-            <Link href="/crm" className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1">
-              All contacts <ArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
-
-          {statusCounts.length > 0 && (
-            <div className="flex gap-2 px-5 pt-3 pb-2 flex-wrap">
-              {statusCounts.map(s => (
-                <span key={s.status} className={`text-xs px-2 py-0.5 rounded-full border font-medium ${CRM_STATUS_META[s.status]?.cls ?? "bg-zinc-700 text-zinc-300 border-zinc-600"}`}>
-                  {s.count} {s.status}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div className="flex-1 overflow-y-auto max-h-96 px-4 pb-2 flex flex-col gap-2 pt-3">
-            {recentContacts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center gap-3">
-                <ContactRound className="w-8 h-8 text-zinc-700" />
-                <div>
-                  <p className="text-sm font-medium text-zinc-400">No contacts yet</p>
-                  <p className="text-xs text-zinc-500 mt-1">Add your first lead or client to start tracking your pipeline.</p>
-                </div>
-                <Link href="/crm">
-                  <Button size="sm" className="text-xs h-8">
-                    <Plus className="w-3.5 h-3.5 mr-1.5" />Add first contact
-                  </Button>
+                  {t.due_date && (
+                    <span className={`text-[11px] font-semibold whitespace-nowrap ${overdue ? "text-red-400" : isToday ? "text-amber-400" : "text-zinc-500"}`}>
+                      {overdue ? "Overdue" : isToday ? "Today" : formatDate(t.due_date, { day: "numeric", month: "short" })}
+                    </span>
+                  )}
+                  <span className={`text-[10.5px] font-bold uppercase tracking-[0.03em] rounded-full px-2.5 py-0.5 whitespace-nowrap ${pri.cls}`}>{pri.label}</span>
+                  <span className="w-[54px] shrink-0 hidden sm:block">
+                    <span className="block h-[5px] rounded-full bg-zinc-800 overflow-hidden">
+                      <span className={`block h-full rounded-full bg-orange-500 ${STATUS_PROGRESS[t.status] ?? "w-1/12"}`} />
+                    </span>
+                  </span>
                 </Link>
-              </div>
-            ) : recentContacts.map(c => (
-              <Link
-                key={c.id}
-                href="/crm"
-                className="flex items-center gap-3 rounded-lg bg-zinc-800 border border-zinc-700/50 px-3 py-2.5 hover:bg-zinc-700/60 transition-colors"
-              >
-                <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-300 shrink-0">
-                  {c.first_name[0]}{c.last_name?.[0] ?? ""}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{c.first_name} {c.last_name}</p>
-                  <p className="text-xs text-zinc-500 truncate">{c.company ?? "—"}</p>
-                </div>
-                <span className={`text-xs px-2 py-0.5 rounded-full border font-medium shrink-0 ${CRM_STATUS_META[c.status]?.cls ?? "bg-zinc-700 text-zinc-300 border-zinc-600"}`}>
-                  {c.status}
-                </span>
-              </Link>
-            ))}
-          </div>
-
-          <div className="px-4 pb-4 pt-2 border-t border-zinc-800 mt-auto">
-            <Link href="/crm">
-              <Button size="sm" className="w-full text-xs h-8">
-                <Plus className="w-3.5 h-3.5 mr-1.5" />Add Contact
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* Time Tracker */}
-      <TimeTracker userId={userId} />
-
-      {/* Quick launch */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { href: "/sops",           Icon: ListChecks,   label: "Browse SOPs",    color: "text-amber-400"  },
-          { href: "/content",        Icon: PenLine,      label: "Create Content", color: "text-pink-400"   },
-          { href: "/vault/knowledge", Icon: BookOpen,    label: "Full KB",        color: "text-blue-400"   },
-          { href: "/company-dna",    Icon: Dna,          label: "Company Info",   color: "text-purple-400" },
-        ].map(q => (
-          <Link
-            key={q.href}
-            href={q.href}
-            className="surface-card px-4 py-4 hover:bg-zinc-800 transition-colors flex items-center gap-3"
-          >
-            <q.Icon className={`w-5 h-5 shrink-0 ${q.color}`} />
-            <span className="text-sm font-medium">{q.label}</span>
+              );
+            })
+          )}
+          <Link href="/tasks" className="flex border-t border-zinc-800 px-5 py-3 text-[12.5px] font-bold text-orange-500 items-center gap-1.5">
+            View all tasks <ArrowRight className="w-3.5 h-3.5" />
           </Link>
-        ))}
+        </section>
+
+        {/* Recent Activity */}
+        <section className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-bold text-zinc-50">Recent Activity</h2>
+            <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide text-green-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400" /> Live
+            </span>
+          </div>
+          {activity.length === 0 ? (
+            <p className="text-sm text-zinc-500 py-4">No recent activity yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-3.5">
+              {activity.map((a) => (
+                <li key={a.id} className="flex gap-3">
+                  <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 flex items-center justify-center text-[11px] font-bold text-zinc-300">{initials(a.actor)}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12.5px] text-zinc-300 leading-snug">
+                      <strong className="text-zinc-50 font-semibold">{a.actor}</strong>{" "}
+                      {a.kind === "comment" ? "commented" : a.body}
+                      {a.taskTitle && <span className="text-zinc-500"> · {a.taskTitle}</span>}
+                    </p>
+                    {a.kind === "comment" && <p className="text-[12px] text-zinc-500 truncate mt-0.5">“{a.body}”</p>}
+                    <p className="text-[11px] text-zinc-600 mt-0.5"><RelativeTime value={a.createdAt} /></p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
+
+      {/* Time tracker — log your work for the Hours KPI */}
+      <section className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-sm p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Activity className="w-4 h-4 text-zinc-400" />
+          <h2 className="text-base font-bold text-zinc-50">Time tracker</h2>
+        </div>
+        <TimeTracker userId={userId} />
+      </section>
+    </div>
+  );
+}
+
+function Kpi({ label, value, unit, icon: Icon, tile, delta, deltaCls }: {
+  label: string; value: number; unit: string; icon: typeof Clock; tile: string; delta: string; deltaCls: string;
+}) {
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-sm p-[18px]">
+      <div className="flex items-center justify-between mb-3.5">
+        <span className="text-xs font-semibold text-zinc-400">{label}</span>
+        <span className={`w-8 h-8 shrink-0 flex items-center justify-center rounded-[9px] ${tile}`}><Icon className="w-4 h-4" /></span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-display text-[38px] leading-[0.85] tracking-[0.01em] text-zinc-50">{value}</span>
+        <span className="text-xs text-zinc-500">{unit}</span>
+      </div>
+      <p className={`mt-2.5 text-[11.5px] font-semibold ${deltaCls}`}>{delta}</p>
     </div>
   );
 }
