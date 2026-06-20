@@ -13,7 +13,6 @@ import {
   Archive,
   Dna,
   LogOut,
-  ShieldCheck,
   ContactRound,
   ListChecks,
   PenLine,
@@ -148,30 +147,25 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
     ? user.full_name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase()
     : user.email.slice(0, 2).toUpperCase();
 
+  const roleBadge = isSuperAdmin ? "ADMIN" : user.role === "client_admin" ? "CLIENT" : "VA";
+  const roleLabel = isSuperAdmin ? "Super Admin" : user.role === "client_admin" ? (client?.name ?? "Client") : (client?.name ?? "Virtual Assistant");
+
   return (
     <>
-      <aside className="flex flex-col w-60 min-h-screen bg-zinc-900 border-r border-zinc-800 px-4 py-6 gap-6 shrink-0">
-        {/* Brand */}
-        <div>
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-white text-xl tracking-tight leading-none">Rapid<span className="text-orange-500">Tal</span></span>
-            <NotificationsBell userId={user.id} />
-          </div>
-          {isSuperAdmin ? (
-            <div className="mt-1 flex items-center gap-2 text-xs text-amber-400 font-medium">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Super Admin
-            </div>
-          ) : (
-            <p className="mt-1 text-xs text-zinc-400 truncate">{client?.name ?? "—"}</p>
-          )}
+      <aside className="flex flex-col w-[264px] min-h-screen bg-zinc-900 border-r border-zinc-800 shrink-0">
+        {/* Brand header */}
+        <div className="h-16 shrink-0 flex items-center gap-3 px-[22px] border-b border-zinc-800">
+          <span className="w-[9px] h-[9px] rounded-full bg-orange-500 shadow-[0_0_12px_rgb(var(--orange-500))] shrink-0" />
+          <span className="font-display text-2xl tracking-[0.08em] leading-none text-zinc-50">RAPID TAL</span>
+          <span className="font-mono text-[9px] font-semibold tracking-[0.12em] text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded-md">{roleBadge}</span>
+          <span className="ml-auto"><NotificationsBell userId={user.id} /></span>
         </div>
 
         {/* Nav */}
-        <nav className="flex flex-col gap-1 flex-1 overflow-y-auto">
+        <nav className="flex flex-col gap-0.5 flex-1 overflow-y-auto px-3.5 py-4">
           {links.map((item) =>
             "section" in item ? (
-              <p key={`s-${item.section}`} className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+              <p key={`s-${item.section}`} className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500 px-2.5 pt-4 pb-1.5">
                 {item.section}
               </p>
             ) : (
@@ -185,13 +179,14 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
                     onClick={onNavigate}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors border-l-2",
+                      "relative flex items-center gap-3 px-2.5 py-2.5 rounded-[9px] text-[13.5px] font-semibold transition-colors",
                       isActive
-                        ? "border-orange-500 bg-orange-500/10 text-orange-300"
-                        : "border-transparent text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                        ? "bg-orange-500/10 text-orange-500"
+                        : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-50"
                     )}
                   >
-                    <item.icon className="w-4 h-4 shrink-0" />
+                    {isActive && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-[3px] h-[18px] rounded-r-md bg-orange-500" />}
+                    <item.icon className="w-[18px] h-[18px] shrink-0" />
                     {item.label}
                   </Link>
                 );
@@ -200,26 +195,24 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
           )}
         </nav>
 
-        {/* User footer */}
-        <div className="flex flex-col gap-2 border-t border-zinc-800 pt-4">
-          <div className="flex items-center gap-3 px-1">
-            <div className="w-7 h-7 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-200 shrink-0">
+        {/* User footer card */}
+        <div className="shrink-0 border-t border-zinc-800 p-3.5 flex items-center gap-3">
+          <Link href="/profile" onClick={onNavigate} className="flex items-center gap-3 min-w-0 flex-1 group">
+            <span className="w-9 h-9 shrink-0 rounded-[10px] bg-gradient-to-br from-orange-500 to-orange-400 flex items-center justify-center text-[13px] font-bold text-white">
               {initials}
-            </div>
-            <div className="min-w-0">
-              {user.full_name && <p className="text-xs font-medium text-zinc-200 truncate">{user.full_name}</p>}
-              <p className="text-xs text-zinc-500 truncate">{user.email}</p>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[13px] font-bold text-zinc-50 truncate group-hover:text-orange-500 transition-colors">{user.full_name ?? user.email}</span>
+              <span className="block text-[11px] text-zinc-500 truncate">{roleLabel}</span>
+            </span>
+          </Link>
+          <button
             onClick={() => setConfirmLogout(true)}
-            className="justify-start text-zinc-400 hover:text-red-400 px-3"
+            title="Sign out"
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors"
           >
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign out
-          </Button>
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </aside>
 
