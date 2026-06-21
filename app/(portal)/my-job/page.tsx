@@ -26,7 +26,7 @@ export default async function MyJobPage() {
 
   // Client-admin leave approvals moved to the Team page; this hub is VA-only now.
   return (
-    <div className="max-w-5xl">
+    <div>
       <MyJobHub
         vaTimezone={user.timezone ?? null}
         contract={(contract as Contract | null) ?? null}

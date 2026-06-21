@@ -114,7 +114,7 @@ export default async function VaDetailPage({ params }: { params: { id: string } 
   };
 
   return (
-    <div className="max-w-4xl">
+    <div>
       {/* Back */}
       <Link
         href="/team"

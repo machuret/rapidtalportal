@@ -153,7 +153,7 @@ export function AskVaultClient({
   }
 
   return (
-    <div className="max-w-3xl flex flex-col min-h-[calc(100vh-8rem)]">
+    <div className="flex flex-col min-h-[calc(100vh-8rem)]">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-orange-500/20">

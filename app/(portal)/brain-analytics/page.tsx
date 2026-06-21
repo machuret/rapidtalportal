@@ -134,7 +134,7 @@ export default async function BrainAnalyticsPage() {
     }));
 
   return (
-    <div className="max-w-5xl">
+    <div>
       <div className="flex items-center gap-4 mb-8">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
           <BarChart3 className="w-6 h-6 text-white" />

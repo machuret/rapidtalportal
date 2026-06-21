@@ -32,7 +32,7 @@ export default async function ToolsPage() {
   const recent = (runs ?? []) as { id: string; tool: string; input_summary: string | null; created_at: string }[];
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <div className="flex items-center gap-4 mb-6">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
           <Wrench className="w-6 h-6 text-white" />

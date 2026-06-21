@@ -184,7 +184,7 @@ function VaultClientInner({
   const isEmptyVault = counts.total === 0 && !hasFilters;
 
   return (
-    <div className="max-w-5xl">
+    <div>
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>

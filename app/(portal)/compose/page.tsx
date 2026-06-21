@@ -38,7 +38,7 @@ export default async function ComposePage() {
   }));
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <PageIntro id="compose" />
       <ComposeClient
         clientId={user.client_id}

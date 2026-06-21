@@ -90,7 +90,7 @@ export function VaultRecap({ clientId, canWrite }: { clientId: string; canWrite:
   const { counts } = data;
 
   return (
-    <div className="max-w-3xl">
+    <div>
       {/* Indexed status strip — "what is actually indexed" */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mb-6 text-sm">
         <span className="text-zinc-400"><span className="font-semibold text-zinc-100">{counts.total}</span> items</span>

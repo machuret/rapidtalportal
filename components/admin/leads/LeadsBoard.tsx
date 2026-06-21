@@ -166,7 +166,7 @@ function LeadDialog({ mode, lead, owners, currentUserId, onClose, submit, onArch
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="bg-zinc-900 border-zinc-700 max-w-2xl">
+      <DialogContent className="bg-zinc-900 border-zinc-700">
         <DialogHeader><DialogTitle>{mode === "create" ? "New lead" : f.name || "Lead"}</DialogTitle></DialogHeader>
         <div className="grid md:grid-cols-2 gap-5 mt-2">
           {/* Left: fields */}

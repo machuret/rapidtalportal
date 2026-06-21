@@ -26,7 +26,7 @@ export default async function CompanyDnaPage() {
   const canEdit = user.role === "client_admin" || user.role === "super_admin";
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <h1 className="text-2xl font-bold mb-1">Company Brain</h1>
       <p className="text-zinc-400 text-sm mb-8">
         The core profile of {client?.name ?? "your client"} — goals, audience, tools, voice and rules.

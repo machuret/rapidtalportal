@@ -34,7 +34,7 @@ export default async function AdminErrorsPage() {
   }[];
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <AdminPageHeader icon={Bug} gradient="from-red-500 to-rose-600 shadow-red-500/20" title="Errors"
         subtitle={
           <>

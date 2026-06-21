@@ -11,7 +11,7 @@ export default async function ProfilePage() {
   if (!ctx) redirect("/login");
 
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
+    <div className="flex flex-col gap-6">
       <ProfileForm user={ctx.user} />
       <AppearanceSettings />
       <NotificationSettings role={ctx.user.role} />

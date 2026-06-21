@@ -59,7 +59,7 @@ export default async function SupervisionDetailPage({ params }: { params: { id: 
   const completed = runs.filter((r) => r.status === "completed").length;
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <Link href="/supervision" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white mb-6 transition-colors">
         <ArrowLeft className="w-4 h-4" /> Back to Supervision
       </Link>

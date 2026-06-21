@@ -17,7 +17,7 @@ export default async function VaultPage() {
   const canWrite = user.role === "client_admin" || user.role === "super_admin" || user.role === "va";
 
   return (
-    <div className="max-w-5xl">
+    <div>
       <VaultTabs active="documents" />
       <PageIntro id="vault" />
       <VaultClient

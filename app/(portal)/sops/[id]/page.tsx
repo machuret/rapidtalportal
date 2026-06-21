@@ -62,7 +62,7 @@ export default async function SopDetailPage({ params }: { params: { id: string }
   const backHref = isGlobal && user.role === "super_admin" ? "/admin/sops" : "/sops";
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <Link
         href={backHref}
         className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white mb-6 transition-colors"

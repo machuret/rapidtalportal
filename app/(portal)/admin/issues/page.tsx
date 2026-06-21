@@ -35,7 +35,7 @@ export default async function AdminIssuesPage() {
   const openCount = rows.filter((r) => r.status !== "resolved").length;
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <AdminPageHeader icon={AlertTriangle} gradient="from-amber-500 to-orange-600 shadow-amber-500/20"
         title="Issues" subtitle={`Concerns raised by the team for RapidTal to mediate. ${openCount} open.`} />
 

@@ -51,7 +51,7 @@ export function RevisionDrawer({ open, onClose, pageId, nameFor, onRestored }: P
     <div className="fixed inset-0 z-modal flex justify-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div role="dialog" aria-modal="true" aria-label="Revision history"
-        className="relative w-full max-w-3xl bg-zinc-950 border-l border-zinc-800 flex flex-col shadow-2xl">
+        className="relative w-full bg-zinc-950 border-l border-zinc-800 flex flex-col shadow-2xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
           <h2 className="font-semibold text-white">Revision history</h2>
           <button onClick={onClose} aria-label="Close revision history" className="text-zinc-500 hover:text-white"><X className="w-5 h-5" /></button>

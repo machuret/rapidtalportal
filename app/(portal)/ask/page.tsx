@@ -15,7 +15,7 @@ export default async function AskPage() {
   const canCurate = user.role === "client_admin" || user.role === "super_admin";
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <PageIntro id="ask" />
       <AskVaultClient
         clientId={user.client_id}

@@ -51,7 +51,7 @@ export default async function BrainPage() {
       <BrainHome clientName={client?.name ?? "your business"} score={score} events={events} trend={trend} lift={lift} />
       {/* "What the Vault knows" — folded in from the retired Company Report nav
           entry so client admins have one Company Brain home, not three. */}
-      <div className="max-w-5xl mt-10 pt-8 border-t border-zinc-800">
+      <div className="mt-10 pt-8 border-t border-zinc-800">
         <h2 className="text-xl font-bold text-white tracking-tight mb-1">What your brain knows</h2>
         <p className="text-zinc-400 text-sm mb-6">Coverage, gaps and the documents behind every answer — the more you add, the more complete it gets.</p>
         <KnowledgeCoverage clientId={clientId} clientName={client?.name ?? ""} canCurate={user.role === "client_admin" || user.role === "super_admin"} />

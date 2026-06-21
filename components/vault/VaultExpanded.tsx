@@ -119,7 +119,7 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
 
   if (!analysis) {
     return (
-      <div className="max-w-3xl">
+      <div>
         {generating ? liveView : (
           <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-12 text-center">
             <div className="w-12 h-12 rounded-2xl bg-violet-500/15 flex items-center justify-center mx-auto mb-4">
@@ -145,7 +145,7 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
   }
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <div className="flex items-center gap-2 mb-4">
         <Telescope className="w-4 h-4 text-violet-400" />
         <h2 className="text-sm font-semibold text-violet-300 uppercase tracking-wide">Expanded View</h2>

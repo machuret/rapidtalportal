@@ -19,7 +19,7 @@ export default async function CompanyReportPage() {
   const canCurate = user.role === "client_admin" || user.role === "super_admin";
 
   return (
-    <div className="max-w-5xl">
+    <div>
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-orange-500/20">

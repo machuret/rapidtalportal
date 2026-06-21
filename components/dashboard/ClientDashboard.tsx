@@ -90,7 +90,7 @@ export function ClientDashboard(props: ClientDashboardProps) {
   const coreComplete = dnaDone && setup.va && setup.firstTask;
 
   return (
-    <div className="max-w-5xl">
+    <div>
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>

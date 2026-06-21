@@ -85,7 +85,7 @@ export function BrainHome({ clientName, score, events, trend, lift }: BrainHomeP
   const f = score.facts;
 
   return (
-    <div className="max-w-5xl">
+    <div>
       <div className="flex items-center gap-4 mb-6">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
           <Brain className="w-6 h-6 text-white" />

@@ -205,7 +205,7 @@ export function ClientDetail({
   );
 
   return (
-    <div className="max-w-4xl flex flex-col gap-8">
+    <div className="flex flex-col gap-8">
       {/* Back link */}
       <a
         href="/admin/clients"

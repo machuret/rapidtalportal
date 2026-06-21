@@ -47,6 +47,14 @@ whole app with zero component edits.
 component (`theme === 'light' ? …`) for color — use a var-backed utility and let
 the override do the work.
 
+**Content width is layout-owned too.** The portal layout
+(`app/(portal)/layout.tsx`) wraps every page in one centered column
+(`max-w-6xl mx-auto px-4 … md:p-8`). Pages must **not** set their own root
+`max-w-*` — that's what made features render at six different widths (Compose
+narrow, Tasks wide). A page fills the standard column; the only sanctioned
+exceptions are a deliberately **centered** form/document (`max-w-… mx-auto`) and
+the print report sheet.
+
 ## 3. How to style — pick the right tool, in order
 
 This codebase uses **two** styling mechanisms, on purpose. There are **no CSS
