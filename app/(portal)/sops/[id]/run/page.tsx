@@ -42,7 +42,7 @@ export default async function SopRunPage({ params }: { params: { id: string } })
   }
 
   return (
-    <div>
+    <div className="page-prose">
       <Link href={`/sops/${s.id}`} className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white mb-6 transition-colors">
         <ArrowLeft className="w-4 h-4" />
         Back to SOP

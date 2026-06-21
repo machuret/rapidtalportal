@@ -38,7 +38,7 @@ export default async function ComposePage() {
   }));
 
   return (
-    <div>
+    <div className="page-prose">
       <PageIntro id="compose" />
       <ComposeClient
         clientId={user.client_id}

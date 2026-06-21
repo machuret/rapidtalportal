@@ -47,13 +47,15 @@ whole app with zero component edits.
 component (`theme === 'light' ? …`) for color — use a var-backed utility and let
 the override do the work.
 
-**Content width is layout-owned too.** The portal layout
-(`app/(portal)/layout.tsx`) wraps every page in one centered column
-(`max-w-6xl mx-auto px-4 … md:p-8`). Pages must **not** set their own root
-`max-w-*` — that's what made features render at six different widths (Compose
-narrow, Tasks wide). A page fills the standard column; the only sanctioned
-exceptions are a deliberately **centered** form/document (`max-w-… mx-auto`) and
-the print report sheet.
+**Content width is layout-owned, with two tiers.** The portal layout
+(`app/(portal)/layout.tsx`) centers one column (`max-w-6xl mx-auto px-4 …
+md:p-8`) — the **WIDE / data tier** (dashboards, Tasks, CRM, Vault, lists,
+reports). Form & reading pages (Compose, Ask the Vault, SOPs, Profile, Company
+DNA, Guide, a single Tool) opt into the **PROSE tier** — a centered narrower
+column — with the single canonical class **`.page-prose`** (`max-w-3xl mx-auto`,
+defined once in `globals.css`). Pages must **not** invent their own root
+`max-w-*`; that's what made features render at six different widths. The only
+other exception is the print report sheet.
 
 ## 3. How to style — pick the right tool, in order
 

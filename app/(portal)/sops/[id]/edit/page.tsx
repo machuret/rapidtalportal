@@ -65,7 +65,7 @@ export default async function SopEditPage({
   const accessUserIds = ((accessRows ?? []) as { user_id: string }[]).map((r) => r.user_id);
 
   return (
-    <div>
+    <div className="page-prose">
       <Link href={`/sops/${s.id}`} className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white mb-6 transition-colors">
         <ArrowLeft className="w-4 h-4" /> Back to SOP
       </Link>

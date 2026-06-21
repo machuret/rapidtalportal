@@ -305,6 +305,14 @@
 }
 
 @layer components {
+  /* ── Page width tiers ─────────────────────────────────────────────────────  */
+  /* Width is owned by the layout (max-w-6xl, the WIDE/data tier). Form & reading
+     pages opt into a centred narrower column with this ONE class — the single
+     source of the prose width. Change it here, every prose page follows.        */
+  .page-prose {
+    @apply max-w-3xl mx-auto;
+  }
+
   /* ── Surface card ─────────────────────────────────────────────────────────  */
   /* Single canonical card pattern. Use className="surface-card" everywhere.   */
   /* Elevation via shadow-md lifts cards off the base surface.                 */
