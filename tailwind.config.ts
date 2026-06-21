@@ -32,6 +32,8 @@ const config: Config = {
       // Tailwind text-* utilities now consume the same values as --text-* vars,
       // so components and globals.css h1/h2 rules are on the exact same scale.
       fontSize: {
+        "3xs": ["var(--text-3xs)", { lineHeight: "1.4" }],
+        "2xs": ["var(--text-2xs)", { lineHeight: "1.45" }],
         xs:   ["var(--text-xs)",   { lineHeight: "1.5" }],
         sm:   ["var(--text-sm)",   { lineHeight: "1.5" }],
         base: ["var(--text-base)", { lineHeight: "1.6" }],
@@ -43,6 +45,7 @@ const config: Config = {
         "2xl": ["clamp(1.3rem, 1.05rem + 1vw, var(--text-2xl))",   { lineHeight: "1.2" }],
         "3xl": ["clamp(1.5rem, 1.1rem + 1.8vw, var(--text-3xl))",  { lineHeight: "1.15" }],
         "4xl": ["clamp(1.875rem, 1.4rem + 2.2vw, var(--text-4xl))", { lineHeight: "1.1" }],
+        "5xl": ["clamp(2rem, 1.4rem + 2.6vw, var(--text-5xl))",     { lineHeight: "0.95" }],
       },
 
       // ── Border radius bridged from CSS token scale ─────────────────────────

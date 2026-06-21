@@ -58,8 +58,8 @@ export function VaDashboard({ firstName, dateLabel, todayIso, clientName, userId
       {/* Hero */}
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
-          <p className="font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-zinc-500 mb-2">{dateLabel}</p>
-          <h1 className="font-display text-[42px] leading-[0.95] tracking-[0.02em] text-zinc-50 mb-2" suppressHydrationWarning>{greeting}, {firstName}</h1>
+          <p className="font-mono text-2xs font-medium uppercase tracking-[0.12em] text-zinc-500 mb-2">{dateLabel}</p>
+          <h1 className="font-display text-5xl tracking-[0.02em] text-zinc-50 mb-2" suppressHydrationWarning>{greeting}, {firstName}</h1>
           <p className="text-sm text-zinc-400">
             You have <strong className="text-zinc-50 font-semibold">{kpis.dueToday} task{kpis.dueToday !== 1 ? "s" : ""}</strong> due today and{" "}
             <strong className="text-zinc-50 font-semibold">{kpis.pendingReview} item{kpis.pendingReview !== 1 ? "s" : ""}</strong> awaiting client review.
@@ -69,7 +69,7 @@ export function VaDashboard({ firstName, dateLabel, todayIso, clientName, userId
           <Link href="/daily-log" className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-50 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2.5 hover:border-zinc-600 transition-colors">
             <NotebookPen className="w-4 h-4" /> {loggedToday ? "Daily Log ✓" : "Daily Log"}
           </Link>
-          <Link href="/compose" className="inline-flex items-center gap-2 text-xs font-bold text-white bg-orange-500 border border-orange-500 rounded-lg px-[18px] py-2.5 shadow-[0_6px_18px_rgb(var(--orange-500)/0.28)] hover:bg-orange-400 transition-colors">
+          <Link href="/compose" className="inline-flex items-center gap-2 text-xs font-bold text-white bg-orange-500 border border-orange-500 rounded-lg px-5 py-2.5 shadow-[0_6px_18px_rgb(var(--orange-500)/0.28)] hover:bg-orange-400 transition-colors">
             <Wand2 className="w-4 h-4" /> Compose
           </Link>
         </div>
@@ -93,7 +93,7 @@ export function VaDashboard({ firstName, dateLabel, todayIso, clientName, userId
         <section className={`${CARD} overflow-hidden`}>
           <div className="flex items-center gap-2.5 px-5 py-4">
             <h2 className="text-base font-bold text-zinc-50">Active Tasks</h2>
-            <span className="font-mono text-[11px] text-zinc-500 bg-zinc-800 rounded-md px-1.5 py-0.5">{activeTasks.length}</span>
+            <span className="font-mono text-2xs text-zinc-500 bg-zinc-800 rounded-md px-1.5 py-0.5">{activeTasks.length}</span>
           </div>
           {activeTasks.length === 0 ? (
             <p className="px-5 pb-6 text-sm text-zinc-500 border-t border-zinc-800 pt-5">Nothing in progress right now. Pick up a task from the board.</p>
@@ -120,7 +120,7 @@ export function VaDashboard({ firstName, dateLabel, todayIso, clientName, userId
                       {overdue ? "Overdue" : isToday ? "Today" : formatDate(t.due_date, { day: "numeric", month: "short" })}
                     </span>
                   )}
-                  <span className={`text-[10px] font-bold uppercase tracking-[0.03em] rounded-full px-2.5 py-0.5 whitespace-nowrap ${pri.cls}`}>{pri.label}</span>
+                  <span className={`text-3xs font-bold uppercase tracking-[0.03em] rounded-full px-2.5 py-0.5 whitespace-nowrap ${pri.cls}`}>{pri.label}</span>
                 </Link>
               );
             })
@@ -139,7 +139,7 @@ export function VaDashboard({ firstName, dateLabel, todayIso, clientName, userId
             <ul className="flex flex-col gap-3.5">
               {activity.map((a) => (
                 <li key={a.id} className="flex gap-3">
-                  <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 flex items-center justify-center text-[11px] font-bold text-zinc-300">{initials(a.actor)}</span>
+                  <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 flex items-center justify-center text-2xs font-bold text-zinc-300">{initials(a.actor)}</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-zinc-300 leading-snug">
                       <strong className="text-zinc-50 font-semibold">{a.actor}</strong>{" "}
@@ -147,7 +147,7 @@ export function VaDashboard({ firstName, dateLabel, todayIso, clientName, userId
                       {a.taskTitle && <span className="text-zinc-500"> · {a.taskTitle}</span>}
                     </p>
                     {a.kind === "comment" && <p className="text-xs text-zinc-500 truncate mt-0.5">“{a.body}”</p>}
-                    <p className="text-[11px] text-zinc-600 mt-0.5"><RelativeTime value={a.createdAt} /></p>
+                    <p className="text-2xs text-zinc-600 mt-0.5"><RelativeTime value={a.createdAt} /></p>
                   </div>
                 </li>
               ))}
@@ -172,7 +172,7 @@ function Kpi({ label, value, unit, icon: Icon, tile, delta, deltaCls }: {
   label: string; value: number; unit: string; icon: typeof Clock; tile: string; delta: string; deltaCls: string;
 }) {
   return (
-    <div className={`${CARD} p-[18px]`}>
+    <div className={`${CARD} p-5`}>
       <div className="flex items-center justify-between mb-3.5">
         <span className="text-xs font-semibold text-zinc-400">{label}</span>
         <span className={`w-8 h-8 shrink-0 flex items-center justify-center rounded-md ${tile}`}><Icon className="w-4 h-4" /></span>

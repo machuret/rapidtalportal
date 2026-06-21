@@ -154,10 +154,10 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
     <>
       <aside className="flex flex-col w-[264px] min-h-screen bg-zinc-900 border-r border-zinc-800 shrink-0">
         {/* Brand header */}
-        <div className="h-16 shrink-0 flex items-center gap-3 px-[22px] border-b border-zinc-800">
+        <div className="h-16 shrink-0 flex items-center gap-3 px-5 border-b border-zinc-800">
           <span className="w-[9px] h-[9px] rounded-full bg-orange-500 shadow-[0_0_12px_rgb(var(--orange-500))] shrink-0" />
           <span className="font-display text-2xl tracking-[0.08em] leading-none text-zinc-50">RAPID TAL</span>
-          <span className="font-mono text-[9px] font-semibold tracking-[0.12em] text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded-md">{roleBadge}</span>
+          <span className="font-mono text-3xs font-semibold tracking-[0.12em] text-orange-500 bg-orange-500/10 px-1.5 py-0.5 rounded-md">{roleBadge}</span>
           <span className="ml-auto"><NotificationsBell userId={user.id} /></span>
         </div>
 
@@ -165,7 +165,7 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
         <nav className="flex flex-col gap-0.5 flex-1 overflow-y-auto px-3.5 py-4">
           {links.map((item) =>
             "section" in item ? (
-              <p key={`s-${item.section}`} className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500 px-2.5 pt-4 pb-1.5">
+              <p key={`s-${item.section}`} className="font-mono text-3xs font-bold uppercase tracking-[0.16em] text-zinc-500 px-2.5 pt-4 pb-1.5">
                 {item.section}
               </p>
             ) : (
@@ -179,7 +179,7 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
                     onClick={onNavigate}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "relative flex items-center gap-3 px-2.5 py-2.5 rounded-[9px] text-[13.5px] font-semibold transition-colors",
+                      "relative flex items-center gap-3 px-2.5 py-2.5 rounded-md text-xs font-semibold transition-colors",
                       isActive
                         ? "bg-orange-500/10 text-orange-500"
                         : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-50"
@@ -198,12 +198,12 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
         {/* User footer card */}
         <div className="shrink-0 border-t border-zinc-800 p-3.5 flex items-center gap-3">
           <Link href="/profile" onClick={onNavigate} className="flex items-center gap-3 min-w-0 flex-1 group">
-            <span className="w-9 h-9 shrink-0 rounded-[10px] bg-gradient-to-br from-orange-500 to-orange-400 flex items-center justify-center text-[13px] font-bold text-white">
+            <span className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-orange-500 to-orange-400 flex items-center justify-center text-xs font-bold text-white">
               {initials}
             </span>
             <span className="min-w-0">
-              <span className="block text-[13px] font-bold text-zinc-50 truncate group-hover:text-orange-500 transition-colors">{user.full_name ?? user.email}</span>
-              <span className="block text-[11px] text-zinc-500 truncate">{roleLabel}</span>
+              <span className="block text-xs font-bold text-zinc-50 truncate group-hover:text-orange-500 transition-colors">{user.full_name ?? user.email}</span>
+              <span className="block text-2xs text-zinc-500 truncate">{roleLabel}</span>
             </span>
           </Link>
           <button

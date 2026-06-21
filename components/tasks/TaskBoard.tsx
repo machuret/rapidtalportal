@@ -185,7 +185,7 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
           )}
         </div>
         <span className={cn(
-          "inline-flex items-center gap-1.5 text-[11px] font-medium rounded-full px-2.5 py-1 transition-colors shrink-0",
+          "inline-flex items-center gap-1.5 text-2xs font-medium rounded-full px-2.5 py-1 transition-colors shrink-0",
           live ? "text-green-400 bg-green-500/10" : "text-zinc-500 bg-zinc-800",
         )}>
           <span className={cn("w-1.5 h-1.5 rounded-full", live ? "bg-green-400 animate-pulse" : "bg-zinc-500")} />
@@ -267,32 +267,32 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
                       {(name || t.due_date || (counts[t.id] ?? 0) > 0 || t.priority > 2 || cat) && (
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           {cat && (
-                            <span className={cn("inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5", categoryColor(cat.color).chip)}>
+                            <span className={cn("inline-flex items-center gap-1 text-2xs font-medium rounded-full px-2 py-0.5", categoryColor(cat.color).chip)}>
                               <span className={cn("w-1.5 h-1.5 rounded-full", categoryColor(cat.color).dot)} />
                               {cat.name}
                             </span>
                           )}
                           {t.priority > 2 && t.status !== "done" && (
-                            <span className={cn("inline-flex items-center text-[11px] font-medium rounded-full px-2 py-0.5", PRIORITY[t.priority].chip)}>
+                            <span className={cn("inline-flex items-center text-2xs font-medium rounded-full px-2 py-0.5", PRIORITY[t.priority].chip)}>
                               {PRIORITY[t.priority].label}
                             </span>
                           )}
                           {(counts[t.id] ?? 0) > 0 && (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400 bg-zinc-800 rounded-full px-2 py-0.5">
+                            <span className="inline-flex items-center gap-1 text-2xs text-zinc-400 bg-zinc-800 rounded-full px-2 py-0.5">
                               <MessageSquare className="w-3 h-3" />
                               {counts[t.id]}
                             </span>
                           )}
                           {name && (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400 bg-zinc-800 rounded-full px-2 py-0.5">
-                              <span className="w-3.5 h-3.5 rounded-full bg-zinc-700 text-[9px] font-semibold flex items-center justify-center text-zinc-300">
+                            <span className="inline-flex items-center gap-1 text-2xs text-zinc-400 bg-zinc-800 rounded-full px-2 py-0.5">
+                              <span className="w-3.5 h-3.5 rounded-full bg-zinc-700 text-3xs font-semibold flex items-center justify-center text-zinc-300">
                                 {name.slice(0, 1).toUpperCase()}
                               </span>
                               {name.split(" ")[0]}
                             </span>
                           )}
                           {t.due_date && (
-                            <span className={cn("inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5",
+                            <span className={cn("inline-flex items-center gap-1 text-2xs rounded-full px-2 py-0.5",
                               overdue ? "text-red-400 bg-red-500/10" : "text-zinc-400 bg-zinc-800")}>
                               <CalendarDays className="w-3 h-3" />
                               {formatDate(t.due_date, { day: "numeric", month: "short" })}
