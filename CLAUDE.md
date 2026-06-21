@@ -70,6 +70,28 @@ guarantee that admins have zero content access. Admins only ever see Notebook
 - **Pages are `force-dynamic`** by default; that's why placeholder Supabase env
   vars are enough to build in CI.
 
+## Help videos & editable guides (super-admin managed)
+
+Two super-admin surfaces under `/admin/tutorials` (migration 081, no RLS — read
+server-side via the admin client, written via `withSuperAdmin` routes):
+
+- **Feature tutorial videos** (`feature_videos`, keyed by the **PageIntro slug**).
+  `lib/tutorials/server.ts` `getFeatureVideos()` loads them once in the portal
+  layout; `FeatureVideosProvider` exposes them so **`PageIntro`** can show a
+  "Video Tutorial" button (`components/help/*`) on any feature page — no per-page
+  prop. The button label/slug set **is** `PAGE_INTROS`, so a new feature gets
+  video support for free by giving its page a `<PageIntro id="…">`.
+- **Editable Client/VA guides** (`guides`, one JSONB `{ intro, groups }` row per
+  audience). `lib/guides/server.ts` `getGuideDoc('client'|'va')` resolves the
+  admin-edited row **?? the code default** (`CLIENT_GUIDE`/`VA_GUIDE` are the seed
+  + fallback), with the same 30s cache + `bustGuideCache` pattern as
+  `lib/prompts/server.ts`. Each guide item can carry a `video` (Loom). Edit text
+  in code **or** in the editor — the DB row wins once saved; "Reset to default"
+  deletes the row.
+
+Loom links are normalised by `lib/loom.ts` (share ↔ embed). Both surfaces go
+live within ~30s of a save (cache TTL), no deploy.
+
 ## Shared modules — reuse, don't re-derive
 
 - **Task/throughput metrics** live in `lib/tasks/metrics.ts` (`sumWorkHours`,

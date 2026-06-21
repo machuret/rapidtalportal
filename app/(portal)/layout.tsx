@@ -7,6 +7,8 @@ import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 import { ErrorReporter } from "@/components/layout/ErrorReporter";
 import { HelpFab } from "@/components/layout/HelpFab";
+import { FeatureVideosProvider } from "@/components/layout/FeatureVideosProvider";
+import { getFeatureVideos } from "@/lib/tutorials/server";
 
 export default async function PortalLayout({
   children,
@@ -45,6 +47,8 @@ export default async function PortalLayout({
     );
   }
 
+  const featureVideos = await getFeatureVideos();
+
   return (
     <div className="flex min-h-screen bg-zinc-950 text-zinc-50 print:bg-white print:min-h-0">
       {/* Keyboard skip link — first focusable element, visible only on focus. */}
@@ -73,7 +77,9 @@ export default async function PortalLayout({
           />
         )}
         <div className="max-w-6xl mx-auto px-4 py-6 md:p-8 print:p-0 print:max-w-none">
-          <QueryProvider>{children}</QueryProvider>
+          <FeatureVideosProvider value={featureVideos}>
+            <QueryProvider>{children}</QueryProvider>
+          </FeatureVideosProvider>
         </div>
       </main>
       <HelpFab />

@@ -16,6 +16,8 @@ export interface GuideItem {
   how: string[];
   /** One friendly pro-tip. */
   tip?: string;
+  /** Optional Loom video (share or embed URL) shown inside the expanded item. */
+  video?: string;
 }
 export interface GuideGroup {
   heading: string;

@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { ClientGuide } from "@/components/guide/ClientGuide";
-import { CLIENT_GUIDE, GUIDE_INTRO } from "@/lib/client-guide";
-import { VA_GUIDE, VA_GUIDE_INTRO } from "@/lib/va-guide";
+import { getGuideDoc } from "@/lib/guides/server";
 import { BookOpen } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +12,9 @@ export default async function GuidePage() {
   if (!ctx) redirect("/login");
 
   // VAs get a guide written for their job; everyone else gets the client guide.
+  // Either may have been edited by an admin (lib/guides/server.ts).
   const isVa = ctx.user.role === "va";
-  const groups = isVa ? VA_GUIDE : CLIENT_GUIDE;
-  const intro = isVa ? VA_GUIDE_INTRO : GUIDE_INTRO;
+  const { intro, groups } = await getGuideDoc(isVa ? "va" : "client");
   const subtitle = isVa
     ? "A plain-English guide to every tool you have, how to do great work, and how to keep your job details clear. Tap any item to expand it."
     : "A plain-English guide to every feature and how to manage your VA. Tap any item to expand it.";

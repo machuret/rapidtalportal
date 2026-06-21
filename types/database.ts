@@ -212,6 +212,18 @@ export interface Database {
         Update: { slug?: string; content?: string; updated_by?: string | null; updated_at?: string };
         Relationships: NoRelationships;
       };
+      feature_videos: {
+        Row: { slug: string; loom_url: string; updated_by: string | null; updated_at: string };
+        Insert: { slug: string; loom_url: string; updated_by?: string | null; updated_at?: string };
+        Update: { slug?: string; loom_url?: string; updated_by?: string | null; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      guides: {
+        Row: { key: string; data: Json; updated_by: string | null; updated_at: string };
+        Insert: { key: string; data: Json; updated_by?: string | null; updated_at?: string };
+        Update: { key?: string; data?: Json; updated_by?: string | null; updated_at?: string };
+        Relationships: NoRelationships;
+      };
       va_job_contracts: {
         Row: { user_id: string; client_id: string | null; rate: number | null; currency: string; pay_period: string; payment_method: string | null; payment_schedule: string | null; start_date: string | null; weekly_hours: number | null; notice_period: string | null; next_review_date: string | null; annual_leave_days: number | null; contract_path: string | null; contract_name: string | null; updated_by: string | null; updated_at: string };
         Insert: { user_id: string; client_id?: string | null; rate?: number | null; currency?: string; pay_period?: string; payment_method?: string | null; payment_schedule?: string | null; start_date?: string | null; weekly_hours?: number | null; notice_period?: string | null; next_review_date?: string | null; annual_leave_days?: number | null; contract_path?: string | null; contract_name?: string | null; updated_by?: string | null; updated_at?: string };

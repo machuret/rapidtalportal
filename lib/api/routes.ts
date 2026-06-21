@@ -19,6 +19,8 @@ export const ROUTES = {
     leads: () => "/api/admin/leads",
     leadEvents: () => "/api/admin/leads/events",
     expenses: () => "/api/admin/expenses",
+    featureVideos: () => "/api/admin/feature-videos",
+    guides: () => "/api/admin/guides",
   },
   notebook: {
     pages: () => "/api/notebook/pages",
