@@ -148,9 +148,9 @@ export function ClientDashboard(props: ClientDashboardProps) {
               {setup.topGaps.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pl-6">
                   {setup.topGaps.map((g) => (
-                    <span key={g.label} className="text-[11px] text-amber-200/90 bg-amber-500/10 rounded-full px-2 py-0.5">{g.label}</span>
+                    <span key={g.label} className="text-2xs text-amber-200/90 bg-amber-500/10 rounded-full px-2 py-0.5">{g.label}</span>
                   ))}
-                  <span className="text-[11px] text-zinc-500 inline-flex items-center gap-0.5">answer these <ArrowRight className="w-3 h-3" /></span>
+                  <span className="text-2xs text-zinc-500 inline-flex items-center gap-0.5">answer these <ArrowRight className="w-3 h-3" /></span>
                 </div>
               )}
             </Link>

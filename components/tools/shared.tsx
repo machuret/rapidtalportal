@@ -133,7 +133,7 @@ export function ResultRegion({ children }: { children: React.ReactNode }) {
 /** Char counter that goes red over the limit. */
 export function CharCount({ len, limit, label }: { len: number; limit: number; label?: string }) {
   return (
-    <p className={cn("text-[11px]", len > limit ? "text-red-400" : "text-zinc-500")}>
+    <p className={cn("text-2xs", len > limit ? "text-red-400" : "text-zinc-500")}>
       {len}/{limit}{label ? ` ${label}` : ""}
     </p>
   );

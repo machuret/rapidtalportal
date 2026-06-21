@@ -93,18 +93,18 @@ export function BrainMemoryPanel({ clientId, initial }: { clientId: string; init
       <li className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 ${
         proposedRow ? "border-amber-500/40 bg-amber-500/5"
         : m.active ? "border-zinc-800 bg-zinc-900/40" : "border-zinc-800/60 bg-zinc-900/20 opacity-60"}`}>
-        <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded border shrink-0 ${meta.cls}`}>
+        <span className={`inline-flex items-center gap-1 text-2xs font-medium px-1.5 py-0.5 rounded border shrink-0 ${meta.cls}`}>
           <Icon className="w-3 h-3" /> {meta.label}
         </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm text-zinc-200 leading-relaxed">{m.content}</p>
           {scopes.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
-              {scopes.map((s) => <span key={s} className="text-[10px] text-zinc-500 bg-zinc-800 rounded px-1.5 py-0.5">{s}</span>)}
+              {scopes.map((s) => <span key={s} className="text-3xs text-zinc-500 bg-zinc-800 rounded px-1.5 py-0.5">{s}</span>)}
             </div>
           )}
         </div>
-        <span className="text-[11px] text-zinc-600 shrink-0 mt-0.5" title="Confidence">{m.confidence}%</span>
+        <span className="text-2xs text-zinc-600 shrink-0 mt-0.5" title="Confidence">{m.confidence}%</span>
         <div className="flex items-center gap-1 shrink-0">
           {proposedRow ? (
             <>

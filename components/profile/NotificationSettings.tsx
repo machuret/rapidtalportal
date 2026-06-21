@@ -61,8 +61,8 @@ export function NotificationSettings({ role }: { role: string }) {
           {/* Column headers */}
           <div className="flex items-center gap-3 pb-2 border-b border-zinc-800">
             <span className="flex-1" />
-            <span className="w-12 text-center text-[11px] uppercase tracking-wide text-zinc-500">In-app</span>
-            <span className="w-12 text-center text-[11px] uppercase tracking-wide text-zinc-500">Email</span>
+            <span className="w-12 text-center text-2xs uppercase tracking-wide text-zinc-500">In-app</span>
+            <span className="w-12 text-center text-2xs uppercase tracking-wide text-zinc-500">Email</span>
           </div>
           {cats.map((c) => (
             <div key={c.key} className="flex items-center gap-3 py-3 border-b border-zinc-800/60 last:border-0">

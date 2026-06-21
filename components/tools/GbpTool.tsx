@@ -48,13 +48,13 @@ export function GbpTool({ clientId, companyName, initial }: { clientId: string; 
           {result.posts.map((p, i) => (
             <div key={i} className="surface-card p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] uppercase tracking-wide text-cyan-400">{p.localAngle || `Option ${i + 1}`}</span>
+                <span className="text-2xs uppercase tracking-wide text-cyan-400">{p.localAngle || `Option ${i + 1}`}</span>
                 <CopyButton text={p.body} />
               </div>
               <p className="text-sm text-zinc-100 leading-relaxed whitespace-pre-wrap">{p.body}</p>
               <div className="flex items-center gap-3 mt-2">
                 {p.cta && <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300">CTA: {p.cta}</span>}
-                <span className={cn("text-[11px] ml-auto", p.body.length > LIMIT ? "text-red-400" : "text-zinc-500")}>{p.body.length}/{LIMIT}</span>
+                <span className={cn("text-2xs ml-auto", p.body.length > LIMIT ? "text-red-400" : "text-zinc-500")}>{p.body.length}/{LIMIT}</span>
               </div>
             </div>
           ))}

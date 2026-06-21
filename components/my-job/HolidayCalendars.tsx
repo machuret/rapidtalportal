@@ -19,7 +19,7 @@ function Column({ region }: { region: HolidayRegion }) {
     <div className="surface-card overflow-hidden">
       <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/60">
         <p className="font-semibold text-zinc-100 text-sm">{region.label}</p>
-        <p className="text-[11px] text-zinc-500">{region.holidays.length} public holidays · {HOLIDAY_YEAR}</p>
+        <p className="text-2xs text-zinc-500">{region.holidays.length} public holidays · {HOLIDAY_YEAR}</p>
       </div>
       <div className="divide-y divide-zinc-800/70 max-h-[420px] overflow-y-auto">
         {region.holidays.map((h) => {
@@ -48,7 +48,7 @@ export function HolidayCalendars() {
           Compare the holidays that apply to each side.
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-[11px] uppercase tracking-wide text-blue-400">Client state</label>
+          <label className="text-2xs uppercase tracking-wide text-blue-400">Client state</label>
           <select value={stateId} onChange={(e) => setStateId(e.target.value)}
             className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5">
             {AU_REGIONS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
@@ -69,7 +69,7 @@ export function HolidayCalendars() {
           </p>
         </div>
       )}
-      <p className="text-[11px] text-zinc-600 mt-3">
+      <p className="text-2xs text-zinc-600 mt-3">
         Curated for {HOLIDAY_YEAR}. Movable dates (Easter, King&apos;s Birthday, Labour Day, and proclamation-based PH holidays) are refreshed each year.
       </p>
     </div>

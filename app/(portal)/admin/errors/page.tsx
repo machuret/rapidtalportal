@@ -56,7 +56,7 @@ export default async function AdminErrorsPage() {
           {rows.map((e) => (
             <details key={e.id} className="surface-card rounded-xl overflow-hidden group">
               <summary className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 cursor-pointer hover:bg-zinc-800/40 transition-colors list-none">
-                <span className={cn("text-[10px] font-semibold uppercase rounded-full px-2 py-0.5 shrink-0", SOURCE_CLS[e.source] ?? "text-zinc-400 bg-zinc-800")}>
+                <span className={cn("text-3xs font-semibold uppercase rounded-full px-2 py-0.5 shrink-0", SOURCE_CLS[e.source] ?? "text-zinc-400 bg-zinc-800")}>
                   {e.source}
                 </span>
                 <span className="text-sm text-zinc-200 flex-1 min-w-[200px] truncate">{e.message}</span>
@@ -72,7 +72,7 @@ export default async function AdminErrorsPage() {
                   {!e.user_id && !e.client_id && "No user context"}
                 </p>
                 {e.stack
-                  ? <pre className="text-[11px] text-zinc-400 bg-zinc-950/60 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap max-h-64 overflow-y-auto">{e.stack}</pre>
+                  ? <pre className="text-2xs text-zinc-400 bg-zinc-950/60 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap max-h-64 overflow-y-auto">{e.stack}</pre>
                   : <p className="text-xs text-zinc-600">No stack trace.</p>}
               </div>
             </details>

@@ -76,7 +76,7 @@ export function MetaTool({ clientId, initial }: { clientId: string; initial?: un
             return (
               <div key={i} className="surface-card p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] uppercase tracking-wide text-cyan-400">{v.angle || `Option ${i + 1}`}</span>
+                  <span className="text-2xs uppercase tracking-wide text-cyan-400">{v.angle || `Option ${i + 1}`}</span>
                   <div className="flex items-center gap-3">
                     {over && (
                       <button onClick={() => fixLength(i, v)} disabled={fixing !== null}

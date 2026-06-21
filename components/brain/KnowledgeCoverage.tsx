@@ -247,7 +247,7 @@ export async function KnowledgeCoverage({
                   <div className="flex items-center gap-2 mb-1">
                     <meta.icon className="w-4 h-4 text-zinc-500 shrink-0" />
                     <p className="font-medium text-zinc-100 truncate">{item.title}</p>
-                    <span className="text-[10px] uppercase tracking-wide text-zinc-600 ml-auto shrink-0">
+                    <span className="text-3xs uppercase tracking-wide text-zinc-600 ml-auto shrink-0">
                       {item.source_type}
                     </span>
                   </div>
@@ -261,7 +261,7 @@ export async function KnowledgeCoverage({
                   {item.tags?.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {item.tags.slice(0, 8).map((t) => (
-                        <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
+                        <span key={t} className="text-2xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
                           {t}
                         </span>
                       ))}

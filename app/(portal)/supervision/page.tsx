@@ -180,10 +180,10 @@ export default async function SupervisionPage() {
                     {flags.map((f) => (
                       <span key={f.text} className={
                         f.kind === "alert"
-                          ? "inline-flex items-center gap-1 text-[11px] font-medium text-red-300 bg-red-500/10 rounded-full px-2 py-0.5"
+                          ? "inline-flex items-center gap-1 text-2xs font-medium text-red-300 bg-red-500/10 rounded-full px-2 py-0.5"
                           : f.kind === "action"
-                            ? "inline-flex items-center gap-1 text-[11px] font-medium text-blue-300 bg-blue-500/10 rounded-full px-2 py-0.5"
-                            : "inline-flex items-center gap-1 text-[11px] font-medium text-amber-300 bg-amber-500/10 rounded-full px-2 py-0.5"}>
+                            ? "inline-flex items-center gap-1 text-2xs font-medium text-blue-300 bg-blue-500/10 rounded-full px-2 py-0.5"
+                            : "inline-flex items-center gap-1 text-2xs font-medium text-amber-300 bg-amber-500/10 rounded-full px-2 py-0.5"}>
                         {f.kind === "action" ? <Inbox className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />} {f.text}
                       </span>
                     ))}

@@ -43,7 +43,7 @@ export function HooksTool({ clientId, initial }: { clientId: string; initial?: u
               <span className="text-xs text-zinc-600 tabular w-5 shrink-0">{i + 1}</span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-zinc-100 font-medium">{h.hook}</p>
-                {h.technique && <p className="text-[11px] text-pink-400/80 mt-0.5">{h.technique}</p>}
+                {h.technique && <p className="text-2xs text-pink-400/80 mt-0.5">{h.technique}</p>}
               </div>
               <CopyButton text={h.hook} label="" className="shrink-0" />
             </div>

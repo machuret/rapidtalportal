@@ -131,7 +131,7 @@ export function SopRunner({ sopId, title, body, clientId, structured, intro, pre
                 </button>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[11px] font-semibold text-zinc-500">STEP {i + 1}</span>
+                    <span className="text-2xs font-semibold text-zinc-500">STEP {i + 1}</span>
                   </div>
                   <p className={cn("text-sm font-medium leading-relaxed", isDone ? "text-zinc-500 line-through" : "text-zinc-100")}>
                     {step.title}

@@ -156,7 +156,7 @@ export function VaultRecap({ clientId, canWrite }: { clientId: string; canWrite:
             return (
               <div key={cat}>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className={cn("text-[11px] font-medium rounded-full px-2 py-0.5", meta?.badgeClass ?? "bg-zinc-800 text-zinc-300")}>
+                  <span className={cn("text-2xs font-medium rounded-full px-2 py-0.5", meta?.badgeClass ?? "bg-zinc-800 text-zinc-300")}>
                     {meta?.shortLabel ?? cat}
                   </span>
                   <span className="text-xs text-zinc-600">{items.length}</span>

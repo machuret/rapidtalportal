@@ -153,7 +153,7 @@ export function SopsLibrary({ sops, canEdit, newHref = "/sops/new", usage, bulk 
     const titleRow = (
       <div className="flex items-center gap-2">
         <p className="font-semibold text-base text-zinc-100 group-hover:text-white transition-colors">{sop.title}</p>
-        {sop.client_id === null && <span className="text-[10px] font-medium uppercase tracking-wide text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-full px-1.5 py-0.5 shrink-0">Library</span>}
+        {sop.client_id === null && <span className="text-3xs font-medium uppercase tracking-wide text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-full px-1.5 py-0.5 shrink-0">Library</span>}
       </div>
     );
 

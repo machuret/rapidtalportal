@@ -71,7 +71,7 @@ export function AnswersToReview({ items, clientId }: { items: ReviewItem[]; clie
           {f.sources.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {f.sources.map((s, i) => (
-                <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 truncate max-w-[14rem]">
+                <span key={i} className="text-2xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 truncate max-w-[14rem]">
                   {s.title}
                 </span>
               ))}

@@ -87,7 +87,7 @@ export default async function TaxSummaryPage({ searchParams }: { searchParams: {
         </tfoot>
       </table>
 
-      <p className="text-[10px] text-zinc-400 mt-10">
+      <p className="text-3xs text-zinc-400 mt-10">
         Compiled by RapidTal Portal on {today} from the working days logged in the portal and the contract rate on file.
         Months with no logged days show no income. This summary is an aid for the contractor&apos;s own tax filing and is not formal tax advice.
       </p>

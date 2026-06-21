@@ -349,7 +349,7 @@ export function CrmDetailPanel({
           ) : (
             <div className="flex flex-col gap-1.5">
               {events.map((e) => (
-                <p key={e.id} className="text-[11px] text-zinc-500 leading-relaxed">
+                <p key={e.id} className="text-2xs text-zinc-500 leading-relaxed">
                   <span className="text-zinc-400">{e.who}</span> {e.body} ·{" "}
                   <LocalTime value={e.created_at} opts={{ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }} />
                 </p>

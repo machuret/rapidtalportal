@@ -39,7 +39,7 @@ export function AchievedStrip({ summary, scope }: { summary: AchievedSummary; sc
           {stats.map((s) => (
             <div key={s.label} className="text-right">
               <p className="text-lg font-bold text-white leading-none tabular-nums">{s.value}</p>
-              <p className="text-[10px] uppercase tracking-wide text-zinc-500 mt-0.5">{s.label}</p>
+              <p className="text-3xs uppercase tracking-wide text-zinc-500 mt-0.5">{s.label}</p>
             </div>
           ))}
         </div>
@@ -53,7 +53,7 @@ export function AchievedStrip({ summary, scope }: { summary: AchievedSummary; sc
             {stats.map((s) => (
               <div key={s.label}>
                 <p className="text-lg font-bold text-white leading-none tabular-nums">{s.value}</p>
-                <p className="text-[10px] uppercase tracking-wide text-zinc-500 mt-0.5">{s.label}</p>
+                <p className="text-3xs uppercase tracking-wide text-zinc-500 mt-0.5">{s.label}</p>
               </div>
             ))}
           </div>

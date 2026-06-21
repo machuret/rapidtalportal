@@ -116,7 +116,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
       >
         <Bell className="w-4 h-4" />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-3xs font-bold flex items-center justify-center">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
@@ -130,7 +130,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
               <button
                 onClick={markAllRead}
                 disabled={loading}
-                className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-white transition-colors"
+                className="inline-flex items-center gap-1 text-2xs text-zinc-400 hover:text-white transition-colors"
               >
                 {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCheck className="w-3 h-3" />}
                 Mark all read
@@ -158,7 +158,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
                       </p>
                       {n.body && <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{n.body}</p>}
                     </div>
-                    <span className="text-[10px] text-zinc-600 shrink-0 mt-0.5">{relTime(n.created_at)}</span>
+                    <span className="text-3xs text-zinc-600 shrink-0 mt-0.5">{relTime(n.created_at)}</span>
                   </div>
                 </button>
               ))}

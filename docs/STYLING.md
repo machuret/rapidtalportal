@@ -18,7 +18,7 @@ into Tailwind in **`tailwind.config.ts`**. Nothing else defines design values.
 | Concern    | Token family                                   | Use via                              |
 |------------|------------------------------------------------|--------------------------------------|
 | Color      | `--zinc-50…950` (+ `--white`, accent `--blue-400`…, brand `--orange-500/600`) | `bg-zinc-900`, `text-zinc-50`, `text-orange-500` |
-| Typography | `--text-xs…4xl` (size), font vars `--font-sans/display/mono` | `text-sm`, `font-display`, `font-mono` |
+| Typography | `--text-3xs…5xl` (size; micro tier 10/11px → hero 42px), font vars `--font-sans/display/mono` | `text-2xs`, `text-sm`, `font-display` |
 | Spacing    | Tailwind's built-in 4pt scale (intentionally **not** tokenised) | `p-4`, `gap-3`, `mt-2`               |
 | Border     | `--border-default/subtle`, `--zinc-700/800`    | `border`, `border-zinc-800`          |
 | Radius     | `--radius-sm/md/lg/xl/full`                     | `rounded-md`, `rounded-xl`           |
@@ -99,8 +99,11 @@ baseline must be clean. To migrate:
 2. `pnpm styles:baseline` to ratchet the baseline **down** (it only shrinks).
 3. The file is now protected at the new, lower count.
 
-This is how `text-[…]` debt (140 values / 53 files at time of writing) gets
-retired file-by-file with zero regression risk and no big-bang rewrite.
+**Arbitrary design values are now fully retired — the baseline is 0.** The
+original 140-value `text-[…]` backlog was cleared by extending the scale with the
+micro tier (`text-2xs`/`text-3xs`) and a `text-5xl` display step, then converting
+every file. So rule 5 now behaves as an absolute "zero new arbitrary values"
+gate. (Raw-hex and inline-style still have a small reviewed baseline.)
 
 ## 7. Known debt / roadmap (not yet enforced)
 
@@ -108,8 +111,9 @@ retired file-by-file with zero regression risk and no big-bang rewrite.
   zinc/accent scale (`--accent-blue` ≈ `--blue-400`, `--surface-raised` ≈
   `--zinc-900`, `--chart-*` hardcode hex). Consolidate to one alias during
   migration; don't add new duplicates.
-- **Arbitrary typography backlog.** 140 grandfathered `*-[Npx]` values to retire
-  via §6, highest-traffic surfaces first.
+- **Arbitrary typography backlog — done.** The 140-value `*-[Npx]` backlog is
+  fully retired; the scale now carries a micro tier (10/11px) and a 42px display
+  step, so the whole app is on tokens.
 - **Spacing tokenisation is deliberately omitted** — the 4pt Tailwind scale is the
   single spacing system. Do not reintroduce `--space-*`.
 </content>

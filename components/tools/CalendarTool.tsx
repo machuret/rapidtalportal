@@ -77,7 +77,7 @@ export function CalendarTool({ clientId, initial }: { clientId: string; initial?
                 <span className="w-9 h-9 rounded-lg bg-zinc-800 text-zinc-300 text-sm font-bold flex items-center justify-center shrink-0 tabular">{d.day}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className={`text-[10px] font-semibold uppercase rounded-full px-2 py-0.5 ${FORMAT_CLS[d.format] ?? "text-zinc-300 bg-zinc-800"}`}>{d.format}</span>
+                    <span className={`text-3xs font-semibold uppercase rounded-full px-2 py-0.5 ${FORMAT_CLS[d.format] ?? "text-zinc-300 bg-zinc-800"}`}>{d.format}</span>
                     <p className="text-sm font-medium text-zinc-100 truncate">{d.hook}</p>
                   </div>
                   <p className="text-sm text-zinc-400">{d.idea}</p>

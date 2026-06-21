@@ -65,7 +65,7 @@ export function SpintaxTool({ clientId, initial }: { clientId: string; initial?:
             </div>
             <p className="text-sm text-zinc-100 leading-relaxed whitespace-pre-wrap">{result.body}</p>
           </div>
-          <p className="text-[11px] text-zinc-500">
+          <p className="text-2xs text-zinc-500">
             Spintax uses <span className="text-zinc-300">{"{option a|option b}"}</span> — your sending tool picks one per send. Paste straight into a spintax-aware sequencer.
           </p>
         </div>

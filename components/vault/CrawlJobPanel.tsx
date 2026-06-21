@@ -157,7 +157,7 @@ export function CrawlJobPanel({ clientId, startedJob }: { clientId: string; star
       )}
 
       {isActive && (
-        <div className="flex items-center gap-1.5 mt-2 text-[11px] text-zinc-500">
+        <div className="flex items-center gap-1.5 mt-2 text-2xs text-zinc-500">
           <Globe className="w-3 h-3" />
           {job.status === "crawling"
             ? "Firecrawl is fetching pages on its own infrastructure…"

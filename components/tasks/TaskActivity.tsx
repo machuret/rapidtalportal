@@ -68,7 +68,7 @@ export function TaskActivity({ taskId, onCommented }: { taskId: string; onCommen
         <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1 mb-2">
           {events.map((e) =>
             e.kind === "activity" ? (
-              <p key={e.id} className="text-[11px] text-zinc-500">
+              <p key={e.id} className="text-2xs text-zinc-500">
                 <span className="text-zinc-400">{e.who}</span> {e.body} · {relTime(e.created_at)}
               </p>
             ) : (
@@ -76,7 +76,7 @@ export function TaskActivity({ taskId, onCommented }: { taskId: string; onCommen
                 "rounded-lg px-3 py-2 text-sm max-w-[90%]",
                 e.mine ? "bg-orange-500/20 self-end" : "bg-zinc-800",
               )}>
-                <p className="text-[11px] text-zinc-400 mb-0.5">{e.who} · {relTime(e.created_at)}</p>
+                <p className="text-2xs text-zinc-400 mb-0.5">{e.who} · {relTime(e.created_at)}</p>
                 <p className="text-zinc-200 whitespace-pre-wrap leading-snug">{e.body}</p>
               </div>
             ),

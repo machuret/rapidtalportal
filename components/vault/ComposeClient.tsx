@@ -522,7 +522,7 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
             {/* Email subject */}
             {email?.subject && (
               <div className="flex items-center gap-2 mb-3 pb-3 border-b border-zinc-800">
-                <span className="text-[11px] uppercase tracking-wide text-zinc-500 shrink-0">Subject</span>
+                <span className="text-2xs uppercase tracking-wide text-zinc-500 shrink-0">Subject</span>
                 <span className="text-sm text-zinc-100 font-medium flex-1">{email.subject}</span>
                 <button onClick={() => copyText("subj", email.subject!)} className="text-zinc-500 hover:text-white">
                   {copied === "subj" ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -555,7 +555,7 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {checkResult.unverified.map((f, i) => (
-                      <span key={i} className="text-[11px] font-mono text-amber-200 bg-amber-500/10 rounded px-1.5 py-0.5">{f}</span>
+                      <span key={i} className="text-2xs font-mono text-amber-200 bg-amber-500/10 rounded px-1.5 py-0.5">{f}</span>
                     ))}
                   </div>
                 </div>
@@ -580,7 +580,7 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {current.sources.map((s) => (
                   <span key={s.n} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400" title={s.kindLabel}>
-                    <span className="text-[10px] uppercase tracking-wide text-zinc-500">{s.kindLabel}</span>
+                    <span className="text-3xs uppercase tracking-wide text-zinc-500">{s.kindLabel}</span>
                     <span className="truncate max-w-[14rem]">{s.title}</span>
                   </span>
                 ))}
@@ -599,7 +599,7 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
               <div key={d.id} className="surface-card flex items-center gap-3 px-3.5 py-2.5">
                 <button onClick={() => restore(d)} className="flex-1 min-w-0 text-left">
                   <p className="text-sm text-zinc-200 truncate">{d.label}</p>
-                  <LocalTime value={d.ts} opts={{ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }} className="text-[11px] text-zinc-500" />
+                  <LocalTime value={d.ts} opts={{ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }} className="text-2xs text-zinc-500" />
                 </button>
                 <button onClick={() => removeSaved(d.id)} className="text-zinc-600 hover:text-red-400 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>

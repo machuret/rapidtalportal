@@ -39,8 +39,8 @@ export function FollowUpTool({ clientId, initial }: { clientId: string; initial?
             <div key={i} className="surface-card p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] uppercase tracking-wide text-cyan-400">Day {t.day}</span>
-                  {t.purpose && <span className="text-[11px] text-zinc-500">· {t.purpose}</span>}
+                  <span className="text-2xs uppercase tracking-wide text-cyan-400">Day {t.day}</span>
+                  {t.purpose && <span className="text-2xs text-zinc-500">· {t.purpose}</span>}
                 </div>
                 <CopyButton text={`Subject: ${t.subject}\n\n${t.body}`} />
               </div>

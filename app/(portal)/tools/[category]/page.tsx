@@ -42,7 +42,7 @@ export default async function ToolCategoryPage({ params }: { params: { category:
                 <p className="font-semibold text-zinc-100">{tool.title}</p>
                 {tool.ready
                   ? <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 ml-auto transition-colors" />
-                  : <span className="text-[10px] uppercase tracking-wide text-zinc-500 bg-zinc-800 rounded-full px-2 py-0.5 ml-auto">Soon</span>}
+                  : <span className="text-3xs uppercase tracking-wide text-zinc-500 bg-zinc-800 rounded-full px-2 py-0.5 ml-auto">Soon</span>}
               </div>
               <p className="text-sm text-zinc-400">{tool.description}</p>
             </div>

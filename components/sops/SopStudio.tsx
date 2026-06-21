@@ -374,7 +374,7 @@ export function SopStudio({ clientId, categories = [], subcategories = [], vaOpt
                 className="text-left flex-1 min-w-0 group disabled:opacity-60">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold text-zinc-100 flex-1">{s.title}</p>
-                  <span className="text-[11px] text-zinc-500 shrink-0">{s.stepCount} steps</span>
+                  <span className="text-2xs text-zinc-500 shrink-0">{s.stepCount} steps</span>
                   <Wand2 className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 transition-colors shrink-0" />
                 </div>
                 {s.scope && <p className="text-xs text-zinc-500 mt-1">{s.scope}</p>}
@@ -461,7 +461,7 @@ export function SopStudio({ clientId, categories = [], subcategories = [], vaOpt
                       </label>
                     ))}
                   </div>
-                  <p className="text-[11px] text-zinc-600 px-1 pt-1">{accessIds.size} VA{accessIds.size !== 1 ? "s" : ""} selected — only these (and admins) will see it.</p>
+                  <p className="text-2xs text-zinc-600 px-1 pt-1">{accessIds.size} VA{accessIds.size !== 1 ? "s" : ""} selected — only these (and admins) will see it.</p>
                 </div>
               )}
             </div>
@@ -518,7 +518,7 @@ export function SopStudio({ clientId, categories = [], subcategories = [], vaOpt
                 {improving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Improve
               </Button>
             </div>
-            <p className="text-[11px] text-zinc-600">This rewrites the draft below for review — your saved SOP isn&apos;t touched until you Save.</p>
+            <p className="text-2xs text-zinc-600">This rewrites the draft below for review — your saved SOP isn&apos;t touched until you Save.</p>
           </div>
         )}
 

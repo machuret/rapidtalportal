@@ -178,13 +178,13 @@ export default async function AdminOverviewPage() {
               {r.flags.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-zinc-800">
                   {r.flags.map((f) => (
-                    <span key={f} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-300 bg-amber-500/10 rounded-full px-2.5 py-1">
+                    <span key={f} className="inline-flex items-center gap-1.5 text-2xs font-medium text-amber-300 bg-amber-500/10 rounded-full px-2.5 py-1">
                       <AlertTriangle className="w-3 h-3" /> {f}
                     </span>
                   ))}
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-zinc-800 text-[11px] text-green-500/80">
+                <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-zinc-800 text-2xs text-green-500/80">
                   <CheckCircle2 className="w-3 h-3" /> Healthy
                 </div>
               )}

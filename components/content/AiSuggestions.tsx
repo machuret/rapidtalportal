@@ -77,7 +77,7 @@ const SuggestionCard = memo(function SuggestionCard({
               <TypeIcon className={`w-3.5 h-3.5 shrink-0 ${iconColor}`} />
               <span className="text-xs text-zinc-500 capitalize">{suggestion.content_type}</span>
               {suggestion.ai_flagged && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-400">
+                <span className="inline-flex items-center gap-1 text-2xs font-medium text-amber-400">
                   <AlertTriangle className="w-3 h-3" /> AI: low fit{typeof suggestion.fit === "number" ? ` (${suggestion.fit})` : ""}
                 </span>
               )}

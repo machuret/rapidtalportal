@@ -56,7 +56,7 @@ function ScoreRing({ score, level }: { score: number; level: string }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-4xl font-bold text-white tabular leading-none">{score}</span>
-        <span className="text-[11px] uppercase tracking-wider text-zinc-500 mt-1">{level}</span>
+        <span className="text-2xs uppercase tracking-wider text-zinc-500 mt-1">{level}</span>
       </div>
     </div>
   );

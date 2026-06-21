@@ -28,7 +28,7 @@ export function DocumentShell({ children, backHref = "/my-job" }: { children: Re
         {children}
       </div>
 
-      <p className="text-[11px] text-zinc-600 text-center mt-4 print:hidden">
+      <p className="text-2xs text-zinc-600 text-center mt-4 print:hidden">
         Use your browser&apos;s print dialog and choose &quot;Save as PDF&quot; to download this document.
       </p>
     </div>

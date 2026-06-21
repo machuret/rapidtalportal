@@ -183,7 +183,7 @@ export function AddVaultItem({ clientId, onAdded, onCrawlStarted }: AddVaultItem
           </Button>
         ))}
 
-        <span className="text-[11px] text-zinc-600 ml-auto hidden sm:inline">
+        <span className="text-2xs text-zinc-600 ml-auto hidden sm:inline">
           PDF, DOCX, TXT, MD, CSV · up to 25MB each
         </span>
       </div>

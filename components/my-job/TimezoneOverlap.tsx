@@ -78,14 +78,14 @@ export function TimezoneOverlap({ defaultVaZone }: { defaultVaZone?: string | nu
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] uppercase tracking-wide text-purple-400">VA timezone</label>
+          <label className="text-2xs uppercase tracking-wide text-purple-400">VA timezone</label>
           <select value={vaZone} onChange={(e) => setVaZone(e.target.value)}
             className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5">
             {ZONES.map((z) => <option key={z} value={z}>{z}</option>)}
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] uppercase tracking-wide text-blue-400">Client timezone</label>
+          <label className="text-2xs uppercase tracking-wide text-blue-400">Client timezone</label>
           <select value={clientZone} onChange={(e) => setClientZone(e.target.value)}
             className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5">
             {ZONES.map((z) => <option key={z} value={z}>{z}</option>)}
@@ -103,11 +103,11 @@ export function TimezoneOverlap({ defaultVaZone }: { defaultVaZone?: string | nu
             )} />
         ))}
       </div>
-      <div className="flex justify-between text-[10px] text-zinc-600 mt-1">
+      <div className="flex justify-between text-3xs text-zinc-600 mt-1">
         <span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>12am</span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-[11px] text-zinc-400">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-2xs text-zinc-400">
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-purple-500/60" /> Your hours (9–5)</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500/60" /> Client hours (9–5, = {label(Math.round(clientStartInVa))}–{label(Math.round(clientEndInVa))} your time)</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-green-500/70" /> Overlap</span>

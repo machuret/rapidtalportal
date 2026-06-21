@@ -161,7 +161,7 @@ function Overview({ contract, vaTimezone }: { contract: Contract | null; vaTimez
               <div key={t.label} className="flex items-start gap-2.5">
                 <t.icon className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <dt className="text-[11px] uppercase tracking-wide text-zinc-500">{t.label}</dt>
+                  <dt className="text-2xs uppercase tracking-wide text-zinc-500">{t.label}</dt>
                   <dd className="text-sm text-zinc-100 break-words">{t.value}</dd>
                 </div>
               </div>
@@ -260,17 +260,17 @@ function DaysTab({ initial }: { initial: DayRow[] }) {
         <h3 className="font-semibold text-zinc-100 mb-4">Log a working day</h3>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wide text-zinc-500">Date</label>
+            <label className="text-2xs uppercase tracking-wide text-zinc-500">Date</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
               className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5" />
           </div>
           <div className="flex flex-col gap-1 w-24">
-            <label className="text-[11px] uppercase tracking-wide text-zinc-500">Hours</label>
+            <label className="text-2xs uppercase tracking-wide text-zinc-500">Hours</label>
             <input type="number" min="0" max="24" step="0.5" value={hours} onChange={(e) => setHours(e.target.value)}
               className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5" />
           </div>
           <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
-            <label className="text-[11px] uppercase tracking-wide text-zinc-500">Note (optional)</label>
+            <label className="text-2xs uppercase tracking-wide text-zinc-500">Note (optional)</label>
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="What you worked on…"
               className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5" />
           </div>
@@ -343,21 +343,21 @@ function LeaveTab({ initial, allowanceDays }: { initial: LeaveRow[]; allowanceDa
         <h3 className="font-semibold text-zinc-100 mb-4">Request leave</h3>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wide text-zinc-500">From</label>
+            <label className="text-2xs uppercase tracking-wide text-zinc-500">From</label>
             <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5" />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wide text-zinc-500">To</label>
+            <label className="text-2xs uppercase tracking-wide text-zinc-500">To</label>
             <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5" />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wide text-zinc-500">Type</label>
+            <label className="text-2xs uppercase tracking-wide text-zinc-500">Type</label>
             <select value={type} onChange={(e) => setType(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5">
               <option value="annual">Annual</option><option value="sick">Sick</option><option value="personal">Personal</option><option value="unpaid">Unpaid</option>
             </select>
           </div>
           <div className="flex flex-col gap-1 flex-1 min-w-[160px]">
-            <label className="text-[11px] uppercase tracking-wide text-zinc-500">Reason (optional)</label>
+            <label className="text-2xs uppercase tracking-wide text-zinc-500">Reason (optional)</label>
             <input value={reason} onChange={(e) => setReason(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5" />
           </div>
           <Button onClick={request} disabled={saving} className="gap-2">
@@ -369,7 +369,7 @@ function LeaveTab({ initial, allowanceDays }: { initial: LeaveRow[]; allowanceDa
       <div className="surface-card p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-zinc-100">Taken in {thisYear}</h3>
-          <span className="text-[11px] text-zinc-500">approved · working days</span>
+          <span className="text-2xs text-zinc-500">approved · working days</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {([
@@ -380,7 +380,7 @@ function LeaveTab({ initial, allowanceDays }: { initial: LeaveRow[]; allowanceDa
           ] as const).map(({ key, label }) => (
             <div key={key} className="rounded-lg bg-zinc-800/60 border border-zinc-700/70 px-3 py-2.5">
               <p className="text-2xl font-semibold text-zinc-100 leading-none">{taken[key]}</p>
-              <p className="text-[11px] uppercase tracking-wide text-zinc-500 mt-1.5">{label}</p>
+              <p className="text-2xs uppercase tracking-wide text-zinc-500 mt-1.5">{label}</p>
             </div>
           ))}
         </div>
@@ -403,7 +403,7 @@ function LeaveTab({ initial, allowanceDays }: { initial: LeaveRow[]; allowanceDa
                 <p className="text-sm text-zinc-100">{niceDate(r.start_date)} → {niceDate(r.end_date)}</p>
                 <p className="text-xs text-zinc-500 capitalize">{r.leave_type}{r.reason ? ` · ${r.reason}` : ""}</p>
               </div>
-              <span className={cn("text-[11px] font-semibold rounded-full px-2.5 py-0.5 capitalize", LEAVE_TINT[r.status] ?? "bg-zinc-700 text-zinc-300")}>{r.status}</span>
+              <span className={cn("text-2xs font-semibold rounded-full px-2.5 py-0.5 capitalize", LEAVE_TINT[r.status] ?? "bg-zinc-700 text-zinc-300")}>{r.status}</span>
             </div>
           ))}
         </div>
@@ -450,7 +450,7 @@ function TeamLeaveTab({ initial }: { initial: TeamLeaveRow[] }) {
             </button>
           </div>
         ) : (
-          <span className={cn("text-[11px] font-semibold rounded-full px-2.5 py-0.5 capitalize shrink-0", LEAVE_TINT[r.status] ?? "bg-zinc-700 text-zinc-300")}>{r.status}</span>
+          <span className={cn("text-2xs font-semibold rounded-full px-2.5 py-0.5 capitalize shrink-0", LEAVE_TINT[r.status] ?? "bg-zinc-700 text-zinc-300")}>{r.status}</span>
         )}
       </div>
     );
@@ -578,15 +578,15 @@ function ReportsTab({ initial }: { initial: ReportRow[] }) {
         </div>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wide text-zinc-500">What I delivered</label>
+            <label className="text-2xs uppercase tracking-wide text-zinc-500">What I delivered</label>
             <textarea rows={4} value={delivered} onChange={(e) => setDelivered(e.target.value)} className={field} placeholder="Key outcomes, projects shipped, wins…" />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wide text-zinc-500">Challenges / blockers</label>
+            <label className="text-2xs uppercase tracking-wide text-zinc-500">Challenges / blockers</label>
             <textarea rows={3} value={challenges} onChange={(e) => setChallenges(e.target.value)} className={field} />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wide text-zinc-500">Goals for next month</label>
+            <label className="text-2xs uppercase tracking-wide text-zinc-500">Goals for next month</label>
             <textarea rows={3} value={goals} onChange={(e) => setGoals(e.target.value)} className={field} />
           </div>
           <Button onClick={save} disabled={saving} className="gap-2 self-start">
@@ -644,18 +644,18 @@ function IssuesTab({ initial }: { initial: IssueRow[] }) {
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap gap-3">
             <div className="flex flex-col gap-1">
-              <label className="text-[11px] uppercase tracking-wide text-zinc-500">Category</label>
+              <label className="text-2xs uppercase tracking-wide text-zinc-500">Category</label>
               <select value={category} onChange={(e) => setCategory(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5">
                 <option value="pay">Pay</option><option value="hours">Hours</option><option value="workload">Workload</option><option value="conduct">Conduct</option><option value="other">Other</option>
               </select>
             </div>
             <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
-              <label className="text-[11px] uppercase tracking-wide text-zinc-500">Subject</label>
+              <label className="text-2xs uppercase tracking-wide text-zinc-500">Subject</label>
               <input value={subject} onChange={(e) => setSubject(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5" />
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] uppercase tracking-wide text-zinc-500">What&apos;s going on</label>
+            <label className="text-2xs uppercase tracking-wide text-zinc-500">What&apos;s going on</label>
             <textarea rows={4} value={detail} onChange={(e) => setDetail(e.target.value)} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-3 py-2 resize-y" />
           </div>
           <Button onClick={raise} disabled={saving || subject.trim().length < 3 || detail.trim().length < 10} className="gap-2 self-start">
@@ -669,9 +669,9 @@ function IssuesTab({ initial }: { initial: IssueRow[] }) {
           {rows.map((r) => (
             <div key={r.id} className="px-4 py-3">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] uppercase tracking-wide text-zinc-500 bg-zinc-800 rounded px-1.5 py-0.5">{r.category}</span>
+                <span className="text-3xs uppercase tracking-wide text-zinc-500 bg-zinc-800 rounded px-1.5 py-0.5">{r.category}</span>
                 <p className="text-sm text-zinc-100 font-medium flex-1 truncate">{r.subject}</p>
-                <span className={cn("text-[11px] font-semibold rounded-full px-2.5 py-0.5 capitalize", ISSUE_TINT[r.status] ?? "bg-zinc-700 text-zinc-300")}>{r.status.replace("_", " ")}</span>
+                <span className={cn("text-2xs font-semibold rounded-full px-2.5 py-0.5 capitalize", ISSUE_TINT[r.status] ?? "bg-zinc-700 text-zinc-300")}>{r.status.replace("_", " ")}</span>
               </div>
               <p className="text-xs text-zinc-500">{r.detail}</p>
             </div>

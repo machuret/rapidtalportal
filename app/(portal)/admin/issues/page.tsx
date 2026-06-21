@@ -50,16 +50,16 @@ export default async function AdminIssuesPage() {
             <div key={r.id} className="surface-card p-4">
               <div className="flex items-start justify-between gap-3 mb-1.5">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10px] uppercase tracking-wide text-zinc-500 bg-zinc-800 rounded px-1.5 py-0.5 shrink-0">{r.category}</span>
+                  <span className="text-3xs uppercase tracking-wide text-zinc-500 bg-zinc-800 rounded px-1.5 py-0.5 shrink-0">{r.category}</span>
                   <p className="text-sm font-semibold text-zinc-100 truncate">{r.subject}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className={cn("text-[11px] font-semibold rounded-full px-2.5 py-0.5 capitalize", STATUS_CLS[r.status] ?? "bg-zinc-700 text-zinc-300")}>{r.status.replace("_", " ")}</span>
+                  <span className={cn("text-2xs font-semibold rounded-full px-2.5 py-0.5 capitalize", STATUS_CLS[r.status] ?? "bg-zinc-700 text-zinc-300")}>{r.status.replace("_", " ")}</span>
                   <IssueStatusControl id={r.id} initial={r.status} />
                 </div>
               </div>
               <p className="text-sm text-zinc-300 whitespace-pre-wrap mb-2">{r.detail}</p>
-              <p className="text-[11px] text-zinc-500">
+              <p className="text-2xs text-zinc-500">
                 {userName.get(r.user_id) ?? "Unknown"}
                 {r.client_id ? ` · ${clientName.get(r.client_id) ?? "—"}` : ""}
                 {" · "}{new Date(r.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}

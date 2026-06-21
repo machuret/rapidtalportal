@@ -174,7 +174,7 @@ export function AccessClient({ initialItems, clientId, isAdmin, members, encrypt
                           {isAdmin && (entry.restricted_to?.length ?? 0) > 0 && (
                             <span
                               title={`Only ${entry.restricted_to!.length} person(s) can see this`}
-                              className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-300 bg-amber-500/10 rounded-full px-1.5 py-0.5"
+                              className="inline-flex items-center gap-1 text-3xs font-medium text-amber-300 bg-amber-500/10 rounded-full px-1.5 py-0.5"
                             >
                               <Lock className="w-2.5 h-2.5" /> {entry.restricted_to!.length}
                             </span>
@@ -264,7 +264,7 @@ export function AccessClient({ initialItems, clientId, isAdmin, members, encrypt
       )}
 
       {!isAdmin && items.length > 0 && (
-        <p className="flex items-center gap-1.5 text-[11px] text-zinc-600 mt-4">
+        <p className="flex items-center gap-1.5 text-2xs text-zinc-600 mt-4">
           <ShieldCheck className="w-3 h-3" />
           For security, every password reveal is logged and visible to your client.
         </p>
@@ -329,7 +329,7 @@ function AuditDialog({ entry, onClose }: { entry: AccessEntry; onClose: () => vo
             </div>
           )}
         </div>
-        <p className="text-[11px] text-zinc-600 mt-2">Last 100 reveals. Every reveal is recorded automatically.</p>
+        <p className="text-2xs text-zinc-600 mt-2">Last 100 reveals. Every reveal is recorded automatically.</p>
       </DialogContent>
     </Dialog>
   );
@@ -492,7 +492,7 @@ function AccessDialog({
                       {m.name}
                     </label>
                   ))}
-                  {allowed.size === 0 && <p className="text-[11px] text-amber-400/80 mt-1">Pick at least one person, or nobody but admins will see it.</p>}
+                  {allowed.size === 0 && <p className="text-2xs text-amber-400/80 mt-1">Pick at least one person, or nobody but admins will see it.</p>}
                 </div>
               )
             )}

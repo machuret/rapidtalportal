@@ -99,7 +99,7 @@ export function GoldenQuestions({ clientId, onAsk }: { clientId: string; onAsk: 
                           <span key={i} title={`${h.s} — ${formatDate(h.at)}`}
                             className={cn("w-1.5 h-1.5 rounded-full", h.s === "pass" ? "bg-green-500" : "bg-red-500")} />
                         ))}
-                        {(q.history ?? []).length === 0 && <span className="text-[10px] text-zinc-600">never run</span>}
+                        {(q.history ?? []).length === 0 && <span className="text-3xs text-zinc-600">never run</span>}
                       </div>
                       <p className="text-sm text-zinc-300 flex-1 min-w-0 truncate" title={q.question}>{q.question}</p>
                       <div className="flex items-center gap-0.5 shrink-0">
@@ -138,7 +138,7 @@ export function GoldenQuestions({ clientId, onAsk }: { clientId: string; onAsk: 
                   {busy === "add" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Add
                 </button>
               </div>
-              <p className="text-[11px] text-zinc-600 mt-2">
+              <p className="text-2xs text-zinc-600 mt-2">
                 Workflow: hit ▶ to ask, read the answer below, then record ✓/✗. Re-run after every crawl or dossier refresh.
               </p>
             </>

@@ -304,7 +304,7 @@ export function UsersTable({
                         <span className="inline-flex items-center gap-2">
                           {u.email}
                           {suspended[u.id] && (
-                            <span className="text-[10px] font-semibold text-red-400 bg-red-500/10 rounded-full px-2 py-0.5">
+                            <span className="text-3xs font-semibold text-red-400 bg-red-500/10 rounded-full px-2 py-0.5">
                               Suspended
                             </span>
                           )}

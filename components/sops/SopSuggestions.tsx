@@ -169,7 +169,7 @@ export function SopSuggestions({ clientId, initial }: { clientId: string | null;
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-zinc-100">{s.title}</p>
                   {s.scope && <p className="text-xs text-zinc-500 mt-0.5">{s.scope}</p>}
-                  <p className="text-[11px] text-zinc-600 mt-0.5">{s.category ? `${s.category} · ` : ""}{s.step_count ?? 6} steps</p>
+                  <p className="text-2xs text-zinc-600 mt-0.5">{s.category ? `${s.category} · ` : ""}{s.step_count ?? 6} steps</p>
                 </div>
                 <button onClick={() => createFrom(s)} disabled={producing} className="text-xs text-amber-400 hover:text-amber-300 inline-flex items-center gap-1 shrink-0 mt-0.5 disabled:opacity-50">
                   <Wand2 className="w-3.5 h-3.5" /> Create
@@ -180,7 +180,7 @@ export function SopSuggestions({ clientId, initial }: { clientId: string | null;
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-zinc-600 mt-2">“Produce” writes full SOPs for the selected ideas and saves them as public — edit or restrict them afterwards. Up to {PRODUCE_BATCH} per batch.</p>
+          <p className="text-2xs text-zinc-600 mt-2">“Produce” writes full SOPs for the selected ideas and saves them as public — edit or restrict them afterwards. Up to {PRODUCE_BATCH} per batch.</p>
         </>
       ) : (
         <p className="text-xs text-zinc-500 mt-2">Generate a batch of fresh SOP ideas — already-created and dismissed ones never come back.</p>

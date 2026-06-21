@@ -166,7 +166,7 @@ export default async function TeamPage() {
                           }`}
                         >
                           {entry?.mood ? MOOD_EMOJI[entry.mood] ?? "•" : (
-                            <span className="text-zinc-700 text-[10px]">–</span>
+                            <span className="text-zinc-700 text-3xs">–</span>
                           )}
                         </div>
                       );

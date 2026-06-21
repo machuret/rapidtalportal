@@ -62,7 +62,7 @@ export function PromptsManager({ initial }: { initial: PromptRow[] }) {
         <div className="surface-card overflow-hidden divide-y divide-zinc-800/70">
           {groups.map(([group, rows]) => (
             <div key={group}>
-              <p className="px-3 pt-3 pb-1.5 text-[11px] uppercase tracking-wide text-zinc-500">{group}</p>
+              <p className="px-3 pt-3 pb-1.5 text-2xs uppercase tracking-wide text-zinc-500">{group}</p>
               {rows.map((p) => (
                 <button
                   key={p.slug}
@@ -163,26 +163,26 @@ function PromptEditor({ prompt, onChange }: { prompt: PromptRow; onChange: (slug
             <div className="flex items-center gap-2.5">
               <h2 className="text-lg font-semibold text-white">{prompt.title}</h2>
               {isCustomized
-                ? <span className="text-[10px] uppercase tracking-wide text-violet-300 bg-violet-500/15 border border-violet-500/30 rounded-full px-2 py-0.5">Customized</span>
-                : <span className="text-[10px] uppercase tracking-wide text-zinc-500 bg-zinc-800 rounded-full px-2 py-0.5">Default</span>}
+                ? <span className="text-3xs uppercase tracking-wide text-violet-300 bg-violet-500/15 border border-violet-500/30 rounded-full px-2 py-0.5">Customized</span>
+                : <span className="text-3xs uppercase tracking-wide text-zinc-500 bg-zinc-800 rounded-full px-2 py-0.5">Default</span>}
             </div>
             <p className="text-xs text-zinc-500 mt-1">{prompt.description}</p>
           </div>
           <div className="text-right shrink-0">
-            <p className="text-[11px] text-zinc-500 font-mono">{prompt.slug}</p>
-            <p className="text-[11px] text-zinc-600 mt-0.5">model: {prompt.model}</p>
+            <p className="text-2xs text-zinc-500 font-mono">{prompt.slug}</p>
+            <p className="text-2xs text-zinc-600 mt-0.5">model: {prompt.model}</p>
           </div>
         </div>
 
         {isCustomized && prompt.updatedAt && (
-          <p className="text-[11px] text-zinc-600 mb-3 flex items-center gap-1">
+          <p className="text-2xs text-zinc-600 mb-3 flex items-center gap-1">
             <Pencil className="w-3 h-3" /> Last edited <LocalTime value={prompt.updatedAt} />{prompt.updatedBy ? ` by ${prompt.updatedBy}` : ""}
           </p>
         )}
 
         {prompt.variables.length > 0 && (
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 mb-4 mt-3">
-            <p className="text-[11px] uppercase tracking-wide text-zinc-500 mb-2 flex items-center gap-1.5">
+            <p className="text-2xs uppercase tracking-wide text-zinc-500 mb-2 flex items-center gap-1.5">
               <Braces className="w-3.5 h-3.5" /> Variables — filled in automatically at run time (click to insert)
             </p>
             <div className="flex flex-col gap-1.5">
@@ -204,11 +204,11 @@ function PromptEditor({ prompt, onChange }: { prompt: PromptRow; onChange: (slug
           onChange={(e) => setContent(e.target.value)}
           rows={Math.min(28, Math.max(10, content.split("\n").length + 2))}
           spellCheck={false}
-          className="w-full rounded-lg bg-zinc-950/80 border border-zinc-800 focus:border-violet-500/50 focus:outline-none text-zinc-100 text-[13px] leading-relaxed font-mono p-3.5 resize-y"
+          className="w-full rounded-lg bg-zinc-950/80 border border-zinc-800 focus:border-violet-500/50 focus:outline-none text-zinc-100 text-xs leading-relaxed font-mono p-3.5 resize-y"
         />
         <div className="flex items-center justify-between mt-1.5">
-          <p className="text-[11px] text-zinc-600">{content.length.toLocaleString()} chars{matchesDefault && isCustomized ? " · matches default (saving will reset)" : ""}</p>
-          {dirty && <p className="text-[11px] text-amber-400">Unsaved changes</p>}
+          <p className="text-2xs text-zinc-600">{content.length.toLocaleString()} chars{matchesDefault && isCustomized ? " · matches default (saving will reset)" : ""}</p>
+          {dirty && <p className="text-2xs text-amber-400">Unsaved changes</p>}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 mt-4">
@@ -238,7 +238,7 @@ function PromptEditor({ prompt, onChange }: { prompt: PromptRow; onChange: (slug
               <div key={v.id} className="px-3 py-2.5 flex items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <LocalTime value={v.created_at} className="text-xs text-zinc-400" />
-                  <p className="text-[11px] text-zinc-600 truncate">{v.content.slice(0, 110)}</p>
+                  <p className="text-2xs text-zinc-600 truncate">{v.content.slice(0, 110)}</p>
                 </div>
                 <button onClick={() => { setContent(v.content); toast.info("Loaded into the editor — save to make it live."); }}
                   className="text-xs text-violet-300 hover:text-violet-200 shrink-0 transition-colors">
@@ -256,7 +256,7 @@ function PromptEditor({ prompt, onChange }: { prompt: PromptRow; onChange: (slug
               {showDefault ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />} Built-in default for reference
             </button>
             {showDefault && (
-              <pre className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3.5 text-[12px] leading-relaxed text-zinc-500 font-mono whitespace-pre-wrap max-h-80 overflow-y-auto">
+              <pre className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3.5 text-xs leading-relaxed text-zinc-500 font-mono whitespace-pre-wrap max-h-80 overflow-y-auto">
                 {prompt.defaultTemplate}
               </pre>
             )}

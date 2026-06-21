@@ -113,7 +113,7 @@ export function VaContractEditor({ vaId, initial }: { vaId: string; initial: Con
   }
 
   const input = "bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-100 px-2.5 py-1.5 w-full";
-  const lbl = "text-[11px] uppercase tracking-wide text-zinc-500";
+  const lbl = "text-2xs uppercase tracking-wide text-zinc-500";
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-5">
       <h3 className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">

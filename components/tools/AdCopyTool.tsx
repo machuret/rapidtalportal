@@ -57,7 +57,7 @@ export function AdCopyTool({ clientId, initial }: { clientId: string; initial?: 
           {result.variants.map((v, i) => (
             <div key={i} className="surface-card p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] uppercase tracking-wide text-pink-400">{v.angle || `Variant ${i + 1}`}</span>
+                <span className="text-2xs uppercase tracking-wide text-pink-400">{v.angle || `Variant ${i + 1}`}</span>
                 <CopyButton text={`${v.headline}\n${v.body}`} />
               </div>
               <p className="text-sm font-medium text-zinc-100">{v.headline}</p>
