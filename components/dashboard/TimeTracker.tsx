@@ -135,14 +135,19 @@ export function TimeTracker({ userId }: { userId: string }) {
     await apiPost({ id: last.id, work_date: today, phase: last.phase, started_at: last.start, ended_at: end });
   }, [entries, today, apiPost]);
 
+  // Start a live work session — from a fresh day (idle) or after logging off
+  // (done), where we clock back in by appending a new segment rather than
+  // forcing the VA to add time manually.
   const startWork = useCallback(async () => {
-    if (phase !== "idle") return;
+    if (phase !== "idle" && phase !== "done") return;
+    const resuming = phase === "done";
     const start = stamp();
     const result = await apiPost({ work_date: today, phase: "work", started_at: start });
     const dbId = result?.entry?.id ?? null;
-    setEntries([{ id: dbId, phase: "work", start, end: null }]);
+    const seg: Segment = { id: dbId, phase: "work", start, end: null };
+    setEntries(prev => (resuming ? [...prev, seg] : [seg]));
     setPhase("working");
-    toast.success("Work session started.");
+    toast.success(resuming ? "Clocked back in." : "Work session started.");
   }, [phase, today, apiPost]);
 
   const startBreak = useCallback(async () => {
@@ -281,12 +286,15 @@ export function TimeTracker({ userId }: { userId: string }) {
             <LogOut className="w-3.5 h-3.5" /> Log Off
           </button>
         </>)}
-        {phase === "done" && (
-          <p className="text-sm text-zinc-400">
+        {phase === "done" && (<>
+          <button onClick={startWork} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/20 border border-green-500/40 text-green-400 text-sm font-medium hover:bg-green-500/30 transition-colors">
+            <Play className="w-3.5 h-3.5" /> Start New Session
+          </button>
+          <p className="text-sm text-zinc-400 self-center">
             Total work: <span className="font-semibold text-green-400 font-mono">{fmt(totals.work)}</span>
             {totals.brk > 0 && <span className="ml-2">· Break: <span className="font-semibold text-amber-400 font-mono">{fmt(totals.brk)}</span></span>}
           </p>
-        )}
+        </>)}
       </div>
 
       {/* Segment log */}
