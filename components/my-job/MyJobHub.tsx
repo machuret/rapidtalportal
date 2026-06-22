@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { TimezoneOverlap } from "./TimezoneOverlap";
 import { HolidayCalendars } from "./HolidayCalendars";
+import { PageIntro } from "@/components/layout/PageIntro";
 
 // ── Types (mirror the DB rows) ───────────────────────────────────────────────
 export interface Contract {
@@ -85,6 +86,8 @@ export function MyJobHub({ vaTimezone, contract, initialDays, initialLeave, init
           <p className="text-zinc-400 text-sm mt-1">Your contract, pay, days worked, leave and the records you may need.</p>
         </div>
       </div>
+
+      <PageIntro id="my-job" />
 
       <div className="flex items-center gap-1 border-b border-zinc-800 mb-6 overflow-x-auto">
         {tabs.map((t) => (

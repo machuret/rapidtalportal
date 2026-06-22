@@ -88,6 +88,11 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
     body: "Your daily log is a quick end-of-day summary — what you did, wins, blockers, and tomorrow's plan. Your client reads these, so it's how your work stays visible. It takes two minutes and builds trust.",
     guide: "Daily Log",
   },
+  "my-job": {
+    title: "What is My Job?",
+    body: "My Job is your employment home — your contract terms, pay, days worked, leave and the records you may need. Log your days here and generate documents like invoices, a certificate of employment, or a yearly income summary, and raise an issue if something isn't working out.",
+    guide: "My Job",
+  },
   notebook: {
     title: "What is the Notebook?",
     body: "The Notebook is the shared home for your placement — SOPs, account registers, content calendars, weekly reports and meeting notes, all in one place instead of scattered across email and chat. Both you and your counterpart can read and edit every page, and it starts pre-loaded with useful templates. RapidTal admins cannot see anything you write here.",
