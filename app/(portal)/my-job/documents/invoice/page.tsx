@@ -1,17 +1,18 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { DocumentShell } from "@/components/my-job/DocumentShell";
-import { periodEarnings, weekdaysInMonth, fmtMoney, type PayContract, type WorkedDay } from "@/lib/my-job/pay";
+import { InvoiceBuilder, type InvoiceInitial } from "@/components/my-job/InvoiceBuilder";
+import { periodEarnings, weekdaysInMonth, type PayContract, type WorkedDay } from "@/lib/my-job/pay";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Invoice — RapidTal" };
 
 /**
- * Invoice generator — auto-built from the VA's logged days + contract rate
- * for a month. Document tool only (print / save as PDF); no payment processing.
- * The days-worked monthly summary is attached below the invoice body.
+ * Invoice generator. The server pre-fills an invoice from the VA's logged days +
+ * contract rate for a month; the client `InvoiceBuilder` then makes every field
+ * editable so the VA can bill freely (fixed fees, projects, anything not tied to
+ * hours). Document tool only (print / save as PDF); no payment processing.
  */
 export default async function InvoicePage({ searchParams }: { searchParams: { month?: string } }) {
   const ctx = await getCurrentUserAndClient();
@@ -43,97 +44,31 @@ export default async function InvoicePage({ searchParams }: { searchParams: { mo
   const ccy = contract?.currency ?? "USD";
   const invoiceNo = `INV-${month.replace("-", "")}-${user.id.slice(0, 4).toUpperCase()}`;
 
-  return (
-    <DocumentShell>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-10">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">INVOICE</h1>
-          <p className="text-sm text-zinc-500 mt-1">{invoiceNo}</p>
-        </div>
-        <div className="text-right text-sm">
-          <p className="font-semibold">{user.full_name ?? user.email}</p>
-          {p?.address && <p className="text-zinc-600 whitespace-pre-line">{p.address}</p>}
-          <p className="text-zinc-600">{p?.personal_email || user.email}</p>
-        </div>
-      </div>
+  // Build the editable "from" contact block and the payment-details note.
+  const fromContact = [p?.address, p?.personal_email || user.email].filter(Boolean).join("\n");
+  const paymentLine = contract?.payment_method
+    ? `Method: ${contract.payment_method}${contract.payment_schedule ? ` · ${contract.payment_schedule}` : ""}`
+    : "";
+  const notes = [paymentLine, p?.payment_details].filter(Boolean).join("\n");
 
-      <div className="grid grid-cols-2 gap-8 mb-10 text-sm">
-        <div>
-          <p className="text-2xs uppercase tracking-wide text-zinc-400 mb-1">Bill to</p>
-          <p className="font-semibold">{client?.name ?? "Client"}</p>
-        </div>
-        <div className="text-right">
-          <p><span className="text-zinc-500">Invoice date:</span> {formatDate(new Date(), { day: "numeric", month: "long", year: "numeric" })}</p>
-          <p><span className="text-zinc-500">Period:</span> {monthLabel}</p>
-        </div>
-      </div>
+  const initial: InvoiceInitial = {
+    invoiceNo,
+    invoiceDate: formatDate(new Date(), { day: "numeric", month: "long", year: "numeric" }),
+    periodLabel: monthLabel,
+    currency: ccy,
+    fromName: user.full_name ?? user.email,
+    fromContact,
+    billTo: client?.name ?? "Client",
+    notes,
+    lines: [{
+      description: `Virtual assistant services — ${monthLabel}`,
+      amount: earn.amount != null ? earn.amount.toFixed(2) : "",
+    }],
+    days: days.map((d) => ({ work_date: d.work_date, hours: d.hours, note: d.note })),
+    daysCount: earn.days,
+    hoursCount: earn.hours,
+    monthLabel,
+  };
 
-      {/* Line items */}
-      <table className="w-full text-sm mb-8">
-        <thead>
-          <tr className="border-b-2 border-zinc-900 text-left">
-            <th className="py-2 font-semibold">Description</th>
-            <th className="py-2 font-semibold text-right">Basis</th>
-            <th className="py-2 font-semibold text-right">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="border-b border-zinc-200">
-            <td className="py-3">Virtual assistant services — {monthLabel}</td>
-            <td className="py-3 text-right text-zinc-600">{earn.basis}</td>
-            <td className="py-3 text-right font-medium">{earn.amount != null ? fmtMoney(earn.amount, ccy) : "—"}</td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colSpan={2} className="py-3 text-right font-semibold">Total due</td>
-            <td className="py-3 text-right text-lg font-bold">{earn.amount != null ? fmtMoney(earn.amount, ccy) : "—"}</td>
-          </tr>
-        </tfoot>
-      </table>
-
-      {/* Payment details */}
-      {(p?.payment_details || contract?.payment_method) && (
-        <div className="mb-10 text-sm">
-          <p className="text-2xs uppercase tracking-wide text-zinc-400 mb-1">Payment details</p>
-          {contract?.payment_method && <p>Method: {contract.payment_method}{contract.payment_schedule ? ` · ${contract.payment_schedule}` : ""}</p>}
-          {p?.payment_details && <p className="text-zinc-600 whitespace-pre-line">{p.payment_details}</p>}
-        </div>
-      )}
-
-      {/* Monthly summary attachment */}
-      <div className="pt-6 border-t border-zinc-200 break-inside-avoid">
-        <p className="text-2xs uppercase tracking-wide text-zinc-400 mb-2">
-          Attachment — days worked in {monthLabel} ({earn.days} days{earn.hours ? `, ${earn.hours} hrs` : ""})
-        </p>
-        {days.length === 0 ? (
-          <p className="text-sm text-zinc-500">No days were logged for this month.</p>
-        ) : (
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-left text-zinc-500 border-b border-zinc-200">
-                <th className="py-1 font-medium">Date</th>
-                <th className="py-1 font-medium">Hours</th>
-                <th className="py-1 font-medium">Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {days.map((d) => (
-                <tr key={d.work_date} className="border-b border-zinc-100">
-                  <td className="py-1 tabular-nums">{new Date(d.work_date + "T00:00:00").toLocaleDateString("en", { weekday: "short", day: "numeric", month: "short" })}</td>
-                  <td className="py-1">{d.hours ?? "—"}</td>
-                  <td className="py-1 text-zinc-600">{d.note ?? ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <p className="text-3xs text-zinc-400 mt-10">
-        Generated by RapidTal Portal from logged working days and contract rate. This is a billing document only — payment is arranged directly between the parties.
-      </p>
-    </DocumentShell>
-  );
+  return <InvoiceBuilder initial={initial} />;
 }

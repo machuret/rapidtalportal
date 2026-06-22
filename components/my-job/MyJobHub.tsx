@@ -492,7 +492,7 @@ function DocumentsTab() {
       <div className={card}>
         <div>
           <h3 className="font-semibold text-zinc-100">Invoice</h3>
-          <p className="text-xs text-zinc-500 mt-1">Auto-built from your logged days and contract rate, with the monthly days summary attached. Print or save as PDF.</p>
+          <p className="text-xs text-zinc-500 mt-1">Starts pre-filled from your logged days and contract rate, then fully editable — change line items and amounts, or bill a fixed fee. Print or save as PDF.</p>
         </div>
         <div className="flex items-center gap-2 mt-auto">
           <input type="month" value={invMonth} onChange={(e) => setInvMonth(e.target.value)}
