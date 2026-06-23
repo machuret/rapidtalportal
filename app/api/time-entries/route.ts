@@ -35,6 +35,26 @@ const SegmentSchema = z.object({
   category:   z.string().optional(),
 });
 
+// ── DELETE /api/time-entries?id=<uuid> ─────────────────────────────────────
+// Remove a single segment the VA flagged as wrong. Scoped to user.id so a VA
+// can only ever delete their own time.
+export const DELETE = withAuth(async (req, { user }) => {
+  const id = req.nextUrl.searchParams.get("id");
+  if (!id || !z.string().uuid().safeParse(id).success) {
+    return NextResponse.json({ error: "valid id required" }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("time_entries")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+});
+
 export const POST = withAuth(async (req, { user }) => {
   if (!user.client_id) {
     return NextResponse.json({ error: "No client assigned" }, { status: 403 });

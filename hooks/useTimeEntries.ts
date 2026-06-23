@@ -71,3 +71,17 @@ export function useUpsertTimeEntry() {
     },
   });
 }
+
+// Mutation for deleting a single segment a VA flagged as wrong.
+export function useDeleteTimeEntry() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; work_date: string }) =>
+      api.delete(`/time-entries?id=${input.id}`, undefined, { showErrorToast: false }),
+    onSettled: (_data, _err, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: timeEntryKeys.byDate(variables.work_date),
+      });
+    },
+  });
+}

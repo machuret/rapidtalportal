@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Play, Coffee, RotateCcw, LogOut, Clock, Plus } from "lucide-react";
+import { Play, Coffee, RotateCcw, LogOut, Clock, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ManualTimeEntry } from "./ManualTimeEntry";
 import { LocalTime } from "@/components/ui/LocalTime";
 import {
   useTimeEntriesQuery,
   useUpsertTimeEntry,
+  useDeleteTimeEntry,
   type TimeEntryRow,
   type UpsertTimeEntryInput,
 } from "@/hooks/useTimeEntries";
@@ -45,6 +46,15 @@ function rowsToSegments(rows: TimeEntryRow[]): Segment[] {
   }));
 }
 
+// Derive the tracker phase from the current segments: an open last segment means
+// we're live (working/break), a closed last means the day's done, none = idle.
+function phaseFromEntries(segs: Segment[]): Phase {
+  if (segs.length === 0) return "idle";
+  const last = segs[segs.length - 1];
+  if (!last.end) return last.phase === "work" ? "working" : "break";
+  return "done";
+}
+
 export function TimeTracker({ userId }: { userId: string }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [entries, setEntries] = useState<Segment[]>([]);
@@ -57,6 +67,7 @@ export function TimeTracker({ userId }: { userId: string }) {
 
   const entriesQuery = useTimeEntriesQuery(today);
   const upsertMutation = useUpsertTimeEntry();
+  const deleteMutation = useDeleteTimeEntry();
 
   // Local `apiPost` shim over the mutation: returns null on error to preserve
   // the existing optimistic-UI flow (insert with id:null, then patch from DB).
@@ -81,12 +92,7 @@ export function TimeTracker({ userId }: { userId: string }) {
     const segs = rowsToSegments(entriesQuery.data ?? []);
     if (segs.length > 0) {
       setEntries(segs);
-      const last = segs[segs.length - 1];
-      if (last.end) {
-        setPhase("done");
-      } else {
-        setPhase(last.phase === "work" ? "working" : "break");
-      }
+      setPhase(phaseFromEntries(segs));
     }
     setLoaded(true);
   }, [entriesQuery.isLoading, entriesQuery.data, loaded]);
@@ -200,7 +206,31 @@ export function TimeTracker({ userId }: { userId: string }) {
     toast.success("Day logged. Great work!");
   }, [phase, closeLastInDB]);
 
-  // ── Totals (memoized to prevent recalculation on every render) ─────────────
+  // Mark a segment as wrong → remove it. Updates the phase if the live/last
+  // segment was the one deleted, and clears it from the DB (unconfirmed segments
+  // with id:null only need local removal).
+  const removeSegment = useCallback(async (idx: number) => {
+    const seg = entries[idx];
+    if (!seg) return;
+    if (!confirm("Remove this time entry? This can't be undone.")) return;
+    const next = entries.filter((_, i) => i !== idx);
+    setEntries(next);
+    setPhase(phaseFromEntries(next));
+    if (!seg.id) return;
+    try {
+      await deleteMutation.mutateAsync({ id: seg.id, work_date: today });
+      toast.success("Entry removed.");
+    } catch {
+      toast.error("Couldn't remove it.");
+      setEntries(entries);            // roll back the optimistic removal
+      setPhase(phaseFromEntries(entries));
+    }
+  }, [entries, today, deleteMutation]);
+
+  // ── Totals ─────────────────────────────────────────────────────────────────
+  // Base = sum of CLOSED segments (memoized, never mutated). The live total adds
+  // the open segment's running `elapsed` on top WITHOUT touching the memo object —
+  // mutating it accumulated across every 1s re-render and ballooned the numbers.
   const totals = useMemo(() => {
     return entries.reduce(
       (acc, e) => {
@@ -213,13 +243,10 @@ export function TimeTracker({ userId }: { userId: string }) {
       { work: 0, brk: 0 }
     );
   }, [entries]);
-  if ((phase === "working" || phase === "break") && elapsed > 0) {
-    const last = entries[entries.length - 1];
-    if (last && !last.end) {
-      if (last.phase === "work") totals.work += elapsed;
-      else totals.brk += elapsed;
-    }
-  }
+  const openSeg = entries[entries.length - 1];
+  const liveMs = (phase === "working" || phase === "break") && openSeg && !openSeg.end ? elapsed : 0;
+  const workMs = totals.work + (openSeg?.phase === "work" ? liveMs : 0);
+  const brkMs = totals.brk + (openSeg?.phase === "break" ? liveMs : 0);
 
   const phaseLabel: Record<Phase, string> = {
     idle: "Not started", working: "Working", break: "On break", done: "Day complete",
@@ -248,11 +275,11 @@ export function TimeTracker({ userId }: { userId: string }) {
       {/* Totals */}
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-zinc-800 px-3 py-2.5 text-center">
-          <p className="text-xl font-bold text-green-400 font-mono">{fmt(totals.work)}</p>
+          <p className="text-xl font-bold text-green-400 font-mono">{fmt(workMs)}</p>
           <p className="text-xs text-zinc-500 mt-0.5">Work time</p>
         </div>
         <div className="rounded-lg bg-zinc-800 px-3 py-2.5 text-center">
-          <p className="text-xl font-bold text-amber-400 font-mono">{fmt(totals.brk)}</p>
+          <p className="text-xl font-bold text-amber-400 font-mono">{fmt(brkMs)}</p>
           <p className="text-xs text-zinc-500 mt-0.5">Break time</p>
         </div>
       </div>
@@ -291,8 +318,8 @@ export function TimeTracker({ userId }: { userId: string }) {
             <Play className="w-3.5 h-3.5" /> Start New Session
           </button>
           <p className="text-sm text-zinc-400 self-center">
-            Total work: <span className="font-semibold text-green-400 font-mono">{fmt(totals.work)}</span>
-            {totals.brk > 0 && <span className="ml-2">· Break: <span className="font-semibold text-amber-400 font-mono">{fmt(totals.brk)}</span></span>}
+            Total work: <span className="font-semibold text-green-400 font-mono">{fmt(workMs)}</span>
+            {brkMs > 0 && <span className="ml-2">· Break: <span className="font-semibold text-amber-400 font-mono">{fmt(brkMs)}</span></span>}
           </p>
         </>)}
       </div>
@@ -326,6 +353,14 @@ export function TimeTracker({ userId }: { userId: string }) {
               <span className="text-zinc-400 font-mono w-14 text-right">
                 {e.end ? fmt(new Date(e.end).getTime() - new Date(e.start).getTime()) : "—"}
               </span>
+              <button
+                onClick={() => removeSegment(i)}
+                title="Mark this entry as wrong and remove it"
+                aria-label="Remove time entry"
+                className="text-zinc-600 hover:text-red-400 transition-colors shrink-0"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </div>
           ))}
         </div>
