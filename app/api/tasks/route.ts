@@ -2,7 +2,7 @@
  * Task board API (shared Trello-style board per client).
  * POST   — create a task. VAs create for themselves; admins can assign anyone in the client.
  * PATCH  — update fields / move between columns. VAs only their own cards; admins any.
- * DELETE — remove a task. Creator or admins.
+ * DELETE — remove a task. Creator, assignee, or admins.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -244,16 +244,18 @@ export const DELETE = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   const { data: existing } = await admin
     .from("tasks")
-    .select("id, client_id, created_by")
+    .select("id, client_id, created_by, assigned_to")
     .eq("id", parsed.data.id)
     .maybeSingle();
   if (!existing) return NextResponse.json({ error: "Task not found." }, { status: 404 });
 
-  const task = existing as { client_id: string; created_by: string | null };
+  const task = existing as { client_id: string; created_by: string | null; assigned_to: string | null };
   const denied = assertClientAccess(user, task.client_id);
   if (denied) return denied;
-  if (!isAdmin(user.role) && task.created_by !== user.id) {
-    return NextResponse.json({ error: "You can only delete tasks you created." }, { status: 403 });
+  // VAs can delete cards they own — created by them or assigned to them — which
+  // matches what the board already lets them edit/move (canMove). Admins: any.
+  if (!isAdmin(user.role) && task.created_by !== user.id && task.assigned_to !== user.id) {
+    return NextResponse.json({ error: "You can only delete tasks you created or are assigned to." }, { status: 403 });
   }
 
   const { error } = await admin.from("tasks").delete().eq("id", parsed.data.id);
