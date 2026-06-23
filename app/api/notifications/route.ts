@@ -4,6 +4,7 @@
  * PATCH — { id } marks one read; { all: true } marks everything read.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withAuth } from "@/lib/api/with-auth";
@@ -30,7 +31,7 @@ export const GET = withAuth(async (_req, { user }) => {
       .eq("user_id", user.id)
       .is("read_at", null),
   ]);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ notifications: items ?? [], unread: count ?? 0 });
 });
 
@@ -50,6 +51,6 @@ export const PATCH = withAuth(async (req, { user }) => {
   if ("type" in parsed.data) query = query.eq("type", parsed.data.type);
 
   const { error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 });

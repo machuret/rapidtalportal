@@ -6,6 +6,7 @@
  * DELETE — remove a category; cards keep their data and become uncategorised.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -43,7 +44,7 @@ export const GET = withAuth(async (_req, { user }) => {
     .eq("client_id", user.client_id)
     .order("order_index")
     .order("name");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data ?? []);
 });
 
@@ -66,7 +67,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   if (error) {
     if (error.code === "23505") return NextResponse.json({ error: DUP_MSG }, { status: 409 });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
   return NextResponse.json(data, { status: 201 });
 });
@@ -96,7 +97,7 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   if (error) {
     if (error.code === "23505") return NextResponse.json({ error: DUP_MSG }, { status: 409 });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
   return NextResponse.json(data);
 });
@@ -117,6 +118,6 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (!isAdmin(user.role)) return NextResponse.json({ error: "Only admins can manage categories." }, { status: 403 });
 
   const { error } = await admin.from("task_categories").delete().eq("id", parsed.data.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 });

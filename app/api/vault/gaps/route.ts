@@ -5,6 +5,7 @@
  * Admins only — gap curation is a governance action.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -39,7 +40,7 @@ export const POST = withAuth(
 
     if (error) {
       console.error("[vault/gaps]", error.message);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return serverError(error);
     }
     return NextResponse.json({ success: true });
   },

@@ -8,6 +8,7 @@
  * GET  — latest job for a client (the Vault page uses this to resume/display).
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -118,6 +119,6 @@ export const POST = withAuth(async (req, { user }) => {
     .select("*")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ job }, { status: 201 });
 });

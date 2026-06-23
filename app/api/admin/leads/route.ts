@@ -7,6 +7,7 @@
  * DELETE — archive (soft) or hard-delete with ?hard=1.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withSuperAdmin } from "@/lib/api/with-auth";
@@ -62,7 +63,7 @@ export const GET = withSuperAdmin(async () => {
   const { data, error } = await admin.from("leads").select(SELECT)
     .is("archived_at", null).order("stage").order("sort_order").order("created_at", { ascending: false })
     .limit(LIST_CAP);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data ?? []);
 });
 
@@ -80,7 +81,7 @@ export const POST = withSuperAdmin(async (req, { user }) => {
     value: d.value ?? null, owner_id: d.ownerId ?? user.id, next_action: d.nextAction ?? null,
     next_action_date: d.nextActionDate ?? null, notes: d.notes ?? null, created_by: user.id,
   }).select(SELECT).single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data, { status: 201 });
 });
 
@@ -112,7 +113,7 @@ export const PATCH = withSuperAdmin(async (req, { user }) => {
   if (d.sortOrder !== undefined) u.sort_order = d.sortOrder;
 
   const { data, error } = await admin.from("leads").update(u).eq("id", d.id).select(SELECT).single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   if (d.stage && d.stage !== prevStage) {
     void admin.from("lead_events").insert({
@@ -133,6 +134,6 @@ export const DELETE = withSuperAdmin(async (req) => {
   const { error } = parsed.data.hard
     ? await admin.from("leads").delete().eq("id", parsed.data.id)
     : await admin.from("leads").update({ archived_at: new Date().toISOString() }).eq("id", parsed.data.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 });

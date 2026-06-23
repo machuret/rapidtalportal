@@ -6,6 +6,7 @@
  * offboarding VAs or pausing a client's team.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withSuperAdmin } from "@/lib/api/with-auth";
@@ -39,7 +40,7 @@ export const POST = withSuperAdmin(async (req, { user }) => {
     // ~10 years = suspended until reinstated; "none" lifts the ban.
     ban_duration: parsed.data.suspend ? "87600h" : "none",
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   return NextResponse.json({ ok: true, suspended: parsed.data.suspend });
 });

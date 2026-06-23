@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withSuperAdmin } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -41,7 +42,7 @@ export const POST = withSuperAdmin(async (req) => {
     if (authError.message?.includes("already been registered")) {
       return NextResponse.json({ error: "Email already registered." }, { status: 409 });
     }
-    return NextResponse.json({ error: authError.message }, { status: 500 });
+    return serverError(authError);
   }
 
   // 2. Write the public.users profile row.
@@ -71,7 +72,7 @@ export const POST = withSuperAdmin(async (req) => {
     // Attempt cleanup: delete the auth user we just created (cascades any
     // trigger-created profile row via the FK).
     await admin.auth.admin.deleteUser(authUser.user.id);
-    return NextResponse.json({ error: dbError.message }, { status: 500 });
+    return serverError(dbError);
   }
 
   return NextResponse.json(userRow, { status: 201 });
@@ -134,7 +135,7 @@ export const PATCH = withSuperAdmin(async (req) => {
 
   if (error) {
     console.error("[admin/users PATCH]", error.code, error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 
   // Sync the auth email only when it actually changed; roll the row back on
@@ -201,7 +202,7 @@ export const DELETE = withSuperAdmin(async (req, { user }) => {
 
   if (dbError) {
     console.error("[admin/users DELETE] DB:", dbError.message);
-    return NextResponse.json({ error: dbError.message }, { status: 500 });
+    return serverError(dbError);
   }
 
   // Then delete auth user

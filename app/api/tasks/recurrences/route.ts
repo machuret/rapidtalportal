@@ -8,6 +8,7 @@
  * The cron at /api/cron/tasks turns these into real cards.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -62,7 +63,7 @@ export const GET = withAuth(async (_req, { user }) => {
     .from("task_recurrences").select(SELECT)
     .eq("client_id", user.client_id)
     .order("active", { ascending: false }).order("next_run_on");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data ?? []);
 });
 
@@ -94,7 +95,7 @@ export const POST = withAuth(async (req, { user }) => {
     .select(SELECT)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data, { status: 201 });
 });
 
@@ -126,7 +127,7 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   const { data, error } = await admin
     .from("task_recurrences").update(u).eq("id", parsed.data.id).select(SELECT).single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data);
 });
 
@@ -146,6 +147,6 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (!isAdmin(user.role)) return NextResponse.json({ error: "Only admins can manage recurring tasks." }, { status: 403 });
 
   const { error } = await admin.from("task_recurrences").delete().eq("id", parsed.data.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 });

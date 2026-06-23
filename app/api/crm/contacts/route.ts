@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -76,7 +77,7 @@ export const POST = withAuth(async (req, { user }) => {
     .select(CONTACT_SELECT)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   logCrm((data as { id: string }).id, parsed.data.clientId, user.id, "created this contact");
   return NextResponse.json(data, { status: 201 });
 });
@@ -124,7 +125,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .select(CONTACT_SELECT)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   // Activity trail.
   if (archived !== undefined) {
@@ -161,6 +162,6 @@ export const DELETE = withAuth(async (req, { user }) => {
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.clientId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 });

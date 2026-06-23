@@ -7,6 +7,7 @@
  * DELETE — remove an entry.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -66,7 +67,7 @@ export const GET = withAuth(async (req, { user }) => {
   if (user.role === "va") query = query.or(`restricted_to.is.null,restricted_to.cs.{${user.id}}`);
   const { data, error } = await query.order("category").order("site");
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data ?? []);
 });
 
@@ -97,7 +98,7 @@ export const POST = withAuth(async (req, { user }) => {
     .select(SAFE_SELECT)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data, { status: 201 });
 }, { roles: ADMIN_ROLES });
 
@@ -136,7 +137,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .select(SAFE_SELECT)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data);
 }, { roles: ADMIN_ROLES });
 
@@ -158,6 +159,6 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const { error } = await admin.from("access_credentials").delete().eq("id", parsed.data.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 }, { roles: ADMIN_ROLES });

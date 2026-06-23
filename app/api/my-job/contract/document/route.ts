@@ -11,6 +11,7 @@
  * Service-role storage + table access, scoped in code (assertClientAccess).
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -72,7 +73,7 @@ export const POST = withAuth(async (req, { user }) => {
   );
   if (dbErr) {
     await admin.storage.from("vault").remove([storagePath]);
-    return NextResponse.json({ error: dbErr.message }, { status: 500 });
+    return serverError(dbErr);
   }
 
   // Drop the previous file so storage doesn't accumulate orphans.

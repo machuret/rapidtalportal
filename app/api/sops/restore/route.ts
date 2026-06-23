@@ -4,6 +4,7 @@
  * their own client. The mirror of the soft-delete in /api/sops DELETE.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -34,6 +35,6 @@ export const POST = withAuth(async (req, { user }) => {
     .from("sops")
     .update({ deleted_at: null })
     .eq("id", parsed.data.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 });

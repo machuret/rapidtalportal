@@ -11,6 +11,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -73,7 +74,7 @@ export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
     .eq("id", params.id);
 
   if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    return serverError(updateErr);
   }
 
   // Fire vault-process in the background — do NOT await.

@@ -16,6 +16,7 @@
  * job. Firecrawl keeps crawling server-side either way.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -388,7 +389,7 @@ export const POST = withAuth(async (req, { user }) => {
     .eq("id", job.id)
     .select("*")
     .single();
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (updateError) return serverError(updateError);
 
   // Crawls take minutes — tell whoever started it when it lands (or fails).
   if ((patch.status === "done" || patch.status === "error") && job.created_by) {

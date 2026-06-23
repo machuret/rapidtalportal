@@ -9,6 +9,7 @@
  * can only touch their own client's SOPs and global SOPs stay super-admin only.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { type ApiUser } from "@/lib/api-auth";
@@ -60,7 +61,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (Object.keys(updates).length > 1) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (admin as any).from("sops").update(updates).in("id", ids);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return serverError(error);
   }
 
   // Visibility access lists are per-SOP (scope differs), so sync each.
@@ -88,6 +89,6 @@ export const DELETE = withAuth(async (req, { user }) => {
   // Soft delete — recoverable, mirroring the single-SOP DELETE.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (admin as any).from("sops").update({ deleted_at: new Date().toISOString() }).in("id", ids);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ deleted: ids.length });
 }, { roles: ["client_admin", "super_admin"] });

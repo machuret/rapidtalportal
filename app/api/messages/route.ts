@@ -8,6 +8,7 @@
  * DEFINER recursion fix) and was surfacing "Failed to load messages".
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -31,7 +32,7 @@ export const GET = withAuth(async (req, { user }) => {
   // Surface the real Postgres error (e.g. missing table) instead of a generic
   // string — it lands in /admin/errors via the withAuth wrapper if it throws,
   // and here we return it so the client can show something actionable.
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   return NextResponse.json({ messages: data ?? [] });
 });

@@ -4,6 +4,7 @@
  * empty object means "everything", and users only persist what they turn off.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -33,6 +34,6 @@ export const PATCH = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (admin as any).from("users").update({ notification_prefs: clean }).eq("id", user.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ prefs: clean });
 });

@@ -4,6 +4,7 @@
  * won't wipe it. Admins only (curation).
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -44,7 +45,7 @@ export const POST = withAuth(
 
     if (error) {
       console.error("[vault/promote-kb]", error.message);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return serverError(error);
     }
     return NextResponse.json({ success: true, id: data?.id });
   },

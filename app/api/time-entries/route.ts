@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateSegmentTimes } from "@/lib/tasks/time-entry-validate";
@@ -18,7 +19,7 @@ export const GET = withAuth(async (req, { user }) => {
     .eq("work_date", date)
     .order("started_at", { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ entries: data });
 });
 
@@ -51,7 +52,7 @@ export const DELETE = withAuth(async (req, { user }) => {
     .eq("id", id)
     .eq("user_id", user.id);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 });
 
@@ -98,7 +99,7 @@ export const POST = withAuth(async (req, { user }) => {
       .eq("user_id", user.id)
       .select()
       .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return serverError(error);
     return NextResponse.json({ entry: data });
   } else {
     // Insert a new segment
@@ -117,7 +118,7 @@ export const POST = withAuth(async (req, { user }) => {
       })
       .select()
       .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return serverError(error);
     return NextResponse.json({ entry: data });
   }
 });

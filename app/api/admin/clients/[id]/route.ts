@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withSuperAdmin } from "@/lib/api/with-auth";
@@ -41,7 +42,7 @@ export const PATCH = withSuperAdmin<{ id: string }>(async (req, { params }) => {
     if (error.code === "23505") {
       return NextResponse.json({ error: "Slug already exists." }, { status: 409 });
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 
   return NextResponse.json(data);
@@ -68,7 +69,7 @@ export const DELETE = withSuperAdmin<{ id: string }>(async (_req, { params }) =>
 
   if (error) {
     console.error("[admin/clients DELETE]", error.code, error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 
   // Best-effort auth cleanup — the client (and cascaded user rows) are already

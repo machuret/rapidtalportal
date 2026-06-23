@@ -7,6 +7,7 @@
  * Admin-only (client_admin scoped to own client, super_admin any).
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -29,7 +30,7 @@ export const GET = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("golden_questions").select(SELECT).eq("client_id", clientId).order("created_at");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ questions: data ?? [] });
 }, { roles: ADMIN_ROLES });
 
@@ -47,7 +48,7 @@ export const POST = withAuth(async (req, { user }) => {
     .insert({ client_id: parsed.data.clientId, question: parsed.data.question.trim(), created_by: user.id })
     .select(SELECT)
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ question: data }, { status: 201 });
 }, { roles: ADMIN_ROLES });
 
@@ -74,7 +75,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .eq("id", parsed.data.id)
     .select(SELECT)
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ question: data });
 }, { roles: ADMIN_ROLES });
 
@@ -92,6 +93,6 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const { error } = await admin.from("golden_questions").delete().eq("id", parsed.data.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 }, { roles: ADMIN_ROLES });

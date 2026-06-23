@@ -5,6 +5,7 @@
  * PATCH /api/vault/feedback — mark a feedback row resolved (admins; review queue).
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -61,7 +62,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[vault/feedback POST]", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 
   // Fold Ask-the-Vault feedback into the unified Brain learning loop, so the
@@ -111,7 +112,7 @@ export const PATCH = withAuth(
 
     if (error) {
       console.error("[vault/feedback PATCH]", error.message);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return serverError(error);
     }
     return NextResponse.json({ success: true });
   },

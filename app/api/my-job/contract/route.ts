@@ -8,6 +8,7 @@
  * rest of the app — the va_job_contracts table is RLS-locked to service role.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -66,6 +67,6 @@ export const PUT = withAuth(async (req, { user }) => {
     .upsert({ user_id: userId, client_id: t.client_id, ...terms, updated_by: user.id, updated_at: new Date().toISOString() }, { onConflict: "user_id" })
     .select("*")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ contract: data });
 }, { roles: ADMIN });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -29,7 +30,7 @@ export const GET = withAuth<{ date: string }>(async (req, { user, params }) => {
     .eq("client_id", user.client_id)
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   if (!log)  return NextResponse.json({ log: null, notes: [] });
 
   const { daily_log_notes: notes, ...logData } = log as typeof log & {

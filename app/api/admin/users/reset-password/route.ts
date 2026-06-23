@@ -7,6 +7,7 @@
  * so it can be copied; it is never stored anywhere by us.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { randomBytes } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -35,7 +36,7 @@ export const POST = withSuperAdmin(async (req) => {
 
   const password = parsed.data.password ?? generatePassword();
   const { error } = await admin.auth.admin.updateUserById(parsed.data.id, { password });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   return NextResponse.json({ password, email: (target as { email: string }).email });
 });

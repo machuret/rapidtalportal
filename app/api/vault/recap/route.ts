@@ -9,6 +9,7 @@
  *            raw_content, so the page stays light even for large vaults
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
@@ -35,7 +36,7 @@ export const GET = withAuth(async (req, { user }) => {
     .select(LIGHT)
     .eq("client_id", clientId)
     .order("created_at", { ascending: false });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   const all = (data ?? []) as LightItem[];
   const counts = {

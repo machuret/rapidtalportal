@@ -5,6 +5,7 @@
  * DELETE — remove a task. Creator, assignee, or admins.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -97,7 +98,7 @@ export const POST = withAuth(async (req, { user }) => {
     .select(SELECT)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   logActivity((data as { id: string }).id, parsed.data.clientId, user.id, "created this task");
 
@@ -177,7 +178,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .select(SELECT)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   const updated = data as { title: string; client_id: string };
 
@@ -259,6 +260,6 @@ export const DELETE = withAuth(async (req, { user }) => {
   }
 
   const { error } = await admin.from("tasks").delete().eq("id", parsed.data.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 });

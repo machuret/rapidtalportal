@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -41,7 +42,7 @@ export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
     .eq("id", params.id)
     .eq("client_id", clientId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   return NextResponse.json({ success: true });
 });
@@ -70,7 +71,7 @@ export const DELETE = withAuth<{ id: string }>(async (req, { user, params }) => 
     .eq("id", params.id)
     .eq("client_id", parsed.data.clientId);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   return NextResponse.json({ success: true });
 });

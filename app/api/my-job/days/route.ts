@@ -5,6 +5,7 @@
  * DELETE ?date= → remove a logged day.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -40,7 +41,7 @@ export const POST = withAuth(async (req, { user }) => {
     .upsert({ user_id: user.id, client_id: user.client_id, ...parsed.data }, { onConflict: "user_id,work_date" })
     .select("*")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ day: data });
 });
 
@@ -49,6 +50,6 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (!date) return NextResponse.json({ error: "Missing date." }, { status: 400 });
   const admin = createAdminClient();
   const { error } = await admin.from("va_days_worked").delete().eq("user_id", user.id).eq("work_date", date);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 });

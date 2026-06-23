@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -19,7 +20,7 @@ export const GET = withAuth(async (_req, { user }) => {
     .eq("id", user.id)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data);
 });
 
@@ -41,7 +42,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .select("id, email, full_name, phone, birthday, avatar_url")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data);
 });
 

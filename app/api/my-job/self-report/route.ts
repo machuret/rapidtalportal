@@ -5,6 +5,7 @@
  * PUT {report_month, …} → create/update the report for a month (upsert).
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -44,6 +45,6 @@ export const PUT = withAuth(async (req, { user }) => {
     }, { onConflict: "user_id,report_month" })
     .select("*")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ report: data });
 });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -40,7 +41,7 @@ export const GET = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[brain/memory GET]", error.code, error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
   return NextResponse.json(data ?? []);
 });
@@ -85,7 +86,7 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[brain/memory PATCH]", error.code, error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
   return NextResponse.json(data);
 });
@@ -113,7 +114,7 @@ export const DELETE = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[brain/memory DELETE]", error.code, error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
   return NextResponse.json({ success: true });
 });

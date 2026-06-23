@@ -9,6 +9,7 @@
  * Returns: { items, page, nextPage, counts }.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
@@ -49,7 +50,7 @@ export const GET = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[vault/items GET]", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 
   const rawItems = data ?? [];

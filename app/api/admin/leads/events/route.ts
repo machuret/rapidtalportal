@@ -4,6 +4,7 @@
  * POST          — log a note / call / email / meeting.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withSuperAdmin } from "@/lib/api/with-auth";
@@ -17,7 +18,7 @@ export const GET = withSuperAdmin(async (req) => {
   const { data, error } = await admin
     .from("lead_events").select("id, lead_id, user_id, kind, body, created_at")
     .eq("lead_id", leadId).order("created_at", { ascending: false }).limit(200);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data ?? []);
 });
 
@@ -37,6 +38,6 @@ export const POST = withSuperAdmin(async (req, { user }) => {
   const { data, error } = await admin.from("lead_events").insert({
     lead_id: parsed.data.leadId, user_id: user.id, kind: parsed.data.kind, body: parsed.data.body.trim(),
   }).select("id, lead_id, user_id, kind, body, created_at").single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data, { status: 201 });
 });

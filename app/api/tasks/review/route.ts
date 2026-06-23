@@ -9,6 +9,7 @@
  * Client-admin / super-admin only, scoped to their own client.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -53,7 +54,7 @@ export const POST = withAuth(async (req, { user }) => {
     .eq("id", parsed.data.id)
     .select(SELECT)
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   // Activity trail + optional note as a comment (so it shows in the card thread).
   const events: { task_id: string; client_id: string; user_id: string; kind: "comment" | "activity"; body: string }[] = [

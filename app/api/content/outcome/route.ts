@@ -6,6 +6,7 @@
  * all pick it up. Admins only.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -45,7 +46,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[content/outcome]", error.code, error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 
   const win = parsed.data.outcome === "win";

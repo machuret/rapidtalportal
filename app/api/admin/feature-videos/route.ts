@@ -9,6 +9,7 @@
  * share/embed links. Edits go live within ~30s via the cache bust.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withSuperAdmin } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -50,7 +51,7 @@ export const PATCH = withSuperAdmin(async (req, { user }) => {
   const { error } = await admin
     .from("feature_videos")
     .upsert({ slug, loom_url, updated_by: user.id, updated_at: new Date().toISOString() }, { onConflict: "slug" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   bustFeatureVideoCache();
   return NextResponse.json({ ok: true });
@@ -62,7 +63,7 @@ export const DELETE = withSuperAdmin(async (req) => {
 
   const admin = createAdminClient();
   const { error } = await admin.from("feature_videos").delete().eq("slug", slug);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   bustFeatureVideoCache();
   return NextResponse.json({ ok: true });

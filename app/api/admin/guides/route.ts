@@ -9,6 +9,7 @@
  * Loom link when present. Edits go live within ~30s via the cache bust.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withSuperAdmin } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -76,7 +77,7 @@ export const PATCH = withSuperAdmin(async (req, { user }) => {
   const { error } = await admin
     .from("guides")
     .upsert({ key: parsed.data.key, data: parsed.data.data, updated_by: user.id, updated_at: new Date().toISOString() }, { onConflict: "key" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   bustGuideCache(parsed.data.key);
   return NextResponse.json({ ok: true });
@@ -88,7 +89,7 @@ export const DELETE = withSuperAdmin(async (req) => {
 
   const admin = createAdminClient();
   const { error } = await admin.from("guides").delete().eq("key", key.data as GuideKey);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   bustGuideCache(key.data);
   return NextResponse.json({ ok: true });

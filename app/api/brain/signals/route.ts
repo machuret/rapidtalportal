@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -59,7 +60,7 @@ export const POST = withAuth(async (req, { user }) => {
         .single();
       if (error) {
         console.error("[brain/signals re-rate]", error.code, error.message);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return serverError(error);
       }
       return NextResponse.json(data, { status: 200 });
     }
@@ -83,7 +84,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[brain/signals POST]", error.code, error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
   return NextResponse.json(data, { status: 201 });
 });

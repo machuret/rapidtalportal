@@ -6,6 +6,7 @@
  * supervision tool, not something VAs browse.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
@@ -33,7 +34,7 @@ export const GET = withAuth(async (req, { user }) => {
     .eq("credential_id", credentialId)
     .order("revealed_at", { ascending: false })
     .limit(100);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   const rows = (reveals ?? []) as { user_id: string | null; revealed_at: string }[];
   const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean))) as string[];

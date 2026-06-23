@@ -5,6 +5,7 @@
  * PATCH → an admin approves/declines a request.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -62,7 +63,7 @@ export const POST = withAuth(async (req, { user }) => {
     .insert({ user_id: user.id, client_id: user.client_id, ...parsed.data })
     .select("*")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   if (user.client_id) {
     const [admins, { data: me }] = await Promise.all([
@@ -120,7 +121,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .eq("id", parsed.data.id)
     .select("*")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   void notify([r.user_id], {
     clientId: r.client_id,

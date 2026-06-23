@@ -7,6 +7,7 @@
  * the runner, so the client calls these without surfacing errors.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withAuth } from "@/lib/api/with-auth";
@@ -43,7 +44,7 @@ export const POST = withAuth(async (req, { user }) => {
     .select("id")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ id: data?.id }, { status: 201 });
 });
 
@@ -65,6 +66,6 @@ export const PATCH = withAuth(async (req, { user }) => {
     .eq("id", parsed.data.id)
     .eq("user_id", user.id); // a user can only update their own run
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ success: true });
 });

@@ -8,6 +8,7 @@
  * PATCH  { id, status: 'dismissed' | 'created' } → update one (never re-suggested).
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -156,6 +157,6 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (admin as any).from("sop_suggestions").update({ status: parsed.data.status }).in("id", rows.map((r) => r.id));
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ updated: rows.length });
 }, ADMIN);

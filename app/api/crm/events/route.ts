@@ -3,6 +3,7 @@
  * created / status moves / edits / archive / restore, with who and when.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
@@ -28,7 +29,7 @@ export const GET = withAuth(async (req, { user }) => {
     .eq("contact_id", contactId)
     .order("created_at", { ascending: false })
     .limit(100);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   const rows = (events ?? []) as { id: string; user_id: string | null; body: string; created_at: string }[];
   const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean))) as string[];

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -58,7 +59,7 @@ export const GET = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[content/topics GET]", error.code, error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 
   return NextResponse.json(data ?? []);
@@ -94,7 +95,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[content/topics POST]", error.code, error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
   return NextResponse.json(data, { status: 201 });
 });
@@ -140,7 +141,7 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[content/topics PATCH]", error.code, error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 
   // Feed the Brain: a reject/flag is a 👎 (with reason), an approve is a 👍.
@@ -194,7 +195,7 @@ export const DELETE = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[content/topics DELETE]", error.code, error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
   return NextResponse.json({ success: true });
 });

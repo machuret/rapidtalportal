@@ -7,6 +7,7 @@
  * User-scoped client → RLS gates everything to placement participants.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { withAuth } from "@/lib/api/with-auth";
@@ -26,7 +27,7 @@ export const GET = withAuth(async (req) => {
     .eq("page_id", pageId)
     .order("created_at", { ascending: false })
     .limit(50);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data ?? []);
 });
 

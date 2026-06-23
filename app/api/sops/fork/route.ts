@@ -4,6 +4,7 @@
  * Admins only; the copy is owned by the caller's client.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withAuth } from "@/lib/api/with-auth";
@@ -61,7 +62,7 @@ export const POST = withAuth(
       .select("id")
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return serverError(error);
     return NextResponse.json({ success: true, id: data?.id }, { status: 201 });
   },
   { roles: ["client_admin", "super_admin"] },

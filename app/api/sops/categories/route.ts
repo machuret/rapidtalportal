@@ -12,6 +12,7 @@
  * Scope is authorised: global = super_admin; client = that client's admins.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -60,7 +61,7 @@ export const POST = withAuth(async (req, { user }) => {
     parent: parsed.data.kind === "subcategory" ? (parsed.data.parent?.trim() || null) : null,
   });
   // Unique violation = already exists — treat as success (idempotent create).
-  if (error && error.code !== "23505") return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error && error.code !== "23505") return serverError(error);
   return NextResponse.json({ ok: true });
 }, ADMIN);
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -50,7 +51,7 @@ export const POST = withAuth(async (req, { user }) => {
     .select("id, body, created_at")
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   logCrm(parsed.data.contactId, parsed.data.clientId, user.id, "added a note");
   return NextResponse.json(data, { status: 201 });
 });
@@ -79,7 +80,7 @@ export const DELETE = withAuth(async (req, { user }) => {
   // VAs can only delete their own notes — chain filter BEFORE awaiting.
   // Return the deleted row's contact_id so we can log the activity-trail entry.
   const { data: deleted, error } = await (isAdmin ? baseQuery : baseQuery.eq("created_by", user.id)).select("contact_id");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   const contactId = ((deleted ?? [])[0] as { contact_id: string } | undefined)?.contact_id;
   if (contactId) logCrm(contactId, parsed.data.clientId, user.id, "deleted a note");
   return NextResponse.json({ ok: true });

@@ -7,6 +7,7 @@
  * marked answered so the gap closes.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -40,7 +41,7 @@ export const POST = withAuth(async (req, { user }) => {
   });
   if (error) {
     console.error("[vault/teach]", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 
   // Close matching gaps in the query log (best-effort).

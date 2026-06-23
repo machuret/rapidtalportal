@@ -8,6 +8,7 @@
  * DELETE ?slug=     → reset to the code default.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withSuperAdmin } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -94,7 +95,7 @@ export const PATCH = withSuperAdmin(async (req, { user }) => {
   const { error } = await admin
     .from("ai_prompts")
     .upsert({ slug: def.slug, content, updated_by: user.id, updated_at: new Date().toISOString() }, { onConflict: "slug" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   // Version snapshot — best-effort, never blocks the save.
   void admin.from("ai_prompt_versions").insert({ slug: def.slug, content, saved_by: user.id })
@@ -110,7 +111,7 @@ export const DELETE = withSuperAdmin(async (req) => {
 
   const admin = createAdminClient();
   const { error } = await admin.from("ai_prompts").delete().eq("slug", slug);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   bustPromptCache(slug);
   return NextResponse.json({ ok: true });
 });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -81,7 +82,7 @@ export const POST = withAuth(async (req, { user }) => {
     .select(SELECT)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   if ((parsed.data.visibility ?? "public") === "restricted") {
     await syncSopAccess(admin, (data as { id: string }).id, clientId, "restricted", parsed.data.accessUserIds);
@@ -133,7 +134,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .select(SELECT)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   // Sync the access list when visibility was set (the studio sends visibility +
   // accessUserIds together): public clears it, restricted replaces it.
@@ -165,6 +166,6 @@ export const DELETE = withAuth(async (req, { user }) => {
     .from("sops")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", parsed.data.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 });

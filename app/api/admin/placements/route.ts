@@ -7,6 +7,7 @@
  * Admins manage the engagement record but never see Notebook content.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withSuperAdmin } from "@/lib/api/with-auth";
@@ -49,7 +50,7 @@ export const POST = withSuperAdmin(async (req) => {
     .single();
   if (error) {
     if (error.code === "23505") return NextResponse.json({ error: "That VA and client are already placed together." }, { status: 409 });
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 
   const seeded = await seedPlacementNotebook((data as { id: string }).id);

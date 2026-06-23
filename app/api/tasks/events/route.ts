@@ -4,6 +4,7 @@
  * POST — add a comment; notifies the card's assignee and creator.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -38,7 +39,7 @@ export const GET = withAuth(async (req, { user }) => {
     .eq("task_id", taskId)
     .order("created_at")
     .limit(200);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   const rows = (events ?? []) as { id: string; user_id: string | null; kind: string; body: string; created_at: string }[];
   const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean))) as string[];
@@ -85,7 +86,7 @@ export const POST = withAuth(async (req, { user }) => {
     })
     .select("id, kind, body, created_at")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   // Tell the people on the card (not yourself).
   void notify(

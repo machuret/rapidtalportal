@@ -5,6 +5,7 @@
  * included so a previously-failed run can be retried in one click.
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
@@ -36,7 +37,7 @@ export const GET = withAuth(async (req, { user }) => {
       .eq("client_id", clientId)
       .in("status", ["ready", "error"]),
   ]);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
 
   const itemIds = (items ?? []).map((i) => (i as { id: string }).id);
   return NextResponse.json({

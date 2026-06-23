@@ -4,6 +4,7 @@
  * (soft-archive, or ?hard).
  */
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withSuperAdmin } from "@/lib/api/with-auth";
@@ -46,7 +47,7 @@ export const GET = withSuperAdmin(async () => {
   const { data, error } = await admin.from("expenses").select(SELECT)
     .is("archived_at", null).order("status").order("name")
     .limit(LIST_CAP);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data ?? []);
 });
 
@@ -64,7 +65,7 @@ export const POST = withSuperAdmin(async (req, { user }) => {
     next_due_date: d.nextDueDate ?? null, url: d.url ?? null, started_on: d.startedOn ?? null,
     notes: d.notes ?? null, owner_id: user.id, created_by: user.id,
   }).select(SELECT).single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data, { status: 201 });
 });
 
@@ -90,7 +91,7 @@ export const PATCH = withSuperAdmin(async (req) => {
 
   const admin = createAdminClient();
   const { data, error } = await admin.from("expenses").update(u).eq("id", d.id).select(SELECT).single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data);
 });
 
@@ -104,6 +105,6 @@ export const DELETE = withSuperAdmin(async (req) => {
   const { error } = parsed.data.hard
     ? await admin.from("expenses").delete().eq("id", parsed.data.id)
     : await admin.from("expenses").update({ archived_at: new Date().toISOString() }).eq("id", parsed.data.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json({ ok: true });
 });
