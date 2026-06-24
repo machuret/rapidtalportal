@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export const GET = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
-  const { data } = await admin.from("va_self_reports").select("*").eq("user_id", user.id).order("report_month", { ascending: false });
+  const { data } = await admin.from("va_self_reports").select("*").eq("user_id", user.id).order("report_month", { ascending: false }).limit(500);
   return NextResponse.json({ reports: data ?? [] });
 });
 

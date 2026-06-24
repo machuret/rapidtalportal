@@ -16,7 +16,9 @@ export const GET = withAuth(async (req, { user }) => {
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");
   const admin = createAdminClient();
-  let q = admin.from("va_days_worked").select("*").eq("user_id", user.id).order("work_date", { ascending: false });
+  // Cap the unwindowed read (~3 years of days); document generators pass an
+  // explicit from/to month window so they're unaffected by the limit.
+  let q = admin.from("va_days_worked").select("*").eq("user_id", user.id).order("work_date", { ascending: false }).limit(1000);
   if (from) q = q.gte("work_date", from);
   if (to) q = q.lte("work_date", to);
   const { data } = await q;

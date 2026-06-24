@@ -20,18 +20,26 @@ export default async function AdminIssuesPage() {
   await requireSuperAdmin();
 
   const admin = createAdminClient();
-  const [{ data: issues }, { data: users }, { data: clients }] = await Promise.all([
-    admin.from("va_issues").select("id, user_id, client_id, category, subject, detail, status, created_at").order("created_at", { ascending: false }).limit(200),
-    admin.from("users").select("id, full_name, email"),
-    admin.from("clients").select("id, name"),
-  ]);
+  const { data: issues } = await admin
+    .from("va_issues").select("id, user_id, client_id, category, subject, detail, status, created_at")
+    .order("created_at", { ascending: false }).limit(200);
 
-  const userName = new Map(((users ?? []) as { id: string; full_name: string | null; email: string }[]).map((u) => [u.id, u.full_name ?? u.email]));
-  const clientName = new Map(((clients ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
   const rows = (issues ?? []) as {
     id: string; user_id: string; client_id: string | null; category: string;
     subject: string; detail: string; status: string; created_at: string;
   }[];
+
+  // Resolve names only for the users/clients referenced by the shown rows,
+  // rather than scanning the whole users/clients tables to build the lookup.
+  const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean) as string[]));
+  const clientIds = Array.from(new Set(rows.map((r) => r.client_id).filter(Boolean) as string[]));
+  const [{ data: users }, { data: clients }] = await Promise.all([
+    admin.from("users").select("id, full_name, email").in("id", userIds),
+    admin.from("clients").select("id, name").in("id", clientIds),
+  ]);
+
+  const userName = new Map(((users ?? []) as { id: string; full_name: string | null; email: string }[]).map((u) => [u.id, u.full_name ?? u.email]));
+  const clientName = new Map(((clients ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
   const openCount = rows.filter((r) => r.status !== "resolved").length;
 
   return (

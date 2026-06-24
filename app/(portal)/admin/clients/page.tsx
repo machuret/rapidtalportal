@@ -11,9 +11,12 @@ export default async function AdminClientsPage() {
   const { data: clients } = await admin
     .from("clients")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(2000); // defensive cap; far beyond real client count
 
-  // Get user counts per client
+  // Get user counts per client. Intentionally uncapped: a .limit() here would
+  // silently undercount clients with many users. If the users table ever grows
+  // past tens of thousands, replace this with a grouped count (RPC).
   const { data: userCounts } = await admin
     .from("users")
     .select("client_id");

@@ -18,20 +18,28 @@ export default async function AdminErrorsPage() {
 
   const admin = createAdminClient();
   const since24h = new Date(Date.now() - 86_400_000).toISOString();
-  const [{ data: errors }, { count: count24h }, { data: users }, { data: clients }] = await Promise.all([
+  const [{ data: errors }, { count: count24h }] = await Promise.all([
     admin.from("app_errors").select("*").order("created_at", { ascending: false }).limit(100),
     admin.from("app_errors").select("id", { count: "exact", head: true }).gte("created_at", since24h),
-    admin.from("users").select("id, full_name, email"),
-    admin.from("clients").select("id, name"),
+  ]);
+
+  const rows = (errors ?? []) as {
+    id: string; source: string; message: string; stack: string | null; url: string | null;
+    user_id: string | null; client_id: string | null; created_at: string;
+  }[];
+
+  // Resolve names only for the users/clients referenced by the 100 shown rows,
+  // rather than scanning the whole users/clients tables to build the lookup.
+  const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean) as string[]));
+  const clientIds = Array.from(new Set(rows.map((r) => r.client_id).filter(Boolean) as string[]));
+  const [{ data: users }, { data: clients }] = await Promise.all([
+    admin.from("users").select("id, full_name, email").in("id", userIds),
+    admin.from("clients").select("id, name").in("id", clientIds),
   ]);
 
   const userName = new Map(((users ?? []) as { id: string; full_name: string | null; email: string }[])
     .map((u) => [u.id, u.full_name ?? u.email]));
   const clientName = new Map(((clients ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
-  const rows = (errors ?? []) as {
-    id: string; source: string; message: string; stack: string | null; url: string | null;
-    user_id: string | null; client_id: string | null; created_at: string;
-  }[];
 
   return (
     <div>

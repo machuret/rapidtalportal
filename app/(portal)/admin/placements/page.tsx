@@ -7,14 +7,19 @@ import { Handshake } from "lucide-react";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Placements — RapidTal Admin" };
 
+// Defensive cap so these reads can't scan an unbounded table; clients/users also
+// feed the create-form dropdowns, so they're capped (not id-scoped). Far beyond
+// any real platform size today.
+const LIST_CAP = 2000;
+
 export default async function AdminPlacementsPage() {
   await requireSuperAdmin();
 
   const admin = createAdminClient();
   const [{ data: placementRows }, { data: clients }, { data: users }] = await Promise.all([
-    admin.from("placements").select("id, client_id, va_user_id, client_user_id, status").order("created_at", { ascending: false }),
-    admin.from("clients").select("id, name").is("archived_at", null).order("name"),
-    admin.from("users").select("id, full_name, email, role, client_id"),
+    admin.from("placements").select("id, client_id, va_user_id, client_user_id, status").order("created_at", { ascending: false }).limit(LIST_CAP),
+    admin.from("clients").select("id, name").is("archived_at", null).order("name").limit(LIST_CAP),
+    admin.from("users").select("id, full_name, email, role, client_id").limit(LIST_CAP),
   ]);
 
   const nameOf = (id: string) => {

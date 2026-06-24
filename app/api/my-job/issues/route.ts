@@ -17,7 +17,7 @@ const ISSUE_HREF = "/admin/issues";
 
 export const GET = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
-  const { data } = await admin.from("va_issues").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+  const { data } = await admin.from("va_issues").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(500);
   return NextResponse.json({ issues: data ?? [] });
 });
 

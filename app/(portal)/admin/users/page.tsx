@@ -5,6 +5,9 @@ import type { UserRole } from "@/types/database";
 
 export const dynamic = "force-dynamic";
 
+// Defensive cap (auth listUsers is already paged at 1000); far beyond real size.
+const LIST_CAP = 2000;
+
 export default async function AdminUsersPage() {
   const ctx = await requireSuperAdmin();
 
@@ -13,8 +16,9 @@ export default async function AdminUsersPage() {
     admin
       .from("users")
       .select("id, email, full_name, role, client_id, created_at")
-      .order("created_at", { ascending: false }),
-    admin.from("clients").select("id, name").order("name"),
+      .order("created_at", { ascending: false })
+      .limit(LIST_CAP),
+    admin.from("clients").select("id, name").order("name").limit(LIST_CAP),
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
   ]);
 

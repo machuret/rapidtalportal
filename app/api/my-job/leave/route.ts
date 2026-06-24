@@ -20,10 +20,10 @@ export const GET = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   const scope = req.nextUrl.searchParams.get("scope");
   if (scope === "client" && ADMIN.includes(user.role) && user.client_id) {
-    const { data } = await admin.from("va_leave_requests").select("*").eq("client_id", user.client_id).order("start_date", { ascending: false });
+    const { data } = await admin.from("va_leave_requests").select("*").eq("client_id", user.client_id).order("start_date", { ascending: false }).limit(1000);
     return NextResponse.json({ requests: data ?? [] });
   }
-  const { data } = await admin.from("va_leave_requests").select("*").eq("user_id", user.id).order("start_date", { ascending: false });
+  const { data } = await admin.from("va_leave_requests").select("*").eq("user_id", user.id).order("start_date", { ascending: false }).limit(1000);
   return NextResponse.json({ requests: data ?? [] });
 });
 
