@@ -2,6 +2,7 @@ import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MIGRATIONS } from "@/lib/migrations/manifest";
 import { emailConfigured } from "@/lib/email";
+import { isEncryptionConfigured } from "@/lib/crypto/credentials";
 import { cn } from "@/lib/utils";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Activity, CheckCircle2, XCircle, AlertTriangle, Database, Clock, Brain, KeyRound } from "lucide-react";
@@ -59,6 +60,7 @@ export default async function AdminHealthPage() {
   const chatConfigured = !!(process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY);
   const embeddingsConfigured = !!process.env.OPENAI_API_KEY;
   const emailReady = emailConfigured();
+  const encryptionReady = isEncryptionConfigured();
 
   // ── Cron heartbeats ───────────────────────────────────────────────────────
   const EXPECTED_CRONS: { name: string; staleAfterH: number }[] = [
@@ -103,6 +105,7 @@ export default async function AdminHealthPage() {
   if (!schemaUnavailable && schemaFails.length) issues.push(`${schemaFails.length} schema object(s) missing`);
   for (const c of staleCrons) issues.push(`cron “${c.name}” is stale`);
   if (!chatConfigured) issues.push("No LLM key set — Brain learning/onboarding disabled (set OPENROUTER_API_KEY or OPENAI_API_KEY)");
+  if (!encryptionReady) issues.push("Credential encryption not configured — the Access feature can't store logins (set CREDENTIALS_ENCRYPTION_KEY)");
   if (degradedClients.length) issues.push(`${degradedClients.length} client brain(s) degraded`);
   if (recentErrorCount && recentErrorCount > 0) issues.push(`${recentErrorCount} error(s) logged in the last 24h`);
 
@@ -248,6 +251,14 @@ export default async function AdminHealthPage() {
               {emailReady
                 ? "Transactional email configured (Resend) — notification emails will send (respecting each user's preferences)."
                 : "Email off — RESEND_API_KEY not set. In-app notifications still work; no emails are sent until it's configured and the sending domain is verified."}
+            </span>
+          </div>
+          <div className="mt-2 flex items-start gap-2 text-sm">
+            <KeyRound className={cn("w-4 h-4 shrink-0 mt-0.5", encryptionReady ? "text-green-400" : "text-red-400")} />
+            <span className={encryptionReady ? "text-zinc-400" : "text-red-300"}>
+              {encryptionReady
+                ? "Credential encryption configured — the Access section can store logins (AES-256-GCM)."
+                : "Credential encryption off — CREDENTIALS_ENCRYPTION_KEY not set. The Access feature is disabled (it refuses to store logins rather than save them unencrypted). Set it with `openssl rand -base64 32` and redeploy."}
             </span>
           </div>
         </section>
