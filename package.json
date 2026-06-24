@@ -15,6 +15,7 @@
     "db:status": "node scripts/apply-migrations.mjs --status",
     "db:baseline": "node scripts/apply-migrations.mjs --baseline",
     "db:apply": "node scripts/apply-migrations.mjs --apply",
+    "functions:deploy": "node scripts/deploy-functions.mjs",
     "gen:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > types/database.ts"
   },
   "dependencies": {

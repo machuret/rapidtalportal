@@ -32,12 +32,19 @@ live DB shows there).
 
 ## 2. Deploy the Edge Functions (vault search / indexing)
 
-These are **not** deployed by `git push` — they must be pushed to Supabase:
+These are **not** deployed by `git push` — they must be pushed to Supabase.
+Use the helper, which deploys **every** function under `supabase/functions/` so
+none get silently forgotten after a change:
 
 ```bash
-supabase functions deploy vault-ask
-supabase functions deploy vault-process
+pnpm functions:deploy                # all functions (vault-ask, vault-process,
+                                     # content-generate, kb-generate, send-message,
+                                     # vault-delete, company-dna-scrape)
+pnpm functions:deploy vault-ask      # just one (or a few, space-separated)
 ```
+
+Requires the Supabase CLI (`supabase login` + `supabase link`, or set
+`SUPABASE_PROJECT_REF`). Under the hood each is `supabase functions deploy <name>`.
 
 Their secrets (OpenAI/Anthropic keys, etc.) live in Supabase function env, not
 Vercel. After deploying, confirm `vault_items.indexed_at` starts advancing.
