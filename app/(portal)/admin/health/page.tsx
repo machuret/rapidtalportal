@@ -20,14 +20,18 @@ export default async function AdminHealthPage() {
 
   const admin = createAdminClient();
 
-  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, { data: items }, { count: recentErrorCount }] = await Promise.all([
+  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, tallyRes, { count: recentErrorCount }] = await Promise.all([
     admin.from("schema_migrations").select("version"),
     admin.rpc("health_schema_check"),
     admin.from("cron_heartbeats").select("name, ran_at, detail"),
     admin.from("clients").select("id, name").is("archived_at", null).order("name"),
-    // indexed_at marks an item as embedded (same signal score.ts uses) — so we
-    // no longer load the entire vault_chunks table just to tell which are indexed.
-    admin.from("vault_items").select("client_id, status, index_error, indexed_at"),
+    // Per-client vault tallies aggregated in the DB (migration 082), instead of
+    // loading the whole vault_items table and counting in JS. Loose-typed: the
+    // function isn't in the generated types yet. If 082 isn't applied the call
+    // errors, tallies fall back to zero, and the migration-drift panel below
+    // flags 082 as pending — so the gap is self-announcing, not a crash.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (admin as any).rpc("health_vault_tallies"),
     admin.from("app_errors").select("id", { count: "exact", head: true })
       .gte("created_at", new Date(Date.now() - 24 * 3_600_000).toISOString()),
   ]);
@@ -71,16 +75,19 @@ export default async function AdminHealthPage() {
   const beatByName = new Map(((beats ?? []) as { name: string; ran_at: string; detail: Record<string, unknown> }[]).map((b) => [b.name, b]));
 
   // ── Per-client brain health ───────────────────────────────────────────────
-  // One pass over items → per-client tallies (was an O(items × clients) nested
-  // filter, plus a full vault_chunks load — both removed).
+  // Per-client tallies come pre-aggregated from health_vault_tallies() (082) —
+  // a single grouped scan in Postgres, not a full vault_items load counted here.
   type Tally = { total: number; ready: number; indexed: number; errored: number };
   const byClient = new Map<string, Tally>();
-  for (const i of (items ?? []) as { client_id: string; status: string; index_error: string | null; indexed_at: string | null }[]) {
-    const t = byClient.get(i.client_id) ?? { total: 0, ready: 0, indexed: 0, errored: 0 };
-    t.total++;
-    if (i.status === "ready") { t.ready++; if (i.indexed_at) t.indexed++; }
-    if (i.status === "error" || i.index_error) t.errored++;
-    byClient.set(i.client_id, t);
+  const tallyRows = (tallyRes?.data ?? []) as {
+    client_id: string; total: number; ready: number; indexed: number; errored: number;
+  }[];
+  for (const r of tallyRows) {
+    // bigint counts can arrive as strings from PostgREST; Number() normalises.
+    byClient.set(r.client_id, {
+      total: Number(r.total), ready: Number(r.ready),
+      indexed: Number(r.indexed), errored: Number(r.errored),
+    });
   }
   const rows = ((clients ?? []) as { id: string; name: string }[]).map((c) => {
     const t = byClient.get(c.id) ?? { total: 0, ready: 0, indexed: 0, errored: 0 };
