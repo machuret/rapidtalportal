@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiAuth, type ApiUser } from "@/lib/api-auth";
 import { captureError } from "@/lib/error-tracking";
+import { originRejected } from "@/lib/api/csrf";
 
 // Return type is widened to Response (not just NextResponse) so streaming
 // handlers — e.g. the SSE Ask-the-Vault route returning a piped ReadableStream —
@@ -25,6 +26,9 @@ export function withAuth<P = Record<string, never>>(
   opts?: { roles?: ApiUser["role"][] },
 ) {
   return async (req: NextRequest, routeCtx?: { params: P }): Promise<Response> => {
+    if (originRejected(req)) {
+      return NextResponse.json({ error: "Cross-origin request blocked." }, { status: 403 });
+    }
     const auth = await requireApiAuth();
     if ("error" in auth) return auth.error;
     if (opts?.roles && !opts.roles.includes(auth.user.role)) {
