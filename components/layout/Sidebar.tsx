@@ -221,9 +221,14 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
       {/* Logout confirmation overlay */}
       {confirmLogout && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-modal">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-xl px-6 py-5 w-80 shadow-xl">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="logout-title"
+            className="bg-zinc-900 border border-zinc-700 rounded-xl px-6 py-5 w-full max-w-xs mx-4 shadow-xl"
+          >
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-base">Sign out?</h2>
+              <h2 id="logout-title" className="font-semibold text-base">Sign out?</h2>
               <button onClick={() => setConfirmLogout(false)} className="text-zinc-500 hover:text-white">
                 <X className="w-4 h-4" />
               </button>

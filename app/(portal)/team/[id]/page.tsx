@@ -314,11 +314,11 @@ export default async function VaDetailPage({ params }: { params: { id: string } 
           </div>
         ) : (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
-            <div className="grid grid-cols-4 px-5 py-2 border-b border-zinc-800 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+            <div className="grid grid-cols-4 px-3 sm:px-5 py-2 border-b border-zinc-800 text-xs font-medium text-zinc-500 uppercase tracking-wider">
               <span>Date</span><span>Work</span><span>Break</span><span>Total tracked</span>
             </div>
             {timeDays.map(([date, s]) => (
-              <div key={date} className="grid grid-cols-4 px-5 py-3 border-b border-zinc-800/50 last:border-0 text-sm hover:bg-zinc-800/30 transition-colors">
+              <div key={date} className="grid grid-cols-4 px-3 sm:px-5 py-3 border-b border-zinc-800/50 last:border-0 text-sm hover:bg-zinc-800/30 transition-colors">
                 <span className="text-zinc-300 font-medium">
                   {format(parseISO(date), "EEE dd MMM")}
                 </span>
