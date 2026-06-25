@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
@@ -122,16 +122,36 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
     return () => { void supabase.removeChannel(channel); };
   }, [clientId]);
 
-  const memberName = (id: string | null) => members.find((m) => m.id === id)?.name ?? null;
-  const categoryById = (id: string | null) => (id ? categories.find((c) => c.id === id) ?? null : null);
+  // O(1) lookups instead of a per-card Array.find() — these run once per card on
+  // every render, so on a large board the linear scans add up fast.
+  const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
+  const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const memberName = (id: string | null) => (id ? memberMap.get(id) ?? null : null);
+  const categoryById = (id: string | null) => (id ? categoryMap.get(id) ?? null : null);
   const canMove = (t: Task) => isAdmin || t.assigned_to === userId || t.created_by === userId;
 
   const matchesFilter = (t: Task) =>
     filterCat === null ? true : filterCat === UNCATEGORIZED ? !t.category_id : t.category_id === filterCat;
 
-  const byCol = (col: TaskStatus) =>
-    tasks.filter((t) => t.status === col && matchesFilter(t))
-      .sort((a, b) => a.order_index - b.order_index || a.created_at.localeCompare(b.created_at));
+  // Compute the four columns once per (tasks, filter) change rather than
+  // re-filtering + re-sorting the whole list four times on every render.
+  const columnItems = useMemo(() => {
+    const result = {} as Record<TaskStatus, Task[]>;
+    for (const col of COLUMNS) {
+      result[col.key] = tasks
+        .filter((t) => t.status === col.key && matchesFilter(t))
+        .sort((a, b) => a.order_index - b.order_index || a.created_at.localeCompare(b.created_at));
+    }
+    return result;
+    // matchesFilter is a pure function of filterCat; depending on filterCat is correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, filterCat]);
+
+  const byCol = (col: TaskStatus) => columnItems[col];
+
+  // Midnight today, computed once per render and reused by every card's
+  // overdue check (was previously allocated twice per card).
+  const todayMidnight = new Date(new Date().toDateString());
 
   async function moveTo(taskId: string, status: TaskStatus) {
     const t = tasks.find((x) => x.id === taskId);
@@ -243,7 +263,8 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
               <div className="flex flex-col gap-2 p-2.5 pt-1 min-h-[80px]">
                 {items.map((t) => {
                   const name = memberName(t.assigned_to);
-                  const overdue = t.due_date && t.status !== "done" && new Date(t.due_date) < new Date(new Date().toDateString());
+                  // `todayMidnight` is computed once per render (above), not once per card.
+                  const overdue = t.due_date && t.status !== "done" && new Date(t.due_date) < todayMidnight;
                   const cat = categoryById(t.category_id);
                   return (
                     <div

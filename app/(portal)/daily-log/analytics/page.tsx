@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { format, subDays } from "date-fns";
-import { DailyLogAnalytics } from "@/components/daily-log/DailyLogAnalytics";
+import { DailyLogAnalyticsLazy } from "@/components/daily-log/DailyLogAnalyticsLazy";
 import type { AnalyticsEntry } from "@/types/daily-log";
 
 export const dynamic = "force-dynamic";
@@ -73,5 +73,5 @@ export default async function DailyLogAnalyticsPage({
     entries = (data ?? []) as AnalyticsEntry[];
   }
 
-  return <DailyLogAnalytics entries={entries} userName={displayName} />;
+  return <DailyLogAnalyticsLazy entries={entries} userName={displayName} />;
 }

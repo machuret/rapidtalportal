@@ -122,10 +122,16 @@ export function ProfileForm({ user }: Props) {
       <div className="surface-card px-6 py-5 flex items-center gap-5">
         <div className="relative shrink-0">
           {avatarUrl ? (
+            // Raw <img> (not next/image) on purpose: it's an 80x80 avatar from a
+            // Supabase public URL. next/image would require a remotePatterns entry
+            // whose misconfiguration 404s every avatar — poor trade for this size.
+            // lazy/async keeps it off the critical path without that config risk.
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={avatarUrl}
               alt="Profile photo"
+              loading="lazy"
+              decoding="async"
               className="w-20 h-20 rounded-full object-cover border-2 border-zinc-700"
             />
           ) : (
