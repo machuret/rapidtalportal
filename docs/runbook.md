@@ -130,3 +130,72 @@ Server + client errors are captured to the `app_errors` table and shown at
 automatically; React render crashes report via the error boundaries. No
 external error vendor is wired in (swap `captureError`'s body for Sentry if that
 changes).
+
+## 8. Pre-launch security hardening (manual steps)
+
+The Phase 1–6 hardening landed in code, but four steps must be done **by hand**
+in a dashboard or a one-time deploy — a `git push` cannot do them. Each is
+independent.
+
+### 8.1 Apply migration 082 (health page tallies) — DB
+
+`/admin/health` aggregates per-client vault tallies via the `health_vault_tallies()`
+function (migration `082`). Until applied, the per-client table shows zeros and
+082 is flagged as pending.
+
+- Preferred: `SUPABASE_DB_URL='postgres://...' pnpm db:apply` (see §1).
+- No terminal: paste the contents of `db/migrations/082_health_vault_tallies.sql`
+  into the Supabase **SQL Editor** and Run. It self-records into
+  `schema_migrations`, so it won't re-flag.
+
+Verify: `/admin/health` shows real counts and 082 is no longer pending.
+
+### 8.2 Deploy the edge functions for the CORS change — CLI
+
+The 7 edge functions had wildcard CORS (`Access-Control-Allow-Origin: *`); they
+now read `ALLOWED_ORIGIN` (default `https://rapidtal.online`). The code change is
+**inert until redeployed**.
+
+```bash
+supabase secrets set ALLOWED_ORIGIN=https://rapidtal.online   # dashboard works too
+pnpm functions:deploy                                         # all 7 (see §2)
+```
+
+- `ALLOWED_ORIGIN` can also be set in the dashboard: **Edge Functions → Secrets**.
+- Not browser-exploitable today (functions are JWT-gated + server-proxied), so
+  this is hardening, not a launch blocker — but redeploy when a teammate has CLI.
+- Multiple browser origins (e.g. Vercel previews): the functions currently accept
+  one origin. Extend them to read a comma list if previews call functions directly.
+
+Verify: a cross-origin OPTIONS preflight to a function no longer echoes `*`.
+
+### 8.3 Content-Security-Policy: validate, then enforce — browser + 1-line code
+
+CSP ships as **`Content-Security-Policy-Report-Only`** in `next.config.mjs` (it
+logs violations without blocking). Do not flip to enforce blind.
+
+1. On the deployed site, open DevTools → **Console** and click through dashboard,
+   vault, tasks, notebook, daily-log/analytics (charts), a Loom "Video Tutorial"
+   button, and login. Look for `[Report Only] … Content Security Policy` messages.
+2. Zero violations → flip the header key in `next.config.mjs`:
+   `Content-Security-Policy-Report-Only` → `Content-Security-Policy`, deploy.
+3. Violations → add the blocked origin to the right directive (`img-src`,
+   `connect-src`, `frame-src`, …) first, then enforce.
+
+Allowed today: `self`, the Supabase origin (REST + `wss` + storage images),
+Loom frames, `data:`/`blob:` images, inline styles/scripts (Next bootstrap).
+
+### 8.4 Login brute-force protection — Supabase dashboard
+
+Login is client-side direct-to-Supabase, so the real control is GoTrue's
+server-side settings (an app-side counter would be bypassable). In the dashboard:
+
+- **Authentication → Rate Limits** — keep sign-in limits enabled.
+- **Authentication → Attack Protection** — enable **CAPTCHA** (hCaptcha/Turnstile).
+  After enabling, wire the token into `app/login/page.tsx` (`signInWithPassword`'s
+  `options.captchaToken`).
+- **Authentication → password policy** — minimum length **≥ 8** (matches the
+  reset-password flow's client check).
+
+Verify: ~10 rapid bad logins get throttled/challenged; a full password-reset
+round-trip (`/forgot-password` → email → `/reset-password` → sign in) works.
