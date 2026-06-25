@@ -20,8 +20,12 @@ const nextConfig = {
   // Headers for caching and security
   async headers() {
     // Supabase origin is needed for REST + realtime (wss) + storage images.
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const supabaseWss = supabaseUrl.replace(/^https/, 'wss');
+    // .trim() defends against stray whitespace in the env value, which would
+    // otherwise break the ^https anchor below and drop the wss:// origin.
+    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
+    // Browsers do NOT treat `connect-src https://host` as also allowing
+    // `wss://host` — the realtime socket needs the wss origin listed explicitly.
+    const supabaseWss = supabaseUrl.replace(/^https:/, 'wss:');
 
     // CSP is shipped REPORT-ONLY on purpose. Next's App Router injects inline
     // bootstrap scripts/styles, so a strict enforced policy needs nonces wired
