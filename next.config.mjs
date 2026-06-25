@@ -19,7 +19,44 @@ const nextConfig = {
   
   // Headers for caching and security
   async headers() {
+    // Supabase origin is needed for REST + realtime (wss) + storage images.
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseWss = supabaseUrl.replace(/^https/, 'wss');
+
+    // CSP is shipped REPORT-ONLY on purpose. Next's App Router injects inline
+    // bootstrap scripts/styles, so a strict enforced policy needs nonces wired
+    // through middleware first. Watch the browser console for violations in a
+    // real session, tighten the directives, THEN switch the header key to
+    // 'Content-Security-Policy' to enforce. Do not flip to enforce blind.
+    const csp = [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      "img-src 'self' data: blob: " + supabaseUrl,
+      "font-src 'self' data:",
+      "style-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-inline'",
+      "connect-src 'self' " + supabaseUrl + ' ' + supabaseWss,
+      "frame-src https://www.loom.com",
+    ].join('; ');
+
+    const securityHeaders = [
+      { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+      { key: 'X-Frame-Options', value: 'DENY' },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+      { key: 'Content-Security-Policy-Report-Only', value: csp },
+    ];
+
     return [
+      {
+        // Apply the security headers to every route (pages, API, assets).
+        source: '/(.*)',
+        headers: securityHeaders,
+      },
       {
         // API responses are per-user and authenticated. Default to no shared
         // caching so a CDN/proxy can never serve one user's data to another.

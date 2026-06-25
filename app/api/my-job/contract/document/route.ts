@@ -65,7 +65,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   const storagePath = `contracts/${target.clientId ?? "no-client"}/${userId}-${Date.now()}.pdf`;
   const { error: upErr } = await admin.storage.from("vault").upload(storagePath, file, { contentType: "application/pdf" });
-  if (upErr) return NextResponse.json({ error: "Upload failed: " + upErr.message }, { status: 500 });
+  if (upErr) return serverError(upErr, { userId: user.id, clientId: target.clientId });
 
   const { error: dbErr } = await admin.from("va_job_contracts").upsert(
     { user_id: userId, client_id: target.clientId, contract_path: storagePath, contract_name: file.name.slice(0, 200), updated_by: user.id, updated_at: new Date().toISOString() },

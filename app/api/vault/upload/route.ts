@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import { safeKeyName } from "@/lib/storage-keys";
 
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
+
+// Server-side allowlist. The browser `accept=` attribute is advisory only — a
+// crafted request can POST any blob — so the type is re-checked here by both
+// extension AND magic bytes for the binary formats. Never trust `file.type`.
+const ALLOWED_EXT = new Set(["pdf", "docx", "txt", "md", "csv"]);
 
 export const POST = withAuth(async (req, { user }) => {
   const form = await req.formData();
@@ -26,6 +32,23 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase();
+  if (!ext || !ALLOWED_EXT.has(ext)) {
+    return NextResponse.json(
+      { error: "Unsupported file type. Upload a PDF, DOCX, TXT, MD, or CSV." },
+      { status: 415 },
+    );
+  }
+  // Magic-byte sniff for the binary formats — don't let a renamed .exe through.
+  const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+  const isPdf = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46; // %PDF
+  const isZip = head[0] === 0x50 && head[1] === 0x4b && (head[2] === 0x03 || head[2] === 0x05 || head[2] === 0x07); // PK.. (docx = zip)
+  if (ext === "pdf" && !isPdf) {
+    return NextResponse.json({ error: "This file isn't a valid PDF." }, { status: 415 });
+  }
+  if (ext === "docx" && !isZip) {
+    return NextResponse.json({ error: "This file isn't a valid DOCX." }, { status: 415 });
+  }
+
   const sourceType = ext === "pdf" ? "pdf" : ext === "docx" ? "docx" : "text";
   const supabase = createAdminClient();
 
@@ -36,7 +59,7 @@ export const POST = withAuth(async (req, { user }) => {
     .upload(storagePath, file, { contentType: file.type });
 
   if (storageError) {
-    return NextResponse.json({ error: "Storage upload failed: " + storageError.message }, { status: 500 });
+    return serverError(storageError, { userId, clientId });
   }
 
   // Insert vault item
@@ -54,7 +77,7 @@ export const POST = withAuth(async (req, { user }) => {
     .single();
 
   if (insertError || !item) {
-    return NextResponse.json({ error: insertError?.message ?? "Insert failed" }, { status: 500 });
+    return serverError(insertError ?? new Error("Insert failed"), { userId, clientId });
   }
 
   const itemId = (item as { id: string }).id;
