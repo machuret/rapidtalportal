@@ -27,11 +27,13 @@ const nextConfig = {
     // `wss://host` — the realtime socket needs the wss origin listed explicitly.
     const supabaseWss = supabaseUrl.replace(/^https:/, 'wss:');
 
-    // CSP is shipped REPORT-ONLY on purpose. Next's App Router injects inline
-    // bootstrap scripts/styles, so a strict enforced policy needs nonces wired
-    // through middleware first. Watch the browser console for violations in a
-    // real session, tighten the directives, THEN switch the header key to
-    // 'Content-Security-Policy' to enforce. Do not flip to enforce blind.
+    // CSP is ENFORCING (validated report-only first against a real session: the
+    // only violation found was the Supabase realtime wss:// origin, now in
+    // connect-src). script-src/style-src keep 'unsafe-inline' because Next's App
+    // Router injects inline bootstrap; tightening that further needs per-request
+    // nonces wired through middleware. If you add a new external origin (a script,
+    // API, font, or iframe host), add it to the matching directive below or it
+    // will be BLOCKED — re-validate report-only before broad changes.
     const csp = [
       "default-src 'self'",
       "base-uri 'self'",
@@ -52,7 +54,7 @@ const nextConfig = {
       { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
       { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-      { key: 'Content-Security-Policy-Report-Only', value: csp },
+      { key: 'Content-Security-Policy', value: csp },
     ];
 
     return [
