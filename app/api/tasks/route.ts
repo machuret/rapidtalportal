@@ -44,6 +44,15 @@ async function categoryOk(admin: ReturnType<typeof createAdminClient>, categoryI
   return !!data;
 }
 
+// The assignee must belong to the task's client — otherwise an admin could assign
+// a task to a user UUID from another tenant, who would then pass the ownership
+// check (assigned_to === user.id) and gain read/edit/delete on a foreign card
+// (and receive a cross-tenant notification leaking the title/description).
+async function assigneeOk(admin: ReturnType<typeof createAdminClient>, userId: string, clientId: string): Promise<boolean> {
+  const { data } = await admin.from("users").select("id").eq("id", userId).eq("client_id", clientId).maybeSingle();
+  return !!data;
+}
+
 const deleteSchema = z.object({ id: z.string().uuid() });
 
 const SELECT = "id, client_id, assigned_to, created_by, title, description, status, order_index, due_date, priority, completed_at, category_id, created_at, updated_at";
@@ -78,6 +87,9 @@ export const POST = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   if (parsed.data.categoryId && !(await categoryOk(admin, parsed.data.categoryId, parsed.data.clientId))) {
     return NextResponse.json({ error: "Unknown category." }, { status: 422 });
+  }
+  if (assignedTo && !(await assigneeOk(admin, assignedTo, parsed.data.clientId))) {
+    return NextResponse.json({ error: "Assignee isn't a member of this client." }, { status: 422 });
   }
   const { data, error } = await admin
     .from("tasks")
@@ -154,7 +166,12 @@ export const PATCH = withAuth(async (req, { user }) => {
   const updates: Database["public"]["Tables"]["tasks"]["Update"] = { updated_at: new Date().toISOString() };
   if (parsed.data.title !== undefined) updates.title = parsed.data.title.trim();
   if (parsed.data.description !== undefined) updates.description = parsed.data.description;
-  if (parsed.data.assignedTo !== undefined) updates.assigned_to = parsed.data.assignedTo;
+  if (parsed.data.assignedTo !== undefined) {
+    if (parsed.data.assignedTo && !(await assigneeOk(admin, parsed.data.assignedTo, task.client_id))) {
+      return NextResponse.json({ error: "Assignee isn't a member of this client." }, { status: 422 });
+    }
+    updates.assigned_to = parsed.data.assignedTo;
+  }
   if (parsed.data.dueDate !== undefined) updates.due_date = parsed.data.dueDate;
   if (parsed.data.priority !== undefined) updates.priority = parsed.data.priority;
   if (parsed.data.categoryId !== undefined) {

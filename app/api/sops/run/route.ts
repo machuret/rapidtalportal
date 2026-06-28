@@ -26,9 +26,16 @@ export const POST = withAuth(async (req, { user }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
 
   const admin = createAdminClient();
-  // Pin the version the VA actually ran, for an accurate audit trail.
-  const { data: sop } = await admin.from("sops").select("version").eq("id", parsed.data.sopId).maybeSingle();
-  const sopVersion = (sop as { version: number } | null)?.version ?? null;
+  // Pin the version the VA actually ran, for an accurate audit trail. Only a SOP
+  // the caller can actually see may be referenced: a global SOP (client_id null)
+  // or one in their own client — never a foreign tenant's SOP (which would leak
+  // its version and pollute the caller's run analytics with a foreign sop_id).
+  const { data: sop } = await admin.from("sops").select("version, client_id").eq("id", parsed.data.sopId).maybeSingle();
+  const sopRow = sop as { version: number; client_id: string | null } | null;
+  if (!sopRow || (sopRow.client_id !== null && sopRow.client_id !== user.client_id && user.role !== "super_admin")) {
+    return NextResponse.json({ error: "SOP not found." }, { status: 404 });
+  }
+  const sopVersion = sopRow.version ?? null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)

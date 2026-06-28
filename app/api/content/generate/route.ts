@@ -8,11 +8,15 @@
  * (ai_original) so the Brain can later measure how much a human rewrote it
  * before approving — see Milestone D (learn from real outcomes). Best-effort.
  */
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { originRejected } from "@/lib/api/csrf";
 
 export async function POST(req: NextRequest) {
+  // Bypasses withAuth (proxies to the edge function, which verifies JWT + role +
+  // tenant), so run withAuth's CSRF origin check explicitly here.
+  if (originRejected(req)) return NextResponse.json({ error: "Cross-origin request blocked." }, { status: 403 });
   const body = await req.json();
   const resp = await proxyToEdgeFunction("content-generate", body);
 

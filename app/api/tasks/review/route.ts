@@ -87,4 +87,4 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   return NextResponse.json(data);
-});
+}, { roles: ["client_admin", "super_admin"] });
