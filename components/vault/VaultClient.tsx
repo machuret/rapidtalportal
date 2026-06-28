@@ -239,7 +239,7 @@ function VaultClientInner({
       <>
       {/* Stats strip */}
       {counts.total > 0 && (
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {[
             { label: "Total Items", value: counts.total,      color: "text-zinc-100" },
             { label: "Ready",       value: counts.ready,      color: "text-green-400" },

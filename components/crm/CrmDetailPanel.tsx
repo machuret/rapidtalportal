@@ -159,7 +159,7 @@ export function CrmDetailPanel({
   const sm = CRM_STATUS_META[contact.status];
 
   return (
-    <div className="w-96 shrink-0 flex flex-col rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden sticky top-4 self-start max-h-[calc(100vh-100px)]">
+    <div className="w-full lg:w-96 lg:shrink-0 flex flex-col rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden lg:sticky lg:top-4 self-start lg:max-h-[calc(100vh-100px)]">
       {/* Header */}
       <div className="px-5 py-4 border-b border-zinc-800 bg-zinc-900/80">
         <div className="flex items-start justify-between gap-2 mb-3">

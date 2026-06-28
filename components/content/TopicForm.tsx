@@ -90,7 +90,7 @@ export const TopicForm = memo(function TopicForm({
 
       <div className="flex flex-col gap-1.5">
         <Label>Content Type</Label>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {CONTENT_TYPES.map((ct) => {
             const Icon = TYPE_ICONS[ct.id];
             const isSelected = contentType === ct.id;

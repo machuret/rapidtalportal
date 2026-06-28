@@ -73,7 +73,7 @@ export default async function VaultKnowledgePage() {
       <PageIntro id="knowledge-base" />
 
       {/* Stats strip */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <div className="surface-card px-5 py-4">
           <div className="flex items-center gap-2 mb-2">
             <BookOpen className="w-4 h-4 text-blue-400 shrink-0" />

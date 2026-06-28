@@ -78,7 +78,7 @@ export function CrmBoard({ contacts: initial, clientId, isAdmin }: CrmBoardProps
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex gap-6 min-h-[600px]">
+    <div className="flex flex-col lg:flex-row gap-6 min-h-[600px]">
 
       {/* ── Left: contact list ──────────────────────────────────────────── */}
       <div className="flex flex-col flex-1 min-w-0">

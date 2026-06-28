@@ -101,7 +101,7 @@ export function AdminPlacements({
       </div>
 
       {/* Metadata table */}
-      <div className="surface-card overflow-hidden">
+      <div className="surface-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="text-xs text-zinc-500 border-b border-zinc-800">
             <tr>
