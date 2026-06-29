@@ -18,7 +18,7 @@ import { originRejected } from "@/lib/api/csrf";
 // JSON handlers are unaffected.
 type AuthedHandler<P> = (
   req: NextRequest,
-  ctx: { user: ApiUser; params: P },
+  ctx: { user: ApiUser; actualUser?: ApiUser; impersonating?: boolean; params: P },
 ) => Promise<Response> | Response;
 
 export function withAuth<P = Record<string, never>>(
@@ -35,12 +35,18 @@ export function withAuth<P = Record<string, never>>(
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
     try {
-      return await handler(req, { user: auth.user, params: (routeCtx?.params ?? {}) as P });
+      return await handler(req, {
+        user: auth.user,
+        actualUser: auth.actualUser,
+        impersonating: auth.impersonating,
+        params: (routeCtx?.params ?? {}) as P,
+      });
     } catch (err) {
       // One catch instruments every wrapped route: the error is recorded for
       // /admin/errors and the caller gets a clean 500 instead of a crash page.
+      // Attribute to the real actor when impersonating, not the viewed-as target.
       captureError("api", err, {
-        userId: auth.user.id,
+        userId: auth.actualUser?.id ?? auth.user.id,
         clientId: auth.user.client_id,
         url: req.nextUrl?.pathname,
       });

@@ -4,9 +4,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { DbUser, DbClient } from "@/types/database";
+// Canonical name lives in lib/impersonation (dependency-free). Imported for use
+// below and re-exported so existing `import { IMPERSONATE_COOKIE } from "@/lib/auth"`
+// callers keep working.
+import { IMPERSONATE_COOKIE } from "@/lib/impersonation";
 
-/** Cookie holding the user id a super_admin is currently impersonating. */
-export const IMPERSONATE_COOKIE = "rt_impersonate";
+export { IMPERSONATE_COOKIE };
 
 const USER_COLUMNS =
   "id, email, full_name, role, client_id, created_at, phone, birthday, avatar_url, timezone";

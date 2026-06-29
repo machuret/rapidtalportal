@@ -73,15 +73,17 @@ export const POST = withSuperAdmin(async (req, { user }) => {
   return res;
 });
 
-export const DELETE = withAuth(async (_req, { user }) => {
-  // Record who we were viewing as (read before clearing) — only if the real
-  // user is a super_admin, mirroring how lib/auth honours the cookie.
+export const DELETE = withAuth(async (_req, { user, actualUser }) => {
+  // While impersonating, requireApiAuth returns the TARGET as `user` and the real
+  // super_admin as `actualUser`; when not impersonating, actualUser is undefined
+  // and `user` is the real caller. Audit the stop against the real admin either way.
+  const realUser = actualUser ?? user;
   const targetId = cookies().get(IMPERSONATE_COOKIE)?.value ?? null;
-  if (targetId && user.role === "super_admin") {
+  if (targetId && realUser.role === "super_admin") {
     const admin = createAdminClient();
     const { data: target } = await admin.from("users").select("email").eq("id", targetId).single();
     await logImpersonation(admin, {
-      actor_id: user.id,
+      actor_id: realUser.id,
       target_id: targetId,
       target_email: (target as { email: string } | null)?.email ?? null,
       action: "stop",
