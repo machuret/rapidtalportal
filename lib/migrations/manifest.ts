@@ -88,4 +88,5 @@ export const MIGRATIONS = [
   "080_notification_prefs.sql",
   "081_help_videos.sql",
   "082_health_vault_tallies.sql",
+  "083_leave_overlap_constraint.sql",
 ] as const;

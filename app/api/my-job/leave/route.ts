@@ -63,7 +63,15 @@ export const POST = withAuth(async (req, { user }) => {
     .insert({ user_id: user.id, client_id: user.client_id, ...parsed.data })
     .select("*")
     .single();
-  if (error) return serverError(error);
+  if (error) {
+    // 23P01 = exclusion violation (va_leave_no_overlap, migration 083): a
+    // concurrent request slipped past the SELECT above — the race the code
+    // check alone can't close. Same friendly message as the fast-path.
+    if (error.code === "23P01") {
+      return NextResponse.json({ error: "You already have a leave request overlapping those dates." }, { status: 409 });
+    }
+    return serverError(error);
+  }
 
   if (user.client_id) {
     const [admins, { data: me }] = await Promise.all([
