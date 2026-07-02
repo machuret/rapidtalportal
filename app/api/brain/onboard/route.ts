@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
+import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { profileGaps } from "@/lib/brain/gaps";
 import { chatProvider, chatModel } from "@/lib/brain/llm";
@@ -30,6 +31,9 @@ export const POST = withAuth(async (req, { user }) => {
   if (user.role !== "client_admin" && user.role !== "super_admin") {
     return NextResponse.json({ error: "Only admins can edit the company profile." }, { status: 403 });
   }
+
+  const rl = aiGenerateLimiter.check(`onboard:${user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   const llm = chatProvider();
   if (!llm) return NextResponse.json({ error: "AI not configured (set OPENROUTER_API_KEY or OPENAI_API_KEY)." }, { status: 500 });

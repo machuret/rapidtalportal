@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
+import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderPrompt } from "@/lib/prompts/server";
 import { buildBrainContext } from "@/lib/brain/context";
@@ -56,6 +57,9 @@ const FIT_THRESHOLD = Number(process.env.BRAIN_FIT_THRESHOLD ?? 55);
 const VALID_TYPES = new Set(["email", "social", "newsletter", "blog"]);
 
 export const POST = withAuth(async (req, { user }) => {
+  const rl = aiGenerateLimiter.check(`topics:${user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
+
   let body: unknown;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }

@@ -82,3 +82,21 @@ export const sopAiLimiter = new SlidingWindowLimiter(30, 10 * 60_000);
 
 // Tools hub (SEO etc.) — each run is a paid LLM call. Generous for real work.
 export const toolsLimiter = new SlidingWindowLimiter(40, 10 * 60_000);
+
+// AI generation surface — content pieces, content topics, KB articles, and the
+// Brain onboarding draft. Each is a paid LLM call; without a cap an authenticated
+// user could hammer generation and run up an unbounded bill. Generous for real
+// iterative work (~4/min sustained), fatal to a runaway loop.
+export const aiGenerateLimiter = new SlidingWindowLimiter(20, 5 * 60_000);
+
+// Company DNA scrape — a Firecrawl fetch plus LLM synthesis. Rarely re-run.
+export const scrapeLimiter = new SlidingWindowLimiter(6, 15 * 60_000);
+
+// Vault ingestion (upload/URL) — parse + embedding fan-out per document. High
+// enough for a genuine bulk-upload session, low enough to stop a flood of paid
+// indexing from one caller.
+export const vaultUploadLimiter = new SlidingWindowLimiter(40, 5 * 60_000);
+
+// Sending a message — fans out in-app notifications AND email to recipients, so
+// it's an email-bomb / spam vector. Plenty for a real conversation.
+export const messageSendLimiter = new SlidingWindowLimiter(30, 5 * 60_000);

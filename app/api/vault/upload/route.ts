@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
+import { vaultUploadLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import { safeKeyName } from "@/lib/storage-keys";
 
@@ -15,6 +16,9 @@ const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
 const ALLOWED_EXT = new Set(["pdf", "docx", "txt", "md", "csv"]);
 
 export const POST = withAuth(async (req, { user }) => {
+  const rl = vaultUploadLimiter.check(`upload:${user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
+
   const form = await req.formData();
   const file = form.get("file") as File | null;
   const title = (form.get("title") as string) || file?.name || "Untitled";

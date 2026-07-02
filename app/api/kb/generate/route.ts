@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
+import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 
 const bodySchema = z.object({
@@ -14,6 +15,9 @@ export const POST = withAuth(async (req, { user }) => {
   if (user.role === "va") {
     return NextResponse.json({ error: "Forbidden. Only admins can regenerate the knowledge base." }, { status: 403 });
   }
+
+  const rl = aiGenerateLimiter.check(`kb:${user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   let body: unknown;
   try { body = await req.json(); }

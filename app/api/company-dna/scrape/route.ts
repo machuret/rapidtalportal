@@ -9,6 +9,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
+import { scrapeLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 
 const schema = z.object({
@@ -34,6 +35,9 @@ export const POST = withAuth(async (req: NextRequest, { user }) => {
 
   const denied = assertClientAccess(user, parsed.data.clientId);
   if (denied) return denied;
+
+  const rl = scrapeLimiter.check(`dna:${user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   if (isBlockedUrl(parsed.data.url)) {
     return NextResponse.json({ error: "Only public https URLs can be scraped." }, { status: 422 });
