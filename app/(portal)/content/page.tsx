@@ -48,6 +48,7 @@ export default async function ContentPage() {
       <ContentStudio
         clientId={user.client_id}
         canApprove={canApprove}
+        canManageCompetitors={["client_admin", "super_admin"].includes(user.role)}
         brandStyle={(brandStyle ?? {}) as Record<string, unknown>}
         history={(history ?? []) as ContentPiece[]}
         topics={(topics ?? []) as ContentTopic[]}

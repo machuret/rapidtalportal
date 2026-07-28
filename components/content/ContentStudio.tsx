@@ -5,19 +5,22 @@ import type { ContentPiece, ContentTopic, ContentType } from "@/types/content";
 import { TopicsTab } from "./TopicsTab";
 import { CreateTab } from "./CreateTab";
 import { HistoryTab } from "./HistoryTab";
+import { CompetitorsTab } from "./CompetitorsTab";
 import { ContentErrorBoundary } from "./ErrorBoundary";
 
-type Tab = "topics" | "create" | "history";
+type Tab = "topics" | "create" | "history" | "competitors";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "topics", label: "💡 Generate ideas" },
   { id: "create", label: "✍️ Write from a topic" },
   { id: "history", label: "🕐 History" },
+  { id: "competitors", label: "📡 Competitors" },
 ];
 
 interface ContentStudioProps {
   clientId: string;
   canApprove: boolean;
+  canManageCompetitors: boolean;
   brandStyle: Record<string, unknown>;
   history: ContentPiece[];
   topics: ContentTopic[];
@@ -26,6 +29,7 @@ interface ContentStudioProps {
 function ContentStudioInner({
   clientId,
   canApprove,
+  canManageCompetitors,
   brandStyle,
   history: initialHistory,
   topics: initialTopics,
@@ -56,7 +60,7 @@ function ContentStudioInner({
   return (
     <div>
       {/* Tab bar */}
-      <div className="flex gap-1 mb-6 p-1 bg-zinc-900 border border-zinc-800 rounded-lg w-fit">
+      <div className="flex flex-wrap gap-1 mb-6 p-1 bg-zinc-900 border border-zinc-800 rounded-lg w-fit max-w-full">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -102,6 +106,12 @@ function ContentStudioInner({
           canApprove={canApprove}
           onHistoryUpdate={setHistory}
         />
+      </div>
+
+      <div className={activeTab === "competitors" ? "" : "hidden"}>
+        <ContentErrorBoundary>
+          <CompetitorsTab clientId={clientId} canManage={canManageCompetitors} />
+        </ContentErrorBoundary>
       </div>
     </div>
   );

@@ -1,5 +1,15 @@
 # Competitor Content Analysis for the Content Suite
 
+## Delivery status
+
+Phase 1 source collection is implemented in migration 095 and the Content
+workspace. Client and super admins can add competitors; attach website, blog,
+single-page, sitemap, feed, newsletter-archive and social-profile URLs; choose
+exact, path or domain scope; set page limits and refresh cadence; and inspect
+source health and recent captures. Website sources use leased, versioned crawl
+jobs. Social and YouTube URLs are registered as `connector_required` until an
+approved API, connector or user-provided export is available.
+
 ## Product position
 
 Competitor analysis should be a market-intelligence layer, not a writing authority.

@@ -100,4 +100,5 @@ export const MIGRATIONS = [
   "092_unified_content_workspace.sql",
   "093_atomic_content_rewrites.sql",
   "094_structured_content_hard_rules.sql",
+  "095_competitor_source_foundation.sql",
 ] as const;

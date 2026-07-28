@@ -23,6 +23,19 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireApiAuth, type ApiUser } from "@/lib/api-auth";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { POST as adapt } from "@/app/api/content/adapt/route";
+import {
+  DELETE as deleteCompetitor,
+  GET as getCompetitors,
+  PATCH as patchCompetitor,
+  POST as createCompetitor,
+} from "@/app/api/content/competitors/route";
+import { POST as startCompetitorCrawl } from "@/app/api/content/competitors/crawl/route";
+import { POST as advanceCompetitorCrawl } from "@/app/api/content/competitors/crawl/advance/route";
+import {
+  DELETE as deleteCompetitorSource,
+  PATCH as patchCompetitorSource,
+  POST as createCompetitorSource,
+} from "@/app/api/content/competitors/sources/route";
 import { POST as duplicate } from "@/app/api/content/duplicate/route";
 import { POST as generate } from "@/app/api/content/generate/route";
 import {
@@ -44,11 +57,14 @@ const CLIENT_A = "11111111-1111-4111-8111-111111111111";
 const CLIENT_B = "22222222-2222-4222-8222-222222222222";
 const PIECE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const TOPIC_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const COMPETITOR_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const SOURCE_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+const CRAWL_ID = "99999999-9999-4999-8999-999999999999";
 const UPDATED_AT = "2026-07-28T01:00:00.000Z";
 const routeCtx = { params: Promise.resolve({}) };
 const user: ApiUser = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-  role: "va",
+  role: "client_admin",
   client_id: CLIENT_A,
 };
 
@@ -67,6 +83,73 @@ const cases: { endpoint: string; call: () => Promise<Response> }[] = [
       client_id: CLIENT_B,
       id: PIECE_ID,
       target_type: "facebook",
+    }), routeCtx),
+  },
+  {
+    endpoint: "competitors:GET",
+    call: () => getCompetitors(
+      new NextRequest(`https://portal.test/api/content/competitors?client_id=${CLIENT_B}`),
+      routeCtx,
+    ),
+  },
+  {
+    endpoint: "competitors:POST",
+    call: () => createCompetitor(jsonRequest("https://portal.test/api/content/competitors", {
+      client_id: CLIENT_B,
+      name: "Other tenant competitor",
+      website_url: "https://example.com",
+    }), routeCtx),
+  },
+  {
+    endpoint: "competitors:PATCH",
+    call: () => patchCompetitor(jsonRequest("https://portal.test/api/content/competitors", {
+      client_id: CLIENT_B,
+      id: COMPETITOR_ID,
+      name: "Changed",
+    }), routeCtx),
+  },
+  {
+    endpoint: "competitors:DELETE",
+    call: () => deleteCompetitor(jsonRequest("https://portal.test/api/content/competitors", {
+      client_id: CLIENT_B,
+      id: COMPETITOR_ID,
+    }), routeCtx),
+  },
+  {
+    endpoint: "competitors/sources:POST",
+    call: () => createCompetitorSource(jsonRequest("https://portal.test/api/content/competitors/sources", {
+      client_id: CLIENT_B,
+      competitor_id: COMPETITOR_ID,
+      url: "https://example.com/blog",
+    }), routeCtx),
+  },
+  {
+    endpoint: "competitors/sources:PATCH",
+    call: () => patchCompetitorSource(jsonRequest("https://portal.test/api/content/competitors/sources", {
+      client_id: CLIENT_B,
+      id: SOURCE_ID,
+      status: "paused",
+    }), routeCtx),
+  },
+  {
+    endpoint: "competitors/sources:DELETE",
+    call: () => deleteCompetitorSource(jsonRequest("https://portal.test/api/content/competitors/sources", {
+      client_id: CLIENT_B,
+      id: SOURCE_ID,
+    }), routeCtx),
+  },
+  {
+    endpoint: "competitors/crawl:POST",
+    call: () => startCompetitorCrawl(jsonRequest("https://portal.test/api/content/competitors/crawl", {
+      client_id: CLIENT_B,
+      source_id: SOURCE_ID,
+    }), routeCtx),
+  },
+  {
+    endpoint: "competitors/crawl/advance:POST",
+    call: () => advanceCompetitorCrawl(jsonRequest("https://portal.test/api/content/competitors/crawl/advance", {
+      client_id: CLIENT_B,
+      job_id: CRAWL_ID,
     }), routeCtx),
   },
   {

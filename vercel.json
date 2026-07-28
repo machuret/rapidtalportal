@@ -17,6 +17,10 @@
     {
       "path": "/api/cron/error-alert",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/competitor-sources",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

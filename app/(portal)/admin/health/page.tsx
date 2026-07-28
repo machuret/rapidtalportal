@@ -72,6 +72,7 @@ export default async function AdminHealthPage() {
     { name: "vault-index", staleAfterH: 1 },   // every 15 min
     { name: "brain-distill", staleAfterH: 26 }, // daily at 02:30
     { name: "error-alert", staleAfterH: 2 },   // every 30 min (spike alerting)
+    { name: "competitor-sources", staleAfterH: 1 }, // every 15 min
   ];
   const beatByName = new Map(((beats ?? []) as { name: string; ran_at: string; detail: Record<string, unknown> }[]).map((b) => [b.name, b]));
 
