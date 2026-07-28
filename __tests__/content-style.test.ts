@@ -44,6 +44,7 @@ describe("content brand style", () => {
     expect(contentStyleWarnings("Our cheap service guarantees guaranteed results, without qualification.", style)).toEqual([
       "Review prohibited phrase: “cheap”",
       "Review prohibited phrase: “guaranteed results, without qualification”",
+      "Review prohibited phrase: “guaranteed results”",
     ]);
   });
 

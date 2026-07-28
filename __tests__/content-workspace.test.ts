@@ -9,6 +9,7 @@ const read = (file: string) => readFileSync(path.join(root, file), "utf8");
 describe("unified content engine", () => {
   const generator = read("supabase/functions/content-generate/index.ts");
   const retrieval = read("supabase/functions/_shared/content-vault-retrieval.ts");
+  const quality = read("supabase/functions/_shared/content-quality.ts");
   const compose = read("components/vault/ComposeClient.tsx");
   const generateRoute = read("app/api/content/generate/route.ts");
 
@@ -29,7 +30,7 @@ describe("unified content engine", () => {
     expect(generateRoute).toContain("keyPoints:");
     expect(generateRoute).toContain("callToAction:");
     expect(generateRoute).not.toContain('"instagram",\n    "social",');
-    expect(generator).toContain("Do not write Facebook or Instagram variants.");
+    expect(quality).toContain("Do not write Facebook or Instagram variants.");
     expect(generator).not.toContain("Write three clearly labelled variants");
   });
 
@@ -40,6 +41,15 @@ describe("unified content engine", () => {
     expect(generator).toContain("styleSnapshot,");
     expect(generator).toContain("sources: verifiedSources");
     expect(generator).toContain("sourceItemIds");
+  });
+
+  test("quality validation runs before persistence and preserves section-only rewriting", () => {
+    expect(generator).toContain("contentQualityWarnings({");
+    expect(generator).toContain("The generated draft did not pass the content quality gate. No draft was created.");
+    expect(generator.indexOf("if (qualityWarnings.length)")).toBeLessThan(
+      generator.indexOf("if (persist)"),
+    );
+    expect(generator).toContain("enforceStructure: !sectionOnlyRewrite");
   });
 });
 

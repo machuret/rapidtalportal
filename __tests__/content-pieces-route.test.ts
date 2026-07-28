@@ -49,7 +49,11 @@ function makeAdmin(options?: {
         client_id: CLIENT_A,
         content_type: "linkedin",
         title: "Draft",
-        body: "A useful practical update.",
+        body: `A useful practical update.
+
+Clear ownership makes the next step easier to understand.
+
+What would you improve first?`,
         status: "draft",
         updated_at: UPDATED_AT,
         created_by: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -73,7 +77,11 @@ function makeAdmin(options?: {
         id: PIECE_ID,
         content_type: "linkedin",
         title: "Draft",
-        body: "A useful practical update.",
+        body: `A useful practical update.
+
+Clear ownership makes the next step easier to understand.
+
+What would you improve first?`,
         status: "approved",
         style_snapshot: {},
         created_by: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -140,6 +148,39 @@ describe("content piece integrity", () => {
         "Review prohibited phrase: “cheap”",
         "Review prohibited phrase: “guaranteed results”",
       ]),
+    });
+    expect(admin.rpc).not.toHaveBeenCalled();
+  });
+
+  test("blocks unsupported factual claims before approval", async () => {
+    const admin = makeAdmin({
+      piece: {
+        data: {
+          id: PIECE_ID,
+          content_type: "linkedin",
+          body: `Save 30% in 7 days.
+
+Our process makes the next step clear.
+
+Would you like to learn more?`,
+          status: "draft",
+          updated_at: UPDATED_AT,
+          source_references: [],
+        },
+        error: null,
+      },
+    });
+    (createAdminClient as jest.Mock).mockReturnValue(admin);
+
+    const response = await PATCH(jsonReq({
+      client_id: CLIENT_A,
+      id: PIECE_ID,
+      status: "approved",
+    }), routeCtx);
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      warnings: ["Unsupported factual claim: “Save 30% in 7 days.”"],
     });
     expect(admin.rpc).not.toHaveBeenCalled();
   });

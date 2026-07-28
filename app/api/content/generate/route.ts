@@ -9,7 +9,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
-import { requireApiAuth } from "@/lib/api-auth";
+import { assertClientAccess, requireApiAuth } from "@/lib/api-auth";
 import { originRejected } from "@/lib/api/csrf";
 import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { z } from "zod";
@@ -80,6 +80,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid content brief." }, { status: 422 });
   }
+  const denied = assertClientAccess(auth.user, parsed.data.clientId);
+  if (denied) return denied;
   const body = {
     ...parsed.data,
     brief: typeof parsed.data.brief === "string"

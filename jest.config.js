@@ -23,10 +23,10 @@ const customJestConfig = {
   // Raise these numbers as route-handler integration coverage expands.
   coverageThreshold: {
     global: {
-      statements: 16.5,
-      branches: 14,
-      functions: 23,
-      lines: 17.5,
+      statements: 18,
+      branches: 14.5,
+      functions: 24,
+      lines: 19,
     },
   },
 }

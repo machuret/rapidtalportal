@@ -6,10 +6,13 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notifications";
 import {
-  contentStyleWarnings,
   createContentStyleSnapshot,
   resolveContentStyle,
 } from "@/supabase/functions/_shared/content-style";
+import {
+  claimSupportFromDna,
+  contentQualityWarnings,
+} from "@/supabase/functions/_shared/content-quality";
 
 const querySchema = z.object({
   client_id: z.string().uuid(),
@@ -171,7 +174,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: current, error: currentError } = await (admin as any)
     .from("content_pieces")
-    .select("content_type, body, status, updated_at")
+    .select("content_type, body, status, updated_at, source_references")
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
     .single();
@@ -186,7 +189,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: dna, error: dnaError } = await (admin as any)
       .from("company_dna")
-      .select("updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles")
+      .select("company_name,services,location,team,tools_used,extra,updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles")
       .eq("client_id", parsed.data.client_id)
       .maybeSingle();
     if (dnaError) return serverError(dnaError);
@@ -199,10 +202,24 @@ export const PATCH = withAuth(async (req, { user }) => {
       return NextResponse.json({ error: "A content body is required before approval." }, { status: 422 });
     }
     const style = resolveContentStyle(dna, current.content_type, "Company-approved tone", "");
-    const warnings = contentStyleWarnings(finalBody, style);
+    const sourceExcerpts = Array.isArray(current.source_references)
+      ? current.source_references
+        .map((source: unknown) => {
+          if (!source || typeof source !== "object") return "";
+          const excerpt = (source as Record<string, unknown>).excerpt;
+          return typeof excerpt === "string" ? excerpt : "";
+        })
+        .filter(Boolean)
+      : [];
+    const warnings = contentQualityWarnings({
+      body: finalBody,
+      contentType: current.content_type,
+      style,
+      claimSupportText: claimSupportFromDna(dna, sourceExcerpts),
+    });
     if (warnings.length) {
       return NextResponse.json({
-        error: "This draft violates an enforced Company DNA rule.",
+        error: "This draft violates an enforced content quality rule.",
         warnings,
       }, { status: 422 });
     }

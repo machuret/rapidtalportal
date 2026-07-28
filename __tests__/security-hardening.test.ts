@@ -120,7 +120,7 @@ describe("content approval and style integrity", () => {
     expect(migration).toContain("p_style_snapshot IS NULL");
     expect(migration).toContain("FROM PUBLIC, anon, authenticated");
     expect(migration).toContain("TO service_role");
-    expect(piecesRoute).toContain("contentStyleWarnings(finalBody, style)");
+    expect(piecesRoute).toContain("contentQualityWarnings({");
     expect(piecesRoute).toContain("createContentStyleSnapshot(style, current.content_type");
   });
 
@@ -142,12 +142,14 @@ describe("content approval and style integrity", () => {
     expect(generator).toContain("Vault context is temporarily unavailable");
     expect(retrieval).toContain("if (vaultError)");
     expect(generator).toContain("if (memoryError)");
-    expect(generator).toContain('content: `${style.prompt}\\n\\n${context}');
+    expect(generator).toContain('content: `${style.prompt}\\n\\n=== PLATFORM OUTPUT CONTRACT ===');
+    expect(generator).toContain("${context}\\n=== STRUCTURED BRIEF ===");
   });
 
   test("X is supported and combined multi-platform generation is rejected", () => {
+    const quality = read("supabase/functions/_shared/content-quality.ts");
     expect(migration).toContain("'email', 'x', 'linkedin'");
-    expect(generator).toContain("x: `Write one X / Twitter post within 280 characters.");
+    expect(quality).toContain('x: "Write one X / Twitter post within 280 characters.');
     expect(generator).not.toContain("social: `Write three clearly labelled variants");
     expect(generator).not.toContain('"instagram", "social", "newsletter"');
   });

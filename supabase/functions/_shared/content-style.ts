@@ -45,6 +45,19 @@ function splitClaims(value: string): string[] {
   ).slice(0, 100);
 }
 
+function explicitHardRulePhrases(value: string): string[] {
+  return value
+    .split(/[\n.;]+/)
+    .map((part) => part.trim())
+    .map((part) => {
+      const match = part.match(
+        /^(?:never|do not|don't|must not|avoid)\s+(?:ever\s+)?(?:(?:use|say|mention|include|claim|promise|write)\s+)?(.+)$/iu,
+      );
+      return match?.[1]?.replace(/[.!]+$/u, "").trim() ?? "";
+    })
+    .filter((part) => part.length >= 2 && part.length <= 160);
+}
+
 function emojiIsDisallowed(policy: string): boolean {
   const normalized = policy.toLocaleLowerCase().trim();
   return (
@@ -124,6 +137,7 @@ export function resolveContentStyle(
     prohibitedPhrases: Array.from(new Set([
       ...splitTerms(text(dna, "prohibited_terms")),
       ...splitClaims(text(dna, "prohibited_claims")),
+      ...explicitHardRulePhrases(text(dna, "internal_rules")),
     ])),
     disallowEmoji: emojiIsDisallowed(text(dna, "emoji_policy")),
   };
