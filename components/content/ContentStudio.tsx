@@ -17,16 +17,16 @@ const TABS: { id: Tab; label: string }[] = [
 
 interface ContentStudioProps {
   clientId: string;
-  userId: string;
   canApprove: boolean;
+  brandStyle: Record<string, unknown>;
   history: ContentPiece[];
   topics: ContentTopic[];
 }
 
 function ContentStudioInner({
   clientId,
-  userId,
   canApprove,
+  brandStyle,
   history: initialHistory,
   topics: initialTopics,
 }: ContentStudioProps) {
@@ -87,7 +87,7 @@ function ContentStudioInner({
       <div className={activeTab === "create" ? "" : "hidden"}>
         <CreateTab
           clientId={clientId}
-          userId={userId}
+          brandStyle={brandStyle}
           initialType={(prefill?.type ?? null) as ContentType | null}
           initialTitle={prefill?.title}
           initialBrief={prefill?.brief}

@@ -13,7 +13,8 @@ const MOOD_LABEL: Record<string, string> = {
   great: "😄 Great", good: "🙂 Good", neutral: "😐 Neutral", difficult: "😕 Difficult", overwhelmed: "😩 Overwhelmed",
 };
 
-export default async function SupervisionDetailPage({ params }: { params: { id: string } }) {
+export default async function SupervisionDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;

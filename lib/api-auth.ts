@@ -55,7 +55,7 @@ async function resolveIdentity(userId: string): Promise<ApiUser | null> {
  * withSuperAdmin routes 403, tenant scoping follows the target's client).
  */
 export async function requireApiAuth(): Promise<AuthedContext | { error: NextResponse }> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

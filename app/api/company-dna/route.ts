@@ -27,6 +27,17 @@ const bodySchema = z.object({
   website_content:    z.string().max(20000).optional().nullable(),
   content_style:      z.string().max(4000).optional().nullable(),
   internal_rules:     z.string().max(4000).optional().nullable(),
+  // Deliberate content-style authority (migration 087). These rules are applied
+  // before any per-draft tone request.
+  preferred_terms:    z.string().max(4000).optional().nullable(),
+  prohibited_terms:   z.string().max(4000).optional().nullable(),
+  emoji_policy:       z.string().max(2000).optional().nullable(),
+  humour_policy:      z.string().max(2000).optional().nullable(),
+  spelling_locale:    z.string().max(200).optional().nullable(),
+  default_cta_style:  z.string().max(2000).optional().nullable(),
+  approved_claims:    z.string().max(6000).optional().nullable(),
+  prohibited_claims:  z.string().max(6000).optional().nullable(),
+  channel_styles:     z.record(z.string(), z.string().max(4000)).optional(),
   // extra is a NOT NULL JSONB column — must be present on first INSERT
   extra:              z.record(z.string(), z.unknown()).optional().default({}),
 });

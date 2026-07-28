@@ -1,31 +1,75 @@
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
+import { randomBytes } from "crypto";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Load .env.local manually
+// Load .env.local manually when present; CI/one-off operators can supply the
+// same values directly through the environment.
 const envPath = resolve(__dirname, "../.env.local");
-const envFile = readFileSync(envPath, "utf8");
-for (const line of envFile.split("\n")) {
-  const [key, ...rest] = line.split("=");
-  if (key && rest.length) process.env[key.trim()] = rest.join("=").trim();
+if (existsSync(envPath)) {
+  const envFile = readFileSync(envPath, "utf8");
+  for (const line of envFile.split("\n")) {
+    const [key, ...rest] = line.split("=");
+    if (key && rest.length && process.env[key.trim()] === undefined) {
+      process.env[key.trim()] = rest.join("=").trim();
+    }
+  }
+}
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
+}
+
+const target = new URL(supabaseUrl);
+const isLocalTarget = ["localhost", "127.0.0.1", "::1"].includes(target.hostname);
+if (!isLocalTarget) {
+  const projectRef = target.hostname.endsWith(".supabase.co")
+    ? target.hostname.slice(0, -".supabase.co".length)
+    : "";
+  const expected = process.env.SEED_EXPECTED_PROJECT_REF;
+  if (
+    process.env.SEED_ALLOW_REMOTE !== "true"
+    || !expected
+    || !projectRef
+    || projectRef !== expected
+  ) {
+    throw new Error(
+      "Refusing to seed a remote database. Set SEED_ALLOW_REMOTE=true and " +
+      "SEED_EXPECTED_PROJECT_REF to the exact target project ref.",
+    );
+  }
 }
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  supabaseUrl,
+  serviceRoleKey,
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
 const DEMO_CLIENT_NAME = "Demo Client Inc.";
 const DEMO_CLIENT_SLUG = "demo-client-inc";
 
+function passwordFor(envName) {
+  const supplied = process.env[envName];
+  if (supplied) {
+    if (supplied.length < 12) throw new Error(`${envName} must be at least 12 characters.`);
+    return supplied;
+  }
+  if (!isLocalTarget) {
+    throw new Error(`${envName} is required when seeding a remote project.`);
+  }
+  return randomBytes(18).toString("base64url");
+}
+
 const USERS = [
-  { email: "admin@rapidtile.local", password: "Admin1234!", role: "super_admin",   full_name: "Super Admin",  clientSlug: null },
-  { email: "client@rapidtile.local", password: "Client1234!", role: "client_admin", full_name: "Client Admin", clientSlug: DEMO_CLIENT_SLUG },
-  { email: "va@rapidtile.local",     password: "Va1234!",     role: "va",           full_name: "Demo VA",      clientSlug: DEMO_CLIENT_SLUG },
+  { email: "admin@rapidtile.local", password: passwordFor("SEED_ADMIN_PASSWORD"), role: "super_admin", full_name: "Super Admin", clientSlug: null },
+  { email: "client@rapidtile.local", password: passwordFor("SEED_CLIENT_PASSWORD"), role: "client_admin", full_name: "Client Admin", clientSlug: DEMO_CLIENT_SLUG },
+  { email: "va@rapidtile.local", password: passwordFor("SEED_VA_PASSWORD"), role: "va", full_name: "Demo VA", clientSlug: DEMO_CLIENT_SLUG },
 ];
 
 async function main() {
@@ -108,9 +152,11 @@ Contact us at hello@democlient.com.au or +61 2 9000 0000.`,
   console.log("Vault item seeded.");
 
   console.log("\n✅ Seed complete!\n");
-  console.log("Login credentials:");
+  console.log(isLocalTarget ? "Generated local login credentials:" : "Seeded login accounts (passwords supplied through the environment):");
   for (const u of USERS) {
-    console.log(`  ${u.email}  /  ${u.password}  (${u.role})`);
+    console.log(isLocalTarget
+      ? `  ${u.email}  /  ${u.password}  (${u.role})`
+      : `  ${u.email}  (${u.role})`);
   }
 }
 

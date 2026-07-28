@@ -12,7 +12,8 @@ export const metadata = { title: "Ask as Client — RapidTal" };
 // Admin-only spot-check: ask any client's Business Brain exactly what their
 // team would ask, and see what it actually answers. The ask routes already
 // authorize super_admin on any client via assertClientAccess.
-export default async function AdminAskPage({ searchParams }: { searchParams: { client?: string } }) {
+export default async function AdminAskPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ client?: string }> }) {
+  const searchParams = await searchParamsPromise;
   await requireSuperAdmin();
 
   const admin = createAdminClient();

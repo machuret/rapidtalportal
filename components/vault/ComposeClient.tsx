@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
@@ -8,17 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BrainFeedback } from "@/components/brain/BrainFeedback";
-import { LocalTime } from "@/components/ui/LocalTime";
 import { cn } from "@/lib/utils";
+import type { ContentBrief, ContentSourceReference, ContentType } from "@/types/content";
 import {
   Wand2, Loader2, Copy, Check, RefreshCw, Reply, Mail, MessageSquare, Megaphone,
-  FileText, Bookmark, Trash2, Sparkles, Users, ChevronDown, X, ShieldCheck, AlertTriangle,
+  FileText, Sparkles, Users, ChevronDown, X, ShieldCheck, AlertTriangle, Save,
 } from "lucide-react";
 
 export interface ComposeContact { id: string; name: string; company: string | null; email: string | null }
-
-interface Source { n: number; kind: string; kindLabel: string; title: string; itemId: string | null }
-interface AskResponse { answer: string; sources: Source[] }
 
 type Channel = "email" | "message" | "social" | "other";
 type Mode = "new" | "reply";
@@ -57,58 +54,22 @@ const LENGTHS: { id: string; label: string; hint: string }[] = [
   { id: "detailed", label: "Detailed", hint: "thorough and well-structured" },
 ];
 
-interface Variant { text: string; loading: boolean; sources: Source[] }
-interface SavedDraft { id: string; label: string; text: string; ts: number }
+interface Variant {
+  id: string | null;
+  updatedAt: string | null;
+  text: string;
+  loading: boolean;
+  sources: ContentSourceReference[];
+  appliedStyle: string[];
+}
 
 function splitEmail(text: string): { subject: string | null; body: string } {
   const m = text.match(/^\s*subject:\s*(.+?)\r?\n([\s\S]*)$/i);
   return m ? { subject: m[1].trim(), body: m[2].trim() } : { subject: null, body: text };
 }
 
-/** Stream a draft from /api/vault/ask-stream, calling onText with the growing text. */
-async function streamDraft(
-  clientId: string,
-  question: string,
-  history: { question: string; answer: string }[],
-  onText: (t: string) => void,
-): Promise<{ ok: boolean; text: string; sources: Source[] }> {
-  let text = "";
-  let sources: Source[] = [];
-  try {
-    const res = await fetch("/api/vault/ask-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId, question, history }),
-    });
-    if (!res.ok || !res.body) return { ok: false, text: "", sources: [] };
-    const sh = res.headers.get("X-Vault-Sources");
-    if (sh) { try { sources = JSON.parse(decodeURIComponent(escape(atob(sh)))); } catch { /* ignore */ } }
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const lines = buf.split("\n");
-      buf = lines.pop() ?? "";
-      for (const line of lines) {
-        const l = line.trim();
-        if (!l.startsWith("data:")) continue;
-        const d = l.slice(5).trim();
-        if (d === "[DONE]") continue;
-        try { const delta = JSON.parse(d)?.choices?.[0]?.delta?.content; if (delta) { text += delta; onText(text); } }
-        catch { /* partial */ }
-      }
-    }
-    return { ok: text.length > 0, text, sources };
-  } catch {
-    return { ok: false, text: "", sources: [] };
-  }
-}
-
 export function ComposeClient({
-  clientId, companyName, brandVoice, signOff, contacts = [],
+  clientId, companyName, contacts = [],
 }: {
   clientId: string;
   companyName: string;
@@ -122,7 +83,6 @@ export function ComposeClient({
   const [tone, setTone] = useState<string>("Professional");
   const [length, setLength] = useState("standard");
   const [language, setLanguage] = useState<string>("Auto");
-  const [count, setCount] = useState<1 | 3>(1);
 
   const [task, setTask] = useState("");
   const [inbound, setInbound] = useState("");
@@ -135,108 +95,109 @@ export function ComposeClient({
 
   const [variants, setVariants] = useState<Variant[]>([]);
   const [active, setActive] = useState(0);
-  const [lastInstruction, setLastInstruction] = useState("");
   const [refine, setRefine] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
-
-  const [saved, setSaved] = useState<SavedDraft[]>([]);
-  const storeKey = `compose-drafts:${clientId}`;
 
   // Fact-safety check (per active variant index → result)
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<{ idx: number; unverified: string[] } | null>(null);
-  const [promoting, setPromoting] = useState(false);
-
-  useEffect(() => {
-    try { setSaved(JSON.parse(localStorage.getItem(storeKey) ?? "[]")); } catch { /* ignore */ }
-  }, [storeKey]);
 
   const busy = variants.some((v) => v.loading);
   const platformMeta = PLATFORMS.find((p) => p.id === platform)!;
   const limit = channel === "social" ? platformMeta.limit : null;
 
-  // ── Prompt building ──────────────────────────────────────────────────────
-  function channelNoun(): string {
-    if (channel === "email") return "email";
-    if (channel === "social") return `${platform} post`;
-    if (channel === "message") return "message";
-    return "message";
-  }
-  function constraints(): string {
-    const lengthHint = LENGTHS.find((l) => l.id === length)!.hint;
-    const parts = [`Tone: ${tone}.`, `Length: ${lengthHint}.`];
-    if (channel === "email") parts.push("Start with a single line 'Subject: <concise subject>', then a blank line, then the email body.");
-    if (channel === "social") parts.push(`Keep it under ${limit} characters. Add 2–4 relevant hashtags at the end.`);
-    if (channel === "message") parts.push("Keep it conversational and brief, suitable for a chat/WhatsApp message.");
-    if (language === "Auto") {
-      if (mode === "reply") parts.push("Reply in the same language the customer wrote in.");
-    } else {
-      parts.push(`Write it in ${language}.`);
-    }
-    if (recipient?.name) parts.push(`Address the recipient by name: ${recipient.name}${recipient.company ? ` (${recipient.company})` : ""}.`);
-    if (brandVoice?.trim()) parts.push(`Match this brand voice: ${brandVoice.trim()}`);
-    if (signOff?.trim()) parts.push(`Sign off as: ${signOff.trim()}`);
-    return parts.join(" ");
-  }
-  function baseInstruction(): string {
-    const noun = channelNoun();
-    if (mode === "reply") {
-      return `A customer or contact sent ${companyName} this message:
-"""
-${inbound.trim()}
-"""
-${guidance.trim() ? `Extra guidance for the reply: ${guidance.trim()}\n` : ""}Draft a helpful, professional ${noun} reply on behalf of ${companyName}, in our voice and tone, addressing their specific questions using our real services, details and policies from the company knowledge. ${constraints()} Plain text only — no markdown. If a specific detail isn't in our knowledge, leave a clear [placeholder] instead of inventing it. Output only the reply.`;
-    }
-    return `You are drafting a ${noun} on behalf of ${companyName}.
-Task: ${task.trim()}
-
-Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our real services, details and policies from the company knowledge. ${constraints()} Plain text only — no markdown. If a specific detail (a name, date or price) isn't in our knowledge, leave a clear [placeholder] instead of inventing it. Output only the draft.`;
+  function resolvedContentType(): ContentType {
+    if (channel === "social") return platform.toLowerCase() as ContentType;
+    return channel;
   }
 
   const canCompose = mode === "new" ? task.trim().length >= 5 : inbound.trim().length >= 5;
 
   async function compose() {
     if (busy || !canCompose) return;
-    const instruction = baseInstruction();
-    setLastInstruction(instruction);
     setActive(0);
     setRefine("");
+    setVariants([{ id: null, updatedAt: null, text: "", loading: true, sources: [], appliedStyle: [] }]);
 
-    if (count === 1) {
-      setVariants([{ text: "", loading: true, sources: [] }]);
-      const r = await streamDraft(clientId, instruction, [], (t) =>
-        setVariants([{ text: t, loading: true, sources: [] }]));
-      if (r.ok) setVariants([{ text: r.text, loading: false, sources: r.sources }]);
-      else {
-        // Fallback to non-streaming.
-        try {
-          const res = await api.post<AskResponse>(ROUTES.vault.ask(), { clientId, question: instruction });
-          setVariants([{ text: res.answer, loading: false, sources: res.sources ?? [] }]);
-        } catch { setVariants([]); }
-      }
-    } else {
-      setVariants([0, 1, 2].map(() => ({ text: "", loading: true, sources: [] })));
-      const nudge = ["", "\n\nGive a distinctly different angle from a standard version.", "\n\nTake a third, noticeably different approach in structure and wording."];
-      await Promise.all([0, 1, 2].map(async (i) => {
-        try {
-          const res = await api.post<AskResponse>(ROUTES.vault.ask(), { clientId, question: instruction + nudge[i] });
-          setVariants((prev) => prev.map((v, idx) => (idx === i ? { text: res.answer, loading: false, sources: res.sources ?? [] } : v)));
-        } catch {
-          setVariants((prev) => prev.map((v, idx) => (idx === i ? { ...v, loading: false, text: "Couldn't generate this option." } : v)));
-        }
-      }));
+    const contentType = resolvedContentType();
+    const objective = mode === "reply"
+      ? guidance.trim() || "Reply helpfully to the inbound message."
+      : task.trim();
+    const brief: ContentBrief = {
+      version: 1,
+      objective,
+      audience: recipient
+        ? `${recipient.name}${recipient.company ? ` at ${recipient.company}` : ""}`
+        : null,
+      keyPoints: [],
+      callToAction: null,
+      language: language === "Auto" ? null : language,
+      tone: tone.toLowerCase() as ContentBrief["tone"],
+      length: length === "standard" ? "medium" : length === "detailed" ? "long" : "short",
+      mode,
+      inboundContext: mode === "reply" ? inbound.trim() : null,
+      additionalGuidance: guidance.trim() || null,
+      recipient: recipient
+        ? { id: recipient.id, name: recipient.name, company: recipient.company }
+        : null,
+    };
+    const title = mode === "reply"
+      ? `Reply to ${recipient?.name ?? "customer"}`
+      : task.trim().split("\n")[0].slice(0, 120);
+
+    try {
+      const result = await api.post<{
+        id: string;
+        updatedAt?: string | null;
+        body: string;
+        sources?: ContentSourceReference[];
+        appliedStyle?: string[];
+      }>("/content/generate", { clientId, contentType, title, brief });
+      setVariants([{
+        id: result.id,
+        updatedAt: result.updatedAt ?? null,
+        text: result.body,
+        loading: false,
+        sources: result.sources ?? [],
+        appliedStyle: result.appliedStyle ?? [],
+      }]);
+      toast.success("Draft created and saved to Content.");
+    } catch {
+      setVariants([]);
     }
   }
 
   async function doRefine() {
-    if (refine.trim().length < 2 || busy || !variants[active]) return;
-    const instruction = `Refine the draft based on this instruction, keeping it ready to send and respecting the same channel and tone: ${refine.trim()}`;
-    const history = [{ question: lastInstruction, answer: variants[active].text }];
+    const current = variants[active];
+    if (refine.trim().length < 2 || busy || !current?.id) return;
+    const instruction = refine.trim();
     setRefine("");
     setVariants((prev) => prev.map((v, i) => (i === active ? { ...v, loading: true } : v)));
-    const r = await streamDraft(clientId, instruction, history, (t) =>
-      setVariants((prev) => prev.map((v, i) => (i === active ? { ...v, text: t } : v))));
-    setVariants((prev) => prev.map((v, i) => (i === active ? { text: r.ok ? r.text : v.text, loading: false, sources: r.sources.length ? r.sources : v.sources } : v)));
+    try {
+      const result = await api.post<{ body: string; updated_at?: string; sources?: ContentSourceReference[] }>(
+        "/content/rewrite",
+        {
+          client_id: clientId,
+          id: current.id,
+          scope: "full",
+          instruction,
+          expected_updated_at: current.updatedAt,
+        },
+      );
+      setVariants((prev) => prev.map((variant, index) =>
+        index === active
+          ? {
+              ...variant,
+              text: result.body,
+              updatedAt: result.updated_at ?? variant.updatedAt,
+              loading: false,
+              sources: result.sources ?? variant.sources,
+            }
+          : variant));
+    } catch {
+      setVariants((prev) => prev.map((variant, index) =>
+        index === active ? { ...variant, loading: false } : variant));
+    }
   }
 
   async function copyText(key: string, text: string) {
@@ -245,27 +206,6 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
     setCopied(key);
     toast.success("Copied to clipboard.");
     setTimeout(() => setCopied((c) => (c === key ? null : c)), 1800);
-  }
-
-  function saveDraft() {
-    const cur = variants[active];
-    if (!cur?.text) return;
-    const label = (channel === "email" ? splitEmail(cur.text).subject : null)
-      ?? cur.text.split("\n").find(Boolean)?.slice(0, 60) ?? "Draft";
-    const entry: SavedDraft = { id: `${Date.now()}`, label, text: cur.text, ts: Date.now() };
-    const next = [entry, ...saved].slice(0, 20);
-    setSaved(next);
-    try { localStorage.setItem(storeKey, JSON.stringify(next)); } catch { /* ignore */ }
-    toast.success("Draft saved.");
-  }
-  function removeSaved(id: string) {
-    const next = saved.filter((s) => s.id !== id);
-    setSaved(next);
-    try { localStorage.setItem(storeKey, JSON.stringify(next)); } catch { /* ignore */ }
-  }
-  function restore(d: SavedDraft) {
-    setVariants([{ text: d.text, loading: false, sources: [] }]);
-    setActive(0);
   }
 
   async function checkDraft() {
@@ -282,23 +222,6 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
       toast.error("Couldn't run the check.");
     } finally {
       setChecking(false);
-    }
-  }
-
-  async function promoteToContent() {
-    const cur = variants[active];
-    if (!cur?.text || promoting) return;
-    setPromoting(true);
-    try {
-      const e = channel === "email" ? splitEmail(cur.text) : null;
-      const title = e?.subject ?? cur.text.split("\n").find(Boolean)?.slice(0, 120) ?? "Untitled draft";
-      const content_type = channel === "social" ? "social" : channel === "email" ? "email" : "other";
-      await api.post(ROUTES.content.pieces(), {
-        client_id: clientId, content_type, title, brief: task || guidance || null, body: cur.text,
-      });
-      toast.success("Saved to Content as a draft — review & approve it there.");
-    } catch { /* api-client toasts */ } finally {
-      setPromoting(false);
     }
   }
 
@@ -327,7 +250,7 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Compose</h1>
           <p className="text-zinc-400 text-sm mt-1">
-            Channel-aware drafts in {companyName}&apos;s voice — pick a format, tone and length, get options to choose from.
+            Channel-aware drafts in {companyName}&apos;s voice — choose a format, tone and length, then create one ready-to-edit artifact.
           </p>
         </div>
       </div>
@@ -368,8 +291,8 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
         </div>
       )}
 
-      {/* Tone + length + language + count */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+      {/* Tone + length + language */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
         <div>
           <p className="label-section mb-1.5">Tone</p>
           <select value={tone} onChange={(e) => setTone(e.target.value)} className="w-full h-9 rounded-md border border-zinc-700 bg-zinc-800 text-zinc-100 px-3 text-sm">
@@ -387,18 +310,6 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
           <select value={language} onChange={(e) => setLanguage(e.target.value)} className="w-full h-9 rounded-md border border-zinc-700 bg-zinc-800 text-zinc-100 px-3 text-sm">
             {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
-        </div>
-        <div>
-          <p className="label-section mb-1.5">Options</p>
-          <div className="flex gap-1.5">
-            {([1, 3] as const).map((n) => (
-              <button key={n} onClick={() => setCount(n)}
-                className={cn("flex-1 h-9 rounded-md border text-sm font-medium transition-colors",
-                  count === n ? "bg-zinc-700 text-white border-zinc-700" : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200")}>
-                {n === 1 ? "1" : "3"}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -470,7 +381,7 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
 
       <Button onClick={compose} disabled={busy || !canCompose} className="gap-1.5">
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-        {mode === "reply" ? "Draft reply" : "Draft it"}{count === 3 ? " ×3" : ""}
+        {mode === "reply" ? "Draft reply" : "Draft it"}
       </Button>
 
       {/* Output */}
@@ -498,18 +409,16 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
                     <button onClick={checkDraft} disabled={checking} className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
                       {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />} Check facts
                     </button>
-                    <button onClick={promoteToContent} disabled={promoting} className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
-                      {promoting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} Save to Content
-                    </button>
-                    <button onClick={saveDraft} className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
-                      <Bookmark className="w-3.5 h-3.5" /> Save
-                    </button>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-green-400">
+                      <Save className="w-3.5 h-3.5" /> Saved to Content
+                    </span>
                   </>
                 )}
                 {current && !current.loading && (
                   <BrainFeedback clientId={clientId} surface="compose"
+                    artifactId={current.id}
                     artifactText={email ? email.body : current?.text ?? ""}
-                    context={{ channel }} />
+                    context={{ channel, platform: channel === "social" ? platform : null }} />
                 )}
                 <button onClick={() => copyText("all", email ? `${email.subject ? `Subject: ${email.subject}\n\n` : ""}${email.body}` : current?.text ?? "")}
                   className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
@@ -577,12 +486,23 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
 
             {/* Sources */}
             {current && current.sources.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {current.sources.map((s) => (
-                  <span key={s.n} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400" title={s.kindLabel}>
-                    <span className="text-3xs uppercase tracking-wide text-zinc-500">{s.kindLabel}</span>
-                    <span className="truncate max-w-[14rem]">{s.title}</span>
-                  </span>
+              <div className="mt-3">
+                <p className="text-xs font-medium text-zinc-500 mb-1.5">Vault sources</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {current.sources.map((source) => (
+                    <span key={`${source.kind}:${source.itemId}`} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400" title={source.excerpt}>
+                      <span className="text-3xs uppercase tracking-wide text-zinc-500">{source.kind === "semantic" ? "Relevant" : "Vault"}</span>
+                      <span className="truncate max-w-[14rem]">{source.title}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {current && current.appliedStyle.length > 0 && (
+              <div className="mt-3 rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2">
+                <p className="text-xs font-medium text-purple-300 mb-1">Applied Company DNA</p>
+                {current.appliedStyle.map((rule) => (
+                  <p key={rule} className="text-xs text-zinc-500">{rule}</p>
                 ))}
               </div>
             )}
@@ -590,23 +510,6 @@ Write a polished, ready-to-send ${noun} in ${companyName}'s voice, using our rea
         </div>
       )}
 
-      {/* Saved drafts */}
-      {saved.length > 0 && (
-        <div className="mt-6">
-          <p className="label-section mb-2">Saved drafts</p>
-          <div className="flex flex-col gap-1.5">
-            {saved.map((d) => (
-              <div key={d.id} className="surface-card flex items-center gap-3 px-3.5 py-2.5">
-                <button onClick={() => restore(d)} className="flex-1 min-w-0 text-left">
-                  <p className="text-sm text-zinc-200 truncate">{d.label}</p>
-                  <LocalTime value={d.ts} opts={{ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }} className="text-2xs text-zinc-500" />
-                </button>
-                <button onClick={() => removeSaved(d.id)} className="text-zinc-600 hover:text-red-400 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

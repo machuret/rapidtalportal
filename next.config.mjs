@@ -93,19 +93,6 @@ const nextConfig = {
   // browser blocked it (CORS) → "Failed to fetch". The middleware matcher
   // already excludes /api, so page navigations canonicalise but API calls don't.
 
-  // Webpack tweaks. NOTE: do not override optimization.splitChunks here — a
-  // previous "vendors" override merged ALL of node_modules into one 442 kB
-  // chunk every page had to download (recharts shipped to pages that never
-  // chart). Next's default granular chunking splits per page.
-  webpack: (config) => {
-    // canvas is an optional native dep of pdfjs-dist — not needed in serverless
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      canvas: false,
-    };
-    return config;
-  },
-  
   // Power by headers
   poweredByHeader: false,
 };

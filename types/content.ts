@@ -3,13 +3,69 @@
  * Single source of truth for content domain types
  */
 
-import { Mail, Share2, Newspaper, BookText } from "lucide-react";
+import {
+  Mail,
+  Share2,
+  Newspaper,
+  BookText,
+  BriefcaseBusiness,
+  Users,
+  Camera,
+  MessageSquare,
+  FileText,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type ContentType = "email" | "social" | "newsletter" | "blog";
+export type ContentType =
+  | "email"
+  | "x"
+  | "linkedin"
+  | "facebook"
+  | "instagram"
+  | "newsletter"
+  | "blog"
+  | "message"
+  | "other"
+  | "social"; // legacy combined-social rows remain readable
 export type TopicStatus = "pending" | "approved" | "rejected";
 export type ContentStatus = "draft" | "approved" | "archived";
-export type ContentOutcome = "win" | "miss";
+export type ContentLength = "short" | "medium" | "long";
+export type ContentTone =
+  | "professional"
+  | "friendly"
+  | "persuasive"
+  | "casual"
+  | "authoritative"
+  | "warm"
+  | "direct"
+  | "playful";
+
+export interface ContentBrief {
+  version: 1;
+  objective: string;
+  audience?: string | null;
+  keyPoints?: string[];
+  callToAction?: string | null;
+  language?: string | null;
+  tone: ContentTone;
+  length: ContentLength;
+  mode?: "new" | "reply";
+  inboundContext?: string | null;
+  additionalGuidance?: string | null;
+  recipient?: {
+    id?: string | null;
+    name: string;
+    company?: string | null;
+  } | null;
+}
+
+export interface ContentSourceReference {
+  itemId: string;
+  title: string;
+  kind: "semantic" | "vault_item";
+  excerpt: string;
+  similarity?: number | null;
+}
 
 export interface ContentTopic {
   id: string;
@@ -28,8 +84,17 @@ export interface ContentPiece {
   content_type: ContentType;
   title: string;
   body?: string | null;
+  style_snapshot?: {
+    channel?: string;
+    summary?: string[];
+    companyDnaUpdatedAt?: string | null;
+    capturedAt?: string;
+  } | null;
+  content_brief?: ContentBrief | null;
+  source_references?: ContentSourceReference[];
+  parent_piece_id?: string | null;
+  generation_kind?: "original" | "reply" | "rewrite" | "duplicate" | "adaptation" | "manual";
   status: ContentStatus;
-  outcome?: ContentOutcome | null;
   created_at: string;
 }
 
@@ -58,18 +123,18 @@ export interface BrainWhy {
 
 export interface ContentGenerationParams {
   clientId: string;
-  userId: string;
   contentType: ContentType;
   title: string;
-  brief: string;
-  tone: string;
-  length: "short" | "medium" | "long";
+  brief: ContentBrief;
 }
 
 // Constants as const assertions for type safety
 export const CONTENT_TYPES = [
-  { id: "email" as const, label: "Email", desc: "Professional business email with CTA" },
-  { id: "social" as const, label: "Social Media", desc: "LinkedIn, Facebook & Instagram variants" },
+  { id: "email" as const, label: "Email", desc: "Business email with a clear CTA" },
+  { id: "x" as const, label: "X / Twitter", desc: "Concise post within the 280-character limit" },
+  { id: "linkedin" as const, label: "LinkedIn", desc: "Professional post for one clear audience" },
+  { id: "facebook" as const, label: "Facebook", desc: "Conversational community-focused post" },
+  { id: "instagram" as const, label: "Instagram", desc: "Caption with visual direction and hashtags" },
   { id: "newsletter" as const, label: "Newsletter", desc: "Client newsletter with sections & CTA" },
   { id: "blog" as const, label: "Blog Post", desc: "SEO-friendly article with subheadings" },
 ];
@@ -91,9 +156,15 @@ export const LENGTHS = [
 // Style constants with proper typing
 export const TYPE_ICON_COLORS: Record<ContentType, string> = {
   email: "text-blue-400",
+  x: "text-zinc-200",
+  linkedin: "text-sky-400",
+  facebook: "text-blue-500",
+  instagram: "text-fuchsia-400",
   social: "text-pink-400",
   newsletter: "text-amber-400",
   blog: "text-green-400",
+  message: "text-teal-400",
+  other: "text-zinc-400",
 };
 
 export const STATUS_STYLES: Record<TopicStatus, string> = {
@@ -110,7 +181,13 @@ export const CONTENT_STATUS_STYLES: Record<ContentStatus, string> = {
 
 export const TYPE_ICONS: Record<ContentType, LucideIcon> = {
   email: Mail,
+  x: Share2,
+  linkedin: BriefcaseBusiness,
+  facebook: Users,
+  instagram: Camera,
   social: Share2,
   newsletter: Newspaper,
   blog: BookText,
+  message: MessageSquare,
+  other: FileText,
 };

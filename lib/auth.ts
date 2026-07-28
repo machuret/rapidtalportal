@@ -47,7 +47,7 @@ async function loadClient(admin: any, clientId: string | null): Promise<DbClient
  */
 export const getCurrentUserAndClient = cache(
   async (): Promise<CurrentUserAndClient | null> => {
-    const supabase = createClient();
+    const supabase = await createClient();
     const {
       data: { user: authUser },
       error: authError,
@@ -68,7 +68,7 @@ export const getCurrentUserAndClient = cache(
     const realUser = userRow as DbUser;
 
     // ── Impersonation (super_admin only) ──────────────────────────────────────
-    const impersonateId = cookies().get(IMPERSONATE_COOKIE)?.value;
+    const impersonateId = (await cookies()).get(IMPERSONATE_COOKIE)?.value;
     if (realUser.role === "super_admin" && impersonateId && impersonateId !== realUser.id) {
       const { data: targetRow } = await admin
         .from("users")

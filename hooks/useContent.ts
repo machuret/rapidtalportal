@@ -3,7 +3,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import { toast } from "sonner";
-import type { ContentPiece, ContentStatus, ContentType } from "@/types/content";
+import type {
+  ContentBrief,
+  ContentPiece,
+  ContentSourceReference,
+  ContentStatus,
+  ContentType,
+} from "@/types/content";
 
 const PIECES_KEY = "content-pieces";
 
@@ -16,24 +22,35 @@ export interface ContentPieceFull extends ContentPiece {
 
 interface GenerationResponse {
   id: string;
+  updatedAt?: string | null;
   body: string;
   critique?: { issues: string[]; grounded: boolean };
+  appliedStyle?: string[];
+  styleSnapshot?: ContentPiece["style_snapshot"];
+  sources?: ContentSourceReference[];
+  warnings?: string[];
 }
 
 interface GenerateContentInput {
   clientId: string;
-  userId: string;
   contentType: ContentType;
   title: string;
-  brief: string;
-  tone: string;
-  length: "short" | "medium" | "long";
+  brief: ContentBrief;
 }
 
 interface UpdatePieceStatusInput {
   client_id: string;
   id: string;
   status: ContentStatus;
+  expected_updated_at?: string;
+}
+
+interface UpdateContentPieceInput {
+  client_id: string;
+  id: string;
+  title?: string;
+  body?: string | null;
+  expected_updated_at?: string;
 }
 
 // Query Keys
@@ -64,8 +81,12 @@ async function generateContent(
 // Update piece status
 async function updatePieceStatus(
   input: UpdatePieceStatusInput
-): Promise<void> {
-  return api.patch("/api/content/pieces", input);
+): Promise<ContentPieceFull> {
+  return api.patch<ContentPieceFull>("/api/content/pieces", input);
+}
+
+async function updateContentPiece(input: UpdateContentPieceInput): Promise<ContentPieceFull> {
+  return api.patch<ContentPieceFull>("/api/content/pieces", input);
 }
 
 // Hook: lazily fetch a content piece's full detail.
@@ -102,9 +123,14 @@ export function useUpdatePieceStatus() {
 
   const mutation = useMutation({
     mutationFn: updatePieceStatus,
-    onSuccess: (_, variables) => {
+    onSuccess: (piece, variables) => {
+      queryClient.setQueryData(pieceKeys.detail(variables.client_id, variables.id), piece);
       toast.success(
-        `Content ${variables.status === "approved" ? "approved" : "archived"}`
+        variables.status === "approved"
+          ? "Content approved"
+          : variables.status === "archived"
+            ? "Content archived"
+            : "Content restored to draft"
       );
     },
     onError: (err) => {
@@ -119,6 +145,24 @@ export function useUpdatePieceStatus() {
 
   return {
     updateStatus: mutation.mutateAsync,
+    isUpdating: mutation.isPending,
+  };
+}
+
+export function useUpdateContentPiece() {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: updateContentPiece,
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to save draft");
+    },
+    onSuccess: (piece, variables) => {
+      queryClient.setQueryData(pieceKeys.detail(variables.client_id, variables.id), piece);
+      queryClient.invalidateQueries({ queryKey: pieceKeys.byClient(variables.client_id) });
+    },
+  });
+  return {
+    updatePiece: mutation.mutateAsync,
     isUpdating: mutation.isPending,
   };
 }

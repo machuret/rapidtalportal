@@ -16,7 +16,7 @@ export default async function PortalLayout({
   children: React.ReactNode;
 }) {
   // First check if there is an auth session at all
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user: authUser } } = await supabase.auth.getUser();
 
   // No session → go to login

@@ -14,11 +14,9 @@ export default async function ContentPage() {
 
   const { user } = ctx;
   if (!user.client_id) redirect("/dashboard");
-  // VA tool — clients drive this through their VA, not directly.
-  if (user.role === "client_admin") redirect("/dashboard");
 
   const admin = createAdminClient();
-  const [{ data: history }, { data: topics }] = await Promise.all([
+  const [{ data: history }, { data: topics }, { data: brandStyle }] = await Promise.all([
     admin
       .from("content_pieces")
       .select("id, content_type, title, status, created_at")
@@ -30,11 +28,15 @@ export default async function ContentPage() {
       .select("id, title, description, content_type, status, created_at, created_by")
       .eq("client_id", user.client_id)
       .order("created_at", { ascending: false }),
+    admin
+      .from("company_dna")
+      .select("brand_voice, content_style, internal_rules, sign_off, preferred_terms, prohibited_terms, emoji_policy, humour_policy, spelling_locale, default_cta_style, approved_claims, prohibited_claims, channel_styles")
+      .eq("client_id", user.client_id)
+      .maybeSingle(),
   ]);
 
-  // VAs run this tool end-to-end: they create AND approve their own client's
-  // content. super_admin retains approval too. (client_admin is redirected above.)
-  const canApprove = user.role === "va" || user.role === "super_admin";
+  // VAs run this tool end-to-end; client and super admins retain approval too.
+  const canApprove = ["va", "client_admin", "super_admin"].includes(user.role);
 
   return (
     <div>
@@ -45,8 +47,8 @@ export default async function ContentPage() {
       <PageIntro id="content" />
       <ContentStudio
         clientId={user.client_id}
-        userId={user.id}
         canApprove={canApprove}
+        brandStyle={(brandStyle ?? {}) as Record<string, unknown>}
         history={(history ?? []) as ContentPiece[]}
         topics={(topics ?? []) as ContentTopic[]}
       />

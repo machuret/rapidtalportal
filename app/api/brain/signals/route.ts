@@ -53,6 +53,10 @@ export const POST = withAuth(async (req, { user }) => {
           artifact_text: parsed.data.artifact_text,
           context:       parsed.data.context ?? {},
           distilled_at:  null,
+          // Invalidate an in-flight distillation of the old judgement. Its
+          // transactional commit will lose ownership and roll back.
+          distill_claim_token: null,
+          distill_claim_until: null,
           created_at:    new Date().toISOString(),
         })
         .eq("id", existing.id)

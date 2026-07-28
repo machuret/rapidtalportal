@@ -5,7 +5,8 @@ import { buildClientReport, recentMonths } from "./report-data";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Monthly Report — RapidTal" };
 
-export default async function ReportsPage({ searchParams }: { searchParams: { month?: string } }) {
+export default async function ReportsPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ month?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const { user, client } = await requireClientAdmin();
 
   const months = recentMonths(6);

@@ -33,6 +33,7 @@ export const maxDuration = 60;
 
 const INGEST_BATCH = 8;   // pages classified/stored per tick
 const MAP_BATCH = 5;      // core pages summarized per LLM call
+const CRAWL_LEASE_SECONDS = 90; // longer than maxDuration; expires after a killed request
 const MAP_MODEL = "openai/gpt-4o-mini";
 const SYNTHESIS_MODEL = "openai/gpt-4o"; // runs once per site — quality over cost
 
@@ -67,6 +68,8 @@ interface CrawlJob {
   tokens_used: number;
   dossier_item_id: string | null;
   meta: JobMeta;
+  lease_token: string | null;
+  lease_until: string | null;
   updated_at: string;
 }
 
@@ -118,29 +121,32 @@ export const POST = withAuth(async (req, { user }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
 
   const admin = createAdminClient();
-  const { data: jobRow } = await admin.from("crawl_jobs").select("*").eq("id", parsed.data.jobId).maybeSingle();
+  const { data: jobRow, error: jobError } = await admin.from("crawl_jobs").select("*").eq("id", parsed.data.jobId).maybeSingle();
+  if (jobError) return serverError(jobError);
   if (!jobRow) return NextResponse.json({ error: "Job not found." }, { status: 404 });
-  const job = jobRow as unknown as CrawlJob;
+  const loadedJob = jobRow as unknown as CrawlJob;
 
-  const denied = assertClientAccess(user, job.client_id);
+  const denied = assertClientAccess(user, loadedJob.client_id);
   if (denied) return denied;
 
-  if (job.status === "done" || job.status === "error") {
-    return NextResponse.json({ job });
+  if (loadedJob.status === "done" || loadedJob.status === "error") {
+    return NextResponse.json({ job: loadedJob });
   }
 
-  // Optimistic claim: only one concurrent tick proceeds. A second poller gets
-  // the current state back and tries again next interval.
-  const claimStamp = new Date().toISOString();
-  const { data: claimed } = await admin
-    .from("crawl_jobs")
-    .update({ updated_at: claimStamp })
-    .eq("id", job.id)
-    .eq("updated_at", job.updated_at)
-    .select("id");
-  if (!claimed || claimed.length === 0) {
-    return NextResponse.json({ job });
+  // Atomic expiring lease: only the returned token may checkpoint this tick.
+  // Multiple tabs/users can poll safely; non-owners simply receive current state.
+  const { data: claimedRows, error: claimError } = await admin.rpc("claim_crawl_job", {
+    p_job_id: loadedJob.id,
+    p_lease_seconds: CRAWL_LEASE_SECONDS,
+  });
+  if (claimError) return serverError(claimError);
+  const claimed = (claimedRows ?? []) as unknown as CrawlJob[];
+  if (claimed.length === 0) {
+    return NextResponse.json({ job: loadedJob });
   }
+  const job = claimed[0];
+  const leaseToken = job.lease_token;
+  if (!leaseToken) return NextResponse.json({ error: "Crawl lease did not return a token." }, { status: 500 });
 
   const meta: JobMeta = job.meta ?? {};
   type JobPatch = import("@/types/database").Database["public"]["Tables"]["crawl_jobs"]["Update"];
@@ -385,11 +391,18 @@ export const POST = withAuth(async (req, { user }) => {
   patch.updated_at = new Date().toISOString();
   const { data: updated, error: updateError } = await admin
     .from("crawl_jobs")
-    .update(patch)
+    .update({ ...patch, lease_token: null, lease_until: null })
     .eq("id", job.id)
+    .eq("lease_token", leaseToken)
     .select("*")
-    .single();
+    .maybeSingle();
   if (updateError) return serverError(updateError);
+  if (!updated) {
+    // The lease expired and another worker claimed the job. Never overwrite its
+    // checkpoint; return its current state and let the next UI poll continue.
+    const { data: current } = await admin.from("crawl_jobs").select("*").eq("id", job.id).maybeSingle();
+    return NextResponse.json({ job: current ?? loadedJob, leaseLost: true });
+  }
 
   // Crawls take minutes — tell whoever started it when it lands (or fails).
   if ((patch.status === "done" || patch.status === "error") && job.created_by) {

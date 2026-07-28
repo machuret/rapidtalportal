@@ -470,7 +470,7 @@ Generate diverse, high-quality content topic ideas that:
 - Are grounded in the actual company information provided
 - Cover multiple content angles: thought leadership, educational, promotional, storytelling, how-to
 - Are specific and actionable, not generic
-- Span a mix of content types (blog, email, social, newsletter)
+- Span a mix of content types (blog, email, X/Twitter, LinkedIn, Facebook, Instagram, newsletter)
 - Would genuinely attract and help their target audience
 
 Return ONLY valid JSON — no markdown, no explanation:
@@ -479,7 +479,7 @@ Return ONLY valid JSON — no markdown, no explanation:
     {
       "title": "Short compelling topic title (max 100 chars)",
       "description": "2–3 sentence brief: what this piece covers, who it's for, key angle or hook",
-      "content_type": "blog" | "email" | "social" | "newsletter",
+      "content_type": "blog" | "email" | "x" | "linkedin" | "facebook" | "instagram" | "newsletter",
       "rationale": "One sentence on why this topic is relevant given the company's content"
     }
   ]
@@ -489,12 +489,12 @@ Return ONLY valid JSON — no markdown, no explanation:
     slug: "content.generate",
     title: "Content Generator",
     group: "Content",
-    description: "Compose: brief → email / social / newsletter / blog draft, grounded in Company DNA + Vault. NOTE: served by the content-generate edge function — edits are live once it's deployed with override support.",
+    description: "Brief → channel-specific email / X / LinkedIn / Facebook / Instagram / newsletter / blog draft, grounded in Company DNA + Vault. Company DNA guidance is prepended by the Edge Function; prohibited phrases and no-emoji policies are also checked deterministically.",
     model: "gpt-4o-mini",
     variables: [
       { name: "tone", description: "Tone selected by the user (e.g. professional)." },
       { name: "length_hint", description: "Length guidance from the short/medium/long selector." },
-      { name: "type_prompt", description: "Format-specific structure block for the chosen content type (email/social/newsletter/blog)." },
+      { name: "type_prompt", description: "Format-specific structure block for the chosen content type and platform." },
     ],
     template: `You are an expert content writer for a business.
 Use the company context and reference material provided to write content that is authentic and on-brand.

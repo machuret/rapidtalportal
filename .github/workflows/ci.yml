@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Audit production dependencies
+        run: pnpm run audit:prod
+
       - name: Type-check
         run: pnpm exec tsc --noEmit
 
@@ -36,8 +39,8 @@ jobs:
       - name: Styles guard
         run: pnpm run styles:check
 
-      - name: Test
-        run: pnpm run test
+      - name: Test with coverage ratchet
+        run: pnpm run test:coverage
 
       # Full production build — catches what tsc/lint can't (bad imports in
       # server/client boundaries, config errors, route conflicts). Placeholder

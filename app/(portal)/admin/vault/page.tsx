@@ -13,7 +13,8 @@ export const metadata = { title: "Client Vaults — RapidTal" };
 // write/read routes already authorize super_admin on any client via
 // assertClientAccess, so this simply points the existing VaultClient at a
 // chosen client_id.
-export default async function AdminVaultPage({ searchParams }: { searchParams: { client?: string } }) {
+export default async function AdminVaultPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ client?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const { user } = await requireSuperAdmin();
 
   const admin = createAdminClient();

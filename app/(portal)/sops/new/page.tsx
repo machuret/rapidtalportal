@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 
 const GLOBAL_SUGGESTED = ["WordPress", "Shopify", "AI", "Email", "SEO", "Social Media", "Admin", "Customer Support"];
 
-export default async function SopNewPage({ searchParams }: { searchParams: { scope?: string; title?: string; category?: string } }) {
+export default async function SopNewPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ scope?: string; title?: string; category?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;

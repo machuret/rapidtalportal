@@ -25,7 +25,7 @@ interface DnaFormProps {
 // disallowed by the styles guard). Mirrors the dashboard setup meter.
 const PCT_WIDTH = ["w-0", "w-[10%]", "w-[20%]", "w-[30%]", "w-[40%]", "w-[50%]", "w-[60%]", "w-[70%]", "w-[80%]", "w-[90%]", "w-full"];
 
-const fields: { key: keyof DbCompanyDna; label: string; multiline?: boolean }[] = [
+const fields: { key: keyof DbCompanyDna; label: string; multiline?: boolean; hint?: string }[] = [
   { key: "company_name", label: "Company Name" },
   { key: "founders", label: "Founders" },
   { key: "location", label: "Location" },
@@ -44,8 +44,26 @@ const fields: { key: keyof DbCompanyDna; label: string; multiline?: boolean }[] 
   { key: "brand_voice", label: "Brand Voice & Tone", multiline: true },
   { key: "content_style", label: "Content Tone & Style", multiline: true },
   { key: "internal_rules", label: "Internal Rules", multiline: true },
+  { key: "preferred_terms", label: "Preferred Words & Phrases", multiline: true },
+  { key: "prohibited_terms", label: "Words & Phrases to Avoid", multiline: true, hint: "Enter one term per line. Commas and semicolons are also supported for existing lists." },
+  { key: "emoji_policy", label: "Emoji Policy", multiline: true },
+  { key: "humour_policy", label: "Humour Policy", multiline: true },
+  { key: "spelling_locale", label: "Language & Spelling Standard" },
+  { key: "default_cta_style", label: "Default Call-to-Action Style", multiline: true },
+  { key: "approved_claims", label: "Approved Claims & Proof Points", multiline: true },
+  { key: "prohibited_claims", label: "Prohibited Claims", multiline: true, hint: "Enter one complete claim per line. These are checked before approval." },
   { key: "sign_off", label: "Default Sign-off" },
 ];
+
+const CHANNEL_STYLE_FIELDS = [
+  { key: "x", label: "X / Twitter", hint: "e.g. concise and specific, one idea, no hashtag stuffing, within 280 characters" },
+  { key: "linkedin", label: "LinkedIn", hint: "e.g. authoritative, practical, strong hook, no emojis, end with a discussion question" },
+  { key: "facebook", label: "Facebook", hint: "e.g. warm, local and conversational, light emojis, one clear action" },
+  { key: "instagram", label: "Instagram", hint: "e.g. punchy caption, visual direction, restrained relevant hashtags" },
+  { key: "email", label: "Email", hint: "e.g. concise, personal greeting, short paragraphs, direct CTA, approved sign-off" },
+  { key: "blog", label: "Blog", hint: "e.g. expert but accessible, evidence-led, practical sections, no filler" },
+  { key: "newsletter", label: "Newsletter", hint: "e.g. editorial and useful, recurring sections, one primary CTA" },
+] as const;
 
 export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
   const { saveDna, isSaving: saving, scrapeDna, isScraping } = useDna();
@@ -59,6 +77,16 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
 
   function set(key: keyof DbCompanyDna, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function setChannelStyle(channel: string, value: string) {
+    setForm((f) => ({
+      ...f,
+      channel_styles: {
+        ...((f.channel_styles ?? {}) as Record<string, string>),
+        [channel]: value,
+      },
+    }));
   }
 
   // Brain 2.0 (F): draft the empty profile fields from the client's Vault docs.
@@ -140,10 +168,13 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
   }
 
   async function copyAll() {
-    const text = fields
+    const profileText = fields
       .map(({ key, label }) => `${label}: ${(form[key] as string) ?? "—"}`)
       .join("\n");
-    await navigator.clipboard.writeText(text);
+    const channelText = CHANNEL_STYLE_FIELDS
+      .map(({ key, label }) => `${label}: ${form.channel_styles?.[key] ?? "Uses the global brand voice"}`)
+      .join("\n");
+    await navigator.clipboard.writeText(`${profileText}\n\nChannel Writing Styles\n${channelText}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -172,6 +203,22 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
               </div>
             );
           })}
+        </div>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4">
+          <p className="text-xs font-medium text-zinc-500 mb-3">Channel Writing Styles</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {CHANNEL_STYLE_FIELDS.map(({ key, label }) => {
+              const value = form.channel_styles?.[key] ?? "";
+              return (
+                <div key={key}>
+                  <p className="text-xs text-zinc-500 mb-1">{label}</p>
+                  <p className={`text-sm whitespace-pre-wrap ${value ? "text-zinc-200" : "text-zinc-600 italic"}`}>
+                    {value || "Uses the global brand voice"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
         </div>
         {updatedAt && (
           <p className="text-xs text-zinc-600">Last updated: <LocalTime value={updatedAt} /></p>
@@ -282,9 +329,35 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
         </div>
       </div>
 
-      {fields.map(({ key, label, multiline }) => (
+      <div className="rounded-xl border border-purple-500/25 bg-purple-500/5 p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Sparkles className="w-4 h-4 text-purple-400" />
+          <h3 className="text-sm font-semibold text-white">Channel Writing Styles</h3>
+        </div>
+        <p className="text-xs text-zinc-400 mb-4">
+          Optional channel overrides. Company guidance and the global brand voice still take priority.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {CHANNEL_STYLE_FIELDS.map(({ key, label, hint }) => (
+            <div key={key} className="flex flex-col gap-1.5">
+              <Label htmlFor={`channel-style-${key}`}>{label}</Label>
+              <Textarea
+                id={`channel-style-${key}`}
+                value={form.channel_styles?.[key] ?? ""}
+                onChange={(e) => setChannelStyle(key, e.target.value)}
+                rows={3}
+                placeholder={hint}
+                className="bg-zinc-900 border-zinc-700 text-sm"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {fields.map(({ key, label, multiline, hint }) => (
         <div key={key} className="flex flex-col gap-1.5">
           <Label>{label}</Label>
+          {hint && <p className="text-xs text-zinc-500">{hint}</p>}
           {multiline ? (
             <Textarea
               value={(form[key] as string) ?? ""}

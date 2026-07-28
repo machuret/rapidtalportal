@@ -21,7 +21,7 @@ export const GET = withAuth(async (req) => {
   if (!id || !z.string().uuid().safeParse(id).success) {
     return NextResponse.json({ error: "id required." }, { status: 422 });
   }
-  const sb = createClient();
+  const sb = await createClient();
   const { data } = await sb.from("notebook_pages").select(SELECT).eq("id", id).maybeSingle();
   if (!data) return NextResponse.json({ error: "Not found." }, { status: 404 });
   return NextResponse.json(data);
@@ -47,7 +47,7 @@ export const POST = withAuth(async (req, { user }) => {
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid input.", issues: parsed.error.flatten() }, { status: 422 });
 
-  const sb = createClient();
+  const sb = await createClient();
 
   // Enforce one level of nesting: a parent must itself be top-level.
   if (parsed.data.parentPageId) {
@@ -103,7 +103,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid input.", issues: parsed.error.flatten() }, { status: 422 });
 
-  const sb = createClient();
+  const sb = await createClient();
   const now = new Date().toISOString();
 
   // ---- Archive / restore (no stale check needed) ----

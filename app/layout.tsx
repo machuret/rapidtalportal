@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   description: "Multi-tenant SaaS portal for managing client knowledge bases.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -23,7 +23,7 @@ export default function RootLayout({
   // Theme is read server-side from the cookie and set on <html> before paint,
   // so there's no flash. Default is dark. The toggle (Profile → Appearance)
   // flips the cookie + data-theme live.
-  const theme = cookies().get("theme")?.value === "light" ? "light" : "dark";
+  const theme = (await cookies()).get("theme")?.value === "light" ? "light" : "dark";
 
   return (
     <html lang="en" data-theme={theme} className={`${sans.variable} ${display.variable} ${mono.variable}`}>

@@ -9,7 +9,16 @@ const createSchema = z.object({
   client_id:    z.string().uuid(),
   title:        z.string().min(1).max(300),
   description:  z.string().max(2000).optional().nullable(),
-  content_type: z.enum(["email", "social", "newsletter", "blog"]),
+  content_type: z.enum([
+    "email",
+    "x",
+    "linkedin",
+    "facebook",
+    "instagram",
+    "social",
+    "newsletter",
+    "blog",
+  ]),
   // Brain pre-screen carried over from the suggestion, so we can later measure
   // whether low-fit predictions actually got rejected (prediction accuracy).
   ai_fit_score: z.number().int().min(0).max(100).optional().nullable(),
@@ -101,8 +110,9 @@ export const POST = withAuth(async (req, { user }) => {
 });
 
 export const PATCH = withAuth(async (req, { user }) => {
-  // Only admins can change status (approve/reject)
-  if (user.role !== "client_admin" && user.role !== "super_admin") {
+  // VAs run the Content workflow end-to-end for their assigned client. Tenant
+  // access is still enforced below, while client/super admins retain authority.
+  if (!["va", "client_admin", "super_admin"].includes(user.role)) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
@@ -152,7 +162,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     const artifactText = [data.title, data.description].filter(Boolean).join(" — ").slice(0, 8000);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (admin as any).from("brain_signals").insert({
+      const { error: signalError } = await (admin as any).from("brain_signals").insert({
         client_id:     parsed.data.client_id,
         user_id:       user.id,
         surface:       "content_topic",
@@ -162,6 +172,7 @@ export const PATCH = withAuth(async (req, { user }) => {
         reason:        parsed.data.flag_reason ?? null,
         context:       { content_type: data.content_type },
       });
+      if (signalError) throw signalError;
     } catch (e) {
       console.error("[content/topics PATCH] brain_signals insert failed", e);
     }
@@ -171,7 +182,7 @@ export const PATCH = withAuth(async (req, { user }) => {
 });
 
 export const DELETE = withAuth(async (req, { user }) => {
-  if (user.role !== "client_admin" && user.role !== "super_admin") {
+  if (!["va", "client_admin", "super_admin"].includes(user.role)) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 

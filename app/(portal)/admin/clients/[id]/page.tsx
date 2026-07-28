@@ -9,10 +9,11 @@ import { CheckCircle2, Circle, ArrowRight, ClipboardCheck } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 interface Props {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export default async function AdminClientDetailPage({ params }: Props) {
+export default async function AdminClientDetailPage({ params: paramsPromise }: Props) {
+  const params = await paramsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   if (ctx.user.role !== "super_admin") redirect("/dashboard");

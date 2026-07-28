@@ -71,6 +71,15 @@ export interface DbCompanyDna {
   website_content: string | null;
   content_style: string | null;
   internal_rules: string | null;
+  preferred_terms: string | null;
+  prohibited_terms: string | null;
+  emoji_policy: string | null;
+  humour_policy: string | null;
+  spelling_locale: string | null;
+  default_cta_style: string | null;
+  approved_claims: string | null;
+  prohibited_claims: string | null;
+  channel_styles: Record<string, string>;
   extra: Record<string, unknown>;
   updated_at: string;
 }
@@ -147,9 +156,9 @@ export interface Database {
         ];
       };
       company_dna: {
-        Row: { id: string; client_id: string; company_name: string | null; founders: string | null; location: string | null; phone: string | null; email: string | null; website: string | null; values: string | null; services: string | null; target_demographic: string | null; client_type: string | null; brand_voice: string | null; sign_off: string | null; business_goals: string | null; marketing_goals: string | null; team: string | null; tools_used: string | null; website_content: string | null; content_style: string | null; internal_rules: string | null; extra: Record<string, unknown>; updated_at: string };
-        Insert: { id?: string; client_id: string; company_name?: string | null; founders?: string | null; location?: string | null; phone?: string | null; email?: string | null; website?: string | null; values?: string | null; services?: string | null; target_demographic?: string | null; client_type?: string | null; brand_voice?: string | null; sign_off?: string | null; business_goals?: string | null; marketing_goals?: string | null; team?: string | null; tools_used?: string | null; website_content?: string | null; content_style?: string | null; internal_rules?: string | null; extra?: Record<string, unknown>; updated_at?: string };
-        Update: { id?: string; client_id?: string; company_name?: string | null; founders?: string | null; location?: string | null; phone?: string | null; email?: string | null; website?: string | null; values?: string | null; services?: string | null; target_demographic?: string | null; client_type?: string | null; brand_voice?: string | null; sign_off?: string | null; business_goals?: string | null; marketing_goals?: string | null; team?: string | null; tools_used?: string | null; website_content?: string | null; content_style?: string | null; internal_rules?: string | null; extra?: Record<string, unknown>; updated_at?: string };
+        Row: { id: string; client_id: string; company_name: string | null; founders: string | null; location: string | null; phone: string | null; email: string | null; website: string | null; values: string | null; services: string | null; target_demographic: string | null; client_type: string | null; brand_voice: string | null; sign_off: string | null; business_goals: string | null; marketing_goals: string | null; team: string | null; tools_used: string | null; website_content: string | null; content_style: string | null; internal_rules: string | null; preferred_terms: string | null; prohibited_terms: string | null; emoji_policy: string | null; humour_policy: string | null; spelling_locale: string | null; default_cta_style: string | null; approved_claims: string | null; prohibited_claims: string | null; channel_styles: Record<string, string>; extra: Record<string, unknown>; updated_at: string };
+        Insert: { id?: string; client_id: string; company_name?: string | null; founders?: string | null; location?: string | null; phone?: string | null; email?: string | null; website?: string | null; values?: string | null; services?: string | null; target_demographic?: string | null; client_type?: string | null; brand_voice?: string | null; sign_off?: string | null; business_goals?: string | null; marketing_goals?: string | null; team?: string | null; tools_used?: string | null; website_content?: string | null; content_style?: string | null; internal_rules?: string | null; preferred_terms?: string | null; prohibited_terms?: string | null; emoji_policy?: string | null; humour_policy?: string | null; spelling_locale?: string | null; default_cta_style?: string | null; approved_claims?: string | null; prohibited_claims?: string | null; channel_styles?: Record<string, string>; extra?: Record<string, unknown>; updated_at?: string };
+        Update: { id?: string; client_id?: string; company_name?: string | null; founders?: string | null; location?: string | null; phone?: string | null; email?: string | null; website?: string | null; values?: string | null; services?: string | null; target_demographic?: string | null; client_type?: string | null; brand_voice?: string | null; sign_off?: string | null; business_goals?: string | null; marketing_goals?: string | null; team?: string | null; tools_used?: string | null; website_content?: string | null; content_style?: string | null; internal_rules?: string | null; preferred_terms?: string | null; prohibited_terms?: string | null; emoji_policy?: string | null; humour_policy?: string | null; spelling_locale?: string | null; default_cta_style?: string | null; approved_claims?: string | null; prohibited_claims?: string | null; channel_styles?: Record<string, string>; extra?: Record<string, unknown>; updated_at?: string };
         Relationships: NoRelationships;
       };
       vault_items: {
@@ -279,9 +288,15 @@ export interface Database {
         Relationships: NoRelationships;
       };
       content_pieces: {
-        Row: { id: string; client_id: string; content_type: string; title: string; brief: string | null; body: string | null; status: string; created_by: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; client_id: string; content_type: string; title: string; brief?: string | null; body?: string | null; status?: string; created_by?: string | null; created_at?: string; updated_at?: string };
-        Update: { id?: string; client_id?: string; content_type?: string; title?: string; brief?: string | null; body?: string | null; status?: string; created_by?: string | null; created_at?: string; updated_at?: string };
+        Row: { id: string; client_id: string; content_type: string; title: string; brief: string | null; body: string | null; status: string; style_snapshot: Json; content_brief: Json; source_references: Json; parent_piece_id: string | null; generation_kind: string; revision_reason: string | null; created_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; content_type: string; title: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; content_type?: string; title?: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      content_piece_revisions: {
+        Row: { id: string; piece_id: string; client_id: string; revision_number: number; title: string; body: string | null; content_type: string; content_brief: Json; style_snapshot: Json; source_references: Json; reason: string; created_by: string | null; created_at: string };
+        Insert: { id?: string; piece_id: string; client_id: string; revision_number: number; title: string; body?: string | null; content_type: string; content_brief?: Json; style_snapshot?: Json; source_references?: Json; reason?: string; created_by?: string | null; created_at?: string };
+        Update: { id?: string; piece_id?: string; client_id?: string; revision_number?: number; title?: string; body?: string | null; content_type?: string; content_brief?: Json; style_snapshot?: Json; source_references?: Json; reason?: string; created_by?: string | null; created_at?: string };
         Relationships: NoRelationships;
       };
       daily_logs: {
@@ -372,9 +387,9 @@ export interface Database {
         Relationships: NoRelationships;
       };
       crawl_jobs: {
-        Row: { id: string; client_id: string; created_by: string | null; url: string; status: string; error: string | null; firecrawl_id: string | null; page_cap: number; pages_total: number; pages_done: number; items_created: number; products_seen: number; pages_dropped: number; tokens_used: number; dossier_item_id: string | null; meta: Record<string, unknown>; created_at: string; updated_at: string };
-        Insert: { id?: string; client_id: string; created_by?: string | null; url: string; status?: string; error?: string | null; firecrawl_id?: string | null; page_cap?: number; pages_total?: number; pages_done?: number; items_created?: number; products_seen?: number; pages_dropped?: number; tokens_used?: number; dossier_item_id?: string | null; meta?: Record<string, unknown>; created_at?: string; updated_at?: string };
-        Update: { id?: string; client_id?: string; created_by?: string | null; url?: string; status?: string; error?: string | null; firecrawl_id?: string | null; page_cap?: number; pages_total?: number; pages_done?: number; items_created?: number; products_seen?: number; pages_dropped?: number; tokens_used?: number; dossier_item_id?: string | null; meta?: Record<string, unknown>; created_at?: string; updated_at?: string };
+        Row: { id: string; client_id: string; created_by: string | null; url: string; status: string; error: string | null; firecrawl_id: string | null; page_cap: number; pages_total: number; pages_done: number; items_created: number; products_seen: number; pages_dropped: number; tokens_used: number; dossier_item_id: string | null; meta: Record<string, unknown>; lease_token: string | null; lease_until: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; created_by?: string | null; url: string; status?: string; error?: string | null; firecrawl_id?: string | null; page_cap?: number; pages_total?: number; pages_done?: number; items_created?: number; products_seen?: number; pages_dropped?: number; tokens_used?: number; dossier_item_id?: string | null; meta?: Record<string, unknown>; lease_token?: string | null; lease_until?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; created_by?: string | null; url?: string; status?: string; error?: string | null; firecrawl_id?: string | null; page_cap?: number; pages_total?: number; pages_done?: number; items_created?: number; products_seen?: number; pages_dropped?: number; tokens_used?: number; dossier_item_id?: string | null; meta?: Record<string, unknown>; lease_token?: string | null; lease_until?: string | null; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
       task_events: {
@@ -425,6 +440,47 @@ export interface Database {
           user_count: number; va_count: number; vault_total: number; vault_ready: number; vault_error: number;
           has_dossier: boolean; open_tasks: number; done_recently: number; vas_logged: number; last_activity: string | null;
         }[];
+      };
+      claim_crawl_job: {
+        Args: { p_job_id: string; p_lease_seconds?: number };
+        Returns: Database["public"]["Tables"]["crawl_jobs"]["Row"][];
+      };
+      claim_brain_signals: {
+        Args: {
+          p_client_id: string;
+          p_limit?: number;
+          p_min_signals?: number;
+          p_lease_seconds?: number;
+        };
+        Returns: {
+          id: string;
+          client_id: string;
+          user_id: string | null;
+          surface: string;
+          artifact_id: string | null;
+          artifact_text: string;
+          rating: number;
+          reason: string | null;
+          context: Json;
+          resolved: boolean;
+          created_at: string;
+          distilled_at: string | null;
+          distill_claim_token: string | null;
+          distill_claim_until: string | null;
+        }[];
+      };
+      release_brain_signal_claim: {
+        Args: { p_client_id: string; p_claim_token: string };
+        Returns: number;
+      };
+      commit_brain_distillation: {
+        Args: {
+          p_client_id: string;
+          p_claim_token: string;
+          p_signal_ids: string[];
+          p_operations: Json;
+        };
+        Returns: Json;
       };
     };
     Enums: Record<string, never>;

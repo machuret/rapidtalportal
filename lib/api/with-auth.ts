@@ -25,7 +25,7 @@ export function withAuth<P = Record<string, never>>(
   handler: AuthedHandler<P>,
   opts?: { roles?: ApiUser["role"][] },
 ) {
-  return async (req: NextRequest, routeCtx?: { params: P }): Promise<Response> => {
+  return async (req: NextRequest, routeCtx: { params: Promise<P> }): Promise<Response> => {
     if (originRejected(req)) {
       return NextResponse.json({ error: "Cross-origin request blocked." }, { status: 403 });
     }
@@ -35,11 +35,12 @@ export function withAuth<P = Record<string, never>>(
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
     try {
+      const params = routeCtx?.params ? await routeCtx.params : ({} as P);
       return await handler(req, {
         user: auth.user,
         actualUser: auth.actualUser,
         impersonating: auth.impersonating,
-        params: (routeCtx?.params ?? {}) as P,
+        params,
       });
     } catch (err) {
       // One catch instruments every wrapped route: the error is recorded for

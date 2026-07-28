@@ -78,7 +78,7 @@ export const DELETE = withAuth(async (_req, { user, actualUser }) => {
   // super_admin as `actualUser`; when not impersonating, actualUser is undefined
   // and `user` is the real caller. Audit the stop against the real admin either way.
   const realUser = actualUser ?? user;
-  const targetId = cookies().get(IMPERSONATE_COOKIE)?.value ?? null;
+  const targetId = (await cookies()).get(IMPERSONATE_COOKIE)?.value ?? null;
   if (targetId && realUser.role === "super_admin") {
     const admin = createAdminClient();
     const { data: target } = await admin.from("users").select("email").eq("id", targetId).single();

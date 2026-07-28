@@ -23,7 +23,7 @@ export const POST = withAuth(async (req) => {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
 
-  const sb = createClient();
+  const sb = await createClient();
   const { items } = parsed.data;
 
   // Fetch every page touched (items + their target parents) in one go. RLS

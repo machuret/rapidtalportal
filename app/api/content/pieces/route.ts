@@ -5,8 +5,11 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notifications";
-import { similarityRatio } from "@/lib/brain/textdiff";
-import { logBrainEvent } from "@/lib/brain/events";
+import {
+  contentStyleWarnings,
+  createContentStyleSnapshot,
+  resolveContentStyle,
+} from "@/supabase/functions/_shared/content-style";
 
 const querySchema = z.object({
   client_id: z.string().uuid(),
@@ -19,11 +22,23 @@ const updateSchema = z.object({
   status: z.enum(["draft", "approved", "archived"]).optional(),
   title: z.string().min(1).max(300).optional(),
   body: z.string().max(50000).optional().nullable(),
+  expected_updated_at: z.string().datetime().optional(),
 });
 
 const createSchema = z.object({
   client_id: z.string().uuid(),
-  content_type: z.string().min(1).max(50).optional().default("other"),
+  content_type: z.enum([
+    "email",
+    "x",
+    "linkedin",
+    "facebook",
+    "instagram",
+    "social",
+    "newsletter",
+    "blog",
+    "message",
+    "other",
+  ]).optional().default("other"),
   title: z.string().min(1).max(300),
   brief: z.string().max(2000).optional().nullable(),
   body: z.string().max(50000).optional().nullable(),
@@ -40,6 +55,22 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
+  // Capture the current style authority even for drafts promoted from Compose.
+  // Missing DNA is allowed at draft time, but a database failure is not.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: dna, error: dnaError } = await (admin as any)
+    .from("company_dna")
+    .select("updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles")
+    .eq("client_id", parsed.data.client_id)
+    .maybeSingle();
+  if (dnaError) return serverError(dnaError);
+  const style = resolveContentStyle(dna, parsed.data.content_type, "Company-approved tone", "");
+  const styleSnapshot = createContentStyleSnapshot(
+    style,
+    parsed.data.content_type,
+    typeof dna?.updated_at === "string" ? dna.updated_at : null,
+  );
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("content_pieces")
@@ -51,6 +82,7 @@ export const POST = withAuth(async (req, { user }) => {
       body: parsed.data.body ?? null,
       status: "draft",
       created_by: user.id,
+      style_snapshot: styleSnapshot,
     })
     .select("id, content_type, title, status, created_at")
     .single();
@@ -84,7 +116,7 @@ export const GET = withAuth(async (req, { user }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (admin as any)
       .from("content_pieces")
-      .select("id, client_id, content_type, title, brief, body, status, outcome, created_by, created_at, updated_at")
+      .select("id, client_id, content_type, title, brief, body, status, content_brief, source_references, style_snapshot, parent_piece_id, generation_kind, created_by, created_at, updated_at")
       .eq("id", parsed.data.id)
       .eq("client_id", parsed.data.client_id)
       .single();
@@ -100,7 +132,7 @@ export const GET = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("content_pieces")
-    .select("id, content_type, title, status, outcome, created_at")
+    .select("id, content_type, title, status, generation_kind, parent_piece_id, created_at")
     .eq("client_id", parsed.data.client_id)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -124,6 +156,7 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
+  const admin = createAdminClient();
 
   // Approval is allowed for any member with access to this client (VAs run the
   // content workflow end-to-end and may approve their own client's content;
@@ -132,23 +165,81 @@ export const PATCH = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "Not allowed to approve content." }, { status: 403 });
   }
 
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (parsed.data.status !== undefined) updates.status = parsed.data.status;
-  if (parsed.data.title !== undefined) updates.title = parsed.data.title;
-  if (parsed.data.body !== undefined) updates.body = parsed.data.body;
-
-  const admin = createAdminClient();
+  // Read the exact version that will be passed to the atomic updater. It locks and
+  // compares updated_at before committing, so validation can never approve a stale
+  // body after another tab has edited it.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data: current, error: currentError } = await (admin as any)
     .from("content_pieces")
-    .update(updates)
+    .select("content_type, body, status, updated_at")
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
-    .select("id, content_type, title, brief, body, status, outcome, ai_original, created_by, created_at, updated_at")
+    .single();
+  if (currentError) return serverError(currentError);
+
+  let dnaUpdatedAt: string | null = null;
+  let styleSnapshot: ReturnType<typeof createContentStyleSnapshot> | null = null;
+
+  // Prohibited terms, claims and explicit no-emoji policies are deterministic
+  // approval gates. Natural-language style guidance remains visibly model-enforced.
+  if (parsed.data.status === "approved") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: dna, error: dnaError } = await (admin as any)
+      .from("company_dna")
+      .select("updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles")
+      .eq("client_id", parsed.data.client_id)
+      .maybeSingle();
+    if (dnaError) return serverError(dnaError);
+    if (!dna) {
+      return NextResponse.json({ error: "Complete Company DNA before approving content." }, { status: 422 });
+    }
+
+    const finalBody = parsed.data.body !== undefined ? parsed.data.body ?? "" : current.body ?? "";
+    if (!finalBody.trim()) {
+      return NextResponse.json({ error: "A content body is required before approval." }, { status: 422 });
+    }
+    const style = resolveContentStyle(dna, current.content_type, "Company-approved tone", "");
+    const warnings = contentStyleWarnings(finalBody, style);
+    if (warnings.length) {
+      return NextResponse.json({
+        error: "This draft violates an enforced Company DNA rule.",
+        warnings,
+      }, { status: 422 });
+    }
+    dnaUpdatedAt = dna.updated_at;
+    styleSnapshot = createContentStyleSnapshot(style, current.content_type, dnaUpdatedAt);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (admin as any).rpc("update_content_piece_atomic", {
+    p_client_id: parsed.data.client_id,
+    p_piece_id: parsed.data.id,
+    p_actor_id: user.id,
+    p_status: parsed.data.status ?? null,
+    p_title: parsed.data.title ?? null,
+    p_body: parsed.data.body ?? null,
+    p_update_title: parsed.data.title !== undefined,
+    p_update_body: parsed.data.body !== undefined,
+    p_expected_piece_updated_at: parsed.data.expected_updated_at ?? current.updated_at,
+    p_expected_dna_updated_at: dnaUpdatedAt,
+    p_style_snapshot: styleSnapshot,
+  })
     .single();
 
   if (error) {
     console.error("[content/pieces PATCH]", error.code, error.message);
+    if (error.code === "40001") {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error.code === "P0002") {
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    }
+    if (error.code === "42501") {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    if (error.code === "P0001" || error.code === "22023") {
+      return NextResponse.json({ error: error.message }, { status: 422 });
+    }
     return serverError(error);
   }
 
@@ -163,48 +254,5 @@ export const PATCH = withAuth(async (req, { user }) => {
     });
   }
 
-  // Real-outcome learning: when a piece is approved, measure how much the human
-  // changed the AI's draft. Kept verbatim → the Brain logs a win; rewritten →
-  // it learns the human preferred something else. Awaited (it's a quick insert)
-  // so the signal isn't lost to a serverless freeze; internally best-effort.
-  if (parsed.data.status === "approved") {
-    await recordApprovalOutcome(admin, parsed.data.client_id, user.id, data);
-  }
-
   return NextResponse.json(data);
 });
-
-/**
- * On approval, turn "how much did the human keep?" into a Brain signal. Only
- * fires for AI-generated pieces (those with an ai_original). Never throws.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function recordApprovalOutcome(admin: any, clientId: string, userId: string, piece: any) {
-  try {
-    const original: string | null = piece.ai_original ?? null;
-    const final: string | null = piece.body ?? null;
-    if (!original || !final) return; // not AI-generated, or empty — nothing to learn
-    const sim = similarityRatio(original, final);
-    const pct = Math.round(sim * 100);
-    const kept = sim >= 0.85;
-    await admin.from("brain_signals").insert({
-      client_id: clientId,
-      user_id: userId,
-      surface: "content_draft",
-      artifact_id: piece.id,
-      artifact_text: (kept ? final : original).slice(0, 8000),
-      rating: kept ? 1 : -1,
-      reason: kept
-        ? `Approved ${pct}% as written — the AI draft was on the money`
-        : `Rewritten before approval (kept ~${pct}%) — humans preferred a different version`,
-      context: { event: "approval", content_type: piece.content_type, kept_pct: pct },
-    });
-    await logBrainEvent(admin, clientId, "feedback",
-      kept
-        ? `Approved a ${piece.content_type} draft kept ${pct}% as written — counted as a win`
-        : `A ${piece.content_type} draft was rewritten before approval — the Brain noted what to change`,
-      { kept_pct: pct, content_type: piece.content_type });
-  } catch (e) {
-    console.error("[content/pieces] recordApprovalOutcome failed", e);
-  }
-}

@@ -8,10 +8,11 @@ import type { AnalyticsEntry } from "@/types/daily-log";
 export const dynamic = "force-dynamic";
 
 export default async function DailyLogAnalyticsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { employee?: string };
+  searchParams: Promise<{ employee?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;

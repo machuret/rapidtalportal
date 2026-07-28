@@ -54,11 +54,18 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   // Audit trail: the client admin can see exactly who viewed which login.
-  await admin.from("access_credential_reveals").insert({
+  const { error: auditError } = await admin.from("access_credential_reveals").insert({
     credential_id: cred.id,
     client_id: cred.client_id,
     user_id: user.id,
   });
+  if (auditError) {
+    console.error("[access/reveal] audit insert failed", auditError.code, auditError.message);
+    return NextResponse.json(
+      { error: "Password reveal could not be audited. Nothing was disclosed; please try again." },
+      { status: 503 },
+    );
+  }
 
   return NextResponse.json({ password });
 });

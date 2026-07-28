@@ -20,7 +20,7 @@ export const GET = withAuth(async (req) => {
   if (!pageId || !z.string().uuid().safeParse(pageId).success) {
     return NextResponse.json({ error: "pageId required." }, { status: 422 });
   }
-  const sb = createClient();
+  const sb = await createClient();
   const { data, error } = await sb
     .from("notebook_page_revisions")
     .select("id, page_id, title, content, edited_by, created_at")
@@ -39,7 +39,7 @@ export const POST = withAuth(async (req, { user }) => {
   const parsed = restoreSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
 
-  const sb = createClient();
+  const sb = await createClient();
   const { data: rev } = await sb
     .from("notebook_page_revisions")
     .select("content, title, page_id")

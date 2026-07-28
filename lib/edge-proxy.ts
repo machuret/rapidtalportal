@@ -22,7 +22,7 @@ export async function proxyToEdgeFunction(
   functionName: string,
   body: Record<string, unknown>,
 ): Promise<NextResponse> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
       getAll() { return cookieStore.getAll(); },
@@ -92,7 +92,7 @@ export async function streamEdgeFunction(
   functionName: string,
   body: Record<string, unknown>,
 ): Promise<Response> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: { getAll() { return cookieStore.getAll(); }, setAll() {} },
   });

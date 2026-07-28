@@ -72,7 +72,6 @@ export const ROUTES = {
   content: {
     pieces: () => "/api/content/pieces",
     generate: () => "/api/content/generate",
-    outcome: () => "/api/content/outcome",
     topics: () => "/api/content/topics",
     topicsForClient: (clientId: string) => `/api/content/topics?client_id=${clientId}`,
     topicsGenerate: () => "/api/content/topics/generate",
