@@ -99,4 +99,5 @@ export const MIGRATIONS = [
   "091_disable_content_performance_learning.sql",
   "092_unified_content_workspace.sql",
   "093_atomic_content_rewrites.sql",
+  "094_structured_content_hard_rules.sql",
 ] as const;

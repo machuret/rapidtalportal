@@ -45,6 +45,7 @@ const PROFILE_SELECT = [
   ...PROFILE_FIELDS.map((f) => f.key),
   ...CONTENT_STYLE_FIELDS.map((f) => f.key),
   "channel_styles",
+  "hard_rules",
 ].join(", ");
 
 interface VaultRow { title: string; raw_content: string | null; category: string | null; ai_summary: string | null }
@@ -172,6 +173,10 @@ export async function buildBrainContext(
     if (styleBlock) {
       hasProfile = true;
       text += `=== CONTENT STYLE RULES ===\n${styleBlock}\n\n`;
+    }
+    if (Array.isArray(dna.hard_rules) && dna.hard_rules.length) {
+      hasProfile = true;
+      text += `=== STRUCTURED CONTENT HARD RULES ===\n${JSON.stringify(dna.hard_rules).slice(0, 6000)}\n\n`;
     }
     const channelStyles = dna.channel_styles;
     if (channelStyles && typeof channelStyles === "object" && !Array.isArray(channelStyles)) {

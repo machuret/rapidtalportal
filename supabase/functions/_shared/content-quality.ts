@@ -28,8 +28,8 @@ export const CONTENT_TYPE_INSTRUCTIONS: Record<QualityContentType, string> = {
   blog: "Write one blog post with a `#` SEO-friendly title, engaging introduction, at least three `##` sections, practical examples, and a concluding CTA. Aim for 600-900 words.",
 };
 
-const CTA_PATTERN =
-  /\b(book|call|contact|discover|download|email|join|learn|let us know|read|register|reply|schedule|share|shop|subscribe|tell us|visit)\b|\?/iu;
+const CTA_ACTION_PATTERN =
+  /\b(book|call|contact|discover|download|email|join|learn more|let us know|read more|register|reply|schedule|share|shop|subscribe|tell us|visit)\b/iu;
 const GREETING_PATTERN = /^(hi|hello|dear|good (morning|afternoon|evening))\b/imu;
 const SIGN_OFF_PATTERN =
   /^(kind regards|regards|best regards|best|thanks|thank you|warm regards|sincerely|yours sincerely|yours faithfully|with appreciation|all the best|respectfully|cheers)[,!]?\s*$/imu;
@@ -40,6 +40,26 @@ function paragraphs(body: string): string[] {
     .split(/\n\s*\n/)
     .map((part) => part.trim())
     .filter(Boolean);
+}
+
+function words(body: string): number {
+  const normalized = body.trim();
+  return normalized ? normalized.split(/\s+/u).length : 0;
+}
+
+function ctaUnits(body: string): string[] {
+  return body
+    .split(/(?<=[.!?])\s+|\n+/u)
+    .map((unit) => unit.trim())
+    .filter(Boolean)
+    .filter((unit) => unit.includes("?") || CTA_ACTION_PATTERN.test(unit));
+}
+
+function requireExactCtaCount(warnings: string[], body: string, label: string, expected = 1): void {
+  const count = ctaUnits(body).length;
+  if (count !== expected) {
+    warnings.push(`${label} requires exactly ${expected} call-to-action or discussion question; found ${count}.`);
+  }
 }
 
 function compact(value: string, limit = 180): string {
@@ -76,7 +96,7 @@ export function contentStructureWarnings(
     case "email":
       if (!/^Subject:\s*\S.+$/imu.test(trimmed)) warnings.push("Email requires a `Subject:` line.");
       if (!GREETING_PATTERN.test(trimmed)) warnings.push("Email requires a greeting.");
-      if (!CTA_PATTERN.test(trimmed)) warnings.push("Email requires one explicit call-to-action.");
+      requireExactCtaCount(warnings, trimmed, "Email");
       if (!hasEmailSignOff(trimmed)) warnings.push("Email requires a sign-off.");
       break;
     case "x":
@@ -85,11 +105,11 @@ export function contentStructureWarnings(
     case "linkedin":
       if (blocks.length < 3) warnings.push("LinkedIn requires a hook and at least two short body paragraphs.");
       if ((blocks[0]?.length ?? 0) > 240) warnings.push("LinkedIn opening hook is too long.");
-      if (!CTA_PATTERN.test(trimmed)) warnings.push("LinkedIn requires one call-to-action or discussion question.");
+      requireExactCtaCount(warnings, trimmed, "LinkedIn");
       break;
     case "facebook":
       if (blocks.length < 2) warnings.push("Facebook requires a conversational opening and body paragraph.");
-      if (!CTA_PATTERN.test(trimmed)) warnings.push("Facebook requires one clear community-focused action.");
+      requireExactCtaCount(warnings, trimmed, "Facebook");
       break;
     case "instagram": {
       if (!/^Caption:\s*$/imu.test(trimmed)) warnings.push("Instagram requires a `Caption:` section.");
@@ -105,14 +125,23 @@ export function contentStructureWarnings(
       if (!/^#\s+\S.+$/mu.test(trimmed)) warnings.push("Newsletter requires a `#` headline.");
       const sections = trimmed.match(/^##\s+\S.+$/gmu) ?? [];
       if (sections.length < 2) warnings.push("Newsletter requires at least two `##` sections.");
-      if (!CTA_PATTERN.test(trimmed)) warnings.push("Newsletter requires one clear call-to-action.");
+      const wordCount = words(trimmed);
+      if (wordCount < 400 || wordCount > 600) {
+        warnings.push(`Newsletter requires 400-600 words; found ${wordCount}.`);
+      }
+      requireExactCtaCount(warnings, trimmed, "Newsletter");
       break;
     }
     case "blog": {
       if (!/^#\s+\S.+$/mu.test(trimmed)) warnings.push("Blog requires a `#` title.");
       const sections = trimmed.match(/^##\s+\S.+$/gmu) ?? [];
       if (sections.length < 3) warnings.push("Blog requires at least three `##` sections.");
-      if (!CTA_PATTERN.test(trimmed)) warnings.push("Blog requires a concluding call-to-action.");
+      const wordCount = words(trimmed);
+      if (wordCount < 600 || wordCount > 900) {
+        warnings.push(`Blog requires 600-900 words; found ${wordCount}.`);
+      }
+      const finalBlock = blocks.at(-1) ?? "";
+      if (!ctaUnits(finalBlock).length) warnings.push("Blog requires a concluding call-to-action.");
       break;
     }
   }
@@ -123,6 +152,7 @@ export function contentStructureWarnings(
 interface ClaimAnchor {
   key: string;
   display: string;
+  pattern: RegExp;
 }
 
 const ABSOLUTE_CLAIMS: { key: string; pattern: RegExp }[] = [
@@ -137,25 +167,82 @@ const ABSOLUTE_CLAIMS: { key: string; pattern: RegExp }[] = [
 ];
 
 const NUMERIC_CLAIM_PATTERN =
-  /(?:[$£€]\s?\d[\d,.]*|\b\d+(?:\.\d+)?\s?(?:%|percent|years?|days?|hours?|customers?|clients?|projects?|locations?|stars?)\b|\b(?:19|20)\d{2}\b)/giu;
+  /(?:[$£€]\s?\d[\d,.]*|\b\d+(?:\.\d+)?\s?%|\b\d+(?:\.\d+)?\s?(?:percent|years?|days?|hours?|customers?|clients?|projects?|locations?|stars?)\b|\b(?:19|20)\d{2}\b)/giu;
 
 function claimAnchors(sentence: string): ClaimAnchor[] {
   const anchors: ClaimAnchor[] = [];
   for (const claim of ABSOLUTE_CLAIMS) {
     const match = sentence.match(claim.pattern);
-    if (match) anchors.push({ key: claim.key, display: match[0].toLocaleLowerCase() });
+    if (match) anchors.push({
+      key: claim.key,
+      display: match[0].toLocaleLowerCase(),
+      pattern: claim.pattern,
+    });
   }
   for (const match of sentence.matchAll(NUMERIC_CLAIM_PATTERN)) {
     const normalized = match[0].toLocaleLowerCase().replace(/\s+/g, " ").trim();
-    anchors.push({ key: `numeric:${normalized}`, display: normalized });
+    anchors.push({
+      key: `numeric:${normalized}`,
+      display: normalized,
+      pattern: new RegExp(escapeRegExp(normalized).replace(/\\ /g, "\\s*"), "iu"),
+    });
   }
   return anchors;
 }
 
-function supportContainsAnchor(support: string, anchor: ClaimAnchor): boolean {
-  if (anchor.key.startsWith("numeric:")) return support.includes(anchor.display);
-  const matcher = ABSOLUTE_CLAIMS.find((claim) => claim.key === anchor.key);
-  return matcher ? matcher.pattern.test(support) : false;
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const NEGATION_PATTERN =
+  /\b(no|not|never|without|cannot|can't|isn't|aren't|wasn't|weren't|doesn't|don't|didn't|won't)\b/iu;
+const CLAIM_STOP_WORDS = new Set([
+  "about", "after", "also", "and", "are", "been", "being", "can", "could",
+  "for", "from", "have", "into", "its", "our", "that", "the", "their", "them",
+  "they", "this", "those", "was", "were", "will", "with", "would", "your",
+  "guarantee", "guaranteed", "award", "winning", "certified", "accredited",
+  "number", "one", "industry", "market", "leading", "largest", "fastest",
+]);
+
+function stripPlaceholders(sentence: string): string {
+  return sentence.replace(/\[[^\]\r\n]{1,160}\]/gu, " ");
+}
+
+function anchorIsNegated(sentence: string, anchor: ClaimAnchor): boolean {
+  const match = sentence.match(anchor.pattern);
+  if (!match || match.index === undefined) return false;
+  const before = sentence.slice(Math.max(0, match.index - 55), match.index);
+  const after = sentence.slice(match.index + match[0].length, match.index + match[0].length + 30);
+  const nearestWords = before.trim().split(/\s+/u).slice(-3).join(" ");
+  return NEGATION_PATTERN.test(nearestWords) ||
+    /^\s*(?:is|are|was|were)?\s*(?:not|never|without)\b/iu.test(after);
+}
+
+function meaningfulClaimTerms(sentence: string): string[] {
+  return Array.from(new Set(
+    sentence
+      .toLocaleLowerCase()
+      .replace(NUMERIC_CLAIM_PATTERN, " ")
+      .replace(/[^\p{L}\p{N}'-]+/gu, " ")
+      .split(/\s+/u)
+      .filter((word) => word.length >= 3 && !CLAIM_STOP_WORDS.has(word)),
+  ));
+}
+
+function sentenceSupportsClaim(
+  claimSentence: string,
+  anchors: ClaimAnchor[],
+  supportSentence: string,
+): boolean {
+  if (!anchors.every((anchor) => anchor.pattern.test(supportSentence) && !anchorIsNegated(supportSentence, anchor))) {
+    return false;
+  }
+  const claimTerms = meaningfulClaimTerms(claimSentence);
+  if (!claimTerms.length) return true;
+  const supportTerms = new Set(meaningfulClaimTerms(supportSentence));
+  const overlap = claimTerms.filter((term) => supportTerms.has(term)).length;
+  const requiredOverlap = Math.max(1, Math.ceil(Math.min(claimTerms.length, 4) * 0.4));
+  return overlap >= requiredOverlap;
 }
 
 /**
@@ -167,19 +254,25 @@ export function unsupportedClaimWarnings(
   body: string,
   supportText: string,
 ): string[] {
-  const normalizedSupport = supportText.toLocaleLowerCase().replace(/\s+/g, " ");
+  const supportSentences = supportText
+    .split(/(?<=[.!?])\s+|\n+|;\s*/u)
+    .map((part) => stripPlaceholders(part).trim())
+    .filter(Boolean);
   const sentences = body
-    .split(/(?<=[.!?])\s+|\n+/)
+    .split(/(?<=[.!?])\s+|\n+/u)
     .map((part) => part.trim())
     .filter(Boolean);
   const warnings: string[] = [];
 
   for (const sentence of sentences) {
-    if (/\[[^\]]+\]/u.test(sentence)) continue;
-    const anchors = claimAnchors(sentence);
+    const claimText = stripPlaceholders(sentence);
+    const anchors = claimAnchors(claimText)
+      .filter((anchor) => !anchorIsNegated(claimText, anchor));
     if (!anchors.length) continue;
-    const unsupported = anchors.filter((anchor) => !supportContainsAnchor(normalizedSupport, anchor));
-    if (unsupported.length) {
+    const supported = supportSentences.some((supportSentence) =>
+      sentenceSupportsClaim(claimText, anchors, supportSentence)
+    );
+    if (!supported) {
       warnings.push(`Unsupported factual claim: “${compact(sentence)}”`);
     }
     if (warnings.length >= 8) break;

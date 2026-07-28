@@ -1,0 +1,28 @@
+name: Content live-model evaluation
+
+on:
+  schedule:
+    - cron: "17 2 * * 1"
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Require evaluation credentials
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: test -n "$OPENROUTER_API_KEY"
+
+      - name: Run live company-voice goldens
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CONTENT_EVAL_MODEL: openai/gpt-4o-mini
+        run: deno run --allow-env=OPENROUTER_API_KEY,CONTENT_EVAL_MODEL --allow-net=openrouter.ai supabase/functions/content-generate/live-golden-eval.ts

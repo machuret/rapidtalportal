@@ -8,6 +8,7 @@ const read = (file: string) => readFileSync(path.join(root, file), "utf8");
 
 describe("unified content engine", () => {
   const generator = read("supabase/functions/content-generate/index.ts");
+  const orchestration = read("supabase/functions/_shared/content-generation-orchestration.ts");
   const retrieval = read("supabase/functions/_shared/content-vault-retrieval.ts");
   const quality = read("supabase/functions/_shared/content-quality.ts");
   const compose = read("components/vault/ComposeClient.tsx");
@@ -40,16 +41,16 @@ describe("unified content engine", () => {
     expect(generator).toContain("style_snapshot: styleSnapshot");
     expect(generator).toContain("styleSnapshot,");
     expect(generator).toContain("sources: verifiedSources");
-    expect(generator).toContain("sourceItemIds");
+    expect(orchestration).toContain("sourceItemIds");
   });
 
   test("quality validation runs before persistence and preserves section-only rewriting", () => {
-    expect(generator).toContain("contentQualityWarnings({");
+    expect(orchestration).toContain("contentQualityWarnings({");
     expect(generator).toContain("The generated draft did not pass the content quality gate. No draft was created.");
     expect(generator.indexOf("if (qualityWarnings.length)")).toBeLessThan(
       generator.indexOf("if (persist)"),
     );
-    expect(generator).toContain("enforceStructure: !sectionOnlyRewrite");
+    expect(orchestration).toContain("enforceStructure: !sectionOnlyRewrite");
   });
 });
 

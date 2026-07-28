@@ -30,7 +30,7 @@ export default async function ContentPage() {
       .order("created_at", { ascending: false }),
     admin
       .from("company_dna")
-      .select("brand_voice, content_style, internal_rules, sign_off, preferred_terms, prohibited_terms, emoji_policy, humour_policy, spelling_locale, default_cta_style, approved_claims, prohibited_claims, channel_styles")
+      .select("brand_voice, content_style, internal_rules, sign_off, preferred_terms, prohibited_terms, emoji_policy, humour_policy, spelling_locale, default_cta_style, approved_claims, prohibited_claims, channel_styles, hard_rules")
       .eq("client_id", user.client_id)
       .maybeSingle(),
   ]);

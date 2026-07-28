@@ -104,8 +104,10 @@ describe("content approval and style integrity", () => {
   const migration = read("db/migrations/088_content_approval_integrity.sql");
   const guardMigration = read("db/migrations/089_content_approval_guard.sql");
   const guardExecutionMigration = read("db/migrations/090_content_guard_execution.sql");
+  const hardRulesMigration = read("db/migrations/094_structured_content_hard_rules.sql");
   const piecesRoute = read("app/api/content/pieces/route.ts");
   const generator = read("supabase/functions/content-generate/index.ts");
+  const orchestration = read("supabase/functions/_shared/content-generation-orchestration.ts");
 
   test("approval locks the piece and exact Company DNA version in one RPC", () => {
     expect(migration).toContain("FOR UPDATE");
@@ -134,6 +136,15 @@ describe("content approval and style integrity", () => {
     expect(guardExecutionMigration).toContain("FROM PUBLIC, anon, authenticated");
   });
 
+  test("structured hard rules are stored and enforced again at the database boundary", () => {
+    expect(hardRulesMigration).toContain("ADD COLUMN IF NOT EXISTS hard_rules JSONB");
+    expect(hardRulesMigration).toContain("jsonb_array_elements");
+    expect(hardRulesMigration).toContain("v_rule_type = 'require_phrase'");
+    expect(hardRulesMigration).toContain("v_rule_type = 'max_words'");
+    expect(hardRulesMigration).toContain("v_rule_type = 'max_emojis'");
+    expect(hardRulesMigration).toContain("REVOKE ALL ON FUNCTION enforce_content_piece_approval()");
+  });
+
   test("generation fails closed on DNA/Vault errors and critiques with the same style authority", () => {
     const retrieval = read("supabase/functions/_shared/content-vault-retrieval.ts");
     expect(generator).toContain("if (dnaError)");
@@ -142,8 +153,8 @@ describe("content approval and style integrity", () => {
     expect(generator).toContain("Vault context is temporarily unavailable");
     expect(retrieval).toContain("if (vaultError)");
     expect(generator).toContain("if (memoryError)");
-    expect(generator).toContain('content: `${style.prompt}\\n\\n=== PLATFORM OUTPUT CONTRACT ===');
-    expect(generator).toContain("${context}\\n=== STRUCTURED BRIEF ===");
+    expect(orchestration).toContain("=== PLATFORM OUTPUT CONTRACT ===");
+    expect(orchestration).toContain("=== STRUCTURED BRIEF ===");
   });
 
   test("X is supported and combined multi-platform generation is rejected", () => {

@@ -63,7 +63,7 @@ export const POST = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: dna, error: dnaError } = await (admin as any)
     .from("company_dna")
-    .select("updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles")
+    .select("updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules")
     .eq("client_id", parsed.data.client_id)
     .maybeSingle();
   if (dnaError) return serverError(dnaError);
@@ -189,7 +189,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: dna, error: dnaError } = await (admin as any)
       .from("company_dna")
-      .select("company_name,services,location,team,tools_used,extra,updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles")
+      .select("company_name,services,location,team,tools_used,extra,updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules")
       .eq("client_id", parsed.data.client_id)
       .maybeSingle();
     if (dnaError) return serverError(dnaError);

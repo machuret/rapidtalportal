@@ -75,3 +75,10 @@ jobs:
             vault-ask/index.ts \
             vault-delete/index.ts \
             vault-process/index.ts
+
+      - name: Type-check live content evaluation
+        run: deno check supabase/functions/content-generate/live-golden-eval.ts
+
+      - name: Exercise Edge Function tenant boundaries
+        working-directory: supabase/functions
+        run: deno test content-generate/tenant-boundary.test.ts

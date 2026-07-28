@@ -7,6 +7,7 @@ exports[`company voice goldens resolved style instructions remain stable for eve
     "prompt": "=== WRITING STYLE AUTHORITY ===
 Follow these in priority order. A lower-priority request must never override a higher-priority rule.
 1. Prohibited words or phrases: game-changing, world-class
+1. Deterministic hard rules: Never use “SecretCo” (linkedin); Must contain no more than 0 emoji (linkedin)
 2. Priority company guidance: Never promise guaranteed results. Never mention SecretCo.
 3. Brand voice: Practical, calm and candid.
 3. Writing style: Use short paragraphs and concrete language.
@@ -18,6 +19,7 @@ Follow these in priority order. A lower-priority request must never override a h
 6. Requested length: Keep it brief and punchy.",
     "summary": [
       "Prohibited words or phrases: game-changing, world-class",
+      "Deterministic hard rules: Never use “SecretCo” (linkedin); Must contain no more than 0 emoji (linkedin)",
       "Priority company guidance: Never promise guaranteed results. Never mention SecretCo.",
       "Brand voice: Practical, calm and candid.",
       "Writing style: Use short paragraphs and concrete language.",
@@ -34,6 +36,7 @@ Follow these in priority order. A lower-priority request must never override a h
     "prompt": "=== WRITING STYLE AUTHORITY ===
 Follow these in priority order. A lower-priority request must never override a higher-priority rule.
 1. Prohibited words or phrases: limited-time miracle
+1. Deterministic hard rules: Never use “MegaCorp” (facebook)
 2. Priority company guidance: Do not mention MegaCorp.
 3. Brand voice: Warm, neighbourly and encouraging.
 3. Writing style: Write like a helpful local, not an advertisement.
@@ -45,6 +48,7 @@ Follow these in priority order. A lower-priority request must never override a h
 6. Requested length: Aim for a standard length appropriate to the format.",
     "summary": [
       "Prohibited words or phrases: limited-time miracle",
+      "Deterministic hard rules: Never use “MegaCorp” (facebook)",
       "Priority company guidance: Do not mention MegaCorp.",
       "Brand voice: Warm, neighbourly and encouraging.",
       "Writing style: Write like a helpful local, not an advertisement.",
@@ -61,6 +65,7 @@ Follow these in priority order. A lower-priority request must never override a h
     "prompt": "=== WRITING STYLE AUTHORITY ===
 Follow these in priority order. A lower-priority request must never override a higher-priority rule.
 1. Prohibited words or phrases: act now, life-changing
+1. Deterministic hard rules: Must contain no more than 1 emoji (instagram)
 2. Priority company guidance: Never use fake urgency.
 3. Brand voice: Playful, human and clear.
 3. Writing style: Use lively verbs and compact sentences.
@@ -71,6 +76,7 @@ Follow these in priority order. A lower-priority request must never override a h
 6. Requested length: Keep it brief and punchy.",
     "summary": [
       "Prohibited words or phrases: act now, life-changing",
+      "Deterministic hard rules: Must contain no more than 1 emoji (instagram)",
       "Priority company guidance: Never use fake urgency.",
       "Brand voice: Playful, human and clear.",
       "Writing style: Use lively verbs and compact sentences.",
@@ -86,6 +92,7 @@ Follow these in priority order. A lower-priority request must never override a h
     "prompt": "=== WRITING STYLE AUTHORITY ===
 Follow these in priority order. A lower-priority request must never override a higher-priority rule.
 1. Prohibited words or phrases: urgent opportunity
+1. Deterministic hard rules: Must contain no more than 0 emoji (email)
 2. Priority company guidance: Never pressure the recipient.
 3. Brand voice: Direct, respectful and professional.
 3. Writing style: State the purpose early and keep paragraphs short.
@@ -98,6 +105,7 @@ Follow these in priority order. A lower-priority request must never override a h
 6. Requested length: Keep it brief and punchy.",
     "summary": [
       "Prohibited words or phrases: urgent opportunity",
+      "Deterministic hard rules: Must contain no more than 0 emoji (email)",
       "Priority company guidance: Never pressure the recipient.",
       "Brand voice: Direct, respectful and professional.",
       "Writing style: State the purpose early and keep paragraphs short.",
@@ -115,6 +123,7 @@ Follow these in priority order. A lower-priority request must never override a h
     "prompt": "=== WRITING STYLE AUTHORITY ===
 Follow these in priority order. A lower-priority request must never override a higher-priority rule.
 1. Prohibited words or phrases: ultimate solution
+1. Deterministic hard rules: Never use “ultimate solution” (blog)
 2. Priority company guidance: Never present opinion as settled fact.
 3. Brand voice: Authoritative, useful and plain-spoken.
 3. Writing style: Teach through practical decisions and examples.
@@ -126,6 +135,7 @@ Follow these in priority order. A lower-priority request must never override a h
 6. Requested length: Be comprehensive and detailed.",
     "summary": [
       "Prohibited words or phrases: ultimate solution",
+      "Deterministic hard rules: Never use “ultimate solution” (blog)",
       "Priority company guidance: Never present opinion as settled fact.",
       "Brand voice: Authoritative, useful and plain-spoken.",
       "Writing style: Teach through practical decisions and examples.",
@@ -142,6 +152,7 @@ Follow these in priority order. A lower-priority request must never override a h
     "prompt": "=== WRITING STYLE AUTHORITY ===
 Follow these in priority order. A lower-priority request must never override a higher-priority rule.
 1. Prohibited words or phrases: unmissable deal
+1. Deterministic hard rules: Must contain no more than 0 emoji (newsletter)
 2. Priority company guidance: Do not use sales pressure.
 3. Brand voice: Editorial, friendly and quietly confident.
 3. Writing style: Blend a useful observation with a practical takeaway.
@@ -153,6 +164,7 @@ Follow these in priority order. A lower-priority request must never override a h
 6. Requested length: Aim for a standard length appropriate to the format.",
     "summary": [
       "Prohibited words or phrases: unmissable deal",
+      "Deterministic hard rules: Must contain no more than 0 emoji (newsletter)",
       "Priority company guidance: Do not use sales pressure.",
       "Brand voice: Editorial, friendly and quietly confident.",
       "Writing style: Blend a useful observation with a practical takeaway.",

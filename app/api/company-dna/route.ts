@@ -4,6 +4,26 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { CONTENT_HARD_RULE_TYPES } from "@/supabase/functions/_shared/content-style";
+
+const hardRuleSchema = z.object({
+  id: z.string().min(1).max(100),
+  type: z.enum(CONTENT_HARD_RULE_TYPES),
+  value: z.string().trim().min(1).max(300).optional(),
+  limit: z.number().int().min(0).max(50000).optional(),
+  channels: z.array(z.enum([
+    "email", "x", "linkedin", "facebook", "instagram",
+    "newsletter", "blog", "message", "other",
+  ])).max(12).optional().default([]),
+}).superRefine((rule, ctx) => {
+  const numeric = ["min_words", "max_words", "max_emojis"].includes(rule.type);
+  if (numeric && rule.limit === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["limit"], message: "A numeric limit is required." });
+  }
+  if (!numeric && !rule.value) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["value"], message: "A phrase is required." });
+  }
+});
 
 const bodySchema = z.object({
   client_id:          z.string().uuid(),
@@ -38,6 +58,7 @@ const bodySchema = z.object({
   approved_claims:    z.string().max(6000).optional().nullable(),
   prohibited_claims:  z.string().max(6000).optional().nullable(),
   channel_styles:     z.record(z.string(), z.string().max(4000)).optional(),
+  hard_rules:         z.array(hardRuleSchema).max(100).optional(),
   // extra is a NOT NULL JSONB column — must be present on first INSERT
   extra:              z.record(z.string(), z.unknown()).optional().default({}),
 });

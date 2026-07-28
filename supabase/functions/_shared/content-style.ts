@@ -1,3 +1,24 @@
+export const CONTENT_HARD_RULE_TYPES = [
+  "prohibit_phrase",
+  "require_phrase",
+  "require_prefix",
+  "require_suffix",
+  "min_words",
+  "max_words",
+  "max_emojis",
+] as const;
+
+export type ContentHardRuleType = typeof CONTENT_HARD_RULE_TYPES[number];
+
+export interface ContentHardRule {
+  id: string;
+  type: ContentHardRuleType;
+  value?: string;
+  limit?: number;
+  /** Empty means every channel. */
+  channels?: string[];
+}
+
 export interface ResolvedContentStyle {
   /** Complete human-readable rule list shown beside the generated draft. */
   summary: string[];
@@ -7,11 +28,14 @@ export interface ResolvedContentStyle {
   prohibitedPhrases: string[];
   /** Whether Company DNA explicitly disallows emoji. */
   disallowEmoji: boolean;
+  /** Validated, channel-applicable rules with deterministic enforcement. */
+  hardRules: ContentHardRule[];
 }
 
 export interface ContentStyleSnapshot {
   channel: string;
   summary: string[];
+  hardRules: ContentHardRule[];
   companyDnaUpdatedAt: string | null;
   capturedAt: string;
 }
@@ -45,17 +69,33 @@ function splitClaims(value: string): string[] {
   ).slice(0, 100);
 }
 
-function explicitHardRulePhrases(value: string): string[] {
-  return value
-    .split(/[\n.;]+/)
-    .map((part) => part.trim())
-    .map((part) => {
-      const match = part.match(
-        /^(?:never|do not|don't|must not|avoid)\s+(?:ever\s+)?(?:(?:use|say|mention|include|claim|promise|write)\s+)?(.+)$/iu,
-      );
-      return match?.[1]?.replace(/[.!]+$/u, "").trim() ?? "";
-    })
-    .filter((part) => part.length >= 2 && part.length <= 160);
+function contentHardRules(dna: Dna, channel: string): ContentHardRule[] {
+  if (!Array.isArray(dna?.hard_rules)) return [];
+  const validTypes = new Set<string>(CONTENT_HARD_RULE_TYPES);
+  const rules: ContentHardRule[] = [];
+
+  for (const raw of dna.hard_rules.slice(0, 100)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const row = raw as Record<string, unknown>;
+    if (typeof row.id !== "string" || !validTypes.has(String(row.type))) continue;
+    const channels = Array.isArray(row.channels)
+      ? row.channels.filter((item): item is string => typeof item === "string").slice(0, 12)
+      : [];
+    if (channels.length && !channels.includes(channel)) continue;
+
+    const type = row.type as ContentHardRuleType;
+    if (["min_words", "max_words", "max_emojis"].includes(type)) {
+      if (typeof row.limit !== "number" || !Number.isInteger(row.limit) || row.limit < 0) continue;
+      rules.push({ id: row.id, type, limit: row.limit, channels });
+      continue;
+    }
+
+    if (typeof row.value !== "string") continue;
+    const value = row.value.trim();
+    if (value.length < 1 || value.length > 300) continue;
+    rules.push({ id: row.id, type, value, channels });
+  }
+  return rules;
 }
 
 function emojiIsDisallowed(policy: string): boolean {
@@ -95,6 +135,19 @@ function channelStyle(dna: Dna, channel: string): string {
   return "";
 }
 
+function hardRuleSummary(rule: ContentHardRule): string {
+  const channelLabel = rule.channels?.length ? ` (${rule.channels.join(", ")})` : "";
+  switch (rule.type) {
+    case "prohibit_phrase": return `Never use “${rule.value}”${channelLabel}`;
+    case "require_phrase": return `Must include “${rule.value}”${channelLabel}`;
+    case "require_prefix": return `Must start with “${rule.value}”${channelLabel}`;
+    case "require_suffix": return `Must end with “${rule.value}”${channelLabel}`;
+    case "min_words": return `Must contain at least ${rule.limit} words${channelLabel}`;
+    case "max_words": return `Must contain no more than ${rule.limit} words${channelLabel}`;
+    case "max_emojis": return `Must contain no more than ${rule.limit} emoji${channelLabel}`;
+  }
+}
+
 /**
  * Resolve deliberate Company DNA writing rules. The ordering is load-bearing:
  * a brief/tone request can shape a draft, but never override Company DNA.
@@ -107,9 +160,11 @@ export function resolveContentStyle(
   requestedTone: string,
   lengthHint: string,
 ): ResolvedContentStyle {
+  const hardRules = contentHardRules(dna, channel);
   const rules: { label: string; value: string; priority: number }[] = [
     { label: "Prohibited claims", value: text(dna, "prohibited_claims"), priority: 1 },
     { label: "Prohibited words or phrases", value: text(dna, "prohibited_terms"), priority: 1 },
+    { label: "Deterministic hard rules", value: hardRules.map(hardRuleSummary).join("; "), priority: 1 },
     { label: "Priority company guidance", value: text(dna, "internal_rules"), priority: 2 },
     { label: "Brand voice", value: text(dna, "brand_voice"), priority: 3 },
     { label: "Writing style", value: text(dna, "content_style"), priority: 3 },
@@ -137,9 +192,9 @@ export function resolveContentStyle(
     prohibitedPhrases: Array.from(new Set([
       ...splitTerms(text(dna, "prohibited_terms")),
       ...splitClaims(text(dna, "prohibited_claims")),
-      ...explicitHardRulePhrases(text(dna, "internal_rules")),
     ])),
     disallowEmoji: emojiIsDisallowed(text(dna, "emoji_policy")),
+    hardRules,
   };
 }
 
@@ -152,7 +207,42 @@ export function contentStyleWarnings(body: string, style: ResolvedContentStyle):
     style.disallowEmoji && /\p{Extended_Pictographic}/u.test(body)
       ? ["Remove emoji: Company DNA disallows them for this content."]
       : [];
-  return [...phraseWarnings, ...emojiWarnings].slice(0, 12);
+  const trimmed = body.trim();
+  const wordCount = trimmed ? trimmed.split(/\s+/u).length : 0;
+  const emojiCount = body.match(/\p{Extended_Pictographic}/gu)?.length ?? 0;
+  const hardRuleWarnings = style.hardRules.flatMap((rule): string[] => {
+    switch (rule.type) {
+      case "prohibit_phrase":
+        return rule.value && containsPhrase(body, rule.value)
+          ? [`Remove prohibited hard-rule phrase: “${rule.value}”`]
+          : [];
+      case "require_phrase":
+        return rule.value && !containsPhrase(body, rule.value)
+          ? [`Add required hard-rule phrase: “${rule.value}”`]
+          : [];
+      case "require_prefix":
+        return rule.value && !trimmed.toLocaleLowerCase().startsWith(rule.value.toLocaleLowerCase())
+          ? [`Content must start with: “${rule.value}”`]
+          : [];
+      case "require_suffix":
+        return rule.value && !trimmed.toLocaleLowerCase().endsWith(rule.value.toLocaleLowerCase())
+          ? [`Content must end with: “${rule.value}”`]
+          : [];
+      case "min_words":
+        return rule.limit !== undefined && wordCount < rule.limit
+          ? [`Content requires at least ${rule.limit} words; found ${wordCount}.`]
+          : [];
+      case "max_words":
+        return rule.limit !== undefined && wordCount > rule.limit
+          ? [`Content allows at most ${rule.limit} words; found ${wordCount}.`]
+          : [];
+      case "max_emojis":
+        return rule.limit !== undefined && emojiCount > rule.limit
+          ? [`Content allows at most ${rule.limit} emoji; found ${emojiCount}.`]
+          : [];
+    }
+  });
+  return [...phraseWarnings, ...emojiWarnings, ...hardRuleWarnings].slice(0, 20);
 }
 
 export function createContentStyleSnapshot(
@@ -164,6 +254,7 @@ export function createContentStyleSnapshot(
   return {
     channel,
     summary: style.summary,
+    hardRules: style.hardRules,
     companyDnaUpdatedAt,
     capturedAt,
   };

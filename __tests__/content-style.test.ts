@@ -44,7 +44,6 @@ describe("content brand style", () => {
     expect(contentStyleWarnings("Our cheap service guarantees guaranteed results, without qualification.", style)).toEqual([
       "Review prohibited phrase: “cheap”",
       "Review prohibited phrase: “guaranteed results, without qualification”",
-      "Review prohibited phrase: “guaranteed results”",
     ]);
   });
 
@@ -66,6 +65,7 @@ describe("content brand style", () => {
     )).toEqual({
       channel: "facebook",
       summary: style.summary,
+      hardRules: [],
       companyDnaUpdatedAt: "2026-07-28T00:00:00.000Z",
       capturedAt: "2026-07-28T01:00:00.000Z",
     });

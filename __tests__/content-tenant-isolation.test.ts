@@ -16,7 +16,7 @@ jest.mock("@/lib/brain/llm", () => ({
   chatModel: jest.fn(),
 }));
 
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync, statSync } from "fs";
 import path from "path";
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -179,16 +179,14 @@ beforeEach(() => {
 describe("all content endpoint tenant boundaries", () => {
   test("the registry covers every exported content route handler", () => {
     const root = path.resolve(__dirname, "..", "app", "api", "content");
-    const routeFiles = [
-      "adapt/route.ts",
-      "duplicate/route.ts",
-      "generate/route.ts",
-      "pieces/route.ts",
-      "revisions/route.ts",
-      "rewrite/route.ts",
-      "topics/generate/route.ts",
-      "topics/route.ts",
-    ];
+    const filesUnder = (directory: string): string[] =>
+      readdirSync(directory).flatMap((name) => {
+        const absolute = path.join(directory, name);
+        return statSync(absolute).isDirectory() ? filesUnder(absolute) : [absolute];
+      });
+    const routeFiles = filesUnder(root)
+      .filter((file) => file.endsWith(`${path.sep}route.ts`))
+      .map((file) => path.relative(root, file));
     const discovered = routeFiles.flatMap((file) => {
       const source = readFileSync(path.join(root, file), "utf8");
       const methods = Array.from(

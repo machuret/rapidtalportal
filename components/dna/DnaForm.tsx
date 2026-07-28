@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Copy, Check, Globe, Loader2, Brain, Sparkles } from "lucide-react";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { HardRulesEditor } from "./HardRulesEditor";
+import type { ContentHardRule } from "@/supabase/functions/_shared/content-style";
 
 interface DnaFormProps {
   initialData: DbCompanyDna | null;
@@ -43,7 +45,7 @@ const fields: { key: keyof DbCompanyDna; label: string; multiline?: boolean; hin
   { key: "website_content", label: "Website Content", multiline: true },
   { key: "brand_voice", label: "Brand Voice & Tone", multiline: true },
   { key: "content_style", label: "Content Tone & Style", multiline: true },
-  { key: "internal_rules", label: "Internal Rules", multiline: true },
+  { key: "internal_rules", label: "Priority Editorial Guidance", multiline: true, hint: "Guidance that needs human judgement. Use Deterministic hard rules for requirements the system must enforce automatically." },
   { key: "preferred_terms", label: "Preferred Words & Phrases", multiline: true },
   { key: "prohibited_terms", label: "Words & Phrases to Avoid", multiline: true, hint: "Enter one term per line. Commas and semicolons are also supported for existing lists." },
   { key: "emoji_policy", label: "Emoji Policy", multiline: true },
@@ -72,6 +74,7 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
   const [copied, setCopied] = useState(false);
   const [scrapingUrl, setScrapingUrl] = useState("");
   const [isDrafting, setIsDrafting] = useState(false);
+  const hardRules = Array.isArray(form.hard_rules) ? form.hard_rules : [];
 
   const gaps = profileGaps(form as Record<string, unknown>);
 
@@ -220,6 +223,10 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
             })}
           </div>
         </div>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4">
+          <p className="text-xs font-medium text-zinc-500 mb-3">Deterministic Hard Rules</p>
+          <HardRulesEditor value={hardRules} onChange={() => {}} readOnly />
+        </div>
         {updatedAt && (
           <p className="text-xs text-zinc-600">Last updated: <LocalTime value={updatedAt} /></p>
         )}
@@ -353,6 +360,11 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
           ))}
         </div>
       </div>
+
+      <HardRulesEditor
+        value={hardRules}
+        onChange={(rules: ContentHardRule[]) => setForm((current) => ({ ...current, hard_rules: rules }))}
+      />
 
       {fields.map(({ key, label, multiline, hint }) => (
         <div key={key} className="flex flex-col gap-1.5">
