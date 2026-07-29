@@ -98,8 +98,8 @@ test("collects Equity Access posts without filtering URLs that LinkedIn blocks f
   expect(searchBody).toMatchObject({
     query: "site:linkedin.com/posts/equity-access",
     ignoreInvalidURLs: false,
-    scrapeOptions: { formats: [{ type: "markdown" }] },
   });
+  expect(searchBody).not.toHaveProperty("scrapeOptions");
   expect(vaultQuery.upsert).toHaveBeenCalledWith(
     [expect.objectContaining({
       client_id: CLIENT_ID,
@@ -109,4 +109,48 @@ test("collects Equity Access posts without filtering URLs that LinkedIn blocks f
     { onConflict: "client_id,origin_key" },
   );
   expect(scheduleVaultProcess).toHaveBeenCalledWith(ITEM_ID, CLIENT_ID);
+});
+
+test("runs live discovery diagnostics without changing Company DNA or Vault records", async () => {
+  const clientQuery = chain({ data: { name: "Equity Access" }, error: null });
+  const from = jest.fn((table: string) => {
+    if (table === "clients") return clientQuery;
+    throw new Error(`Test mode must not access ${table}`);
+  });
+  (createAdminClient as jest.Mock).mockReturnValue({ from });
+  jest.spyOn(global, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({
+      success: true,
+      data: { web: [] },
+    }), { status: 200, headers: { "content-type": "application/json" } }),
+  );
+  const request = new NextRequest("https://portal.test/api/vault/linkedin", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      clientId: CLIENT_ID,
+      profileUrl: "https://www.linkedin.com/company/equity-access/",
+      maxPosts: 10,
+      mode: "test",
+    }),
+  });
+
+  const response = await POST(request, { params: Promise.resolve({}) });
+  const body = await response.json();
+
+  expect(response.status).toBe(200);
+  expect(body).toMatchObject({
+    success: true,
+    test: true,
+    discovery: {
+      accepted: 0,
+      returned: 0,
+      attempts: [
+        { query: "site:linkedin.com/posts/equity-access", status: 200, returned: 0 },
+        { query: 'site:linkedin.com/posts "Equity Access"', status: 200, returned: 0 },
+      ],
+    },
+  });
+  expect(from).toHaveBeenCalledTimes(1);
+  expect(scheduleVaultProcess).not.toHaveBeenCalled();
 });

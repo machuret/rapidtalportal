@@ -13,6 +13,7 @@ const bodySchema = z.object({
   clientId: z.string().uuid(),
   profileUrl: z.string().url().max(2000),
   maxPosts: z.number().int().min(1).max(20).optional().default(10),
+  mode: z.enum(["test", "collect"]).optional().default("collect"),
 });
 
 type SearchResult = {
@@ -92,6 +93,20 @@ function searchResults(json: {
   return Array.isArray(json.web) ? json.web : [];
 }
 
+interface DiscoveryCandidate {
+  url: string | null;
+  accepted: boolean;
+  reason: "accepted" | "missing_url" | "different_company" | "insufficient_content" | "duplicate";
+  contentCharacters: number;
+}
+
+interface DiscoveryAttempt {
+  query: string;
+  status: number;
+  returned: number;
+  error: string | null;
+}
+
 export const POST = withAuth(async (req, { user }) => {
   if (!["client_admin", "super_admin"].includes(user.role)) {
     return NextResponse.json({ error: "Only admins can manage LinkedIn style sources." }, { status: 403 });
@@ -132,6 +147,8 @@ export const POST = withAuth(async (req, { user }) => {
 
   const companyName = (client as { name: string }).name;
   const uniqueResults = new Map<string, { url: string; title: string; content: string }>();
+  const attempts: DiscoveryAttempt[] = [];
+  const candidates: DiscoveryCandidate[] = [];
   let lastSearchError = "";
   const queries = [
     `site:linkedin.com/posts/${profile.slug}`,
@@ -154,11 +171,6 @@ export const POST = withAuth(async (req, { user }) => {
         // LinkedIn post pages are often unsuitable for a second direct scrape,
         // but they must remain eligible as public search results.
         ignoreInvalidURLs: false,
-        scrapeOptions: {
-          formats: [{ type: "markdown" }],
-          onlyMainContent: true,
-          timeout: 45_000,
-        },
       }),
     });
     const searchJson = await searchResponse.json().catch(() => ({})) as {
@@ -167,17 +179,53 @@ export const POST = withAuth(async (req, { user }) => {
       data?: { web?: SearchResult[] } | SearchResult[];
       web?: SearchResult[];
     };
+    const results = searchResults(searchJson);
+    attempts.push({
+      query,
+      status: searchResponse.status,
+      returned: results.length,
+      error: !searchResponse.ok || searchJson.success === false
+        ? searchJson.error ?? `Search returned ${searchResponse.status}`
+        : null,
+    });
     if (!searchResponse.ok || searchJson.success === false) {
       lastSearchError = searchJson.error ?? `Search returned ${searchResponse.status}`;
       continue;
     }
-    for (const result of searchResults(searchJson)) {
-      const url = normalisePublicPostUrl(searchResultUrl(result), profile.slug);
+    for (const result of results) {
+      const rawUrl = searchResultUrl(result);
+      const url = normalisePublicPostUrl(rawUrl, profile.slug);
       const content = cleanText(result.markdown)
         || cleanText(result.description)
         || cleanText(result.snippet)
         || cleanText(result.metadata?.description);
-      if (!url || content.length < 40 || uniqueResults.has(url)) continue;
+      if (!url) {
+        candidates.push({
+          url: typeof rawUrl === "string" ? rawUrl.slice(0, 2000) : null,
+          accepted: false,
+          reason: typeof rawUrl === "string" ? "different_company" : "missing_url",
+          contentCharacters: content.length,
+        });
+        continue;
+      }
+      if (content.length < 40) {
+        candidates.push({
+          url,
+          accepted: false,
+          reason: "insufficient_content",
+          contentCharacters: content.length,
+        });
+        continue;
+      }
+      if (uniqueResults.has(url)) {
+        candidates.push({
+          url,
+          accepted: false,
+          reason: "duplicate",
+          contentCharacters: content.length,
+        });
+        continue;
+      }
       uniqueResults.set(url, {
         url,
         title: (
@@ -187,12 +235,36 @@ export const POST = withAuth(async (req, { user }) => {
         ).slice(0, 200),
         content,
       });
+      candidates.push({
+        url,
+        accepted: true,
+        reason: "accepted",
+        contentCharacters: content.length,
+      });
     }
   }
 
+  const discovery = {
+    profileUrl: profile.url,
+    provider: "firecrawl_search",
+    attempts,
+    returned: attempts.reduce((total, attempt) => total + attempt.returned, 0),
+    accepted: uniqueResults.size,
+    candidates,
+  };
+  if (parsed.data.mode === "test") {
+    return NextResponse.json({
+      success: true,
+      test: true,
+      discovery,
+    });
+  }
   if (uniqueResults.size === 0 && lastSearchError) {
     return NextResponse.json(
-      { error: lastSearchError || "LinkedIn's public results could not be collected right now." },
+      {
+        error: lastSearchError || "LinkedIn's public results could not be collected right now.",
+        discovery,
+      },
       { status: 502 },
     );
   }
@@ -251,6 +323,7 @@ export const POST = withAuth(async (req, { user }) => {
       success: true,
       profileUrl: profile.url,
       collected: 0,
+      discovery,
       warning: "The LinkedIn page was saved, but no public posts were discoverable. LinkedIn may be limiting public access; try again later.",
     });
   }
@@ -275,5 +348,6 @@ export const POST = withAuth(async (req, { user }) => {
     profileUrl: profile.url,
     collected: saved.length,
     items: saved,
+    discovery,
   });
 });
