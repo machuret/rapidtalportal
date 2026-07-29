@@ -22,7 +22,7 @@ export const GET = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("content_piece_revisions")
-    .select("id,revision_number,title,body,content_type,reason,created_by,created_at")
+    .select("id,revision_number,title,body,content_type,content_brief,source_references,reason,created_by,created_at")
     .eq("piece_id", parsed.data.piece_id)
     .eq("client_id", parsed.data.client_id)
     .order("revision_number", { ascending: false })

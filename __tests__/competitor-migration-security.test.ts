@@ -27,6 +27,14 @@ const intelligenceRunsMigration = readFileSync(
   path.resolve(__dirname, "..", "db", "migrations", "102_competitor_intelligence_runs.sql"),
   "utf8",
 );
+const intelligenceHardeningMigration = readFileSync(
+  path.resolve(__dirname, "..", "db", "migrations", "103_competitor_intelligence_hardening.sql"),
+  "utf8",
+);
+const retireUnleasedMigration = readFileSync(
+  path.resolve(__dirname, "..", "db", "migrations", "104_retire_unleased_competitor_intelligence.sql"),
+  "utf8",
+);
 
 describe("competitor source foundation migration", () => {
   test.each([
@@ -154,5 +162,80 @@ describe("competitor intelligence runs migration", () => {
     expect(intelligenceRunsMigration).toContain("WHERE client_id = p_client_id");
     expect(intelligenceRunsMigration).toContain("competitor_id = ANY(p_competitor_ids)");
     expect(intelligenceRunsMigration).toContain("id = ANY(p_source_item_ids)");
+  });
+});
+
+describe("competitor intelligence hardening migration", () => {
+  test("uses publication time with an explicit immutable collection-date fallback", () => {
+    expect(intelligenceHardeningMigration).toContain(
+      "coalesce(ci.published_at, cv.captured_at) AS effective_at",
+    );
+    expect(intelligenceHardeningMigration).toContain(
+      "CASE WHEN ci.published_at IS NULL THEN 'captured' ELSE 'published' END AS date_basis",
+    );
+    expect(intelligenceHardeningMigration).toContain(
+      "coalesce(ci.published_at, cv.captured_at) >= p_window_start",
+    );
+    expect(intelligenceHardeningMigration).toContain(
+      "version.content_hash = ci.content_hash",
+    );
+  });
+
+  test("pins capture-version IDs and hashes in every completed report", () => {
+    expect(intelligenceHardeningMigration).toContain("source_evidence JSONB");
+    expect(intelligenceHardeningMigration).toContain("capture_version_id");
+    expect(intelligenceHardeningMigration).toContain(
+      "version.content_hash = entry.value->>'content_hash'",
+    );
+    expect(intelligenceHardeningMigration).toContain(
+      "jsonb_array_length(source_evidence) = source_count",
+    );
+  });
+
+  test("allows v2 analysis only when the JSON and column schema versions agree", () => {
+    expect(intelligenceHardeningMigration).toContain(
+      "DROP CONSTRAINT IF EXISTS competitor_intelligence_runs_analysis_check",
+    );
+    expect(intelligenceHardeningMigration).toContain(
+      "(analysis->>'schema_version')::INTEGER = schema_version",
+    );
+  });
+
+  test("serializes paid analysis through one expiring tenant lease", () => {
+    expect(intelligenceHardeningMigration).toContain(
+      "CREATE TABLE IF NOT EXISTS competitor_intelligence_jobs",
+    );
+    expect(intelligenceHardeningMigration).toContain(
+      "CREATE UNIQUE INDEX IF NOT EXISTS competitor_intelligence_one_running_job",
+    );
+    expect(intelligenceHardeningMigration).toContain(
+      "clock_timestamp() + interval '3 minutes'",
+    );
+    expect(intelligenceHardeningMigration).toContain(
+      "AND lease_token = p_lease_token",
+    );
+    expect(intelligenceHardeningMigration).toContain(
+      "A competitor analysis is already running for this client.",
+    );
+  });
+
+  test("keeps every worker function service-role only and retires unleased writes", () => {
+    for (const name of [
+      "competitor_intelligence_evidence",
+      "start_competitor_intelligence_job",
+      "fail_competitor_intelligence_job",
+      "complete_competitor_intelligence_job",
+    ]) {
+      expect(intelligenceHardeningMigration).toContain(`REVOKE ALL ON FUNCTION ${name}`);
+      expect(intelligenceHardeningMigration).toMatch(
+        new RegExp(`GRANT EXECUTE ON FUNCTION ${name}[\\s\\S]+TO service_role`, "u"),
+      );
+    }
+    expect(retireUnleasedMigration).toContain(
+      "DROP FUNCTION IF EXISTS replace_competitor_intelligence_run",
+    );
+    expect(retireUnleasedMigration).toContain(
+      "WHERE schema_version = 1 AND status = 'complete'",
+    );
   });
 });

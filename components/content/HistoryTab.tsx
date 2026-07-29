@@ -30,7 +30,13 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { Textarea } from "@/components/ui/textarea";
 import { usePieceDetail, useUpdateContentPiece, useUpdatePieceStatus } from "@/hooks/useContent";
 import type { ContentPieceFull } from "@/hooks/useContent";
-import type { ContentPiece, ContentSourceReference, ContentStatus, ContentType } from "@/types/content";
+import type {
+  ContentBrief,
+  ContentPiece,
+  ContentSourceReference,
+  ContentStatus,
+  ContentType,
+} from "@/types/content";
 import { TYPE_ICON_COLORS, TYPE_ICONS, CONTENT_STATUS_STYLES } from "@/types/content";
 
 /* ── Props ──────────────────────────────────────────────────────── */
@@ -112,6 +118,7 @@ function PieceDetail({
     revision_number: number;
     title: string;
     body: string | null;
+    content_brief: ContentBrief;
     reason: string;
     created_at: string;
   }[]>([]);
@@ -429,6 +436,34 @@ function PieceDetail({
         </div>
       )}
 
+      {piece.content_brief?.marketIntelligence && (
+        <div className="rounded-lg border border-orange-500/25 bg-orange-500/5 px-4 py-3">
+          <p className="text-xs font-medium text-orange-200">Market intelligence provenance</p>
+          <p className="mt-1 text-xs leading-5 text-zinc-400">
+            Idea: {piece.content_brief.marketIntelligence.ideaTitle} ·{" "}
+            {piece.content_brief.marketIntelligence.confidence} confidence ·{" "}
+            {piece.content_brief.marketIntelligence.novelty} relative to company content
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {piece.content_brief.marketIntelligence.competitorSources.map((source) => (
+              <a
+                key={`${source.itemId}:${source.captureVersionId}`}
+                href={source.url}
+                target="_blank"
+                rel="noreferrer"
+                title={`Immutable capture ${source.captureVersionId}\n${source.evidenceQuote}`}
+                className="rounded-full border border-orange-500/20 px-2.5 py-1 text-xs text-orange-100 hover:border-orange-400/50"
+              >
+                {source.competitorName}: {source.title}
+              </a>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-zinc-600">
+            Report {piece.content_brief.marketIntelligence.runId}
+          </p>
+        </div>
+      )}
+
       {piece.source_references && piece.source_references.length > 0 && (
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3">
           <p className="text-xs font-medium text-zinc-500 mb-2">Vault sources used</p>
@@ -513,6 +548,11 @@ function PieceDetail({
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
                 <div className="rounded-lg bg-zinc-950 p-3">
                   <p className="text-xs text-zinc-600 mb-2">Revision {revision.revision_number}</p>
+                  {revision.content_brief?.marketIntelligence && (
+                    <p className="mb-2 text-xs text-orange-300">
+                      Market provenance retained · report {revision.content_brief.marketIntelligence.runId}
+                    </p>
+                  )}
                   <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-400">{revision.body}</pre>
                 </div>
                 <div className="rounded-lg bg-zinc-950 p-3">

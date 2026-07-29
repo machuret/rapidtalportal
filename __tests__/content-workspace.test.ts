@@ -44,6 +44,15 @@ describe("unified content engine", () => {
     expect(orchestration).toContain("sourceItemIds");
   });
 
+  test("market intelligence is tenant-verified, hidden from factual context, and persisted with the brief", () => {
+    expect(generateRoute).toContain("marketIntelligenceSchema");
+    expect(generator).toContain("validateMarketIntelligence");
+    expect(generator).toContain('.eq("client_id", clientId)');
+    expect(generator).toContain("modelContentBrief");
+    expect(generator).toContain("Market intelligence is inspiration only.");
+    expect(generator).toContain("content_brief: contentBrief");
+  });
+
   test("quality validation runs before persistence and preserves section-only rewriting", () => {
     expect(orchestration).toContain("contentQualityWarnings({");
     expect(generator).toContain("The generated draft did not pass the content quality gate. No draft was created.");
@@ -72,6 +81,8 @@ describe("editorial workspace integrity", () => {
     expect(migration).toContain("NEW.revision_reason := NULL");
     expect(revisions).toContain("assertClientAccess");
     expect(revisions).toContain('.eq("client_id", parsed.data.client_id)');
+    expect(revisions).toContain("content_brief,source_references");
+    expect(history).toContain("Market provenance retained");
   });
 
   test("rewrites are draft-only, non-duplicating engine calls with tenant-qualified saves", () => {

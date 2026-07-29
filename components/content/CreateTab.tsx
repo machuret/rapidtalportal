@@ -10,7 +10,12 @@ import { BrainFeedback } from "@/components/brain/BrainFeedback";
 import { toast } from "sonner";
 import { useGenerateContent, useUpdateContentPiece } from "@/hooks/useContent";
 import { CONTENT_TYPES, TONES, LENGTHS, TYPE_ICON_COLORS, TYPE_ICONS } from "@/types/content";
-import type { ContentType, ContentPiece, ContentSourceReference } from "@/types/content";
+import type {
+  ContentMarketIntelligenceProvenance,
+  ContentType,
+  ContentPiece,
+  ContentSourceReference,
+} from "@/types/content";
 import {
   contentStyleWarnings,
   resolveContentStyle,
@@ -22,8 +27,13 @@ interface CreateTabProps {
   initialType?: ContentType | null;
   initialTitle?: string;
   initialBrief?: string;
+  initialKeyPoints?: string[];
+  initialAdditionalGuidance?: string;
+  initialMarketIntelligence?: ContentMarketIntelligenceProvenance | null;
   onContentGenerated: (piece: ContentPiece) => void;
 }
+
+const EMPTY_KEY_POINTS: string[] = [];
 
 export const CreateTab = memo(function CreateTab({
   clientId,
@@ -31,6 +41,9 @@ export const CreateTab = memo(function CreateTab({
   initialType = null,
   initialTitle = "",
   initialBrief = "",
+  initialKeyPoints = EMPTY_KEY_POINTS,
+  initialAdditionalGuidance = "",
+  initialMarketIntelligence = null,
   onContentGenerated,
 }: CreateTabProps) {
   const [selectedType, setSelectedType] = useState<ContentType | null>(
@@ -39,7 +52,10 @@ export const CreateTab = memo(function CreateTab({
   const [title, setTitle] = useState(initialTitle);
   const [brief, setBrief] = useState(initialBrief);
   const [audience, setAudience] = useState("");
-  const [keyPoints, setKeyPoints] = useState("");
+  const [keyPoints, setKeyPoints] = useState(initialKeyPoints.join("\n"));
+  const [additionalGuidance, setAdditionalGuidance] = useState(initialAdditionalGuidance);
+  const [marketIntelligence, setMarketIntelligence] =
+    useState<ContentMarketIntelligenceProvenance | null>(initialMarketIntelligence);
   const [callToAction, setCallToAction] = useState("");
   const [tone, setTone] = useState("Professional");
   const [length, setLength] = useState<"short" | "medium" | "long">("medium");
@@ -82,7 +98,9 @@ export const CreateTab = memo(function CreateTab({
     setTitle(initialTitle);
     setBrief(initialBrief);
     setAudience("");
-    setKeyPoints("");
+    setKeyPoints(initialKeyPoints.join("\n"));
+    setAdditionalGuidance(initialAdditionalGuidance);
+    setMarketIntelligence(initialMarketIntelligence);
     setCallToAction("");
     setOutput(null);
     setGeneratedId(null);
@@ -92,7 +110,14 @@ export const CreateTab = memo(function CreateTab({
     setAppliedStyle([]);
     setWarnings([]);
     setSources([]);
-  }, [initialType, initialTitle, initialBrief]);
+  }, [
+    initialType,
+    initialTitle,
+    initialBrief,
+    initialKeyPoints,
+    initialAdditionalGuidance,
+    initialMarketIntelligence,
+  ]);
 
   const handleGenerate = useCallback(async () => {
     if (!selectedType || !title.trim()) {
@@ -127,6 +152,8 @@ export const CreateTab = memo(function CreateTab({
           tone: tone.toLowerCase() as "professional" | "friendly" | "persuasive" | "casual" | "authoritative",
           length,
           mode: "new",
+          additionalGuidance: additionalGuidance || null,
+          marketIntelligence,
         },
       });
 
@@ -153,7 +180,21 @@ export const CreateTab = memo(function CreateTab({
     } finally {
       generatingRef.current = false;
     }
-  }, [generate, clientId, selectedType, title, brief, audience, keyPoints, callToAction, tone, length, onContentGenerated]);
+  }, [
+    generate,
+    clientId,
+    selectedType,
+    title,
+    brief,
+    audience,
+    keyPoints,
+    callToAction,
+    tone,
+    length,
+    additionalGuidance,
+    marketIntelligence,
+    onContentGenerated,
+  ]);
 
   const handleCopy = useCallback(async () => {
     if (!output) return;
@@ -175,6 +216,8 @@ export const CreateTab = memo(function CreateTab({
     setBrief("");
     setAudience("");
     setKeyPoints("");
+    setAdditionalGuidance("");
+    setMarketIntelligence(null);
     setCallToAction("");
     setSelectedType(null);
     setTone("Professional");
@@ -342,6 +385,23 @@ export const CreateTab = memo(function CreateTab({
             className="bg-zinc-900 border-zinc-700 text-sm"
           />
         </div>
+
+        {marketIntelligence && (
+          <div className="rounded-lg border border-orange-500/25 bg-orange-500/5 px-4 py-3">
+            <p className="text-xs font-medium text-orange-200">Verified market intelligence attached</p>
+            <p className="mt-1 text-xs leading-5 text-zinc-400">
+              {marketIntelligence.competitorSources.length} immutable competitor source
+              {marketIntelligence.competitorSources.length === 1 ? "" : "s"} and{" "}
+              {marketIntelligence.companyReferences.length} company/Vault comparison reference
+              {marketIntelligence.companyReferences.length === 1 ? "" : "s"} will be saved with this draft.
+            </p>
+            {additionalGuidance && (
+              <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-zinc-500">
+                {additionalGuidance}
+              </p>
+            )}
+          </div>
+        )}
 
         {stylePreview.length > 0 && (
           <div className="rounded-lg border border-purple-500/25 bg-purple-500/5 px-4 py-3">
