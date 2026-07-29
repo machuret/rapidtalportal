@@ -106,6 +106,14 @@ describe("competitor URL resolution", () => {
       normalizedUrl: "https://au.linkedin.com/company/example",
       requiresConnector: false,
     });
+    expect(resolveCompetitorUrl(
+      "https://www.linkedin.com/company/equity-access/posts/?feedView=all",
+    )).toMatchObject({
+      sourceType: "social_profile",
+      platform: "linkedin",
+      crawlScope: "profile",
+      requiresConnector: false,
+    });
   });
 
   test("allows an explicit scope for ordinary public pages", () => {
@@ -207,6 +215,10 @@ describe("competitor crawl boundaries", () => {
     expect(capturedPageBelongsToSource(
       "https://www.linkedin.com/company/example",
       linkedin,
-    )).toBe(false);
+    )).toBe(true);
+    expect(capturedPageBelongsToSource(
+      "https://www.linkedin.com/company/example/posts/?feedView=all",
+      linkedin,
+    )).toBe(true);
   });
 });

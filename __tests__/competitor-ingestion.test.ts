@@ -126,14 +126,23 @@ describe("competitor source ingestion", () => {
         : { data: null, error: null }));
     const fetchMock = jest.spyOn(global, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        success: true,
         data: {
-          web: [
-            { url: "https://www.linkedin.com/posts/example_activity-123" },
-            { url: "https://www.linkedin.com/posts/other_activity-456" },
-            { url: "https://evil.example/posts/example_activity-789" },
+          rawHtml: '<a href="https://www.linkedin.com/posts/example_activity-111">Post</a>',
+          links: [
+            "https://www.linkedin.com/posts/example_activity-111",
+            "https://www.linkedin.com/posts/other_activity-999",
           ],
         },
+      }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        // Historical Firecrawl response shape is accepted during provider
+        // rollouts as well as the current data.web shape.
+        data: [
+          { url: "https://www.linkedin.com/posts/example_activity-123" },
+          { url: "https://www.linkedin.com/posts/other_activity-456" },
+          { url: "https://evil.example/posts/example_activity-789" },
+        ],
       }), { status: 200, headers: { "content-type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "batch-job" }), {
         status: 200,
@@ -142,18 +151,70 @@ describe("competitor source ingestion", () => {
 
     await startCompetitorRefresh({ from, rpc }, linkedinSource, "actor-id");
 
-    expect(fetchMock.mock.calls[0][0]).toBe("https://api.firecrawl.dev/v2/search");
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.firecrawl.dev/v2/scrape");
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
+      url: "https://www.linkedin.com/company/example/posts/?feedView=all",
+    });
+    expect(fetchMock.mock.calls[1][0]).toBe("https://api.firecrawl.dev/v2/search");
+    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body))).toMatchObject({
       includeDomains: ["linkedin.com"],
       limit: 10,
+      query: "site:linkedin.com/posts/example",
     });
-    expect(fetchMock.mock.calls[1][0]).toBe("https://api.firecrawl.dev/v2/batch/scrape");
-    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body))).toMatchObject({
-      urls: ["https://www.linkedin.com/posts/example_activity-123"],
+    expect(fetchMock.mock.calls[2][0]).toBe("https://api.firecrawl.dev/v2/batch/scrape");
+    expect(JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body))).toMatchObject({
+      urls: [
+        "https://www.linkedin.com/posts/example_activity-111",
+        "https://www.linkedin.com/posts/example_activity-123",
+      ],
     });
     expect(rpc).toHaveBeenCalledWith("create_competitor_crawl_job", expect.objectContaining({
       p_pages_requested: 11,
     }));
+  });
+
+  test("falls back to the attributed public posts feed instead of reporting no content", async () => {
+    const linkedinSource = source({
+      source_type: "social_profile",
+      platform: "linkedin",
+      url: "https://www.linkedin.com/company/equity-access",
+      normalized_url: "https://www.linkedin.com/company/equity-access",
+      crawl_scope: "profile",
+      path_prefix: null,
+      max_pages: 10,
+      competitor_name: "Equity Access",
+    });
+    const queued = { ...claimed(), status: "queued", provider_job_id: null };
+    const started = { ...queued, status: "crawling", provider_job_id: "batch-job" };
+    const rpc = jest.fn(() => ({
+      single: jest.fn().mockResolvedValue({ data: queued, error: null }),
+    }));
+    const from = jest.fn((table: string) =>
+      chainWith(table === "competitor_crawl_jobs"
+        ? { data: started, error: null }
+        : { data: null, error: null }));
+    const fetchMock = jest.spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: { rawHtml: "", links: [] },
+      }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        data: { web: [] },
+      }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "batch-job" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }));
+
+    await expect(startCompetitorRefresh(
+      { from, rpc },
+      linkedinSource,
+      "actor-id",
+    )).resolves.toMatchObject({ provider_job_id: "batch-job" });
+
+    expect(JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body))).toMatchObject({
+      urls: ["https://www.linkedin.com/company/equity-access/posts/?feedView=all"],
+    });
   });
 
   test("atomically reserves tenant budget before starting a v2 provider crawl", async () => {

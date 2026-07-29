@@ -19,6 +19,10 @@ const readinessMigration = readFileSync(
   path.resolve(__dirname, "..", "db", "migrations", "099_competitor_intelligence_readiness.sql"),
   "utf8",
 );
+const linkedinDiscoveryMigration = readFileSync(
+  path.resolve(__dirname, "..", "db", "migrations", "100_linkedin_public_post_discovery.sql"),
+  "utf8",
+);
 
 describe("competitor source foundation migration", () => {
   test.each([
@@ -106,5 +110,16 @@ describe("competitor intelligence readiness migration", () => {
     expect(readinessMigration).toContain("m.captured_items >= 5");
     expect(readinessMigration).toContain("m.content_characters >= 3000");
     expect(readinessMigration).toContain("m.latest_capture >= now() - interval '180 days'");
+  });
+});
+
+describe("LinkedIn public post discovery migration", () => {
+  test("activates only public company posts feeds and keeps readiness private", () => {
+    expect(linkedinDiscoveryMigration).toContain("linkedin\\.com/company/");
+    expect(linkedinDiscoveryMigration).toContain("/posts/?");
+    expect(linkedinDiscoveryMigration).toContain("IN ('social_post', 'social_feed')");
+    expect(linkedinDiscoveryMigration).toMatch(
+      /REVOKE ALL ON FUNCTION competitor_intelligence_readiness\(UUID\)[\s\S]+FROM PUBLIC, anon, authenticated/u,
+    );
   });
 });

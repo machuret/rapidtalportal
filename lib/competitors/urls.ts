@@ -99,7 +99,9 @@ export function linkedinCompanySlug(raw: string): string | null {
       url.protocol !== "https:"
       || (host !== "linkedin.com" && !host.endsWith(".linkedin.com"))
     ) return null;
-    const match = url.pathname.match(/^\/company\/([a-z0-9][a-z0-9-]{0,99})\/?$/iu);
+    const match = url.pathname.match(
+      /^\/company\/([a-z0-9][a-z0-9-]{0,99})(?:\/posts)?\/?$/iu,
+    );
     return match?.[1]?.toLowerCase() ?? null;
   } catch {
     return null;

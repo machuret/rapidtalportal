@@ -151,6 +151,9 @@ function urlsFromXml(raw: string, links: unknown): string[] {
   for (const match of raw.matchAll(/<link\b[^>]*>(https?:\/\/[\s\S]*?)<\/link>/giu)) {
     found.add(decodeXml(match[1].trim()));
   }
+  for (const match of raw.matchAll(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>/giu)) {
+    found.add(decodeXml(match[1].trim()));
+  }
   if (Array.isArray(links)) {
     for (const link of links) if (typeof link === "string") found.add(link);
   }
@@ -229,7 +232,7 @@ function linkedinPostBelongsToCompany(raw: string, source: IngestionSource): boo
   const slug = linkedinCompanySlug(source.normalized_url);
   if (!slug) return false;
   try {
-    const candidate = new URL(raw);
+    const candidate = new URL(raw, source.url);
     const host = candidate.hostname.toLowerCase().replace(/^www\./u, "");
     return candidate.protocol === "https:"
       && (host === "linkedin.com" || host.endsWith(".linkedin.com"))
@@ -247,23 +250,55 @@ async function discoverLinkedinPostUrls(source: IngestionSource): Promise<string
       422,
     );
   }
-  const name = source.competitor_name?.trim() || slug.replace(/-/gu, " ");
+  const sourceUrl = new URL(source.normalized_url);
+  const postsFeedUrl = `${sourceUrl.protocol}//${sourceUrl.host}/company/${slug}/posts/?feedView=all`;
+  const found = new Set<string>();
+
+  // LinkedIn's public company page exposes update links even when a search
+  // provider has not indexed the latest post yet.
+  try {
+    const { raw, links } = await scrapeXml(postsFeedUrl);
+    for (const candidate of urlsFromXml(raw, links)) {
+      if (linkedinPostBelongsToCompany(candidate, source)) {
+        found.add(new URL(candidate, postsFeedUrl).toString());
+      }
+      if (found.size >= source.max_pages) return [...found];
+    }
+  } catch {
+    // Search remains an independent discovery path below.
+  }
+
   const json = await firecrawlJson(`${FIRECRAWL_API}/search`, {
     method: "POST",
     headers: firecrawlHeaders(true),
     body: JSON.stringify({
-      query: `site:linkedin.com/posts/${slug} "${name}"`,
+      query: `site:linkedin.com/posts/${slug}`,
       limit: source.max_pages,
       sources: ["web"],
       includeDomains: ["linkedin.com"],
       timeout: 45000,
     }),
   });
-  const results = Array.isArray(json?.data?.web) ? json.data.web : [];
-  return [...new Set<string>(results
-    .map((result: { url?: unknown }) => typeof result?.url === "string" ? result.url : "")
-    .filter((url: string) => linkedinPostBelongsToCompany(url, source)))]
-    .slice(0, source.max_pages);
+  // Firecrawl v2 returns data.web. Accept the two historical shapes as well so
+  // a provider response rollout cannot silently turn a discoverable feed into
+  // a false "no posts" result.
+  const results = Array.isArray(json?.data?.web) ? json.data.web
+    : Array.isArray(json?.data) ? json.data
+      : Array.isArray(json?.web) ? json.web
+        : [];
+  for (const result of results) {
+    const value = result as { url?: unknown; sourceURL?: unknown };
+    const candidate = typeof value.url === "string" ? value.url
+      : typeof value.sourceURL === "string" ? value.sourceURL
+        : "";
+    if (linkedinPostBelongsToCompany(candidate, source)) found.add(candidate);
+    if (found.size >= source.max_pages) break;
+  }
+
+  // Last-resort capture: the public posts feed itself contains the company's
+  // Updates section. It is better to preserve that attributed market context
+  // than report that no public content exists.
+  return (found.size > 0 ? [...found] : [postsFeedUrl]).slice(0, source.max_pages);
 }
 
 async function startFirecrawl(source: IngestionSource): Promise<ProviderStart> {
@@ -371,7 +406,10 @@ export function capturedPageBelongsToSource(raw: string, source: IngestionSource
     const root = new URL(source.normalized_url);
     if (candidate.protocol !== "https:") return false;
     if (source.platform === "linkedin" && source.source_type === "social_profile") {
-      return linkedinPostBelongsToCompany(raw, source);
+      const sourceSlug = linkedinCompanySlug(source.normalized_url);
+      const attributedCompanyPage = sourceSlug !== null
+        && linkedinCompanySlug(candidate.toString()) === sourceSlug;
+      return attributedCompanyPage || linkedinPostBelongsToCompany(raw, source);
     }
     if (!allowedSourceHost(candidate, source)) return false;
     if (source.crawl_scope === "exact") {
@@ -435,7 +473,10 @@ async function commitPage(
     p_page_id: row.id,
     p_canonical_url: canonicalUrl,
     p_platform: source.platform,
-    p_content_type: source.platform === "linkedin" ? "social_post"
+    p_content_type: source.platform === "linkedin"
+      && new URL(canonicalUrl).pathname.toLowerCase().startsWith("/company/")
+      ? "social_feed"
+      : source.platform === "linkedin" ? "social_post"
       : source.source_type === "blog" ? "article"
         : "page",
     p_title: title,
