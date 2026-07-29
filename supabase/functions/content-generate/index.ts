@@ -302,7 +302,7 @@ export async function handleContentGenerateRequest(
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const resolvedDna = {
+    const resolvedDna: Record<string, unknown> = {
       ...(dna as Record<string, unknown>),
       style_analysis_profiles: approvedStyleAnalysis
         ? { [contentType]: approvedStyleAnalysis }
