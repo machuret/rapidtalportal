@@ -173,6 +173,91 @@ describe("competitor source ingestion", () => {
     }));
   });
 
+  test("stages public LinkedIn search content directly instead of re-scraping blocked post pages", async () => {
+    const linkedinSource = source({
+      source_type: "social_profile",
+      platform: "linkedin",
+      url: "https://www.linkedin.com/company/equity-access",
+      normalized_url: "https://www.linkedin.com/company/equity-access",
+      crawl_scope: "profile",
+      path_prefix: null,
+      max_pages: 10,
+      competitor_name: "Equity Access",
+    });
+    const queued = { ...claimed(), status: "queued", provider_job_id: null };
+    const started = {
+      ...queued,
+      status: "ingesting",
+      provider: "firecrawl_search",
+      provider_job_id: "linkedin-search-1",
+      provider_complete: true,
+      pages_discovered: 1,
+    };
+    const leased = { ...started, lease_token: LEASE };
+    const checkpointed = { ...leased, lease_token: null };
+    const stage = jest.fn();
+    const rpc = jest.fn((name: string, args?: Record<string, unknown>) => {
+      if (name === "create_competitor_crawl_job") {
+        return { single: jest.fn().mockResolvedValue({ data: queued, error: null }) };
+      }
+      if (name === "claim_competitor_crawl_job") {
+        return { single: jest.fn().mockResolvedValue({ data: leased, error: null }) };
+      }
+      if (name === "stage_competitor_crawl_pages") {
+        stage(args);
+        return Promise.resolve({ data: 1, error: null });
+      }
+      if (name === "checkpoint_competitor_crawl_job") {
+        return { single: jest.fn().mockResolvedValue({ data: checkpointed, error: null }) };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    });
+    const from = jest.fn((table: string) =>
+      chainWith(table === "competitor_crawl_jobs"
+        ? { data: started, error: null }
+        : { data: null, error: null }));
+    const fetchMock = jest.spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: { rawHtml: "", links: [], markdown: "" },
+      }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        data: {
+          web: [{
+            url: "https://www.linkedin.com/posts/equity-access_equityaccess-activity-7452144320121393153-XzSg",
+            title: "Equity Access on LinkedIn",
+            description: "Equity Access helps brokers structure private lending scenarios with speed and certainty.",
+          }],
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    const result = await startCompetitorRefresh({ from, rpc }, linkedinSource, "actor-id");
+
+    expect(result).toMatchObject({
+      status: "ingesting",
+      provider: "firecrawl_search",
+      provider_complete: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body))).toMatchObject({
+      scrapeOptions: {
+        formats: [{ type: "markdown" }],
+        onlyMainContent: true,
+      },
+    });
+    expect(stage).toHaveBeenCalledWith(expect.objectContaining({
+      p_job_id: JOB_ID,
+      p_lease_token: LEASE,
+      p_provider_complete: true,
+      p_pages: [expect.objectContaining({
+        markdown: expect.stringContaining("private lending"),
+        metadata: expect.objectContaining({
+          sourceURL: expect.stringContaining("/posts/equity-access_"),
+        }),
+      })],
+    }));
+  });
+
   test("falls back to the attributed public posts feed instead of reporting no content", async () => {
     const linkedinSource = source({
       source_type: "social_profile",

@@ -61,7 +61,8 @@ interface FirecrawlResultPage {
 
 interface ProviderStart {
   id: string;
-  provider: "firecrawl_crawl" | "firecrawl_batch";
+  provider: "firecrawl_crawl" | "firecrawl_batch" | "firecrawl_search";
+  pages?: FirecrawlPage[];
 }
 
 export class CompetitorIngestionError extends Error {
@@ -179,13 +180,18 @@ function allowedSourceHost(candidate: URL, source: IngestionSource): boolean {
   return false;
 }
 
-async function scrapeXml(url: string): Promise<{ raw: string; links: unknown }> {
+async function scrapeXml(url: string): Promise<{
+  raw: string;
+  links: unknown;
+  markdown: string;
+  metadata?: FirecrawlPage["metadata"];
+}> {
   const json = await firecrawlJson(`${FIRECRAWL_API}/scrape`, {
     method: "POST",
     headers: firecrawlHeaders(true),
     body: JSON.stringify({
       url,
-      formats: ["rawHtml", "links"],
+      formats: ["markdown", "rawHtml", "links"],
       onlyMainContent: false,
       timeout: 45000,
     }),
@@ -193,6 +199,8 @@ async function scrapeXml(url: string): Promise<{ raw: string; links: unknown }> 
   return {
     raw: typeof json?.data?.rawHtml === "string" ? json.data.rawHtml : "",
     links: json?.data?.links,
+    markdown: typeof json?.data?.markdown === "string" ? json.data.markdown : "",
+    metadata: json?.data?.metadata,
   };
 }
 
@@ -242,7 +250,43 @@ function linkedinPostBelongsToCompany(raw: string, source: IngestionSource): boo
   }
 }
 
-async function discoverLinkedinPostUrls(source: IngestionSource): Promise<string[]> {
+interface LinkedinDiscovery {
+  urls: string[];
+  pages: FirecrawlPage[];
+}
+
+function linkedinSearchPage(
+  result: Record<string, unknown>,
+  source: IngestionSource,
+): FirecrawlPage | null {
+  const candidate = typeof result.url === "string" ? result.url
+    : typeof result.sourceURL === "string" ? result.sourceURL
+      : "";
+  if (!linkedinPostBelongsToCompany(candidate, source)) return null;
+  const markdown = [
+    result.markdown,
+    result.description,
+    result.snippet,
+  ].find((value) => typeof value === "string" && value.trim().length >= 20);
+  if (typeof markdown !== "string") return null;
+  const suppliedMetadata = result.metadata && typeof result.metadata === "object"
+    ? result.metadata as Record<string, unknown>
+    : {};
+  return {
+    markdown: markdown.trim(),
+    metadata: {
+      ...suppliedMetadata,
+      sourceURL: candidate,
+      title: typeof result.title === "string" ? result.title : suppliedMetadata.title as string | undefined,
+      author: typeof result.author === "string" ? result.author : suppliedMetadata.author as string | undefined,
+      publishedTime: typeof result.publishedTime === "string"
+        ? result.publishedTime
+        : suppliedMetadata.publishedTime as string | undefined,
+    },
+  };
+}
+
+async function discoverLinkedinPosts(source: IngestionSource): Promise<LinkedinDiscovery> {
   const slug = linkedinCompanySlug(source.normalized_url);
   if (!slug) {
     throw new CompetitorIngestionError(
@@ -253,52 +297,85 @@ async function discoverLinkedinPostUrls(source: IngestionSource): Promise<string
   const sourceUrl = new URL(source.normalized_url);
   const postsFeedUrl = `${sourceUrl.protocol}//${sourceUrl.host}/company/${slug}/posts/?feedView=all`;
   const found = new Set<string>();
+  const pages = new Map<string, FirecrawlPage>();
+  let feedPage: FirecrawlPage | null = null;
 
   // LinkedIn's public company page exposes update links even when a search
   // provider has not indexed the latest post yet.
   try {
-    const { raw, links } = await scrapeXml(postsFeedUrl);
+    const { raw, links, markdown, metadata } = await scrapeXml(postsFeedUrl);
     for (const candidate of urlsFromXml(raw, links)) {
       if (linkedinPostBelongsToCompany(candidate, source)) {
         found.add(new URL(candidate, postsFeedUrl).toString());
       }
-      if (found.size >= source.max_pages) return [...found];
+      if (found.size >= source.max_pages) break;
+    }
+    if (markdown.trim().length >= 80) {
+      feedPage = {
+        markdown: markdown.trim(),
+        metadata: {
+          ...metadata,
+          sourceURL: postsFeedUrl,
+          title: `${source.competitor_name || slug} — LinkedIn posts`,
+        },
+      };
     }
   } catch {
     // Search remains an independent discovery path below.
   }
 
-  const json = await firecrawlJson(`${FIRECRAWL_API}/search`, {
-    method: "POST",
-    headers: firecrawlHeaders(true),
-    body: JSON.stringify({
-      query: `site:linkedin.com/posts/${slug}`,
-      limit: source.max_pages,
-      sources: ["web"],
-      includeDomains: ["linkedin.com"],
-      timeout: 45000,
-    }),
-  });
-  // Firecrawl v2 returns data.web. Accept the two historical shapes as well so
-  // a provider response rollout cannot silently turn a discoverable feed into
-  // a false "no posts" result.
-  const results = Array.isArray(json?.data?.web) ? json.data.web
-    : Array.isArray(json?.data) ? json.data
-      : Array.isArray(json?.web) ? json.web
-        : [];
-  for (const result of results) {
-    const value = result as { url?: unknown; sourceURL?: unknown };
-    const candidate = typeof value.url === "string" ? value.url
-      : typeof value.sourceURL === "string" ? value.sourceURL
-        : "";
-    if (linkedinPostBelongsToCompany(candidate, source)) found.add(candidate);
-    if (found.size >= source.max_pages) break;
+  try {
+    const json = await firecrawlJson(`${FIRECRAWL_API}/search`, {
+      method: "POST",
+      headers: firecrawlHeaders(true),
+      body: JSON.stringify({
+        query: `site:linkedin.com/posts/${slug}`,
+        limit: source.max_pages,
+        sources: ["web"],
+        includeDomains: ["linkedin.com"],
+        scrapeOptions: {
+          formats: [{ type: "markdown" }],
+          onlyMainContent: true,
+        },
+        timeout: 45000,
+      }),
+    });
+    // Firecrawl v2 returns data.web. Accept the two historical shapes as well so
+    // a provider response rollout cannot silently turn a discoverable feed into
+    // a false "no posts" result.
+    const results = Array.isArray(json?.data?.web) ? json.data.web
+      : Array.isArray(json?.data) ? json.data
+        : Array.isArray(json?.web) ? json.web
+          : [];
+    for (const rawResult of results) {
+      if (!rawResult || typeof rawResult !== "object") continue;
+      const result = rawResult as Record<string, unknown>;
+      const candidate = typeof result.url === "string" ? result.url
+        : typeof result.sourceURL === "string" ? result.sourceURL
+          : "";
+      if (!linkedinPostBelongsToCompany(candidate, source)) continue;
+      found.add(candidate);
+      const page = linkedinSearchPage(result, source);
+      if (page) pages.set(candidate, page);
+      if (found.size >= source.max_pages) break;
+    }
+  } catch (error) {
+    // A usable feed capture or discovered post URL can proceed independently
+    // when search is temporarily unavailable.
+    if (!feedPage && found.size === 0) throw error;
   }
 
-  // Last-resort capture: the public posts feed itself contains the company's
-  // Updates section. It is better to preserve that attributed market context
-  // than report that no public content exists.
-  return (found.size > 0 ? [...found] : [postsFeedUrl]).slice(0, source.max_pages);
+  if (pages.size > 0) {
+    return { urls: [...found].slice(0, source.max_pages), pages: [...pages.values()] };
+  }
+  if (feedPage) return { urls: [...found].slice(0, source.max_pages), pages: [feedPage] };
+
+  // Last-resort capture: ask the batch provider for attributed URLs, including
+  // the public Updates feed when discovery returned no individual post links.
+  return {
+    urls: (found.size > 0 ? [...found] : [postsFeedUrl]).slice(0, source.max_pages),
+    pages: [],
+  };
 }
 
 async function startFirecrawl(source: IngestionSource): Promise<ProviderStart> {
@@ -311,8 +388,15 @@ async function startFirecrawl(source: IngestionSource): Promise<ProviderStart> {
     && source.source_type === "social_profile"
     && isCollectableLinkedinCompanyUrl(source.normalized_url)
   ) {
-    const urls = await discoverLinkedinPostUrls(source);
-    if (urls.length === 0) {
+    const discovery = await discoverLinkedinPosts(source);
+    if (discovery.pages.length > 0) {
+      return {
+        id: `linkedin-search-${Date.now()}`,
+        provider: "firecrawl_search",
+        pages: discovery.pages.slice(0, source.max_pages),
+      };
+    }
+    if (discovery.urls.length === 0) {
       throw new CompetitorIngestionError(
         "No public posts were found for this LinkedIn company page. Check the URL or add public post URLs individually.",
         422,
@@ -320,7 +404,7 @@ async function startFirecrawl(source: IngestionSource): Promise<ProviderStart> {
     }
     endpoint = `${FIRECRAWL_API}/batch/scrape`;
     body = {
-      urls,
+      urls: discovery.urls,
       formats: ["markdown"],
       onlyMainContent: true,
       ignoreInvalidURLs: true,
@@ -591,12 +675,15 @@ export async function startCompetitorRefresh(
 
   try {
     const provider = await startFirecrawl(source);
+    const inlinePages = provider.pages?.filter((page) => readablePage(page, source)) ?? [];
     const { data: started, error } = await admin
       .from("competitor_crawl_jobs")
       .update({
-        status: "crawling",
+        status: inlinePages.length > 0 ? "ingesting" : "crawling",
         provider: provider.provider,
         provider_job_id: provider.id,
+        provider_complete: inlinePages.length > 0,
+        pages_discovered: inlinePages.length,
       })
       .eq("id", job.id)
       .eq("client_id", source.client_id)
@@ -604,13 +691,47 @@ export async function startCompetitorRefresh(
       .single();
     if (error || !started) throw new CompetitorIngestionError(error?.message ?? "Couldn't save collection progress.");
 
+    let savedJob = started as CompetitorCrawlJob;
+    if (inlinePages.length > 0) {
+      const { data: claimed, error: claimError } = await admin
+        .rpc("claim_competitor_crawl_job", { p_job_id: job.id, p_lease_seconds: 90 })
+        .single();
+      if (claimError || !claimed?.lease_token) {
+        throw new CompetitorIngestionError(claimError?.message ?? "Couldn't reserve the discovered content.");
+      }
+      const { error: stageError } = await admin.rpc("stage_competitor_crawl_pages", {
+        p_job_id: job.id,
+        p_lease_token: claimed.lease_token,
+        p_pages: inlinePages,
+        p_next_result_url: null,
+        p_provider_complete: true,
+        p_pages_discovered: inlinePages.length,
+      });
+      if (stageError) throw new CompetitorIngestionError(stageError.message);
+      const { data: checkpointed, error: checkpointError } = await admin
+        .rpc("checkpoint_competitor_crawl_job", {
+          p_job_id: job.id,
+          p_lease_token: claimed.lease_token,
+          p_status: "ingesting",
+          p_pages_discovered: inlinePages.length,
+          p_items_captured: 0,
+          p_error_message: null,
+          p_meta: { discovery: "public_linkedin_search" },
+        })
+        .single();
+      if (checkpointError || !checkpointed) {
+        throw new CompetitorIngestionError(checkpointError?.message ?? "Couldn't save discovered content.");
+      }
+      savedJob = checkpointed as CompetitorCrawlJob;
+    }
+
     const { error: sourceError } = await admin
       .from("competitor_sources")
       .update({ status: "active", last_error: null })
       .eq("id", source.id)
       .eq("client_id", source.client_id);
     if (sourceError) throw new CompetitorIngestionError(sourceError.message);
-    return started as CompetitorCrawlJob;
+    return savedJob;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Couldn't start source collection.";
     const { error: jobUpdateError } = await admin
