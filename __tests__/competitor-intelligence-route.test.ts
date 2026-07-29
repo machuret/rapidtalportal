@@ -183,9 +183,9 @@ function evidenceRows() {
     content_type: "social_post",
     title: `Post ${index + 1}`,
     raw_content: `${exactQuote(index)} ${"Useful detail. ".repeat(80)}`,
-    published_at: `2026-0${(index % 3) + 5}-01T00:00:00.000Z`,
-    captured_at: "2026-07-02T00:00:00.000Z",
-    effective_at: `2026-0${(index % 3) + 5}-01T00:00:00.000Z`,
+    published_at: `2026-0${(index % 3) + 5}-01T00:00:00+00:00`,
+    captured_at: "2026-07-02T00:00:00+00:00",
+    effective_at: `2026-0${(index % 3) + 5}-01T00:00:00+00:00`,
     date_basis: "published" as const,
   }));
 }
@@ -327,11 +327,11 @@ function postDb(options: {
     throw new Error(`Unexpected table ${table}`);
   });
   (createAdminClient as jest.Mock).mockReturnValue({ from, rpc });
-  jest.spyOn(global, "fetch").mockResolvedValue(
+  jest.spyOn(global, "fetch").mockImplementation(() => Promise.resolve(
     new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify(options.modelAnalysis ?? analysis) } }],
     }), { status: 200, headers: { "content-type": "application/json" } }),
-  );
+  ));
   return { rpc, from };
 }
 
@@ -436,6 +436,7 @@ test("uses publication-window evidence, exact quotes, company material and an at
     }),
   );
   const fetchMock = global.fetch as jest.Mock;
+  expect((fetchMock.mock.calls[0][1] as RequestInit).signal).toBeInstanceOf(AbortSignal);
   const modelBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
   expect(modelBody.messages[0].content).toContain("exact, contiguous quotes");
   expect(modelBody.messages[1].content).toContain(`company_reference id="${COMPANY_CONTENT_ID}"`);

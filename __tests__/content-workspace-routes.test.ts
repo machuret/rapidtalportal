@@ -85,6 +85,66 @@ describe("unified content generation boundary", () => {
     }));
   });
 
+  test("accepts immutable intelligence timestamps with database offsets", async () => {
+    (proxyToEdgeFunction as jest.Mock).mockResolvedValue(NextResponse.json({
+      id: CHILD_ID,
+      body: "Draft",
+      updatedAt: NEXT_UPDATED_AT,
+    }));
+    const request = new NextRequest("https://portal.test/api/content/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        clientId: CLIENT_A,
+        contentType: "linkedin",
+        title: "Evidence-backed idea",
+        brief: {
+          version: 1,
+          objective: "Use a verified market opportunity.",
+          tone: "professional",
+          length: "short",
+          marketIntelligence: {
+            version: 1,
+            runId: "30000000-0000-4000-8000-000000000001",
+            reportSchemaVersion: 2,
+            ideaTitle: "Evidence-backed idea",
+            confidence: "medium",
+            novelty: "adjacent",
+            competitorIds: ["33333333-3333-4333-8333-333333333333"],
+            competitorSources: [1, 2].map((number) => ({
+              itemId: `00000000-0000-4000-8000-00000000000${number}`,
+              captureVersionId: `10000000-0000-4000-8000-00000000000${number}`,
+              contentHash: `hash-${number}-0000000000000000`,
+              competitorId: "33333333-3333-4333-8333-333333333333",
+              competitorName: "Market Co",
+              title: `Post ${number}`,
+              url: `https://competitor.test/${number}`,
+              effectiveAt: "2026-07-01T10:00:00+10:00",
+              dateBasis: "published",
+              evidenceQuote: "A sufficiently long exact competitor evidence quotation.",
+            })),
+            companyReferences: [],
+            generatedAt: "2026-07-01T10:00:00+10:00",
+          },
+        },
+      }),
+    });
+
+    const response = await generate(request);
+
+    expect(response.status).toBe(200);
+    expect(proxyToEdgeFunction).toHaveBeenCalledWith(
+      "content-generate",
+      expect.objectContaining({
+        brief: expect.objectContaining({
+          marketIntelligence: expect.objectContaining({
+            generatedAt: "2026-07-01T10:00:00+10:00",
+          }),
+        }),
+      }),
+    );
+  });
+
   test("rejects the legacy combined social type at the web boundary", async () => {
     const request = new NextRequest("https://portal.test/api/content/generate", {
       method: "POST",

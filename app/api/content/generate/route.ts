@@ -41,7 +41,7 @@ const marketIntelligenceSchema = z.object({
     competitorName: z.string().trim().min(1).max(300),
     title: z.string().trim().min(1).max(500),
     url: z.string().url(),
-    effectiveAt: z.string().datetime(),
+    effectiveAt: z.string().datetime({ offset: true }),
     dateBasis: z.enum(["published", "captured"]),
     evidenceQuote: z.string().trim().min(20).max(500),
   })).min(2).max(12),
@@ -51,7 +51,7 @@ const marketIntelligenceSchema = z.object({
     title: z.string().trim().min(1).max(500),
     contentHash: z.string().min(16).max(256),
   })).max(12),
-  generatedAt: z.string().datetime(),
+  generatedAt: z.string().datetime({ offset: true }),
 });
 const structuredBriefSchema = z.object({
   version: z.literal(1).default(1),

@@ -75,6 +75,9 @@ export const ROUTES = {
     generate: () => "/api/content/generate",
     styleAnalysis: () => "/api/content/style-analysis",
     styleAnalysisForClient: (clientId: string) => `/api/content/style-analysis?client_id=${clientId}`,
+    competitorIntelligence: () => "/api/content/competitors/intelligence",
+    competitorIntelligenceForClient: (clientId: string) =>
+      `/api/content/competitors/intelligence?client_id=${clientId}`,
     topics: () => "/api/content/topics",
     topicsForClient: (clientId: string) => `/api/content/topics?client_id=${clientId}`,
     topicsGenerate: () => "/api/content/topics/generate",

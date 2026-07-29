@@ -48,8 +48,76 @@ test("requires exact evidence quotations for patterns, gaps and recommendations"
 });
 
 test("rejects reports from unsupported schema versions", () => {
-  expect(parseCompetitorIntelligence({ schema_version: 1 })).toBeNull();
-  expect(parseCompetitorIntelligence({ schema_version: 3 })).toBeNull();
+  const valid = {
+    schema_version: 2 as const,
+    executive_summary: "Summary",
+    topic_clusters: [{
+      id: "cluster",
+      label: "Cluster",
+      description: "Description",
+      signal_strength: "established" as const,
+      competitor_ids: [COMPETITOR_ID],
+      source_item_ids: SOURCE_IDS,
+      evidence_quotes: SOURCE_IDS.map((id) => ({
+        source_item_id: id,
+        quote: "A sufficiently long exact competitor evidence quote.",
+      })),
+      channels: ["linkedin" as const],
+    }],
+    format_patterns: [],
+    positioning_profiles: [{
+      competitor_id: COMPETITOR_ID,
+      summary: "Positioning",
+      audience: [],
+      themes: [],
+      value_propositions: [],
+      tone: [],
+      source_item_ids: [SOURCE_IDS[0]],
+      evidence_quotes: [{
+        source_item_id: SOURCE_IDS[0],
+        quote: "A sufficiently long exact competitor evidence quote.",
+      }],
+    }],
+    comparisons: [],
+    positioning_gaps: [{
+      title: "Gap",
+      description: "Description",
+      gap_type: "topic" as const,
+      rationale: "Rationale",
+      company_fit: "high" as const,
+      competitor_ids: [COMPETITOR_ID],
+      source_item_ids: SOURCE_IDS,
+      evidence_quotes: SOURCE_IDS.map((id) => ({
+        source_item_id: id,
+        quote: "A sufficiently long exact competitor evidence quote.",
+      })),
+      recommended_channels: ["linkedin" as const],
+      suggested_angles: [],
+    }],
+    recommended_ideas: [{
+      title: "Idea",
+      channel: "linkedin" as const,
+      format: "Post",
+      objective: "Objective",
+      why_valuable: "Value",
+      differentiation: "Difference",
+      suggested_hook: "Hook",
+      key_points: ["One", "Two"],
+      competitor_ids: [COMPETITOR_ID],
+      source_item_ids: SOURCE_IDS,
+      evidence_quotes: SOURCE_IDS.map((id) => ({
+        source_item_id: id,
+        quote: "A sufficiently long exact competitor evidence quote.",
+      })),
+      company_reference_ids: [],
+      novelty: "new" as const,
+      overlap_warning: "",
+      confidence: "medium" as const,
+    }],
+  };
+  expect(parseCompetitorIntelligence(valid)).not.toBeNull();
+  expect(parseCompetitorIntelligence({ ...valid, schema_version: 1 })).toBeNull();
+  expect(parseCompetitorIntelligence({ ...valid, schema_version: 3 })).toBeNull();
 });
 
 test("creates a structured brief with immutable market provenance", () => {
@@ -125,30 +193,42 @@ test("creates a structured brief with immutable market provenance", () => {
 
   const result = competitorIdeaToBrief(idea, run);
 
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error(result.error);
   expect(result).toMatchObject({
-    type: "linkedin",
-    title: "A practical decision checklist",
-    objective: "Help readers make a sound decision.",
-    keyPoints: ["Define the decision", "Compare the trade-offs"],
-    marketIntelligence: {
-      runId: RUN_ID,
-      confidence: "medium",
-      novelty: "adjacent",
-      competitorSources: [
-        expect.objectContaining({
-          itemId: SOURCE_IDS[0],
-          captureVersionId: CAPTURE_IDS[0],
-          evidenceQuote: "Exact verified competitor excerpt number 1.",
-        }),
-        expect.objectContaining({
-          itemId: SOURCE_IDS[1],
-          captureVersionId: CAPTURE_IDS[1],
-        }),
-      ],
-      companyReferences: [
-        expect.objectContaining({ id: COMPANY_ID, kind: "content_piece" }),
-      ],
+    brief: {
+      type: "linkedin",
+      title: "A practical decision checklist",
+      objective: "Help readers make a sound decision.",
+      keyPoints: ["Define the decision", "Compare the trade-offs"],
+      marketIntelligence: {
+        runId: RUN_ID,
+        confidence: "medium",
+        novelty: "adjacent",
+        competitorSources: [
+          expect.objectContaining({
+            itemId: SOURCE_IDS[0],
+            captureVersionId: CAPTURE_IDS[0],
+            evidenceQuote: "Exact verified competitor excerpt number 1.",
+          }),
+          expect.objectContaining({
+            itemId: SOURCE_IDS[1],
+            captureVersionId: CAPTURE_IDS[1],
+          }),
+        ],
+        companyReferences: [
+          expect.objectContaining({ id: COMPANY_ID, kind: "content_piece" }),
+        ],
+      },
     },
   });
-  expect(result.additionalGuidance).toContain("Verify every factual claim using the company Vault.");
+  expect(result.brief.additionalGuidance).toContain("Verify every factual claim using the company Vault.");
+
+  expect(competitorIdeaToBrief(idea, {
+    ...run,
+    sources: run.sources.slice(0, 1),
+  })).toEqual({
+    ok: false,
+    error: "This idea's immutable competitor evidence is incomplete. Refresh the intelligence report.",
+  });
 });

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import type { Competitor } from "@/types/competitors";
 import type {
   CompetitorIntelligenceIdea,
@@ -68,20 +69,22 @@ export function CompetitorIntelligencePanel({
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const loadReport = useCallback(async (showLoading = false) => {
+  const loadReport = useCallback(async (showLoading = false, silent = false) => {
     if (showLoading) setLoading(true);
     try {
       const result = await api.get<{
         run: CompetitorIntelligenceRun | null;
         active_job: CompetitorIntelligenceJob | null;
       }>(
-      `/content/competitors/intelligence?client_id=${clientId}`,
+      ROUTES.content.competitorIntelligenceForClient(clientId),
       { showErrorToast: false },
       );
       setRun(result.run);
       setActiveJob(result.active_job);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Competitor intelligence could not be loaded.");
+      if (!silent) {
+        toast.error(error instanceof Error ? error.message : "Competitor intelligence could not be loaded.");
+      }
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -91,7 +94,7 @@ export function CompetitorIntelligencePanel({
 
   useEffect(() => {
     if (!activeJob) return;
-    const timer = window.setInterval(() => void loadReport(), 4000);
+    const timer = window.setInterval(() => void loadReport(false, true), 4000);
     return () => window.clearInterval(timer);
   }, [activeJob, loadReport]);
 
@@ -141,7 +144,7 @@ export function CompetitorIntelligencePanel({
         run: CompetitorIntelligenceRun;
         active_job: null;
       }>(
-        "/content/competitors/intelligence",
+        ROUTES.content.competitorIntelligence(),
         {
           client_id: clientId,
           competitor_ids: [...selectedIds],
@@ -156,7 +159,7 @@ export function CompetitorIntelligencePanel({
     } catch (error) {
       // A second tab or user may have acquired the durable lease after this
       // panel was loaded. Refresh so the shared in-progress state is visible.
-      await loadReport();
+      await loadReport(false, true);
       toast.error(error instanceof Error ? error.message : "Competitor analysis failed.");
     } finally {
       setAnalysing(false);

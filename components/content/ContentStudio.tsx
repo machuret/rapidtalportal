@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { toast } from "sonner";
 import type {
   ContentMarketIntelligenceProvenance,
   ContentPiece,
@@ -76,7 +77,12 @@ function ContentStudioInner({
     idea: CompetitorIntelligenceIdea,
     run: Parameters<typeof competitorIdeaToBrief>[1],
   ) => {
-    const intelligenceBrief = competitorIdeaToBrief(idea, run);
+    const result = competitorIdeaToBrief(idea, run);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    const intelligenceBrief = result.brief;
     setPrefill({
       type: intelligenceBrief.type,
       title: intelligenceBrief.title,

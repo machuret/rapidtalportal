@@ -170,6 +170,20 @@ export interface CompetitorIntelligenceRun {
   company_sources: CompetitorIntelligenceCompanySource[];
 }
 
+export type CompetitorIdeaBriefResult =
+  | {
+      ok: true;
+      brief: {
+        type: CompetitorIntelligenceIdea["channel"];
+        title: string;
+        objective: string;
+        keyPoints: string[];
+        additionalGuidance: string;
+        marketIntelligence: ContentMarketIntelligenceProvenance;
+      };
+    }
+  | { ok: false; error: string };
+
 export function parseCompetitorIntelligence(value: unknown): CompetitorIntelligence | null {
   const parsed = competitorIntelligenceSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
@@ -178,14 +192,7 @@ export function parseCompetitorIntelligence(value: unknown): CompetitorIntellige
 export function competitorIdeaToBrief(
   idea: CompetitorIntelligenceIdea,
   run: CompetitorIntelligenceRun,
-): {
-  type: CompetitorIntelligenceIdea["channel"];
-  title: string;
-  objective: string;
-  keyPoints: string[];
-  additionalGuidance: string;
-  marketIntelligence: ContentMarketIntelligenceProvenance;
-} {
+): CompetitorIdeaBriefResult {
   const quoteBySource = new Map(
     idea.evidence_quotes.map((evidence) => [evidence.source_item_id, evidence.quote]),
   );
@@ -193,46 +200,64 @@ export function competitorIdeaToBrief(
     idea.source_item_ids.includes(source.id));
   const selectedCompanySources = run.company_sources.filter((source) =>
     idea.company_reference_ids.includes(source.id));
+  if (
+    selectedSources.length !== idea.source_item_ids.length ||
+    selectedSources.some((source) => (quoteBySource.get(source.id)?.trim().length ?? 0) < 20)
+  ) {
+    return {
+      ok: false,
+      error: "This idea's immutable competitor evidence is incomplete. Refresh the intelligence report.",
+    };
+  }
+  if (selectedCompanySources.length !== idea.company_reference_ids.length) {
+    return {
+      ok: false,
+      error: "This idea's company comparison evidence is incomplete. Refresh the intelligence report.",
+    };
+  }
   return {
-    type: idea.channel,
-    title: idea.title,
-    objective: idea.objective,
-    keyPoints: idea.key_points,
-    additionalGuidance: [
-      `Market opportunity: ${idea.why_valuable}`,
-      `Differentiated angle: ${idea.differentiation}`,
-      `Suggested opening: ${idea.suggested_hook}`,
-      `Novelty assessment: ${idea.novelty}.`,
-      idea.overlap_warning ? `Overlap note: ${idea.overlap_warning}` : "",
-      "Competitor intelligence is market inspiration only. Verify every factual claim using the company Vault.",
-    ].filter(Boolean).join("\n"),
-    marketIntelligence: {
-      version: 1,
-      runId: run.id,
-      reportSchemaVersion: 2,
-      ideaTitle: idea.title,
-      confidence: idea.confidence,
-      novelty: idea.novelty,
-      competitorIds: idea.competitor_ids,
-      competitorSources: selectedSources.map((source) => ({
-        itemId: source.id,
-        captureVersionId: source.capture_version_id,
-        contentHash: source.content_hash,
-        competitorId: source.competitor_id,
-        competitorName: source.competitor_name,
-        title: source.title,
-        url: source.url,
-        effectiveAt: source.effective_at,
-        dateBasis: source.date_basis,
-        evidenceQuote: quoteBySource.get(source.id) ?? "",
-      })),
-      companyReferences: selectedCompanySources.map((source) => ({
-        id: source.id,
-        kind: source.kind,
-        title: source.title,
-        contentHash: source.content_hash,
-      })),
-      generatedAt: run.created_at,
+    ok: true,
+    brief: {
+      type: idea.channel,
+      title: idea.title,
+      objective: idea.objective,
+      keyPoints: idea.key_points,
+      additionalGuidance: [
+        `Market opportunity: ${idea.why_valuable}`,
+        `Differentiated angle: ${idea.differentiation}`,
+        `Suggested opening: ${idea.suggested_hook}`,
+        `Novelty assessment: ${idea.novelty}.`,
+        idea.overlap_warning ? `Overlap note: ${idea.overlap_warning}` : "",
+        "Competitor intelligence is market inspiration only. Verify every factual claim using the company Vault.",
+      ].filter(Boolean).join("\n"),
+      marketIntelligence: {
+        version: 1,
+        runId: run.id,
+        reportSchemaVersion: 2,
+        ideaTitle: idea.title,
+        confidence: idea.confidence,
+        novelty: idea.novelty,
+        competitorIds: idea.competitor_ids,
+        competitorSources: selectedSources.map((source) => ({
+          itemId: source.id,
+          captureVersionId: source.capture_version_id,
+          contentHash: source.content_hash,
+          competitorId: source.competitor_id,
+          competitorName: source.competitor_name,
+          title: source.title,
+          url: source.url,
+          effectiveAt: source.effective_at,
+          dateBasis: source.date_basis,
+          evidenceQuote: quoteBySource.get(source.id)!.trim(),
+        })),
+        companyReferences: selectedCompanySources.map((source) => ({
+          id: source.id,
+          kind: source.kind,
+          title: source.title,
+          contentHash: source.content_hash,
+        })),
+        generatedAt: run.created_at,
+      },
     },
   };
 }
