@@ -440,7 +440,7 @@ export function CompetitorsTab({ clientId, canManage, active = true }: Competito
             <h2 className="font-semibold text-white">Competitor intelligence</h2>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-zinc-400">
-            Collect public market content for topic and format analysis. Competitor material stays separate from your Vault and cannot support claims.
+            Collect public market content for topic and format analysis. It stays in a protected market-context area and cannot become Company DNA, company facts or writing-style authority.
           </p>
         </div>
         {canManage && (

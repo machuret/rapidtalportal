@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { DbVaultItem, VaultCategory } from "@/types/database";
 import { toast } from "sonner";
 import {
-  FileText, Trash2, Search, Loader2, CheckSquare, Square, X, Sparkles,
+  FileText, Trash2, Search, Loader2, CheckSquare, Square, X, Sparkles, Radar,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { VaultExpanded } from "./VaultExpanded";
 import { VaultItemRow } from "./VaultItemRow";
 import { useVaultList } from "@/hooks/useVaultList";
 import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
+import { CompetitorsTab } from "@/components/content/CompetitorsTab";
 
 type TypeFilter = "all" | "text" | "url" | "pdf" | "docx";
 
@@ -79,7 +80,7 @@ function VaultClientInner({
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [crawlJob, setCrawlJob] = useState<CrawlJob | null>(null);
-  const [view, setView] = useState<"items" | "recap" | "expanded">("items");
+  const [view, setView] = useState<"items" | "recap" | "expanded" | "competitors">("items");
   const [editItem, setEditItem] = useState<DbVaultItem | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reprocessing, setReprocessing] = useState<string | null>(null);
@@ -217,7 +218,12 @@ function VaultClientInner({
 
       {/* View tabs: browse items, read the recap digest, or the deep analysis */}
       <div className="flex items-center gap-1 mb-5 border-b border-zinc-800">
-        {([["items", "Items"], ["recap", "Recap"], ["expanded", "Expanded View"]] as const).map(([v, label]) => (
+        {([
+          ["items", "Items"],
+          ["recap", "Recap"],
+          ["expanded", "Expanded View"],
+          ["competitors", "Competitors"],
+        ] as const).map(([v, label]) => (
           <button
             key={v}
             onClick={() => setView(v)}
@@ -226,12 +232,19 @@ function VaultClientInner({
               view === v ? "border-white text-white" : "border-transparent text-zinc-400 hover:text-zinc-200",
             )}
           >
+            {v === "competitors" && <Radar className="mr-1.5 inline h-3.5 w-3.5" />}
             {label}
           </button>
         ))}
       </div>
 
-      {view === "recap" ? (
+      {view === "competitors" ? (
+        <CompetitorsTab
+          clientId={clientId}
+          canManage={role === "client_admin" || role === "super_admin"}
+          active
+        />
+      ) : view === "recap" ? (
         <VaultRecap clientId={clientId} canWrite={canWrite} />
       ) : view === "expanded" ? (
         <VaultExpanded clientId={clientId} canWrite={canWrite} />
