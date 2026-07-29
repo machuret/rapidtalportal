@@ -2,6 +2,12 @@
 
 import { readFileSync } from "fs";
 import path from "path";
+import {
+  contentBriefSchema,
+  contentMarketIntelligenceSchema,
+  contentProjectStatusSchema,
+  contentProjectStepSchema,
+} from "@/lib/content/project-schema";
 
 const root = path.resolve(__dirname, "..");
 const read = (file: string) => readFileSync(path.join(root, file), "utf8");
@@ -9,7 +15,6 @@ const read = (file: string) => readFileSync(path.join(root, file), "utf8");
 describe("connected editorial journey", () => {
   const migration = read("db/migrations/105_connected_editorial_projects.sql");
   const projectsRoute = read("app/api/content/projects/route.ts");
-  const projectSchema = read("lib/content/project-schema.ts");
   const evidenceRoute = read("app/api/content/projects/evidence/route.ts");
   const validationRoute = read("app/api/content/validate/route.ts");
   const generator = read("supabase/functions/content-generate/index.ts");
@@ -73,8 +78,67 @@ describe("connected editorial journey", () => {
     expect(workflow).toContain("Save idea for later");
     expect(workflow).toContain("Regenerate ideas");
     expect(workflow).toContain("Reject idea");
-    expect(projectSchema).toContain('"saved"');
-    expect(projectSchema).toContain('"rejected"');
+    expect(contentProjectStatusSchema.parse("saved")).toBe("saved");
+    expect(contentProjectStatusSchema.parse("rejected")).toBe("rejected");
+    expect(contentProjectStepSchema.parse("brief")).toBe("brief");
+    expect(contentProjectStepSchema.safeParse("unknown").success).toBe(false);
+  });
+
+  test("brief and market provenance schemas reject ambiguous inputs", () => {
+    expect(contentBriefSchema.parse({
+      version: 1,
+      objective: "Explain the company position",
+      audience: "Prospective clients",
+      angle: "A company-specific perspective",
+      desiredFormat: "Founder-led insight post",
+      keyPoints: ["One verified point"],
+      callToAction: "Read the guide",
+      tone: "professional",
+      length: "medium",
+      mode: "new",
+    })).toMatchObject({
+      objective: "Explain the company position",
+      desiredFormat: "Founder-led insight post",
+    });
+
+    const duplicateId = "11111111-1111-4111-8111-111111111111";
+    expect(contentMarketIntelligenceSchema.safeParse({
+      version: 1,
+      runId: "22222222-2222-4222-8222-222222222222",
+      reportSchemaVersion: 2,
+      ideaTitle: "A verified opportunity",
+      confidence: "high",
+      novelty: "new",
+      competitorIds: [duplicateId, duplicateId],
+      competitorSources: [
+        {
+          itemId: "33333333-3333-4333-8333-333333333333",
+          captureVersionId: "44444444-4444-4444-8444-444444444444",
+          contentHash: "1234567890abcdef",
+          competitorId: duplicateId,
+          competitorName: "Competitor",
+          title: "Post one",
+          url: "https://example.com/post-one",
+          effectiveAt: "2026-07-30T00:00:00+00:00",
+          dateBasis: "published",
+          evidenceQuote: "A sufficiently long evidence quotation.",
+        },
+        {
+          itemId: "55555555-5555-4555-8555-555555555555",
+          captureVersionId: "66666666-6666-4666-8666-666666666666",
+          contentHash: "abcdef1234567890",
+          competitorId: duplicateId,
+          competitorName: "Competitor",
+          title: "Post two",
+          url: "https://example.com/post-two",
+          effectiveAt: "2026-07-30T00:00:00+00:00",
+          dateBasis: "captured",
+          evidenceQuote: "Another sufficiently long evidence quotation.",
+        },
+      ],
+      companyReferences: [],
+      generatedAt: "2026-07-30T00:00:00+00:00",
+    }).success).toBe(false);
   });
 
   test("validation and revisions retain provenance through approval", () => {

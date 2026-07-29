@@ -23,6 +23,8 @@ import {
   type ContentModelRequest,
 } from "../_shared/content-generation-orchestration.ts";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
 const baseCorsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -39,6 +41,7 @@ const DEFAULT_SYSTEM = DEFAULT_CONTENT_SYSTEM;
  */
 const promptCache = new Map<string, { content: string | null; at: number }>();
 // deno-lint-ignore no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function promptOverride(admin: any, slug: string, fallback: string): Promise<string> {
   const hit = promptCache.get(slug);
   if (hit && Date.now() - hit.at < 30_000) return hit.content ?? fallback;
@@ -365,11 +368,9 @@ export async function handleContentGenerateRequest(
     if (projectId) {
       if (
         !persist ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(projectId) ||
+        !UUID_RE.test(projectId) ||
         !selectedVaultSourceIds ||
-        selectedVaultSourceIds.some((id) =>
-          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(id)
-        )
+        selectedVaultSourceIds.some((id) => !UUID_RE.test(id))
       ) {
         return new Response(JSON.stringify({ error: "Invalid connected content project request." }), {
           status: 422,
@@ -422,7 +423,7 @@ export async function handleContentGenerateRequest(
 
     let generationKind = contentBrief.mode === "reply" ? "reply" : "original";
     if (requestedGenerationKind === "adaptation") {
-      if (!parentPieceId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parentPieceId)) {
+      if (!parentPieceId || !UUID_RE.test(parentPieceId)) {
         return new Response(JSON.stringify({ error: "A valid parent piece is required for adaptation." }), {
           status: 422,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -693,8 +694,20 @@ export async function handleContentGenerateRequest(
       const { data: piece, error: dbError } = persistence;
 
       if (dbError) {
-        return new Response(JSON.stringify({ error: dbError.message }), {
-          status: 500,
+        const status = dbError.code === "40001"
+          ? 409
+          : dbError.code === "P0002"
+            ? 404
+            : dbError.code === "42501"
+              ? 403
+              : dbError.code === "P0001" || dbError.code === "22023"
+                ? 422
+                : 500;
+        console.error("content-generate: draft persistence failed:", dbError);
+        return new Response(JSON.stringify({
+          error: status === 500 ? "The draft could not be saved." : dbError.message,
+        }), {
+          status,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }

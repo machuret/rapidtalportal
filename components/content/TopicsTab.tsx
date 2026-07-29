@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useCallback } from "react";
+import { memo, useState, useCallback, useEffect, useRef } from "react";
 import { Plus, Wand2, RefreshCw, Search, Radar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ interface TopicsTabProps {
   clientId: string;
   canApprove: boolean;
   initialTopics: ContentTopic[];
+  regenerateRequest?: number;
   onTopicSelected: (topic: ContentTopic) => void;
   onOpenIntelligence: () => void;
 }
@@ -23,12 +24,14 @@ export const TopicsTab = memo(function TopicsTab({
   clientId,
   canApprove,
   initialTopics,
+  regenerateRequest = 0,
   onTopicSelected,
   onOpenIntelligence,
 }: TopicsTabProps) {
   const [showForm, setShowForm] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [search, setSearch] = useState("");
+  const handledRegenerateRequest = useRef(0);
 
   const {
     topics,
@@ -80,6 +83,16 @@ export const TopicsTab = memo(function TopicsTab({
   const handleGenerateIdeas = useCallback(async () => {
     await generateIdeas({ count: 8, mode: "company" });
   }, [generateIdeas]);
+
+  useEffect(() => {
+    if (
+      regenerateRequest < 1 ||
+      regenerateRequest === handledRegenerateRequest.current
+    ) return;
+    handledRegenerateRequest.current = regenerateRequest;
+    setShowSuggestions(true);
+    void handleGenerateIdeas();
+  }, [handleGenerateIdeas, regenerateRequest]);
 
   const handleSubmitSuggestions = useCallback(
     async (selected: AiSuggestion[]) => {

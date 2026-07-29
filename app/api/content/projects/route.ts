@@ -19,7 +19,14 @@ import {
 type MarketIntelligence = z.infer<typeof contentMarketIntelligenceSchema>;
 
 function sameSet(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((value) => right.includes(value));
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  return (
+    leftSet.size === left.length &&
+    rightSet.size === right.length &&
+    leftSet.size === rightSet.size &&
+    [...leftSet].every((value) => rightSet.has(value))
+  );
 }
 
 async function verifyMarketIntelligence(

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type {
@@ -46,7 +47,9 @@ interface ContentStudioProps {
 
 function projectProgress(project: ContentProject): string {
   if (project.status === "saved") return "Saved idea";
-  if (project.current_step === "complete") return project.status;
+  if (project.current_step === "complete") {
+    return `${project.status.charAt(0).toUpperCase()}${project.status.slice(1)}`;
+  }
   return `${project.current_step.charAt(0).toUpperCase()}${project.current_step.slice(1)} stage`;
 }
 
@@ -66,6 +69,7 @@ function ContentStudioInner({
   const [manualTitle, setManualTitle] = useState("");
   const [manualType, setManualType] = useState<ContentType>("linkedin");
   const [showManual, setShowManual] = useState(false);
+  const [ideaGenerationRequest, setIdeaGenerationRequest] = useState(0);
 
   const unfinished = useMemo(
     () => projects.filter((project) => ["active", "saved"].includes(project.status)),
@@ -84,7 +88,7 @@ function ContentStudioInner({
 
   const createProject = useCallback(async (idea: ContentProjectIdea) => {
     try {
-      const created = await api.post<ContentProject>("/content/projects", {
+      const created = await api.post<ContentProject>(ROUTES.content.projects(), {
         client_id: clientId,
         idea,
       });
@@ -99,7 +103,7 @@ function ContentStudioInner({
     setOpeningProject(projectId);
     try {
       const project = await api.get<ContentProject>(
-        `/content/projects?client_id=${clientId}&id=${projectId}`,
+        ROUTES.content.project(clientId, projectId),
       );
       updateProject(project);
     } catch {
@@ -178,6 +182,11 @@ function ContentStudioInner({
           project={activeProject}
           onProjectChange={updateProject}
           onClose={() => setActiveProject(null)}
+          onRegenerateIdeas={() => {
+            setActiveProject(null);
+            setView("ideas");
+            setIdeaGenerationRequest((request) => request + 1);
+          }}
           onContentGenerated={handleContentGenerated}
         />
       </ContentErrorBoundary>
@@ -247,6 +256,7 @@ function ContentStudioInner({
             clientId={clientId}
             canApprove={canApprove}
             initialTopics={initialTopics}
+            regenerateRequest={ideaGenerationRequest}
             onTopicSelected={handleTopicSelected}
             onOpenIntelligence={() => setView("competitors")}
           />

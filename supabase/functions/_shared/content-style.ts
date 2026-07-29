@@ -50,6 +50,11 @@ export interface ContentStyleSnapshot {
   styleAnalysis: ContentStyleAnalysisProvenance | null;
   companyDnaUpdatedAt: string | null;
   capturedAt: string;
+  exampleSources?: Array<{
+    itemId: string;
+    title: string;
+    sourceUrl: string | null;
+  }>;
 }
 
 type Dna = Record<string, unknown> | null | undefined;

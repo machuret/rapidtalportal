@@ -266,8 +266,23 @@ export const PATCH = withAuth(async (req, { user }) => {
       !Array.isArray(current.style_snapshot) &&
       Array.isArray((current.style_snapshot as Record<string, unknown>).exampleSources)
         ? {
-            exampleSources:
-              (current.style_snapshot as Record<string, unknown>).exampleSources,
+            exampleSources: (
+              (current.style_snapshot as Record<string, unknown>).exampleSources as unknown[]
+            ).flatMap((source) => {
+              if (!source || typeof source !== "object" || Array.isArray(source)) return [];
+              const value = source as Record<string, unknown>;
+              return (
+                typeof value.itemId === "string" &&
+                typeof value.title === "string" &&
+                (typeof value.sourceUrl === "string" || value.sourceUrl === null)
+              )
+                ? [{
+                    itemId: value.itemId,
+                    title: value.title,
+                    sourceUrl: value.sourceUrl,
+                  }]
+                : [];
+            }),
           }
         : {}),
     };

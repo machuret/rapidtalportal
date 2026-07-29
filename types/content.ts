@@ -189,9 +189,7 @@ export interface ContentProject {
   vault_source_ids: string[];
   vault_source_references: ContentSourceReference[];
   competitor_signals: ContentMarketIntelligenceSource[];
-  style_snapshot: ContentPiece["style_snapshot"] & {
-    hardRules?: Array<Record<string, unknown>>;
-  };
+  style_snapshot: NonNullable<ContentPiece["style_snapshot"]>;
   current_piece_id: string | null;
   current_piece?: ContentPiece | null;
   created_at: string;

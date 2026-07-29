@@ -1,7 +1,17 @@
 -- ============================================================
 -- 105_connected_editorial_projects.sql
 -- Durable spine for Discover -> Brief -> Evidence -> Draft -> Approval.
+-- Requires PostgreSQL 15+ for composite ON DELETE SET NULL column lists.
+-- Portal currently runs PostgreSQL 17; fail explicitly on older targets.
 -- ============================================================
+
+DO $$
+BEGIN
+  IF current_setting('server_version_num')::INTEGER < 150000 THEN
+    RAISE EXCEPTION 'Migration 105 requires PostgreSQL 15 or newer.';
+  END IF;
+END;
+$$;
 
 CREATE TABLE content_projects (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -45,13 +55,21 @@ ALTER TABLE content_pieces
   ADD CONSTRAINT content_pieces_project_client_fkey
     FOREIGN KEY (project_id, client_id)
     REFERENCES content_projects(id, client_id)
-    ON DELETE SET NULL (project_id);
+    ON DELETE SET NULL (project_id)
+    NOT VALID;
+
+ALTER TABLE content_pieces
+  VALIDATE CONSTRAINT content_pieces_project_client_fkey;
 
 ALTER TABLE content_projects
   ADD CONSTRAINT content_projects_current_piece_client_fkey
     FOREIGN KEY (current_piece_id, client_id)
     REFERENCES content_pieces(id, client_id)
-    ON DELETE SET NULL (current_piece_id);
+    ON DELETE SET NULL (current_piece_id)
+    NOT VALID;
+
+ALTER TABLE content_projects
+  VALIDATE CONSTRAINT content_projects_current_piece_client_fkey;
 
 CREATE INDEX content_pieces_project_idx
   ON content_pieces(project_id, created_at DESC)
@@ -264,6 +282,9 @@ BEGIN
     EXCEPTION WHEN invalid_text_representation THEN
       RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Invalid factual source reference.';
     END;
+    IF v_item_id IS NULL THEN
+      RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'Invalid factual source reference.';
+    END IF;
     IF NOT (v_item_id = ANY(v_project.vault_source_ids)) THEN
       RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'A generated source was not selected as factual Vault evidence.';
     END IF;

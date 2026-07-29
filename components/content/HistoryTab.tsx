@@ -607,6 +607,10 @@ export const HistoryTab = memo(function HistoryTab({
   const detailQuery = usePieceDetail(clientId, selectedId);
   const isLoading = detailQuery.isLoading;
 
+  useEffect(() => {
+    setSelectedId(initialSelectedId);
+  }, [initialSelectedId]);
+
   // Sync fetched detail into local selected piece (so status edits can patch it)
   useEffect(() => {
     if (detailQuery.data) {
@@ -633,15 +637,13 @@ export const HistoryTab = memo(function HistoryTab({
       onHistoryUpdate((prev) =>
         prev.map((p) => (p.id === id ? { ...p, status } : p))
       );
-      // Update the detail view
-      setSelectedPiece((prev) => {
-        if (!prev) return prev;
-        const next = { ...prev, status };
+      const next = selectedPiece ? { ...selectedPiece, status } : null;
+      if (next) {
+        setSelectedPiece(next);
         onPieceStatusChanged?.(next);
-        return next;
-      });
+      }
     },
-    [onHistoryUpdate, onPieceStatusChanged]
+    [onHistoryUpdate, onPieceStatusChanged, selectedPiece]
   );
 
   // Detail view

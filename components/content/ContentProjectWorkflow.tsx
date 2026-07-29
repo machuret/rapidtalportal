@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,6 +64,7 @@ interface ContentProjectWorkflowProps {
   project: ContentProject;
   onProjectChange: (project: ContentProject) => void;
   onClose: () => void;
+  onRegenerateIdeas: () => void;
   onContentGenerated: (piece: ContentPiece) => void;
 }
 
@@ -82,7 +84,7 @@ function ProjectProgress({ project }: { project: ContentProject }) {
     : Math.max(0, STEPS.findIndex((step) => step.id === project.current_step));
   return (
     <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3">
-      <ol className="flex min-w-[720px] items-center">
+      <ol className="flex min-w-3xl items-center">
         {STEPS.map((step, index) => {
           const complete = index < currentIndex || project.current_step === "complete";
           const current = index === currentIndex;
@@ -117,6 +119,7 @@ export function ContentProjectWorkflow({
   project,
   onProjectChange,
   onClose,
+  onRegenerateIdeas,
   onContentGenerated,
 }: ContentProjectWorkflowProps) {
   const [busy, setBusy] = useState(false);
@@ -150,7 +153,7 @@ export function ContentProjectWorkflow({
   ): Promise<ContentProject | null> => {
     setBusy(true);
     try {
-      const updated = await api.patch<ContentProject>("/content/projects", {
+      const updated = await api.patch<ContentProject>(ROUTES.content.projects(), {
         client_id: clientId,
         id: project.id,
         expected_updated_at: project.updated_at,
@@ -167,7 +170,7 @@ export function ContentProjectWorkflow({
 
   const loadProject = useCallback(async () => {
     const loaded = await api.get<ContentProject>(
-      `/content/projects?client_id=${clientId}&id=${project.id}`,
+      ROUTES.content.project(clientId, project.id),
     );
     onProjectChange(loaded);
     return loaded;
@@ -175,13 +178,21 @@ export function ContentProjectWorkflow({
 
   useEffect(() => {
     if (project.current_step !== "evidence") return;
+    let cancelled = false;
     setEvidenceLoading(true);
     api.get<ContentEvidenceOption[]>(
-      `/content/projects/evidence?client_id=${clientId}&project_id=${project.id}`,
+      ROUTES.content.projectEvidence(clientId, project.id),
     )
-      .then(setEvidence)
+      .then((rows) => {
+        if (!cancelled) setEvidence(rows);
+      })
       .catch(() => undefined)
-      .finally(() => setEvidenceLoading(false));
+      .finally(() => {
+        if (!cancelled) setEvidenceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [clientId, project.current_step, project.id]);
 
   const market = project.idea_snapshot.marketIntelligence ?? null;
@@ -267,7 +278,7 @@ export function ContentProjectWorkflow({
     if (!project.current_piece_id) return;
     setBusy(true);
     try {
-      const result = await api.post<ValidationResult>("/content/validate", {
+      const result = await api.post<ValidationResult>(ROUTES.content.validate(), {
         client_id: clientId,
         project_id: project.id,
         piece_id: project.current_piece_id,
@@ -369,7 +380,7 @@ export function ContentProjectWorkflow({
             </Button>
             <Button variant="outline" className="w-full justify-start" disabled={busy} onClick={async () => {
               const updated = await patchProject({ status: "saved" });
-              if (updated) onClose();
+              if (updated) onRegenerateIdeas();
             }}>
               <Sparkles className="mr-2 h-4 w-4" /> Regenerate ideas
             </Button>
@@ -410,7 +421,7 @@ export function ContentProjectWorkflow({
             <section className="rounded-xl border border-blue-500/25 bg-blue-500/5 p-5 lg:col-span-2">
               <p className="flex items-center gap-2 font-medium text-blue-200"><BookOpenCheck className="h-4 w-4" /> Facts from the company Vault</p>
               <p className="mt-1 text-xs text-zinc-400">Only these sources may support factual claims in the draft.</p>
-              <div className="mt-4 max-h-[430px] space-y-2 overflow-y-auto pr-1">
+              <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
                 {evidenceLoading && <p className="py-8 text-center text-sm text-zinc-500">Loading factual Vault sources…</p>}
                 {!evidenceLoading && evidence.length === 0 && <p className="py-8 text-center text-sm text-zinc-500">No ready factual sources are available. You can continue, but claims will be limited to Company DNA.</p>}
                 {evidence.map((source) => {
