@@ -91,6 +91,25 @@ function looksLikeFeed(pathname: string): boolean {
     || /\.(?:rss|atom)$/iu.test(pathname);
 }
 
+export function linkedinCompanySlug(raw: string): string | null {
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase().replace(/^www\./u, "");
+    if (
+      url.protocol !== "https:"
+      || (host !== "linkedin.com" && !host.endsWith(".linkedin.com"))
+    ) return null;
+    const match = url.pathname.match(/^\/company\/([a-z0-9][a-z0-9-]{0,99})\/?$/iu);
+    return match?.[1]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function isCollectableLinkedinCompanyUrl(raw: string): boolean {
+  return linkedinCompanySlug(raw) !== null;
+}
+
 function defaultClassification(url: URL): {
   sourceType: CompetitorSourceType;
   platform: CompetitorPlatform;
@@ -101,7 +120,17 @@ function defaultClassification(url: URL): {
   if (platform === "youtube") {
     return { sourceType: "youtube", platform, scope: "profile", requiresConnector: true };
   }
-  if (["linkedin", "facebook", "instagram", "x"].includes(platform)) {
+  if (platform === "linkedin") {
+    return {
+      sourceType: "social_profile",
+      platform,
+      scope: "profile",
+      // Public company posts can be discovered without impersonating a user.
+      // Personal profiles and individual post URLs remain connector-only.
+      requiresConnector: !isCollectableLinkedinCompanyUrl(url.toString()),
+    };
+  }
+  if (["facebook", "instagram", "x"].includes(platform)) {
     return { sourceType: "social_profile", platform, scope: "profile", requiresConnector: true };
   }
   if (/sitemap(?:_index)?\.xml$/iu.test(url.pathname)) {

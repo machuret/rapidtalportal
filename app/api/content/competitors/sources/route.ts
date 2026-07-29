@@ -3,7 +3,7 @@ import { z } from "zod";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { serverError } from "@/lib/api/errors";
-import { resolveCompetitorUrl } from "@/lib/competitors/urls";
+import { isCollectableLinkedinCompanyUrl, resolveCompetitorUrl } from "@/lib/competitors/urls";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const MANAGER_ROLES = ["client_admin", "super_admin"] as const;
@@ -113,7 +113,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   const db = admin as any;
   const { data: current, error: currentError } = await db
     .from("competitor_sources")
-    .select("id, source_type, refresh_cadence, competitors!inner(refresh_cadence)")
+    .select("id, source_type, platform, normalized_url, refresh_cadence, competitors!inner(refresh_cadence)")
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
     .maybeSingle();
@@ -123,6 +123,10 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (
     parsed.data.status === "active"
     && ["social_profile", "youtube"].includes(current.source_type)
+    && !(
+      current.platform === "linkedin"
+      && isCollectableLinkedinCompanyUrl(current.normalized_url)
+    )
   ) {
     return NextResponse.json(
       { error: "This source requires an approved connector or user-provided export." },

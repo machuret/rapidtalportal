@@ -15,6 +15,10 @@ const discoveryBudgetMigration = readFileSync(
   path.resolve(__dirname, "..", "db", "migrations", "097_competitor_discovery_budget.sql"),
   "utf8",
 );
+const readinessMigration = readFileSync(
+  path.resolve(__dirname, "..", "db", "migrations", "099_competitor_intelligence_readiness.sql"),
+  "utf8",
+);
 
 describe("competitor source foundation migration", () => {
   test.each([
@@ -83,5 +87,24 @@ describe("competitor ingestion reliability migration", () => {
         `REVOKE ALL ON FUNCTION ${name}`,
       );
     }
+  });
+});
+
+describe("competitor intelligence readiness migration", () => {
+  test("readiness is tenant-qualified and service-role only", () => {
+    expect(readinessMigration).toContain("WHERE c.client_id = p_client_id");
+    expect(readinessMigration).toContain("WHERE ci.client_id = p_client_id");
+    expect(readinessMigration).toMatch(
+      /REVOKE ALL ON FUNCTION competitor_intelligence_readiness\(UUID\)[\s\S]+FROM PUBLIC, anon, authenticated/u,
+    );
+    expect(readinessMigration).toMatch(
+      /GRANT EXECUTE ON FUNCTION competitor_intelligence_readiness\(UUID\)[\s\S]+TO service_role/u,
+    );
+  });
+
+  test("requires enough recent evidence before idea generation", () => {
+    expect(readinessMigration).toContain("m.captured_items >= 5");
+    expect(readinessMigration).toContain("m.content_characters >= 3000");
+    expect(readinessMigration).toContain("m.latest_capture >= now() - interval '180 days'");
   });
 });

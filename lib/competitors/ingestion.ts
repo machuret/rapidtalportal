@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import { nextRefreshAt, resolveCompetitorUrl } from "@/lib/competitors/urls";
+import {
+  isCollectableLinkedinCompanyUrl,
+  linkedinCompanySlug,
+  nextRefreshAt,
+  resolveCompetitorUrl,
+} from "@/lib/competitors/urls";
 import type {
   CompetitorCrawlJob,
   CompetitorRefreshCadence,
@@ -24,6 +29,7 @@ const EXCLUDED_PATHS = [
 type AdminClient = any;
 
 export interface IngestionSource extends CompetitorSource {
+  competitor_name?: string;
   competitor_cadence?: CompetitorRefreshCadence;
   competitor_status?: "active" | "paused";
   competitor_website_url?: string | null;
@@ -219,12 +225,75 @@ async function discoverDocumentUrls(source: IngestionSource): Promise<string[]> 
   return [...documents];
 }
 
+function linkedinPostBelongsToCompany(raw: string, source: IngestionSource): boolean {
+  const slug = linkedinCompanySlug(source.normalized_url);
+  if (!slug) return false;
+  try {
+    const candidate = new URL(raw);
+    const host = candidate.hostname.toLowerCase().replace(/^www\./u, "");
+    return candidate.protocol === "https:"
+      && (host === "linkedin.com" || host.endsWith(".linkedin.com"))
+      && candidate.pathname.toLowerCase().startsWith(`/posts/${slug}_`);
+  } catch {
+    return false;
+  }
+}
+
+async function discoverLinkedinPostUrls(source: IngestionSource): Promise<string[]> {
+  const slug = linkedinCompanySlug(source.normalized_url);
+  if (!slug) {
+    throw new CompetitorIngestionError(
+      "Use a public LinkedIn company page URL, for example https://www.linkedin.com/company/company-name.",
+      422,
+    );
+  }
+  const name = source.competitor_name?.trim() || slug.replace(/-/gu, " ");
+  const json = await firecrawlJson(`${FIRECRAWL_API}/search`, {
+    method: "POST",
+    headers: firecrawlHeaders(true),
+    body: JSON.stringify({
+      query: `site:linkedin.com/posts/${slug} "${name}"`,
+      limit: source.max_pages,
+      sources: ["web"],
+      includeDomains: ["linkedin.com"],
+      timeout: 45000,
+    }),
+  });
+  const results = Array.isArray(json?.data?.web) ? json.data.web : [];
+  return [...new Set<string>(results
+    .map((result: { url?: unknown }) => typeof result?.url === "string" ? result.url : "")
+    .filter((url: string) => linkedinPostBelongsToCompany(url, source)))]
+    .slice(0, source.max_pages);
+}
+
 async function startFirecrawl(source: IngestionSource): Promise<ProviderStart> {
   let endpoint = `${FIRECRAWL_API}/crawl`;
   let body: Record<string, unknown> = buildCompetitorCrawlRequest(source);
   let provider: ProviderStart["provider"] = "firecrawl_crawl";
 
-  if (source.crawl_scope === "feed" || source.crawl_scope === "sitemap") {
+  if (
+    source.platform === "linkedin"
+    && source.source_type === "social_profile"
+    && isCollectableLinkedinCompanyUrl(source.normalized_url)
+  ) {
+    const urls = await discoverLinkedinPostUrls(source);
+    if (urls.length === 0) {
+      throw new CompetitorIngestionError(
+        "No public posts were found for this LinkedIn company page. Check the URL or add public post URLs individually.",
+        422,
+      );
+    }
+    endpoint = `${FIRECRAWL_API}/batch/scrape`;
+    body = {
+      urls,
+      formats: ["markdown"],
+      onlyMainContent: true,
+      ignoreInvalidURLs: true,
+      maxConcurrency: 5,
+      timeout: 45000,
+    };
+    provider = "firecrawl_batch";
+  } else if (source.crawl_scope === "feed" || source.crawl_scope === "sitemap") {
     const urls = await discoverDocumentUrls(source);
     if (urls.length === 0) {
       throw new CompetitorIngestionError("The supplied sitemap or feed did not contain public content URLs.", 422);
@@ -300,7 +369,11 @@ export function capturedPageBelongsToSource(raw: string, source: IngestionSource
   try {
     const candidate = new URL(raw);
     const root = new URL(source.normalized_url);
-    if (candidate.protocol !== "https:" || !allowedSourceHost(candidate, source)) return false;
+    if (candidate.protocol !== "https:") return false;
+    if (source.platform === "linkedin" && source.source_type === "social_profile") {
+      return linkedinPostBelongsToCompany(raw, source);
+    }
+    if (!allowedSourceHost(candidate, source)) return false;
     if (source.crawl_scope === "exact") {
       return candidate.pathname.replace(/\/+$/u, "") === root.pathname.replace(/\/+$/u, "");
     }
@@ -362,7 +435,9 @@ async function commitPage(
     p_page_id: row.id,
     p_canonical_url: canonicalUrl,
     p_platform: source.platform,
-    p_content_type: source.source_type === "blog" ? "article" : "page",
+    p_content_type: source.platform === "linkedin" ? "social_post"
+      : source.source_type === "blog" ? "article"
+        : "page",
     p_title: title,
     p_raw_content: content,
     p_author: typeof page.metadata?.author === "string" ? page.metadata.author.slice(0, 300) : null,
@@ -430,7 +505,14 @@ export async function startCompetitorRefresh(
   if (resolvedSource.normalizedUrl !== source.normalized_url) {
     throw new CompetitorIngestionError("The stored source URL failed integrity validation.", 422);
   }
-  if (resolvedSource.requiresConnector || ["social_profile", "youtube"].includes(source.source_type)) {
+  const collectableLinkedin = source.platform === "linkedin"
+    && source.source_type === "social_profile"
+    && isCollectableLinkedinCompanyUrl(source.normalized_url);
+  if (
+    resolvedSource.requiresConnector
+    || source.source_type === "youtube"
+    || (source.source_type === "social_profile" && !collectableLinkedin)
+  ) {
     throw new CompetitorIngestionError(
       "This source is registered, but collection requires an approved platform connector or user-provided export.",
       422,
@@ -449,7 +531,7 @@ export async function startCompetitorRefresh(
       p_pages_requested: source.max_pages + (
         ["feed", "sitemap"].includes(source.crawl_scope)
           ? 12
-          : 0
+          : collectableLinkedin ? 1 : 0
       ),
       p_daily_crawl_limit: configuredLimit("COMPETITOR_DAILY_CRAWL_LIMIT", 20),
       p_daily_page_limit: configuredLimit("COMPETITOR_DAILY_PAGE_LIMIT", 500),
@@ -518,13 +600,14 @@ export async function advanceCompetitorCrawl(
   const leaseToken = claimed.lease_token as string;
   const { data: sourceRow, error: sourceError } = await admin
     .from("competitor_sources")
-    .select("*, competitors!inner(refresh_cadence, status, website_url)")
+    .select("*, competitors!inner(name, refresh_cadence, status, website_url)")
     .eq("id", claimed.source_id)
     .eq("client_id", claimed.client_id)
     .single();
   if (sourceError || !sourceRow) throw new CompetitorIngestionError(sourceError?.message ?? "Source not found.", 404);
   const source = {
     ...sourceRow,
+    competitor_name: sourceRow.competitors?.name ?? "",
     competitor_cadence: sourceRow.competitors?.refresh_cadence ?? "manual",
     competitor_status: sourceRow.competitors?.status ?? "active",
     competitor_website_url: sourceRow.competitors?.website_url ?? null,
