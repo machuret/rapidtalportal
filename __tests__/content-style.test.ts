@@ -66,8 +66,46 @@ describe("content brand style", () => {
       channel: "facebook",
       summary: style.summary,
       hardRules: [],
+      styleAnalysis: null,
       companyDnaUpdatedAt: "2026-07-28T00:00:00.000Z",
       capturedAt: "2026-07-28T01:00:00.000Z",
+    });
+  });
+
+  test("uses only the approved analysis for the selected channel and keeps manual style authoritative", () => {
+    const style = resolveContentStyle({
+      ...dna,
+      style_analysis_profiles: {
+        linkedin: {
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          analysis: {
+            summary: "Direct, evidence-led and conversational.",
+            voice_traits: ["Candid", "Practical"],
+            hook_patterns: ["Open with a concrete tension"],
+            cta_patterns: ["Finish with one reflective question"],
+          },
+          source_item_ids: ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
+          analysed_at: "2026-07-29T01:00:00.000Z",
+          approved_at: "2026-07-29T02:00:00.000Z",
+        },
+      },
+    }, "linkedin", "Playful", "Short.");
+
+    expect(style.prompt).toContain("Approved linkedin style analysis");
+    expect(style.prompt).toContain("Open with a concrete tension");
+    expect(style.prompt.indexOf("linkedin style")).toBeLessThan(
+      style.prompt.indexOf("Approved linkedin style analysis"),
+    );
+    expect(style.summary).toContain(
+      "Approved linkedin style analysis: Direct, evidence-led and conversational.",
+    );
+    expect(style.styleAnalysis).toEqual({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      channel: "linkedin",
+      summary: "Direct, evidence-led and conversational.",
+      sourceItemIds: ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
+      analysedAt: "2026-07-29T01:00:00.000Z",
+      approvedAt: "2026-07-29T02:00:00.000Z",
     });
   });
 });

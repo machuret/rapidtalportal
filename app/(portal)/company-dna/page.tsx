@@ -3,6 +3,7 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DnaForm } from "@/components/dna/DnaForm";
 import { PageIntro } from "@/components/layout/PageIntro";
+import { StyleAnalysisManager } from "@/components/content/StyleAnalysisManager";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Company DNA — RapidTal" };
@@ -35,6 +36,11 @@ export default async function CompanyDnaPage() {
       </p>
       <PageIntro id="company-dna" />
       <DnaForm initialData={dna ?? null} clientId={user.client_id} readOnly={!canEdit} />
+      <StyleAnalysisManager
+        clientId={user.client_id}
+        clientName={client?.name}
+        canEdit={canEdit}
+      />
     </div>
   );
 }

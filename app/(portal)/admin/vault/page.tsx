@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Archive } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { LinkedInVaultSourcePanel } from "@/components/vault/LinkedInVaultSourcePanel";
+import { StyleAnalysisManager } from "@/components/content/StyleAnalysisManager";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Client Vaults — RapidTal" };
@@ -79,6 +80,12 @@ export default async function AdminVaultPage({ searchParams: searchParamsPromise
             clientId={clientId}
             clientName={clientName ?? "this company"}
             initialUrl={linkedInUrl}
+          />
+          <StyleAnalysisManager
+            key={`style-${clientId}`}
+            clientId={clientId}
+            clientName={clientName}
+            canEdit
           />
           <VaultClient
             key={clientId}

@@ -1,4 +1,5 @@
 import type { ContentHardRule } from "@/supabase/functions/_shared/content-style";
+import type { StyleAnalysisProfile } from "@/lib/content/style-analysis";
 
 export type UserRole = "super_admin" | "client_admin" | "va";
 export type DailyLogMood = "great" | "good" | "neutral" | "difficult" | "overwhelmed";
@@ -430,6 +431,63 @@ export interface Database {
         Update: { id?: string; client_id?: string; content?: string; model?: string | null; source_url?: string | null; tokens_used?: number; created_by?: string | null; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
+      content_style_analyses: {
+        Row: {
+          id: string;
+          client_id: string;
+          channel: string;
+          status: string;
+          analysis: StyleAnalysisProfile;
+          source_item_ids: string[];
+          source_count: number;
+          source_character_count: number;
+          model: string | null;
+          analysed_at: string | null;
+          approved_at: string | null;
+          approved_by: string | null;
+          created_by: string | null;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          channel: string;
+          status?: string;
+          analysis?: StyleAnalysisProfile;
+          source_item_ids?: string[];
+          source_count?: number;
+          source_character_count?: number;
+          model?: string | null;
+          analysed_at?: string | null;
+          approved_at?: string | null;
+          approved_by?: string | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          client_id?: string;
+          channel?: string;
+          status?: string;
+          analysis?: StyleAnalysisProfile;
+          source_item_ids?: string[];
+          source_count?: number;
+          source_character_count?: number;
+          model?: string | null;
+          analysed_at?: string | null;
+          approved_at?: string | null;
+          approved_by?: string | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: NoRelationships;
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -489,6 +547,14 @@ export interface Database {
           p_operations: Json;
         };
         Returns: Json;
+      };
+      approve_content_style_analysis: {
+        Args: {
+          p_client_id: string;
+          p_analysis_id: string;
+          p_actor_id: string;
+        };
+        Returns: Database["public"]["Tables"]["content_style_analyses"]["Row"];
       };
     };
     Enums: Record<string, never>;

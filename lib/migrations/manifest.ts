@@ -106,4 +106,5 @@ export const MIGRATIONS = [
   "098_admin_company_profile_sources.sql",
   "099_competitor_intelligence_readiness.sql",
   "100_linkedin_public_post_discovery.sql",
+  "101_content_style_analysis.sql",
 ] as const;
