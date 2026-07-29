@@ -34,6 +34,8 @@ function chain(result: { data?: unknown; error: unknown }) {
 beforeEach(() => {
   jest.clearAllMocks();
   process.env.FIRECRAWL_API_KEY = "test-key";
+  delete process.env.APIFY_API_TOKEN;
+  delete process.env.APIFY_LINKEDIN_ACTOR_ID;
   (requireApiAuth as jest.Mock).mockResolvedValue({
     user: { id: USER_ID, role: "client_admin", client_id: CLIENT_ID },
   });
@@ -41,6 +43,8 @@ beforeEach(() => {
 
 afterAll(() => {
   delete process.env.FIRECRAWL_API_KEY;
+  delete process.env.APIFY_API_TOKEN;
+  delete process.env.APIFY_LINKEDIN_ACTOR_ID;
 });
 
 test("collects Equity Access posts without filtering URLs that LinkedIn blocks from direct scraping", async () => {
@@ -145,12 +149,91 @@ test("runs live discovery diagnostics without changing Company DNA or Vault reco
     discovery: {
       accepted: 0,
       returned: 0,
-      attempts: [
-        { query: "site:linkedin.com/posts/equity-access", status: 200, returned: 0 },
-        { query: 'site:linkedin.com/posts "Equity Access"', status: 200, returned: 0 },
-      ],
     },
   });
+  expect(body.discovery.attempts).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      provider: "firecrawl",
+      query: "site:linkedin.com/posts/equity-access",
+      status: 200,
+      returned: 0,
+    }),
+    expect.objectContaining({
+      provider: "firecrawl",
+      query: 'site:linkedin.com/posts "Equity Access"',
+      status: 200,
+      returned: 0,
+    }),
+  ]));
   expect(from).toHaveBeenCalledTimes(1);
   expect(scheduleVaultProcess).not.toHaveBeenCalled();
+});
+
+test("uses the configured Apify API Actor before the Firecrawl fallback", async () => {
+  process.env.APIFY_API_TOKEN = "apify-test-token";
+  const clientQuery = chain({ data: { name: "Equity Access" }, error: null });
+  const from = jest.fn((table: string) => {
+    if (table === "clients") return clientQuery;
+    throw new Error(`Test mode must not access ${table}`);
+  });
+  (createAdminClient as jest.Mock).mockReturnValue({ from });
+  const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
+    new Response(JSON.stringify([{
+      type: "post",
+      linkedinUrl: "https://www.linkedin.com/posts/equity-access_equityaccess-privatelending-mortgagebrokers-activity-7452144320121393153-XzSg",
+      content: "Our CEO balances private credit leadership with purpose-driven lending and responsible broker partnerships.",
+      author: { name: "Equity Access" },
+      postedAt: { date: "2026-06-01T00:00:00.000Z" },
+      engagement: { likes: 12, comments: 3, shares: 1 },
+    }]), { status: 200, headers: { "content-type": "application/json" } }),
+  );
+  const request = new NextRequest("https://portal.test/api/vault/linkedin", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      clientId: CLIENT_ID,
+      profileUrl: "https://www.linkedin.com/company/equity-access/",
+      maxPosts: 10,
+      mode: "test",
+    }),
+  });
+
+  const response = await POST(request, { params: Promise.resolve({}) });
+  const body = await response.json();
+
+  expect(response.status).toBe(200);
+  expect(body).toMatchObject({
+    success: true,
+    test: true,
+    discovery: {
+      provider: "apify",
+      accepted: 1,
+      attempts: [{
+        provider: "apify",
+        status: 200,
+        returned: 1,
+        error: null,
+      }],
+      candidates: [{
+        provider: "apify",
+        accepted: true,
+        reason: "accepted",
+      }],
+    },
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const actorUrl = new URL(String(fetchMock.mock.calls[0][0]));
+  expect(actorUrl.pathname).toContain("/acts/harvestapi~linkedin-company-posts/run-sync-get-dataset-items");
+  expect(actorUrl.searchParams.get("maxItems")).toBe("10");
+  expect(actorUrl.searchParams.get("maxTotalChargeUsd")).toBe("0.25");
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({
+    method: "POST",
+    headers: expect.objectContaining({ Authorization: "Bearer apify-test-token" }),
+  });
+  expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
+    targetUrls: ["https://www.linkedin.com/company/equity-access"],
+    maxPosts: 10,
+    scrapeComments: false,
+    scrapeReactions: false,
+  });
 });
