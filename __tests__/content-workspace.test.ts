@@ -46,6 +46,7 @@ describe("unified content engine", () => {
 
   test("market intelligence is tenant-verified, hidden from factual context, and persisted with the brief", () => {
     expect(generateRoute).toContain("marketIntelligenceSchema");
+    expect(generator).toContain("JSON.stringify(contentBrief).length > 48000");
     expect(generator).toContain("validateMarketIntelligence");
     expect(generator).toContain('.eq("client_id", clientId)');
     expect(generator).toContain("modelContentBrief");

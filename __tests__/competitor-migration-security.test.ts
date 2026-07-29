@@ -228,7 +228,7 @@ describe("competitor intelligence hardening migration", () => {
     ]) {
       expect(intelligenceHardeningMigration).toContain(`REVOKE ALL ON FUNCTION ${name}`);
       expect(intelligenceHardeningMigration).toMatch(
-        new RegExp(`GRANT EXECUTE ON FUNCTION ${name}[\\s\\S]+TO service_role`, "u"),
+        new RegExp(`GRANT EXECUTE ON FUNCTION ${name}[^;]+TO service_role`, "u"),
       );
     }
     expect(retireUnleasedMigration).toContain(

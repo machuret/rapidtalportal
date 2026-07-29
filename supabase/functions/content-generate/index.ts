@@ -72,6 +72,7 @@ function sameStringSet(left: string[], right: string[]): boolean {
 // immutable report owned by this tenant. Direct Edge Function callers therefore
 // cannot forge competitor evidence or attach another tenant's intelligence.
 // deno-lint-ignore no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function validateMarketIntelligence(admin: any, clientId: string, value: unknown): Promise<string | null> {
   if (value === undefined || value === null) return null;
   const provenance = record(value);
@@ -316,7 +317,7 @@ export async function handleContentGenerateRequest(
 
     if (
       title.length > 300 ||
-      JSON.stringify(contentBrief).length > 12000 ||
+      JSON.stringify(contentBrief).length > 48000 ||
       sourceContext.length > 50000
     ) {
       return new Response(JSON.stringify({ error: "The content request is too long." }), {

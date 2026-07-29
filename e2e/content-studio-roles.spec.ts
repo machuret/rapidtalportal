@@ -41,10 +41,7 @@ test.describe("signed-in Content Studio roles", () => {
     await expect(page.getByRole("heading", { name: "Competitor intelligence" })).toBeVisible();
     await expect(page.getByTestId("competitor-add-button")).toBeVisible();
 
-    const analyse = page.getByTestId("competitor-analyse-button");
-    if (await analyse.count()) {
-      await expect(analyse).toBeVisible();
-    }
+    await expect(page.getByTestId("competitor-analyse-button")).toBeVisible();
   });
 
   test("VA can read Market Intelligence but cannot mutate competitor configuration", async ({ page }) => {

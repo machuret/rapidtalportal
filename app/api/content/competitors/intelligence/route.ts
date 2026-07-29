@@ -6,6 +6,7 @@ import { withAuth } from "@/lib/api/with-auth";
 import { serverError } from "@/lib/api/errors";
 import { chatModel, chatProvider } from "@/lib/brain/llm";
 import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
+import { captureError } from "@/lib/error-tracking";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   competitorIntelligenceSchema,
@@ -37,9 +38,9 @@ const sourceSnapshotSchema = z.object({
   url: z.string().url(),
   platform: z.string().min(1).max(80),
   content_type: z.string().min(1).max(80),
-  published_at: z.string().datetime().nullable(),
-  captured_at: z.string().datetime(),
-  effective_at: z.string().datetime(),
+  published_at: z.string().datetime({ offset: true }).nullable(),
+  captured_at: z.string().datetime({ offset: true }),
+  effective_at: z.string().datetime({ offset: true }),
   date_basis: z.enum(["published", "captured"]),
 });
 const companySnapshotSchema = z.object({
@@ -261,7 +262,7 @@ function citedEvidenceIsValid(
     if (!source || !quote) return false;
     const normalizedQuote = compactWhitespace(quote);
     return normalizedQuote.split(/\s+/u).length >= 4 &&
-      compactWhitespace(source.raw_content).includes(normalizedQuote);
+      compactWhitespace(source.raw_content.trim().slice(0, 3500)).includes(normalizedQuote);
   });
 }
 
@@ -645,11 +646,26 @@ export const POST = withAuth(async (request, { user }) => {
   }
   const job = claimed as JobRow;
   const failJob = async (message: string) => {
-    await db.rpc("fail_competitor_intelligence_job", {
-      p_job_id: job.id,
-      p_lease_token: job.lease_token,
-      p_error_message: message,
-    });
+    try {
+      const { error } = await db.rpc("fail_competitor_intelligence_job", {
+        p_job_id: job.id,
+        p_lease_token: job.lease_token,
+        p_error_message: message,
+      });
+      if (error) {
+        captureError("api", error, {
+          userId: user.id,
+          clientId: parsed.data.client_id,
+          url: "/api/content/competitors/intelligence",
+        });
+      }
+    } catch (error) {
+      captureError("api", error, {
+        userId: user.id,
+        clientId: parsed.data.client_id,
+        url: "/api/content/competitors/intelligence",
+      });
+    }
   };
 
   const model = chatModel("COMPETITOR_INTELLIGENCE_MODEL");
@@ -657,6 +673,7 @@ export const POST = withAuth(async (request, { user }) => {
   try {
     response = await fetch(provider.url, {
       method: "POST",
+      signal: AbortSignal.timeout(100_000),
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${provider.key}`,

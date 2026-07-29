@@ -80,6 +80,7 @@ Deno.test("content-generate rejects a cross-tenant request before privileged con
 
 Deno.test("content-generate rejects another tenant's market-intelligence provenance before generation", async () => {
   const adminTables: string[] = [];
+  const filters: string[] = [];
   const userClient = {
     auth: {
       getUser: async () => ({
@@ -93,7 +94,10 @@ Deno.test("content-generate rejects another tenant's market-intelligence provena
       adminTables.push(table);
       const chain = {
         select: () => chain,
-        eq: () => chain,
+        eq: (column: string, value: unknown) => {
+          filters.push(`${table}.${column}=${String(value)}`);
+          return chain;
+        },
         single: async () => ({
           data: { id: USER_ID, role: "client_admin", client_id: USER_CLIENT_ID },
           error: null,
@@ -174,5 +178,10 @@ Deno.test("content-generate rejects another tenant's market-intelligence provena
     adminTables.join(","),
     "users,competitor_intelligence_runs",
     "tables read before provenance rejection",
+  );
+  assertEquals(
+    filters.includes(`competitor_intelligence_runs.client_id=${USER_CLIENT_ID}`),
+    true,
+    "market report query is tenant-qualified",
   );
 });
