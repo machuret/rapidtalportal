@@ -46,6 +46,11 @@ import {
 } from "@/app/api/content/pieces/route";
 import { GET as revisions } from "@/app/api/content/revisions/route";
 import { POST as rewrite } from "@/app/api/content/rewrite/route";
+import {
+  GET as getStyleAnalysis,
+  PATCH as patchStyleAnalysis,
+  POST as createStyleAnalysis,
+} from "@/app/api/content/style-analysis/route";
 import { POST as generateTopics } from "@/app/api/content/topics/generate/route";
 import {
   DELETE as deleteTopic,
@@ -62,6 +67,7 @@ const COMPETITOR_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const SOURCE_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const CRAWL_ID = "99999999-9999-4999-8999-999999999999";
 const UPDATED_AT = "2026-07-28T01:00:00.000Z";
+const STYLE_ANALYSIS_ID = "abababab-abab-4bab-8bab-abababababab";
 const routeCtx = { params: Promise.resolve({}) };
 const user: ApiUser = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -223,6 +229,47 @@ const cases: { endpoint: string; call: () => Promise<Response> }[] = [
       scope: "full",
       instruction: "Cross-tenant rewrite",
       expected_updated_at: UPDATED_AT,
+    }), routeCtx),
+  },
+  {
+    endpoint: "style-analysis:GET",
+    call: () => getStyleAnalysis(
+      new NextRequest(`https://portal.test/api/content/style-analysis?client_id=${CLIENT_B}`),
+      routeCtx,
+    ),
+  },
+  {
+    endpoint: "style-analysis:POST",
+    call: () => createStyleAnalysis(jsonRequest("https://portal.test/api/content/style-analysis", {
+      client_id: CLIENT_B,
+      channel: "linkedin",
+    }), routeCtx),
+  },
+  {
+    endpoint: "style-analysis:PATCH",
+    call: () => patchStyleAnalysis(jsonRequest("https://portal.test/api/content/style-analysis", {
+      client_id: CLIENT_B,
+      id: STYLE_ANALYSIS_ID,
+      action: "save",
+      analysis: {
+        summary: "Clear and practical.",
+        voice_traits: [],
+        tone: "Professional",
+        audience_relationship: "",
+        hook_patterns: [],
+        structure_patterns: [],
+        sentence_style: "",
+        paragraph_style: "",
+        formatting_patterns: [],
+        vocabulary_patterns: [],
+        cta_patterns: [],
+        emoji_usage: "",
+        hashtag_usage: "",
+        content_patterns: [],
+        avoid_patterns: [],
+        confidence: "medium",
+        evidence: [],
+      },
     }), routeCtx),
   },
   {

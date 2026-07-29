@@ -95,7 +95,13 @@ What would you improve first?`,
 
   return {
     from: jest.fn((table: string) =>
-      chain(table === "company_dna" ? defaults.dna : defaults.piece)),
+      chain(
+        table === "company_dna"
+          ? defaults.dna
+          : table === "content_style_analyses"
+            ? { data: null, error: null }
+            : defaults.piece,
+      )),
     rpc: jest.fn(() => chain(defaults.rpc)),
   };
 }
@@ -265,7 +271,7 @@ Would you like to learn more?`,
     }), routeCtx);
 
     expect(response.status).toBe(201);
-    const contentBuilder = admin.from.mock.results[1].value as { insert: jest.Mock };
+    const contentBuilder = admin.from.mock.results[2].value as { insert: jest.Mock };
     expect(contentBuilder.insert).toHaveBeenCalledWith(expect.objectContaining({
       content_type: "x",
       style_snapshot: expect.objectContaining({

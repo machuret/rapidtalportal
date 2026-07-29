@@ -288,6 +288,26 @@ export async function handleContentGenerateRequest(
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const { data: approvedStyleAnalysis, error: styleAnalysisError } = await admin
+      .from("content_style_analyses")
+      .select("id,channel,analysis,source_item_ids,analysed_at,approved_at")
+      .eq("client_id", clientId)
+      .eq("channel", contentType)
+      .eq("status", "approved")
+      .maybeSingle();
+    if (styleAnalysisError) {
+      console.error("content-generate: approved style analysis query failed:", styleAnalysisError);
+      return new Response(JSON.stringify({ error: "Approved writing style is temporarily unavailable. No draft was created." }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const resolvedDna: Record<string, unknown> = {
+      ...(dna as Record<string, unknown>),
+      style_analysis_profiles: approvedStyleAnalysis
+        ? { [contentType]: approvedStyleAnalysis }
+        : {},
+    };
     let retrieval;
     try {
       retrieval = await retrieveContentVault({
@@ -306,7 +326,7 @@ export async function handleContentGenerateRequest(
     }
 
     let context = "";
-    const d = dna as Record<string, unknown>;
+    const d = resolvedDna;
     context += "=== COMPANY CONTEXT ===\n";
     for (const [k, v] of Object.entries(d)) {
       if (k !== "updated_at" && v && typeof v === "string") context += `${k}: ${v}\n`;
@@ -347,7 +367,7 @@ export async function handleContentGenerateRequest(
 
     // ── OpenAI generation ─────────────────────────────────────────────────────
     const style = resolveContentStyle(
-      dna as Record<string, unknown> | null,
+      resolvedDna,
       contentType,
       tone,
       CONTENT_LENGTH_HINTS[length] ?? "",
@@ -388,7 +408,7 @@ export async function handleContentGenerateRequest(
       context,
       sourceContext,
       style,
-      dna: dna as Record<string, unknown>,
+      dna: resolvedDna,
       sources: retrieval.sources,
       complete,
       baseTemplate,
@@ -397,8 +417,8 @@ export async function handleContentGenerateRequest(
       ...createContentStyleSnapshot(
       style,
       contentType,
-      typeof (dna as Record<string, unknown>).updated_at === "string"
-        ? (dna as Record<string, unknown>).updated_at as string
+      typeof resolvedDna.updated_at === "string"
+        ? resolvedDna.updated_at as string
         : null,
       ),
       exampleSources: retrieval.styleSources,

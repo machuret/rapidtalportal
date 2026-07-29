@@ -14,6 +14,17 @@ import {
   contentQualityWarnings,
 } from "@/supabase/functions/_shared/content-quality";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function approvedStyleProfile(db: any, clientId: string, channel: string) {
+  return db
+    .from("content_style_analyses")
+    .select("id,channel,analysis,source_item_ids,analysed_at,approved_at")
+    .eq("client_id", clientId)
+    .eq("channel", channel)
+    .eq("status", "approved")
+    .maybeSingle();
+}
+
 const querySchema = z.object({
   client_id: z.string().uuid(),
   id: z.string().uuid().optional(),
@@ -61,13 +72,25 @@ export const POST = withAuth(async (req, { user }) => {
   // Capture the current style authority even for drafts promoted from Compose.
   // Missing DNA is allowed at draft time, but a database failure is not.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: dna, error: dnaError } = await (admin as any)
-    .from("company_dna")
-    .select("updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules")
-    .eq("client_id", parsed.data.client_id)
-    .maybeSingle();
+  const db = admin as any;
+  const [
+    { data: dna, error: dnaError },
+    { data: styleProfile, error: styleProfileError },
+  ] = await Promise.all([
+    db
+      .from("company_dna")
+      .select("updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules")
+      .eq("client_id", parsed.data.client_id)
+      .maybeSingle(),
+    approvedStyleProfile(db, parsed.data.client_id, parsed.data.content_type),
+  ]);
   if (dnaError) return serverError(dnaError);
-  const style = resolveContentStyle(dna, parsed.data.content_type, "Company-approved tone", "");
+  if (styleProfileError) return serverError(styleProfileError);
+  const resolvedDna = {
+    ...(dna ?? {}),
+    style_analysis_profiles: styleProfile ? { [parsed.data.content_type]: styleProfile } : {},
+  };
+  const style = resolveContentStyle(resolvedDna, parsed.data.content_type, "Company-approved tone", "");
   const styleSnapshot = createContentStyleSnapshot(
     style,
     parsed.data.content_type,
@@ -187,12 +210,20 @@ export const PATCH = withAuth(async (req, { user }) => {
   // approval gates. Natural-language style guidance remains visibly model-enforced.
   if (parsed.data.status === "approved") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: dna, error: dnaError } = await (admin as any)
-      .from("company_dna")
-      .select("company_name,services,location,team,tools_used,extra,updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules")
-      .eq("client_id", parsed.data.client_id)
-      .maybeSingle();
+    const db = admin as any;
+    const [
+      { data: dna, error: dnaError },
+      { data: styleProfile, error: styleProfileError },
+    ] = await Promise.all([
+      db
+        .from("company_dna")
+        .select("company_name,services,location,team,tools_used,extra,updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules")
+        .eq("client_id", parsed.data.client_id)
+        .maybeSingle(),
+      approvedStyleProfile(db, parsed.data.client_id, current.content_type),
+    ]);
     if (dnaError) return serverError(dnaError);
+    if (styleProfileError) return serverError(styleProfileError);
     if (!dna) {
       return NextResponse.json({ error: "Complete Company DNA before approving content." }, { status: 422 });
     }
@@ -201,7 +232,11 @@ export const PATCH = withAuth(async (req, { user }) => {
     if (!finalBody.trim()) {
       return NextResponse.json({ error: "A content body is required before approval." }, { status: 422 });
     }
-    const style = resolveContentStyle(dna, current.content_type, "Company-approved tone", "");
+    const resolvedDna = {
+      ...dna,
+      style_analysis_profiles: styleProfile ? { [current.content_type]: styleProfile } : {},
+    };
+    const style = resolveContentStyle(resolvedDna, current.content_type, "Company-approved tone", "");
     const sourceExcerpts = Array.isArray(current.source_references)
       ? current.source_references
         .map((source: unknown) => {
@@ -215,7 +250,7 @@ export const PATCH = withAuth(async (req, { user }) => {
       body: finalBody,
       contentType: current.content_type,
       style,
-      claimSupportText: claimSupportFromDna(dna, sourceExcerpts),
+      claimSupportText: claimSupportFromDna(resolvedDna, sourceExcerpts),
     });
     if (warnings.length) {
       return NextResponse.json({
