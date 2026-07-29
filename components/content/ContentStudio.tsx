@@ -7,6 +7,10 @@ import { CreateTab } from "./CreateTab";
 import { HistoryTab } from "./HistoryTab";
 import { CompetitorsTab } from "./CompetitorsTab";
 import { ContentErrorBoundary } from "./ErrorBoundary";
+import {
+  competitorIdeaToBrief,
+  type CompetitorIntelligenceIdea,
+} from "@/lib/competitors/intelligence";
 
 type Tab = "topics" | "create" | "history" | "competitors";
 
@@ -14,7 +18,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "topics", label: "💡 Generate ideas" },
   { id: "create", label: "✍️ Write from a topic" },
   { id: "history", label: "🕐 History" },
-  { id: "competitors", label: "📡 Competitors" },
+  { id: "competitors", label: "📡 Market intelligence" },
 ];
 
 interface ContentStudioProps {
@@ -57,6 +61,11 @@ function ContentStudioInner({
     setHistory((prev) => [piece, ...prev]);
   }, []);
 
+  const handleCompetitorIdeaSelected = useCallback((idea: CompetitorIntelligenceIdea) => {
+    setPrefill(competitorIdeaToBrief(idea));
+    setActiveTab("create");
+  }, []);
+
   return (
     <div>
       {/* Tab bar */}
@@ -84,6 +93,7 @@ function ContentStudioInner({
             canApprove={canApprove}
             initialTopics={initialTopics}
             onTopicSelected={handleTopicSelected}
+            onOpenIntelligence={() => setActiveTab("competitors")}
           />
         </ContentErrorBoundary>
       </div>
@@ -114,6 +124,7 @@ function ContentStudioInner({
             clientId={clientId}
             canManage={canManageCompetitors}
             active={activeTab === "competitors"}
+            onIdeaSelected={handleCompetitorIdeaSelected}
           />
         </ContentErrorBoundary>
       </div>

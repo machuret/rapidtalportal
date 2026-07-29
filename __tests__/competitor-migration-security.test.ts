@@ -23,6 +23,10 @@ const linkedinDiscoveryMigration = readFileSync(
   path.resolve(__dirname, "..", "db", "migrations", "100_linkedin_public_post_discovery.sql"),
   "utf8",
 );
+const intelligenceRunsMigration = readFileSync(
+  path.resolve(__dirname, "..", "db", "migrations", "102_competitor_intelligence_runs.sql"),
+  "utf8",
+);
 
 describe("competitor source foundation migration", () => {
   test.each([
@@ -121,5 +125,34 @@ describe("LinkedIn public post discovery migration", () => {
     expect(linkedinDiscoveryMigration).toMatch(
       /REVOKE ALL ON FUNCTION competitor_intelligence_readiness\(UUID\)[\s\S]+FROM PUBLIC, anon, authenticated/u,
     );
+  });
+});
+
+describe("competitor intelligence runs migration", () => {
+  test("keeps durable analysis service-role only", () => {
+    expect(intelligenceRunsMigration).toContain(
+      "ALTER TABLE competitor_intelligence_runs ENABLE ROW LEVEL SECURITY",
+    );
+    expect(intelligenceRunsMigration).toContain(
+      "REVOKE ALL ON TABLE competitor_intelligence_runs FROM PUBLIC, anon, authenticated",
+    );
+    expect(intelligenceRunsMigration).toMatch(
+      /REVOKE ALL ON FUNCTION replace_competitor_intelligence_run[\s\S]+FROM PUBLIC, anon, authenticated/u,
+    );
+  });
+
+  test("atomically supersedes the old report before inserting its replacement", () => {
+    expect(intelligenceRunsMigration).toContain("PERFORM id FROM clients WHERE id = p_client_id FOR UPDATE");
+    expect(intelligenceRunsMigration).toContain("SET status = 'superseded'");
+    expect(intelligenceRunsMigration).toContain("RETURNING * INTO v_run");
+  });
+
+  test("requires bounded source provenance and a versioned report", () => {
+    expect(intelligenceRunsMigration).toContain("schema_version INTEGER NOT NULL DEFAULT 1");
+    expect(intelligenceRunsMigration).toContain("source_count = cardinality(source_item_ids)");
+    expect(intelligenceRunsMigration).toContain("cardinality(source_item_ids) BETWEEN 3 AND 80");
+    expect(intelligenceRunsMigration).toContain("WHERE client_id = p_client_id");
+    expect(intelligenceRunsMigration).toContain("competitor_id = ANY(p_competitor_ids)");
+    expect(intelligenceRunsMigration).toContain("id = ANY(p_source_item_ids)");
   });
 });

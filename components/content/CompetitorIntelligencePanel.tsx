@@ -1,0 +1,441 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowRight,
+  BarChart3,
+  BookOpen,
+  ExternalLink,
+  FileStack,
+  Lightbulb,
+  Loader2,
+  RefreshCw,
+  Scale,
+  Sparkles,
+  Target,
+} from "lucide-react";
+import { toast } from "sonner";
+import { api } from "@/lib/api-client";
+import type { Competitor } from "@/types/competitors";
+import type {
+  CompetitorIntelligenceIdea,
+  CompetitorIntelligenceRun,
+} from "@/lib/competitors/intelligence";
+import { Button } from "@/components/ui/button";
+
+interface Props {
+  clientId: string;
+  canManage: boolean;
+  competitors: Competitor[];
+  onIdeaSelected?: (idea: CompetitorIntelligenceIdea) => void;
+}
+
+type Section = "overview" | "topics" | "formats" | "comparison" | "gaps" | "ideas";
+
+const sections: Array<{ id: Section; label: string; icon: typeof BarChart3 }> = [
+  { id: "overview", label: "Overview", icon: BarChart3 },
+  { id: "topics", label: "Topic clusters", icon: BookOpen },
+  { id: "formats", label: "Formats", icon: FileStack },
+  { id: "comparison", label: "Comparison", icon: Scale },
+  { id: "gaps", label: "Positioning gaps", icon: Target },
+  { id: "ideas", label: "Recommended ideas", icon: Lightbulb },
+];
+
+function readableDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
+}
+
+export function CompetitorIntelligencePanel({
+  clientId,
+  canManage,
+  competitors,
+  onIdeaSelected,
+}: Props) {
+  const [run, setRun] = useState<CompetitorIntelligenceRun | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [analysing, setAnalysing] = useState(false);
+  const [section, setSection] = useState<Section>("overview");
+  const [windowDays, setWindowDays] = useState(180);
+  const readyCompetitors = useMemo(
+    () => competitors.filter((competitor) =>
+      competitor.status === "active" && competitor.readiness.ready),
+    [competitors],
+  );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    api.get<{ run: CompetitorIntelligenceRun | null }>(
+      `/content/competitors/intelligence?client_id=${clientId}`,
+      { showErrorToast: false },
+    ).then((result) => {
+      if (active) setRun(result.run);
+    }).catch((error) => {
+      if (active) toast.error(error instanceof Error ? error.message : "Competitor intelligence could not be loaded.");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [clientId]);
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const valid = new Set(readyCompetitors.map((competitor) => competitor.id));
+      const retained = new Set([...current].filter((id) => valid.has(id)));
+      return retained.size > 0 ? retained : valid;
+    });
+  }, [readyCompetitors]);
+
+  const sourceById = useMemo(
+    () => new Map((run?.sources ?? []).map((source) => [source.id, source])),
+    [run?.sources],
+  );
+  const competitorById = useMemo(
+    () => new Map(competitors.map((competitor) => [competitor.id, competitor])),
+    [competitors],
+  );
+  const reportIsStale = useMemo(() => {
+    if (!run) return false;
+    const included = new Set(run.competitor_ids);
+    const reportCreatedAt = new Date(run.created_at).getTime();
+    return competitors.some((competitor) =>
+      included.has(competitor.id) &&
+      competitor.readiness.latest_capture !== null &&
+      new Date(competitor.readiness.latest_capture).getTime() > reportCreatedAt);
+  }, [competitors, run]);
+
+  function toggleCompetitor(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function analyse() {
+    if (selectedIds.size === 0) {
+      toast.error("Select at least one evidence-ready competitor.");
+      return;
+    }
+    setAnalysing(true);
+    try {
+      const result = await api.post<{ run: CompetitorIntelligenceRun }>(
+        "/content/competitors/intelligence",
+        {
+          client_id: clientId,
+          competitor_ids: [...selectedIds],
+          window_days: windowDays,
+        },
+        { showErrorToast: false },
+      );
+      setRun(result.run);
+      setSection("overview");
+      toast.success("Competitor intelligence report created.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Competitor analysis failed.");
+    } finally {
+      setAnalysing(false);
+    }
+  }
+
+  function evidenceLinks(ids: string[]) {
+    return (
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {ids.map((id) => {
+          const source = sourceById.get(id);
+          return source ? (
+            <a
+              key={id}
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              title={source.title}
+              className="inline-flex max-w-56 items-center gap-1 rounded-full border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+            >
+              <span className="truncate">{source.competitor_name}: {source.title}</span>
+              <ExternalLink className="h-3 w-3 shrink-0" />
+            </a>
+          ) : (
+            <span key={id} className="rounded-full border border-zinc-800 px-2 py-1 text-xs text-zinc-600">
+              Source unavailable
+            </span>
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 text-sm text-zinc-400">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading the latest intelligence report…
+      </div>
+    );
+  }
+
+  return (
+    <section className="rounded-xl border border-orange-500/25 bg-orange-500/5">
+      <div className="border-b border-orange-500/20 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-orange-300" />
+              <h3 className="font-semibold text-white">Market intelligence report</h3>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">
+              Evidence-backed topic clusters, recurring formats, competitor positioning and differentiated content opportunities.
+              Competitor material is inspiration only—not proof for claims about your company.
+            </p>
+          </div>
+          {canManage && (
+            <div className="flex shrink-0 flex-wrap items-end gap-2">
+              <label className="space-y-1 text-xs text-zinc-500">
+                <span>Analysis window</span>
+                <select
+                  value={windowDays}
+                  onChange={(event) => setWindowDays(Number(event.target.value))}
+                  className="block h-9 rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 text-sm text-zinc-200"
+                >
+                  <option value={90}>Last 90 days</option>
+                  <option value={180}>Last 180 days</option>
+                  <option value={365}>Last 12 months</option>
+                </select>
+              </label>
+              <Button
+                type="button"
+                onClick={() => void analyse()}
+                disabled={analysing || selectedIds.size === 0}
+                className="bg-orange-500 text-white hover:bg-orange-400"
+              >
+                {analysing ? <Loader2 className="animate-spin" /> : run ? <RefreshCw /> : <Sparkles />}
+                {analysing ? "Analysing…" : run ? "Refresh report" : "Analyse competitors"}
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {canManage && readyCompetitors.length > 0 && (
+          <div className="mt-4">
+            <p className="mb-2 text-xs text-zinc-500">Evidence-ready competitors included</p>
+            <div className="flex flex-wrap gap-2">
+              {readyCompetitors.map((competitor) => (
+                <button
+                  key={competitor.id}
+                  type="button"
+                  onClick={() => toggleCompetitor(competitor.id)}
+                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                    selectedIds.has(competitor.id)
+                      ? "border-orange-400/50 bg-orange-500/15 text-orange-100"
+                      : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  {competitor.name} · {competitor.readiness.captured_items} items
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {!run ? (
+        <div className="px-5 py-10 text-center">
+          <BarChart3 className="mx-auto h-8 w-8 text-zinc-700" />
+          <p className="mt-3 font-medium text-zinc-300">No intelligence report yet</p>
+          <p className="mx-auto mt-1 max-w-xl text-sm text-zinc-500">
+            {readyCompetitors.length > 0
+              ? "Analyse the evidence-ready competitor mini-vaults to find repeatable market signals and content opportunities."
+              : "Collect at least 5 recent items and 3,000 characters for a competitor before running analysis."}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="flex gap-1 overflow-x-auto border-b border-zinc-800 px-4 py-2">
+            {sections.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSection(item.id)}
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium ${
+                    section === item.id
+                      ? "bg-zinc-700 text-white"
+                      : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="p-5">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+              <span>
+                {readableDate(run.window_start)}–{readableDate(run.window_end)} · {run.source_count} sources ·{" "}
+                {run.source_character_count.toLocaleString()} characters
+              </span>
+              <span className={reportIsStale ? "text-amber-300" : ""}>
+                Generated {readableDate(run.created_at)}
+                {reportIsStale ? " · refresh recommended" : ""}
+              </span>
+            </div>
+
+            {section === "overview" && (
+              <div className="space-y-5">
+                <p className="max-w-4xl text-sm leading-6 text-zinc-300">{run.analysis.executive_summary}</p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    ["Topic clusters", run.analysis.topic_clusters.length],
+                    ["Format patterns", run.analysis.format_patterns.length],
+                    ["Positioning gaps", run.analysis.positioning_gaps.length],
+                    ["Recommended ideas", run.analysis.recommended_ideas.length],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+                      <p className="text-xs text-zinc-500">{label}</p>
+                      <p className="mt-1 text-xl font-semibold text-zinc-100">{value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {run.analysis.positioning_profiles.map((profile) => (
+                    <div key={profile.competitor_id} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+                      <p className="text-sm font-semibold text-zinc-200">
+                        {competitorById.get(profile.competitor_id)?.name ?? "Competitor"}
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-zinc-400">{profile.summary}</p>
+                      <p className="mt-3 text-xs text-zinc-500">Themes: {profile.themes.join(" · ")}</p>
+                      {evidenceLinks(profile.source_item_ids)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {section === "topics" && (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {run.analysis.topic_clusters.map((cluster) => (
+                  <div key={cluster.id} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-200">{cluster.label}</p>
+                        <p className="mt-1 text-sm leading-6 text-zinc-400">{cluster.description}</p>
+                      </div>
+                      <span className="rounded-full border border-orange-500/25 px-2 py-1 text-xs capitalize text-orange-300">
+                        {cluster.signal_strength}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-xs text-zinc-500">Channels: {cluster.channels.join(", ")}</p>
+                    {evidenceLinks(cluster.source_item_ids)}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {section === "formats" && (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {run.analysis.format_patterns.map((format) => (
+                  <div key={format.name} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+                    <p className="text-sm font-semibold text-zinc-200">{format.name}</p>
+                    <p className="mt-1 text-sm leading-6 text-zinc-400">{format.description}</p>
+                    <dl className="mt-3 space-y-2 text-xs">
+                      <div><dt className="text-zinc-600">Hook</dt><dd className="text-zinc-400">{format.hook_pattern || "No consistent pattern"}</dd></div>
+                      <div><dt className="text-zinc-600">Structure</dt><dd className="text-zinc-400">{format.structure_pattern || "No consistent pattern"}</dd></div>
+                      <div><dt className="text-zinc-600">CTA</dt><dd className="text-zinc-400">{format.cta_pattern || "No consistent pattern"}</dd></div>
+                    </dl>
+                    {evidenceLinks(format.source_item_ids)}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {section === "comparison" && (
+              <div className="space-y-3">
+                {run.analysis.comparisons.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-zinc-700 p-8 text-center text-sm text-zinc-500">
+                    Select at least two evidence-ready competitors for direct comparisons.
+                  </p>
+                ) : run.analysis.comparisons.map((comparison) => (
+                  <div key={comparison.dimension} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+                    <p className="text-sm font-semibold text-zinc-200">{comparison.dimension}</p>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {comparison.observations.map((observation) => (
+                        <div key={observation.competitor_id} className="rounded border border-zinc-800 p-3">
+                          <p className="text-xs font-medium text-zinc-300">
+                            {competitorById.get(observation.competitor_id)?.name ?? "Competitor"}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">{observation.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-sm text-orange-200/80">Opportunity: {comparison.opportunity}</p>
+                    {evidenceLinks(comparison.source_item_ids)}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {section === "gaps" && (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {run.analysis.positioning_gaps.map((gap) => (
+                  <div key={gap.title} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold text-zinc-200">{gap.title}</p>
+                      <span className="rounded-full border border-zinc-700 px-2 py-1 text-xs capitalize text-zinc-400">
+                        {gap.gap_type.replace(/_/gu, " ")}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-zinc-400">{gap.description}</p>
+                    <p className="mt-2 text-xs leading-5 text-zinc-500">{gap.rationale}</p>
+                    <p className="mt-3 text-xs text-zinc-500">
+                      Company fit: {gap.company_fit} · Suggested: {gap.recommended_channels.join(", ")}
+                    </p>
+                    {evidenceLinks(gap.source_item_ids)}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {section === "ideas" && (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {run.analysis.recommended_ideas.map((idea) => (
+                  <div key={`${idea.channel}-${idea.title}`} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-orange-300">{idea.channel} · {idea.format}</p>
+                        <p className="mt-1 text-sm font-semibold text-zinc-200">{idea.title}</p>
+                      </div>
+                      <span className="rounded-full border border-zinc-700 px-2 py-1 text-xs capitalize text-zinc-400">
+                        {idea.confidence}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-zinc-400">{idea.why_valuable}</p>
+                    <p className="mt-2 text-xs leading-5 text-zinc-500">
+                      Differentiation: {idea.differentiation}
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-zinc-500">
+                      Suggested hook: “{idea.suggested_hook}”
+                    </p>
+                    {evidenceLinks(idea.source_item_ids)}
+                    {onIdeaSelected && (
+                      <div className="mt-4 flex justify-end">
+                        <Button type="button" size="sm" onClick={() => onIdeaSelected(idea)}>
+                          Build content brief
+                          <ArrowRight />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
