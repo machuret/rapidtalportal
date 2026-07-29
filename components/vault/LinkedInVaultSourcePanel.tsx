@@ -22,12 +22,14 @@ interface DiscoveryReport {
   returned: number;
   accepted: number;
   attempts: Array<{
+    provider: "apify" | "firecrawl";
     query: string;
     status: number;
     returned: number;
     error: string | null;
   }>;
   candidates: Array<{
+    provider: "apify" | "firecrawl";
     url: string | null;
     accepted: boolean;
     reason: "accepted" | "missing_url" | "different_company" | "insufficient_content" | "duplicate";
@@ -167,7 +169,8 @@ export function LinkedInVaultSourcePanel({ clientId, clientName, initialUrl }: P
               <div key={attempt.query} className="rounded border border-zinc-800 px-3 py-2">
                 <p className="break-all text-zinc-300">{attempt.query}</p>
                 <p className="mt-1">
-                  Provider returned {attempt.returned} result{attempt.returned === 1 ? "" : "s"} · HTTP {attempt.status}
+                  {attempt.provider === "apify" ? "Apify" : "Firecrawl"} returned {attempt.returned} result{attempt.returned === 1 ? "" : "s"}
+                  {attempt.status > 0 ? ` · HTTP ${attempt.status}` : ""}
                   {attempt.error ? ` · ${attempt.error}` : ""}
                 </p>
               </div>
@@ -178,7 +181,9 @@ export function LinkedInVaultSourcePanel({ clientId, clientName, initialUrl }: P
                   ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
                   : <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />}
                 <div className="min-w-0">
-                  <p className="text-zinc-300">{reasonLabels[candidate.reason]} · {candidate.contentCharacters} text characters</p>
+                  <p className="text-zinc-300">
+                    {candidate.provider === "apify" ? "Apify" : "Firecrawl"} · {reasonLabels[candidate.reason]} · {candidate.contentCharacters} text characters
+                  </p>
                   {candidate.url && <p className="truncate text-zinc-500">{candidate.url}</p>}
                 </div>
               </div>

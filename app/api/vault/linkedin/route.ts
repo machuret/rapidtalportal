@@ -94,6 +94,7 @@ function searchResults(json: {
 }
 
 interface DiscoveryCandidate {
+  provider: "apify" | "firecrawl";
   url: string | null;
   accepted: boolean;
   reason: "accepted" | "missing_url" | "different_company" | "insufficient_content" | "duplicate";
@@ -101,6 +102,7 @@ interface DiscoveryCandidate {
 }
 
 interface DiscoveryAttempt {
+  provider: "apify" | "firecrawl";
   query: string;
   status: number;
   returned: number;
@@ -130,8 +132,9 @@ export const POST = withAuth(async (req, { user }) => {
     );
   }
 
+  const apifyToken = process.env.APIFY_API_TOKEN;
   const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-  if (!firecrawlKey) {
+  if (!apifyToken && !firecrawlKey) {
     return NextResponse.json({ error: "LinkedIn collection is not configured." }, { status: 503 });
   }
 
@@ -150,12 +153,143 @@ export const POST = withAuth(async (req, { user }) => {
   const attempts: DiscoveryAttempt[] = [];
   const candidates: DiscoveryCandidate[] = [];
   let lastSearchError = "";
+  const acceptCandidate = (
+    provider: DiscoveryCandidate["provider"],
+    result: SearchResult,
+  ) => {
+    const rawUrl = searchResultUrl(result);
+    const url = normalisePublicPostUrl(rawUrl, profile.slug);
+    const content = cleanText(result.markdown)
+      || cleanText(result.description)
+      || cleanText(result.snippet)
+      || cleanText(result.metadata?.description);
+    if (!url) {
+      candidates.push({
+        provider,
+        url: typeof rawUrl === "string" ? rawUrl.slice(0, 2000) : null,
+        accepted: false,
+        reason: typeof rawUrl === "string" ? "different_company" : "missing_url",
+        contentCharacters: content.length,
+      });
+      return;
+    }
+    if (content.length < 40) {
+      candidates.push({
+        provider,
+        url,
+        accepted: false,
+        reason: "insufficient_content",
+        contentCharacters: content.length,
+      });
+      return;
+    }
+    if (uniqueResults.has(url)) {
+      candidates.push({
+        provider,
+        url,
+        accepted: false,
+        reason: "duplicate",
+        contentCharacters: content.length,
+      });
+      return;
+    }
+    uniqueResults.set(url, {
+      url,
+      title: (
+        cleanText(result.title)
+        || cleanText(result.metadata?.title)
+        || `${companyName} — LinkedIn post`
+      ).slice(0, 200),
+      content,
+    });
+    candidates.push({
+      provider,
+      url,
+      accepted: true,
+      reason: "accepted",
+      contentCharacters: content.length,
+    });
+  };
+
+  if (apifyToken) {
+    const actorId = process.env.APIFY_LINKEDIN_ACTOR_ID
+      || "harvestapi~linkedin-company-posts";
+    const actorUrl = new URL(
+      `https://api.apify.com/v2/acts/${encodeURIComponent(actorId)}/run-sync-get-dataset-items`,
+    );
+    actorUrl.searchParams.set("format", "json");
+    actorUrl.searchParams.set("clean", "true");
+    actorUrl.searchParams.set("timeout", "90");
+    actorUrl.searchParams.set("maxItems", String(parsed.data.maxPosts));
+    actorUrl.searchParams.set("maxTotalChargeUsd", "0.25");
+    const response = await fetch(actorUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apifyToken}`,
+      },
+      body: JSON.stringify({
+        targetUrls: [profile.url],
+        maxPosts: parsed.data.maxPosts,
+        scrapeComments: false,
+        scrapeReactions: false,
+        includeQuotePosts: false,
+        includeReposts: false,
+      }),
+    });
+    const json = await response.json().catch(() => ({}));
+    const rows = Array.isArray(json) ? json as Array<Record<string, unknown>> : [];
+    const error = response.ok
+      ? null
+      : cleanText((json as { error?: { message?: unknown } })?.error?.message)
+        || `Apify returned ${response.status}`;
+    attempts.push({
+      provider: "apify",
+      query: `${actorId}: ${profile.url}`,
+      status: response.status,
+      returned: rows.length,
+      error,
+    });
+    if (error) lastSearchError = error;
+    for (const row of rows) {
+      const author = row.author && typeof row.author === "object"
+        ? row.author as Record<string, unknown>
+        : {};
+      const document = row.document && typeof row.document === "object"
+        ? row.document as Record<string, unknown>
+        : {};
+      acceptCandidate("apify", {
+        url: row.linkedinUrl ?? row.postUrl,
+        title: document.title ?? author.name,
+        markdown: row.content ?? row.text,
+      });
+    }
+  } else {
+    attempts.push({
+      provider: "apify",
+      query: "LinkedIn company posts Actor",
+      status: 0,
+      returned: 0,
+      error: "APIFY_API_TOKEN is not configured.",
+    });
+  }
+
   const queries = [
     `site:linkedin.com/posts/${profile.slug}`,
     `site:linkedin.com/posts "${companyName}"`,
   ];
   for (const query of queries) {
     if (uniqueResults.size > 0) break;
+    if (!firecrawlKey) {
+      attempts.push({
+        provider: "firecrawl",
+        query,
+        status: 0,
+        returned: 0,
+        error: "FIRECRAWL_API_KEY is not configured.",
+      });
+      break;
+    }
     const searchResponse = await fetch("https://api.firecrawl.dev/v2/search", {
       method: "POST",
       headers: {
@@ -181,6 +315,7 @@ export const POST = withAuth(async (req, { user }) => {
     };
     const results = searchResults(searchJson);
     attempts.push({
+      provider: "firecrawl",
       query,
       status: searchResponse.status,
       returned: results.length,
@@ -193,60 +328,15 @@ export const POST = withAuth(async (req, { user }) => {
       continue;
     }
     for (const result of results) {
-      const rawUrl = searchResultUrl(result);
-      const url = normalisePublicPostUrl(rawUrl, profile.slug);
-      const content = cleanText(result.markdown)
-        || cleanText(result.description)
-        || cleanText(result.snippet)
-        || cleanText(result.metadata?.description);
-      if (!url) {
-        candidates.push({
-          url: typeof rawUrl === "string" ? rawUrl.slice(0, 2000) : null,
-          accepted: false,
-          reason: typeof rawUrl === "string" ? "different_company" : "missing_url",
-          contentCharacters: content.length,
-        });
-        continue;
-      }
-      if (content.length < 40) {
-        candidates.push({
-          url,
-          accepted: false,
-          reason: "insufficient_content",
-          contentCharacters: content.length,
-        });
-        continue;
-      }
-      if (uniqueResults.has(url)) {
-        candidates.push({
-          url,
-          accepted: false,
-          reason: "duplicate",
-          contentCharacters: content.length,
-        });
-        continue;
-      }
-      uniqueResults.set(url, {
-        url,
-        title: (
-          cleanText(result.title)
-          || cleanText(result.metadata?.title)
-          || `${companyName} — LinkedIn post`
-        ).slice(0, 200),
-        content,
-      });
-      candidates.push({
-        url,
-        accepted: true,
-        reason: "accepted",
-        contentCharacters: content.length,
-      });
+      acceptCandidate("firecrawl", result);
     }
   }
 
   const discovery = {
     profileUrl: profile.url,
-    provider: "firecrawl_search",
+    provider: uniqueResults.size > 0 && candidates.some((candidate) => candidate.provider === "apify" && candidate.accepted)
+      ? "apify"
+      : "firecrawl",
     attempts,
     returned: attempts.reduce((total, attempt) => total + attempt.returned, 0),
     accepted: uniqueResults.size,
