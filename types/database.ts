@@ -297,9 +297,15 @@ export interface Database {
         Relationships: NoRelationships;
       };
       content_pieces: {
-        Row: { id: string; client_id: string; content_type: string; title: string; brief: string | null; body: string | null; status: string; style_snapshot: Json; content_brief: Json; source_references: Json; parent_piece_id: string | null; generation_kind: string; revision_reason: string | null; created_by: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; client_id: string; content_type: string; title: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
-        Update: { id?: string; client_id?: string; content_type?: string; title?: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Row: { id: string; client_id: string; project_id: string | null; content_type: string; title: string; brief: string | null; body: string | null; status: string; style_snapshot: Json; content_brief: Json; source_references: Json; parent_piece_id: string | null; generation_kind: string; revision_reason: string | null; created_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; project_id?: string | null; content_type: string; title: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; project_id?: string | null; content_type?: string; title?: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Relationships: NoRelationships;
+      };
+      content_projects: {
+        Row: { id: string; client_id: string; title: string; status: string; current_step: string; idea_snapshot: Json; content_brief: Json; vault_source_ids: string[]; vault_source_references: Json; competitor_signals: Json; style_snapshot: Json; current_piece_id: string | null; created_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; title: string; status?: string; current_step?: string; idea_snapshot?: Json; content_brief?: Json; vault_source_ids?: string[]; vault_source_references?: Json; competitor_signals?: Json; style_snapshot?: Json; current_piece_id?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; title?: string; status?: string; current_step?: string; idea_snapshot?: Json; content_brief?: Json; vault_source_ids?: string[]; vault_source_references?: Json; competitor_signals?: Json; style_snapshot?: Json; current_piece_id?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
       content_piece_revisions: {

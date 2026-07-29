@@ -142,7 +142,7 @@ export const GET = withAuth(async (req, { user }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (admin as any)
       .from("content_pieces")
-      .select("id, client_id, content_type, title, brief, body, status, content_brief, source_references, style_snapshot, parent_piece_id, generation_kind, created_by, created_at, updated_at")
+      .select("id, client_id, project_id, content_type, title, brief, body, status, content_brief, source_references, style_snapshot, parent_piece_id, generation_kind, created_by, created_at, updated_at")
       .eq("id", parsed.data.id)
       .eq("client_id", parsed.data.client_id)
       .single();
@@ -158,7 +158,7 @@ export const GET = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("content_pieces")
-    .select("id, content_type, title, status, generation_kind, parent_piece_id, created_at")
+    .select("id, project_id, content_type, title, status, generation_kind, parent_piece_id, created_at")
     .eq("client_id", parsed.data.client_id)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -197,7 +197,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: current, error: currentError } = await (admin as any)
     .from("content_pieces")
-    .select("content_type, body, status, updated_at, source_references")
+    .select("content_type, body, status, updated_at, source_references, style_snapshot")
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
     .single();
@@ -259,7 +259,33 @@ export const PATCH = withAuth(async (req, { user }) => {
       }, { status: 422 });
     }
     dnaUpdatedAt = dna.updated_at;
-    styleSnapshot = createContentStyleSnapshot(style, current.content_type, dnaUpdatedAt);
+    styleSnapshot = {
+      ...createContentStyleSnapshot(style, current.content_type, dnaUpdatedAt),
+      ...(current.style_snapshot &&
+      typeof current.style_snapshot === "object" &&
+      !Array.isArray(current.style_snapshot) &&
+      Array.isArray((current.style_snapshot as Record<string, unknown>).exampleSources)
+        ? {
+            exampleSources: (
+              (current.style_snapshot as Record<string, unknown>).exampleSources as unknown[]
+            ).flatMap((source) => {
+              if (!source || typeof source !== "object" || Array.isArray(source)) return [];
+              const value = source as Record<string, unknown>;
+              return (
+                typeof value.itemId === "string" &&
+                typeof value.title === "string" &&
+                (typeof value.sourceUrl === "string" || value.sourceUrl === null)
+              )
+                ? [{
+                    itemId: value.itemId,
+                    title: value.title,
+                    sourceUrl: value.sourceUrl,
+                  }]
+                : [];
+            }),
+          }
+        : {}),
+    };
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -72,6 +72,13 @@ export const ROUTES = {
   },
   content: {
     pieces: () => "/api/content/pieces",
+    projects: () => "/api/content/projects",
+    projectsForClient: (clientId: string) => `/api/content/projects?client_id=${clientId}`,
+    project: (clientId: string, projectId: string) =>
+      `/api/content/projects?client_id=${clientId}&id=${projectId}`,
+    projectEvidence: (clientId: string, projectId: string) =>
+      `/api/content/projects/evidence?client_id=${clientId}&project_id=${projectId}`,
+    validate: () => "/api/content/validate",
     generate: () => "/api/content/generate",
     styleAnalysis: () => "/api/content/style-analysis",
     styleAnalysisForClient: (clientId: string) => `/api/content/style-analysis?client_id=${clientId}`,

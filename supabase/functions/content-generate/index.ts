@@ -23,6 +23,8 @@ import {
   type ContentModelRequest,
 } from "../_shared/content-generation-orchestration.ts";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
 const baseCorsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -39,6 +41,7 @@ const DEFAULT_SYSTEM = DEFAULT_CONTENT_SYSTEM;
  */
 const promptCache = new Map<string, { content: string | null; at: number }>();
 // deno-lint-ignore no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function promptOverride(admin: any, slug: string, fallback: string): Promise<string> {
   const hit = promptCache.get(slug);
   if (hit && Date.now() - hit.at < 30_000) return hit.content ?? fallback;
@@ -271,6 +274,13 @@ export async function handleContentGenerateRequest(
     const contentType = requestedContentType === "social" ? "linkedin" : requestedContentType;
     const persist = body.persist !== false;
     const sourceContext = typeof body.sourceContext === "string" ? body.sourceContext : "";
+    const projectId = typeof body.projectId === "string" ? body.projectId : null;
+    const selectedVaultSourceIds: string[] | undefined = Array.isArray(body.vaultSourceIds)
+      ? Array.from(new Set<string>(
+          (body.vaultSourceIds as unknown[])
+            .filter((id: unknown): id is string => typeof id === "string"),
+        ))
+      : undefined;
     const requestedGenerationKind = body.generationKind;
     const parentPieceId = typeof body.parentPieceId === "string" ? body.parentPieceId : null;
     const rawBrief = body.brief;
@@ -318,7 +328,8 @@ export async function handleContentGenerateRequest(
     if (
       title.length > 300 ||
       JSON.stringify(contentBrief).length > 48000 ||
-      sourceContext.length > 50000
+      sourceContext.length > 50000 ||
+      (selectedVaultSourceIds?.length ?? 0) > 20
     ) {
       return new Response(JSON.stringify({ error: "The content request is too long." }), {
         status: 422,
@@ -354,6 +365,50 @@ export async function handleContentGenerateRequest(
       });
     }
 
+    if (projectId) {
+      if (
+        !persist ||
+        !UUID_RE.test(projectId) ||
+        !selectedVaultSourceIds ||
+        selectedVaultSourceIds.some((id) => !UUID_RE.test(id))
+      ) {
+        return new Response(JSON.stringify({ error: "Invalid connected content project request." }), {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: project, error: projectError } = await admin
+        .from("content_projects")
+        .select("id,status,content_brief,vault_source_ids")
+        .eq("id", projectId)
+        .eq("client_id", clientId)
+        .maybeSingle();
+      if (projectError) {
+        return new Response(JSON.stringify({ error: "Content project is temporarily unavailable." }), {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!project) {
+        return new Response(JSON.stringify({ error: "Content project not found." }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!["active", "saved"].includes(project.status)) {
+        return new Response(JSON.stringify({ error: "This content project cannot generate a new draft." }), {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!sameStringSet(project.vault_source_ids ?? [], selectedVaultSourceIds)) {
+        return new Response(JSON.stringify({ error: "The selected Vault evidence changed. Reload the project." }), {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const marketIntelligenceError = await validateMarketIntelligence(
       admin,
       clientId,
@@ -368,7 +423,7 @@ export async function handleContentGenerateRequest(
 
     let generationKind = contentBrief.mode === "reply" ? "reply" : "original";
     if (requestedGenerationKind === "adaptation") {
-      if (!parentPieceId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(parentPieceId)) {
+      if (!parentPieceId || !UUID_RE.test(parentPieceId)) {
         return new Response(JSON.stringify({ error: "A valid parent piece is required for adaptation." }), {
           status: 422,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -463,6 +518,7 @@ export async function handleContentGenerateRequest(
         query: `${title}. ${objective}. ${String(contentBrief.additionalGuidance ?? "")}`,
         relevantCategories: relevantCats,
         styleChannel: contentType,
+        selectedSourceIds: projectId ? selectedVaultSourceIds : undefined,
       });
     } catch (error) {
       console.error("content-generate: Vault query failed:", error);
@@ -603,28 +659,55 @@ export async function handleContentGenerateRequest(
     let pieceId: string | null = null;
     let persistedPiece: Record<string, unknown> | null = null;
     if (persist) {
-      const { data: piece, error: dbError } = await admin
-        .from("content_pieces")
-        .insert({
-          client_id: clientId,
-          content_type: contentType,
-          title,
-          brief: objective,
-          content_brief: contentBrief,
-          source_references: verifiedSources,
-          body: finalBody,
-          status: "draft",
-          created_by: authUser.id,
-          style_snapshot: styleSnapshot,
-          generation_kind: generationKind,
-          parent_piece_id: generationKind === "adaptation" ? parentPieceId : null,
-        })
-        .select("id,content_type,title,status,generation_kind,parent_piece_id,created_at,updated_at")
-        .single();
+      const persistence = projectId
+        ? await admin.rpc("create_content_project_draft", {
+            p_client_id: clientId,
+            p_project_id: projectId,
+            p_actor_id: authUser.id,
+            p_content_type: contentType,
+            p_title: title,
+            p_body: finalBody,
+            p_content_brief: contentBrief,
+            p_source_references: verifiedSources,
+            p_style_snapshot: styleSnapshot,
+            p_generation_kind: generationKind,
+            p_parent_piece_id: generationKind === "adaptation" ? parentPieceId : null,
+          }).single()
+        : await admin
+          .from("content_pieces")
+          .insert({
+            client_id: clientId,
+            content_type: contentType,
+            title,
+            brief: objective,
+            content_brief: contentBrief,
+            source_references: verifiedSources,
+            body: finalBody,
+            status: "draft",
+            created_by: authUser.id,
+            style_snapshot: styleSnapshot,
+            generation_kind: generationKind,
+            parent_piece_id: generationKind === "adaptation" ? parentPieceId : null,
+          })
+          .select("id,content_type,title,status,generation_kind,parent_piece_id,created_at,updated_at")
+          .single();
+      const { data: piece, error: dbError } = persistence;
 
       if (dbError) {
-        return new Response(JSON.stringify({ error: dbError.message }), {
-          status: 500,
+        const status = dbError.code === "40001"
+          ? 409
+          : dbError.code === "P0002"
+            ? 404
+            : dbError.code === "42501"
+              ? 403
+              : dbError.code === "P0001" || dbError.code === "22023"
+                ? 422
+                : 500;
+        console.error("content-generate: draft persistence failed:", dbError);
+        return new Response(JSON.stringify({
+          error: status === 500 ? "The draft could not be saved." : dbError.message,
+        }), {
+          status,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }

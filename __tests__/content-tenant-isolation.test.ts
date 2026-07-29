@@ -48,6 +48,12 @@ import {
   PATCH as patchPiece,
   POST as createPiece,
 } from "@/app/api/content/pieces/route";
+import {
+  GET as getProjects,
+  PATCH as patchProject,
+  POST as createProject,
+} from "@/app/api/content/projects/route";
+import { GET as getProjectEvidence } from "@/app/api/content/projects/evidence/route";
 import { GET as revisions } from "@/app/api/content/revisions/route";
 import { POST as rewrite } from "@/app/api/content/rewrite/route";
 import {
@@ -62,6 +68,7 @@ import {
   PATCH as patchTopic,
   POST as createTopic,
 } from "@/app/api/content/topics/route";
+import { POST as validateContent } from "@/app/api/content/validate/route";
 
 const CLIENT_A = "11111111-1111-4111-8111-111111111111";
 const CLIENT_B = "22222222-2222-4222-8222-222222222222";
@@ -72,6 +79,7 @@ const SOURCE_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const CRAWL_ID = "99999999-9999-4999-8999-999999999999";
 const UPDATED_AT = "2026-07-28T01:00:00.000Z";
 const STYLE_ANALYSIS_ID = "abababab-abab-4bab-8bab-abababababab";
+const PROJECT_ID = "12121212-1212-4212-8212-121212121212";
 const routeCtx = { params: Promise.resolve({}) };
 const user: ApiUser = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -237,6 +245,46 @@ const cases: { endpoint: string; call: () => Promise<Response> }[] = [
     }), routeCtx),
   },
   {
+    endpoint: "projects:GET",
+    call: () => getProjects(
+      new NextRequest(`https://portal.test/api/content/projects?client_id=${CLIENT_B}`),
+      routeCtx,
+    ),
+  },
+  {
+    endpoint: "projects:POST",
+    call: () => createProject(jsonRequest("https://portal.test/api/content/projects", {
+      client_id: CLIENT_B,
+      idea: {
+        version: 1,
+        origin: "manual",
+        title: "Cross-tenant project",
+        channel: "linkedin",
+        rationale: "",
+        differentiation: "",
+        evidenceSummary: "",
+      },
+    }), routeCtx),
+  },
+  {
+    endpoint: "projects:PATCH",
+    call: () => patchProject(jsonRequest("https://portal.test/api/content/projects", {
+      client_id: CLIENT_B,
+      id: PROJECT_ID,
+      expected_updated_at: UPDATED_AT,
+      current_step: "brief",
+    }), routeCtx),
+  },
+  {
+    endpoint: "projects/evidence:GET",
+    call: () => getProjectEvidence(
+      new NextRequest(
+        `https://portal.test/api/content/projects/evidence?client_id=${CLIENT_B}&project_id=${PROJECT_ID}`,
+      ),
+      routeCtx,
+    ),
+  },
+  {
     endpoint: "revisions:GET",
     call: () => revisions(
       new NextRequest(
@@ -343,6 +391,14 @@ const cases: { endpoint: string; call: () => Promise<Response> }[] = [
     call: () => deleteTopic(jsonRequest("https://portal.test/api/content/topics", {
       client_id: CLIENT_B,
       id: TOPIC_ID,
+    }), routeCtx),
+  },
+  {
+    endpoint: "validate:POST",
+    call: () => validateContent(jsonRequest("https://portal.test/api/content/validate", {
+      client_id: CLIENT_B,
+      project_id: PROJECT_ID,
+      piece_id: PIECE_ID,
     }), routeCtx),
   },
 ];

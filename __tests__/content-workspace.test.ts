@@ -2,6 +2,7 @@
 
 import { readFileSync } from "fs";
 import path from "path";
+import { contentBriefSchema } from "@/lib/content/project-schema";
 
 const root = path.resolve(__dirname, "..");
 const read = (file: string) => readFileSync(path.join(root, file), "utf8");
@@ -26,10 +27,23 @@ describe("unified content engine", () => {
 
   test("the public generation boundary requires a structured brief and one platform", () => {
     expect(generateRoute).toContain("structuredBriefSchema");
-    expect(generateRoute).toContain("objective:");
-    expect(generateRoute).toContain("audience:");
-    expect(generateRoute).toContain("keyPoints:");
-    expect(generateRoute).toContain("callToAction:");
+    expect(contentBriefSchema.parse({
+      version: 1,
+      objective: "Publish one channel-specific article",
+      audience: "Clients",
+      angle: "Evidence-led",
+      desiredFormat: "Short article",
+      keyPoints: ["One point"],
+      callToAction: "Learn more",
+      tone: "professional",
+      length: "short",
+      mode: "new",
+    })).toMatchObject({
+      audience: "Clients",
+      angle: "Evidence-led",
+      desiredFormat: "Short article",
+      callToAction: "Learn more",
+    });
     expect(generateRoute).not.toContain('"instagram",\n    "social",');
     expect(quality).toContain("Do not write Facebook or Instagram variants.");
     expect(generator).not.toContain("Write three clearly labelled variants");
@@ -45,7 +59,9 @@ describe("unified content engine", () => {
   });
 
   test("market intelligence is tenant-verified, hidden from factual context, and persisted with the brief", () => {
-    expect(generateRoute).toContain("marketIntelligenceSchema");
+    expect(contentBriefSchema.safeParse({
+      objective: "Missing a valid controlled tone and length",
+    }).success).toBe(false);
     expect(generator).toContain("JSON.stringify(contentBrief).length > 48000");
     expect(generator).toContain("validateMarketIntelligence");
     expect(generator).toContain('.eq("client_id", clientId)');
