@@ -17,9 +17,17 @@ const bodySchema = z.object({
 
 type SearchResult = {
   url?: unknown;
+  sourceURL?: unknown;
   title?: unknown;
   markdown?: unknown;
   description?: unknown;
+  snippet?: unknown;
+  metadata?: {
+    sourceURL?: unknown;
+    url?: unknown;
+    title?: unknown;
+    description?: unknown;
+  };
 };
 
 function parseCompanyProfile(raw: string): { url: string; slug: string } | null {
@@ -52,7 +60,7 @@ function normalisePublicPostUrl(raw: unknown, companySlug: string): string | nul
     const path = url.pathname.toLowerCase();
     if (
       url.protocol !== "https:" ||
-      host !== "linkedin.com" ||
+      (host !== "linkedin.com" && !host.endsWith(".linkedin.com")) ||
       !path.startsWith(`/posts/${companySlug}_`)
     ) return null;
     url.hostname = "www.linkedin.com";
@@ -66,6 +74,22 @@ function normalisePublicPostUrl(raw: unknown, companySlug: string): string | nul
 
 function cleanText(value: unknown): string {
   return typeof value === "string" ? value.trim().slice(0, 200_000) : "";
+}
+
+function searchResultUrl(result: SearchResult): unknown {
+  return result.url
+    ?? result.sourceURL
+    ?? result.metadata?.sourceURL
+    ?? result.metadata?.url;
+}
+
+function searchResults(json: {
+  data?: { web?: SearchResult[] } | SearchResult[];
+  web?: SearchResult[];
+}): SearchResult[] {
+  if (Array.isArray(json.data)) return json.data;
+  if (Array.isArray(json.data?.web)) return json.data.web;
+  return Array.isArray(json.web) ? json.web : [];
 }
 
 export const POST = withAuth(async (req, { user }) => {
@@ -107,52 +131,70 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   const companyName = (client as { name: string }).name;
-  const searchResponse = await fetch("https://api.firecrawl.dev/v2/search", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${firecrawlKey}`,
-    },
-    body: JSON.stringify({
-      query: `site:linkedin.com/posts/${profile.slug} "${companyName}"`,
-      includeDomains: ["linkedin.com"],
-      limit: parsed.data.maxPosts,
-      timeout: 60_000,
-      ignoreInvalidURLs: true,
-      scrapeOptions: {
-        formats: ["markdown"],
-        onlyMainContent: true,
-        timeout: 45_000,
+  const uniqueResults = new Map<string, { url: string; title: string; content: string }>();
+  let lastSearchError = "";
+  const queries = [
+    `site:linkedin.com/posts/${profile.slug}`,
+    `site:linkedin.com/posts "${companyName}"`,
+  ];
+  for (const query of queries) {
+    if (uniqueResults.size > 0) break;
+    const searchResponse = await fetch("https://api.firecrawl.dev/v2/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${firecrawlKey}`,
       },
-    }),
-  });
-  const searchJson = await searchResponse.json().catch(() => ({})) as {
-    success?: boolean;
-    error?: string;
-    data?: { web?: SearchResult[] } | SearchResult[];
-  };
-  if (!searchResponse.ok || searchJson.success === false) {
-    return NextResponse.json(
-      { error: searchJson.error ?? "LinkedIn's public results could not be collected right now." },
-      { status: 502 },
-    );
+      body: JSON.stringify({
+        query,
+        sources: ["web"],
+        includeDomains: ["linkedin.com"],
+        limit: parsed.data.maxPosts,
+        timeout: 60_000,
+        // LinkedIn post pages are often unsuitable for a second direct scrape,
+        // but they must remain eligible as public search results.
+        ignoreInvalidURLs: false,
+        scrapeOptions: {
+          formats: [{ type: "markdown" }],
+          onlyMainContent: true,
+          timeout: 45_000,
+        },
+      }),
+    });
+    const searchJson = await searchResponse.json().catch(() => ({})) as {
+      success?: boolean;
+      error?: string;
+      data?: { web?: SearchResult[] } | SearchResult[];
+      web?: SearchResult[];
+    };
+    if (!searchResponse.ok || searchJson.success === false) {
+      lastSearchError = searchJson.error ?? `Search returned ${searchResponse.status}`;
+      continue;
+    }
+    for (const result of searchResults(searchJson)) {
+      const url = normalisePublicPostUrl(searchResultUrl(result), profile.slug);
+      const content = cleanText(result.markdown)
+        || cleanText(result.description)
+        || cleanText(result.snippet)
+        || cleanText(result.metadata?.description);
+      if (!url || content.length < 40 || uniqueResults.has(url)) continue;
+      uniqueResults.set(url, {
+        url,
+        title: (
+          cleanText(result.title)
+          || cleanText(result.metadata?.title)
+          || `${companyName} — LinkedIn post`
+        ).slice(0, 200),
+        content,
+      });
+    }
   }
 
-  const rawResults = Array.isArray(searchJson.data)
-    ? searchJson.data
-    : Array.isArray(searchJson.data?.web)
-      ? searchJson.data.web
-      : [];
-  const uniqueResults = new Map<string, { url: string; title: string; content: string }>();
-  for (const result of rawResults) {
-    const url = normalisePublicPostUrl(result.url, profile.slug);
-    const content = cleanText(result.markdown) || cleanText(result.description);
-    if (!url || content.length < 40 || uniqueResults.has(url)) continue;
-    uniqueResults.set(url, {
-      url,
-      title: cleanText(result.title).slice(0, 200) || `${companyName} — LinkedIn post`,
-      content,
-    });
+  if (uniqueResults.size === 0 && lastSearchError) {
+    return NextResponse.json(
+      { error: lastSearchError || "LinkedIn's public results could not be collected right now." },
+      { status: 502 },
+    );
   }
 
   const { data: currentDna, error: dnaReadError } = await admin
