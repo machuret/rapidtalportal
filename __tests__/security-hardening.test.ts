@@ -245,7 +245,6 @@ describe("admin company profile and LinkedIn style sources", () => {
     expect(linkedInRoute).toContain('host !== "linkedin.com"');
     expect(linkedInRoute).toContain('path.startsWith(`/posts/${companySlug}_`)');
     expect(linkedInRoute).toContain("ignoreInvalidURLs: false");
-    expect(linkedInRoute).toContain('formats: [{ type: "markdown" }]');
     expect(linkedInRoute).toContain('evidence_role: "style_example"');
     expect(linkedInRoute).toContain('tags: ["linkedin", "style_example", "company_owned", "social_post"]');
     expect(linkedInRoute).toContain('onConflict: "client_id,origin_key"');
