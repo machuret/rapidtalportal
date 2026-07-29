@@ -33,6 +33,10 @@ import { POST as startCompetitorCrawl } from "@/app/api/content/competitors/craw
 import { POST as advanceCompetitorCrawl } from "@/app/api/content/competitors/crawl/advance/route";
 import { GET as getCompetitorItems } from "@/app/api/content/competitors/items/route";
 import {
+  GET as getCompetitorIntelligence,
+  POST as createCompetitorIntelligence,
+} from "@/app/api/content/competitors/intelligence/route";
+import {
   DELETE as deleteCompetitorSource,
   PATCH as patchCompetitorSource,
   POST as createCompetitorSource,
@@ -167,6 +171,26 @@ const cases: { endpoint: string; call: () => Promise<Response> }[] = [
       ),
       routeCtx,
     ),
+  },
+  {
+    endpoint: "competitors/intelligence:GET",
+    call: () => getCompetitorIntelligence(
+      new NextRequest(
+        `https://portal.test/api/content/competitors/intelligence?client_id=${CLIENT_B}`,
+      ),
+      routeCtx,
+    ),
+  },
+  {
+    endpoint: "competitors/intelligence:POST",
+    call: () => createCompetitorIntelligence(jsonRequest(
+      "https://portal.test/api/content/competitors/intelligence",
+      {
+        client_id: CLIENT_B,
+        competitor_ids: [COMPETITOR_ID],
+        window_days: 180,
+      },
+    ), routeCtx),
   },
   {
     endpoint: "duplicate:POST",

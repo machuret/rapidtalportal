@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import type { CompetitorIntelligenceIdea } from "@/lib/competitors/intelligence";
 import type {
   Competitor,
   CompetitorCrawlJob,
@@ -30,11 +31,13 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { CompetitorIntelligencePanel } from "@/components/content/CompetitorIntelligencePanel";
 
 interface CompetitorsTabProps {
   clientId: string;
   canManage: boolean;
   active?: boolean;
+  onIdeaSelected?: (idea: CompetitorIntelligenceIdea) => void;
 }
 
 const CADENCES: { value: CompetitorRefreshCadence; label: string }[] = [
@@ -122,7 +125,12 @@ function sourceState(source: CompetitorSource): {
   };
 }
 
-export function CompetitorsTab({ clientId, canManage, active = true }: CompetitorsTabProps) {
+export function CompetitorsTab({
+  clientId,
+  canManage,
+  active = true,
+  onIdeaSelected,
+}: CompetitorsTabProps) {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
@@ -465,6 +473,15 @@ export function CompetitorsTab({ clientId, canManage, active = true }: Competito
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           {error}
         </div>
+      )}
+
+      {competitors.length > 0 && (
+        <CompetitorIntelligencePanel
+          clientId={clientId}
+          canManage={canManage}
+          competitors={competitors}
+          onIdeaSelected={onIdeaSelected}
+        />
       )}
 
       {showCreate && canManage && (
