@@ -7,6 +7,14 @@ const migration = readFileSync(
   path.resolve(__dirname, "..", "db", "migrations", "095_competitor_source_foundation.sql"),
   "utf8",
 );
+const reliabilityMigration = readFileSync(
+  path.resolve(__dirname, "..", "db", "migrations", "096_competitor_ingestion_reliability.sql"),
+  "utf8",
+);
+const discoveryBudgetMigration = readFileSync(
+  path.resolve(__dirname, "..", "db", "migrations", "097_competitor_discovery_budget.sql"),
+  "utf8",
+);
 
 describe("competitor source foundation migration", () => {
   test.each([
@@ -42,5 +50,38 @@ describe("competitor source foundation migration", () => {
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS competitor_content_items");
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS competitor_capture_versions");
     expect(migration).not.toMatch(/INSERT INTO vault_items/u);
+  });
+});
+
+describe("competitor ingestion reliability migration", () => {
+  test("durably stages provider pages and tracks crawl generations", () => {
+    expect(reliabilityMigration).toContain("CREATE TABLE IF NOT EXISTS competitor_crawl_pages");
+    expect(reliabilityMigration).toContain("last_seen_generation");
+    expect(reliabilityMigration).toContain("last_seen_generation IS DISTINCT FROM v_job.generation_id");
+  });
+
+  test("reserves hard tenant budgets in the same transaction as job creation", () => {
+    expect(reliabilityMigration).toContain("CREATE TABLE IF NOT EXISTS competitor_crawl_usage");
+    expect(reliabilityMigration).toContain("Daily competitor collection budget reached.");
+    expect(reliabilityMigration).toMatch(/RETURN QUERY\s+INSERT INTO competitor_crawl_jobs/u);
+  });
+
+  test("counts bounded sitemap and feed discovery in the provider-page budget", () => {
+    expect(discoveryBudgetMigration).toContain("p_pages_requested > 112");
+    expect(discoveryBudgetMigration).toContain("pages_reserved + p_pages_requested");
+    expect(discoveryBudgetMigration).toContain("FROM PUBLIC, anon, authenticated");
+  });
+
+  test("all new worker functions are service-role only", () => {
+    for (const name of [
+      "create_competitor_crawl_job",
+      "stage_competitor_crawl_pages",
+      "commit_competitor_crawl_page",
+      "finalize_competitor_crawl_job",
+    ]) {
+      expect(reliabilityMigration).toContain(
+        `REVOKE ALL ON FUNCTION ${name}`,
+      );
+    }
   });
 });

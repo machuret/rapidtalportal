@@ -63,12 +63,15 @@ export function isPrivateHostname(hostname: string): boolean {
     return value === null || PRIVATE_V4_RANGES.some(([start, end]) => value >= start && value <= end);
   }
   if (version === 6) {
-    return host === "::1"
-      || host === "::"
-      || host.startsWith("fc")
-      || host.startsWith("fd")
-      || /^fe[89ab]/u.test(host)
-      || host.startsWith("2001:db8:");
+    // Public competitor sources have no legitimate reason to use mapped,
+    // multicast, ULA, link-local or other non-global IPv6 space. Restrict
+    // literals to global unicast (2000::/3), then exclude documentation and
+    // benchmarking prefixes that sit inside that range.
+    const first = Number.parseInt(host.split(":")[0] || "0", 16);
+    const globalUnicast = first >= 0x2000 && first <= 0x3fff;
+    return !globalUnicast
+      || host.startsWith("2001:db8:")
+      || host.startsWith("2001:2:");
   }
   return false;
 }

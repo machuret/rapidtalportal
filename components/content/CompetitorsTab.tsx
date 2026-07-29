@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Clock3,
+  FileText,
   ExternalLink,
   Globe2,
   Link2,
@@ -13,6 +14,7 @@ import {
   Plus,
   Radar,
   RefreshCw,
+  Settings2,
   Trash2,
   X,
 } from "lucide-react";
@@ -21,6 +23,7 @@ import { api } from "@/lib/api-client";
 import type {
   Competitor,
   CompetitorCrawlJob,
+  CompetitorContentItem,
   CompetitorRefreshCadence,
   CompetitorSource,
 } from "@/types/competitors";
@@ -31,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 interface CompetitorsTabProps {
   clientId: string;
   canManage: boolean;
+  active?: boolean;
 }
 
 const CADENCES: { value: CompetitorRefreshCadence; label: string }[] = [
@@ -93,6 +97,13 @@ function sourceState(source: CompetitorSource): {
       activeJob: null,
     };
   }
+  if (source.status === "retrying") {
+    return {
+      label: "Retry scheduled",
+      className: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      activeJob: null,
+    };
+  }
   if (source.status === "paused") {
     return {
       label: "Paused",
@@ -107,12 +118,26 @@ function sourceState(source: CompetitorSource): {
   };
 }
 
-export function CompetitorsTab({ clientId, canManage }: CompetitorsTabProps) {
+export function CompetitorsTab({ clientId, canManage, active = true }: CompetitorsTabProps) {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [addingSourceTo, setAddingSourceTo] = useState<string | null>(null);
+  const [editingSource, setEditingSource] = useState<string | null>(null);
+  const [sourceSettings, setSourceSettings] = useState({
+    refresh_cadence: "" as "" | CompetitorRefreshCadence,
+    max_pages: 30,
+  });
+  const [captureBrowser, setCaptureBrowser] = useState<{
+    competitorId: string;
+    items: CompetitorContentItem[];
+    page: number;
+    total: number;
+    hasMore: boolean;
+    selected: CompetitorContentItem | null;
+    loading: boolean;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState({
     name: "",
@@ -163,7 +188,7 @@ export function CompetitorsTab({ clientId, canManage }: CompetitorsTabProps) {
   );
 
   useEffect(() => {
-    if (!canManage || activeJobs.length === 0) return;
+    if (!active || !canManage || activeJobs.length === 0) return;
     const timer = window.setTimeout(async () => {
       await Promise.allSettled(activeJobs.map((job) =>
         api.post("/content/competitors/crawl/advance", {
@@ -173,7 +198,7 @@ export function CompetitorsTab({ clientId, canManage }: CompetitorsTabProps) {
       await load(true);
     }, 4000);
     return () => window.clearTimeout(timer);
-  }, [activeJobs, canManage, clientId, load]);
+  }, [active, activeJobs, canManage, clientId, load]);
 
   async function createCompetitor(event: React.FormEvent) {
     event.preventDefault();
@@ -245,9 +270,101 @@ export function CompetitorsTab({ clientId, canManage }: CompetitorsTabProps) {
       await api.patch("/content/competitors/sources", {
         client_id: clientId,
         id: source.id,
-        status: source.status === "active" ? "paused" : "active",
+        status: source.status === "paused" ? "active" : "paused",
       });
       await load(true);
+    } catch (caught) {
+      reportActionError(caught);
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  function beginSourceSettings(source: CompetitorSource) {
+    setEditingSource(source.id);
+    setSourceSettings({
+      refresh_cadence: source.refresh_cadence ?? "",
+      max_pages: source.max_pages,
+    });
+  }
+
+  async function saveSourceSettings(source: CompetitorSource) {
+    setWorking(`settings:${source.id}`);
+    try {
+      await api.patch("/content/competitors/sources", {
+        client_id: clientId,
+        id: source.id,
+        refresh_cadence: sourceSettings.refresh_cadence || null,
+        max_pages: sourceSettings.max_pages,
+      });
+      setEditingSource(null);
+      toast.success("Source settings updated.");
+      await load(true);
+    } catch (caught) {
+      reportActionError(caught);
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function updateCompetitorCadence(
+    competitor: Competitor,
+    refreshCadence: CompetitorRefreshCadence,
+  ) {
+    setWorking(`cadence:${competitor.id}`);
+    try {
+      await api.patch("/content/competitors", {
+        client_id: clientId,
+        id: competitor.id,
+        refresh_cadence: refreshCadence,
+      });
+      await load(true);
+    } catch (caught) {
+      reportActionError(caught);
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function browseCaptures(competitorId: string, page = 0) {
+    setCaptureBrowser((current) => ({
+      competitorId,
+      items: current?.competitorId === competitorId ? current.items : [],
+      page,
+      total: current?.competitorId === competitorId ? current.total : 0,
+      hasMore: false,
+      selected: null,
+      loading: true,
+    }));
+    try {
+      const result = await api.get<{
+        items: CompetitorContentItem[];
+        page: number;
+        total: number;
+        has_more: boolean;
+      }>(`/content/competitors/items?client_id=${clientId}&competitor_id=${competitorId}&page=${page}&limit=20`);
+      setCaptureBrowser({
+        competitorId,
+        items: result.items,
+        page: result.page,
+        total: result.total,
+        hasMore: result.has_more,
+        selected: null,
+        loading: false,
+      });
+    } catch (caught) {
+      setCaptureBrowser(null);
+      reportActionError(caught);
+    }
+  }
+
+  async function inspectCapture(competitorId: string, itemId: string) {
+    setWorking(`capture:${itemId}`);
+    try {
+      const result = await api.get<{ item: CompetitorContentItem }>(
+        `/content/competitors/items?client_id=${clientId}&competitor_id=${competitorId}&id=${itemId}`,
+      );
+      setCaptureBrowser((current) => current ? { ...current, selected: result.item } : current);
     } catch (caught) {
       reportActionError(caught);
     } finally {
@@ -440,9 +557,26 @@ export function CompetitorsTab({ clientId, canManage }: CompetitorsTabProps) {
                     }`}>
                       {competitor.status === "active" ? "Active" : "Paused"}
                     </span>
-                    <span className="text-xs text-zinc-500">
-                      {CADENCES.find((entry) => entry.value === competitor.refresh_cadence)?.label}
-                    </span>
+                    {canManage ? (
+                      <select
+                        aria-label={`Refresh schedule for ${competitor.name}`}
+                        value={competitor.refresh_cadence}
+                        disabled={working === `cadence:${competitor.id}`}
+                        onChange={(event) => void updateCompetitorCadence(
+                          competitor,
+                          event.target.value as CompetitorRefreshCadence,
+                        )}
+                        className="h-7 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-300"
+                      >
+                        {CADENCES.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-xs text-zinc-500">
+                        {CADENCES.find((entry) => entry.value === competitor.refresh_cadence)?.label}
+                      </span>
+                    )}
                   </div>
                   {competitor.description && <p className="mt-1 text-sm text-zinc-400">{competitor.description}</p>}
                   <p className="mt-2 text-xs text-zinc-500">
@@ -533,9 +667,18 @@ export function CompetitorsTab({ clientId, canManage }: CompetitorsTabProps) {
                             </Button>
                             {source.status !== "connector_required" && (
                               <Button type="button" size="icon-sm" variant="ghost" onClick={() => void toggleSource(source)}>
-                                {source.status === "active" ? <Pause /> : <Play />}
+                                {source.status === "paused" ? <Play /> : <Pause />}
                               </Button>
                             )}
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              aria-label="Edit source settings"
+                              onClick={() => beginSourceSettings(source)}
+                            >
+                              <Settings2 />
+                            </Button>
                             <Button
                               type="button"
                               size="icon-sm"
@@ -548,6 +691,50 @@ export function CompetitorsTab({ clientId, canManage }: CompetitorsTabProps) {
                           </div>
                         )}
                       </div>
+                      {editingSource === source.id && (
+                        <div className="mt-3 grid gap-3 border-t border-zinc-800 pt-3 sm:grid-cols-[minmax(0,1fr)_130px_auto]">
+                          <label className="space-y-1 text-xs text-zinc-400">
+                            <span>Schedule</span>
+                            <select
+                              value={sourceSettings.refresh_cadence}
+                              onChange={(event) => setSourceSettings((settings) => ({
+                                ...settings,
+                                refresh_cadence: event.target.value as "" | CompetitorRefreshCadence,
+                              }))}
+                              className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-200"
+                            >
+                              <option value="">Inherit competitor</option>
+                              {CADENCES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            </select>
+                          </label>
+                          <label className="space-y-1 text-xs text-zinc-400">
+                            <span>Page limit</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={sourceSettings.max_pages}
+                              onChange={(event) => setSourceSettings((settings) => ({
+                                ...settings,
+                                max_pages: Number(event.target.value),
+                              }))}
+                            />
+                          </label>
+                          <div className="flex items-end gap-2">
+                            <Button type="button" size="sm" variant="ghost" onClick={() => setEditingSource(null)}>
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={working === `settings:${source.id}`}
+                              onClick={() => void saveSourceSettings(source)}
+                            >
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -647,6 +834,115 @@ export function CompetitorsTab({ clientId, canManage }: CompetitorsTabProps) {
                         </a>
                       ))}
                     </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="mt-2 text-orange-400"
+                      onClick={() => void browseCaptures(competitor.id)}
+                    >
+                      <FileText />
+                      Browse all captured content
+                    </Button>
+                  </div>
+                )}
+                {competitor.recent_items.length === 0
+                  && competitor.sources.some((source) => source.content_count > 0) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-orange-400"
+                    onClick={() => void browseCaptures(competitor.id)}
+                  >
+                    <FileText />
+                    Browse all captured content
+                  </Button>
+                )}
+
+                {captureBrowser?.competitorId === competitor.id && (
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-950 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="font-medium text-zinc-200">Captured content</h4>
+                        <p className="text-xs text-zinc-500">{captureBrowser.total} captured items tracked</p>
+                      </div>
+                      <Button type="button" size="icon-sm" variant="ghost" onClick={() => setCaptureBrowser(null)}>
+                        <X />
+                      </Button>
+                    </div>
+                    {captureBrowser.loading ? (
+                      <div className="flex items-center gap-2 py-8 text-sm text-zinc-500">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Loading captures…
+                      </div>
+                    ) : (
+                      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.5fr)]">
+                        <div className="space-y-2">
+                          {captureBrowser.items.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => void inspectCapture(competitor.id, item.id)}
+                              className={`w-full rounded-lg border p-3 text-left ${
+                                captureBrowser.selected?.id === item.id
+                                  ? "border-orange-500/50 bg-orange-500/10"
+                                  : "border-zinc-800 hover:border-zinc-700"
+                              }`}
+                            >
+                              <span className="block truncate text-sm text-zinc-300">{item.title}</span>
+                              <span className="mt-1 block text-xs text-zinc-600">
+                                {item.is_removed ? "No longer found · " : ""}{formatDate(item.captured_at)}
+                              </span>
+                            </button>
+                          ))}
+                          <div className="flex items-center justify-between">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={captureBrowser.page === 0}
+                              onClick={() => void browseCaptures(competitor.id, captureBrowser.page - 1)}
+                            >
+                              Previous
+                            </Button>
+                            <span className="text-xs text-zinc-600">Page {captureBrowser.page + 1}</span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={!captureBrowser.hasMore}
+                              onClick={() => void browseCaptures(competitor.id, captureBrowser.page + 1)}
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="min-h-56 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                          {captureBrowser.selected ? (
+                            <>
+                              <div className="flex items-start justify-between gap-3">
+                                <h5 className="font-medium text-zinc-200">{captureBrowser.selected.title}</h5>
+                                <a
+                                  href={captureBrowser.selected.canonical_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-sky-400"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              </div>
+                              <pre className="mt-3 max-h-[32rem] overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-6 text-zinc-400">
+                                {captureBrowser.selected.raw_content}
+                              </pre>
+                            </>
+                          ) : (
+                            <p className="py-16 text-center text-sm text-zinc-600">
+                              Select an item to inspect its captured text.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

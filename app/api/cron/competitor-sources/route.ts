@@ -54,8 +54,8 @@ export async function GET(req: NextRequest) {
 
   const { data: dueSources, error: dueError } = await db
     .from("competitor_sources")
-    .select("*, competitors!inner(refresh_cadence, status)")
-    .eq("status", "active")
+    .select("*, competitors!inner(refresh_cadence, status, website_url)")
+    .in("status", ["active", "retrying"])
     .eq("competitors.status", "active")
     .not("next_refresh_at", "is", null)
     .lte("next_refresh_at", new Date().toISOString())
@@ -72,6 +72,12 @@ export async function GET(req: NextRequest) {
           competitor_cadence: (source as IngestionSource & {
             competitors?: { refresh_cadence?: IngestionSource["refresh_cadence"] };
           }).competitors?.refresh_cadence ?? "manual",
+          competitor_status: (source as IngestionSource & {
+            competitors?: { status?: IngestionSource["competitor_status"] };
+          }).competitors?.status ?? "active",
+          competitor_website_url: (source as IngestionSource & {
+            competitors?: { website_url?: string | null };
+          }).competitors?.website_url ?? null,
         }, null);
         started++;
       } catch (error) {

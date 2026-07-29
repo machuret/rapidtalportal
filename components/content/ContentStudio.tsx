@@ -110,7 +110,11 @@ function ContentStudioInner({
 
       <div className={activeTab === "competitors" ? "" : "hidden"}>
         <ContentErrorBoundary>
-          <CompetitorsTab clientId={clientId} canManage={canManageCompetitors} />
+          <CompetitorsTab
+            clientId={clientId}
+            canManage={canManageCompetitors}
+            active={activeTab === "competitors"}
+          />
         </ContentErrorBoundary>
       </div>
     </div>

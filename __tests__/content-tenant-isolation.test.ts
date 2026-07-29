@@ -31,6 +31,7 @@ import {
 } from "@/app/api/content/competitors/route";
 import { POST as startCompetitorCrawl } from "@/app/api/content/competitors/crawl/route";
 import { POST as advanceCompetitorCrawl } from "@/app/api/content/competitors/crawl/advance/route";
+import { GET as getCompetitorItems } from "@/app/api/content/competitors/items/route";
 import {
   DELETE as deleteCompetitorSource,
   PATCH as patchCompetitorSource,
@@ -151,6 +152,15 @@ const cases: { endpoint: string; call: () => Promise<Response> }[] = [
       client_id: CLIENT_B,
       job_id: CRAWL_ID,
     }), routeCtx),
+  },
+  {
+    endpoint: "competitors/items:GET",
+    call: () => getCompetitorItems(
+      new NextRequest(
+        `https://portal.test/api/content/competitors/items?client_id=${CLIENT_B}&competitor_id=${COMPETITOR_ID}`,
+      ),
+      routeCtx,
+    ),
   },
   {
     endpoint: "duplicate:POST",

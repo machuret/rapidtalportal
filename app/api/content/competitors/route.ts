@@ -59,7 +59,7 @@ export const GET = withAuth(async (req, { user }) => {
       .order("name"),
     db
       .from("competitor_sources")
-      .select("id, competitor_id, client_id, source_type, platform, url, normalized_url, crawl_scope, path_prefix, status, refresh_cadence, max_pages, content_count, last_crawled_at, last_success_at, next_refresh_at, last_error, created_at")
+      .select("id, competitor_id, client_id, source_type, platform, url, normalized_url, crawl_scope, path_prefix, status, refresh_cadence, max_pages, content_count, last_crawled_at, last_success_at, next_refresh_at, last_error, failure_count, created_at")
       .eq("client_id", parsed.data.client_id)
       .order("created_at"),
     db
@@ -173,6 +173,16 @@ export const PATCH = withAuth(async (req, { user }) => {
     .maybeSingle();
   if (error) return serverError(error);
   if (!data) return NextResponse.json({ error: "Competitor not found." }, { status: 404 });
+
+  if (parsed.data.status === "paused") {
+    const { error: cancelError } = await db
+      .from("competitor_crawl_jobs")
+      .update({ cancel_requested_at: new Date().toISOString() })
+      .eq("competitor_id", id)
+      .eq("client_id", client_id)
+      .in("status", ["queued", "crawling", "ingesting"]);
+    if (cancelError) return serverError(cancelError);
+  }
 
   if (parsed.data.refresh_cadence) {
     const next = parsed.data.refresh_cadence === "manual" ? null : new Date().toISOString();

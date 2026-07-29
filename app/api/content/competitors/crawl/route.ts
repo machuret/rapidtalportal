@@ -33,7 +33,7 @@ export const POST = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("competitor_sources")
-    .select("*, competitors!inner(refresh_cadence)")
+    .select("*, competitors!inner(refresh_cadence, status, website_url)")
     .eq("id", parsed.data.source_id)
     .eq("client_id", parsed.data.client_id)
     .single();
@@ -43,6 +43,8 @@ export const POST = withAuth(async (req, { user }) => {
     const job = await startCompetitorRefresh(admin, {
       ...data,
       competitor_cadence: data.competitors?.refresh_cadence ?? "manual",
+      competitor_status: data.competitors?.status ?? "active",
+      competitor_website_url: data.competitors?.website_url ?? null,
     } as IngestionSource, user.id);
     return NextResponse.json({ job }, { status: 202 });
   } catch (error) {

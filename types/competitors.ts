@@ -21,8 +21,8 @@ export type CompetitorPlatform =
   | "x"
   | "other";
 export type CompetitorCrawlScope = "exact" | "path" | "domain" | "sitemap" | "feed" | "profile";
-export type CompetitorSourceStatus = "active" | "paused" | "error" | "connector_required";
-export type CompetitorCrawlStatus = "queued" | "crawling" | "ingesting" | "done" | "error";
+export type CompetitorSourceStatus = "active" | "paused" | "retrying" | "error" | "connector_required";
+export type CompetitorCrawlStatus = "queued" | "crawling" | "ingesting" | "done" | "error" | "cancelled";
 
 export interface CompetitorSource {
   id: string;
@@ -42,6 +42,7 @@ export interface CompetitorSource {
   last_success_at: string | null;
   next_refresh_at: string | null;
   last_error: string | null;
+  failure_count?: number;
   created_at: string;
   latest_job?: CompetitorCrawlJob | null;
 }
@@ -52,6 +53,11 @@ export interface CompetitorCrawlJob {
   competitor_id: string;
   client_id: string;
   status: CompetitorCrawlStatus;
+  provider?: string;
+  provider_job_id?: string | null;
+  next_result_url?: string | null;
+  provider_complete?: boolean;
+  cancel_requested_at?: string | null;
   pages_discovered: number;
   items_captured: number;
   error_message: string | null;
@@ -70,6 +76,10 @@ export interface CompetitorContentItem {
   title: string;
   published_at: string | null;
   captured_at: string;
+  raw_content?: string;
+  author?: string | null;
+  metadata?: Record<string, unknown>;
+  is_removed?: boolean;
 }
 
 export interface Competitor {
@@ -85,4 +95,3 @@ export interface Competitor {
   sources: CompetitorSource[];
   recent_items: CompetitorContentItem[];
 }
-

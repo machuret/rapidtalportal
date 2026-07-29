@@ -2,13 +2,23 @@
 
 ## Delivery status
 
-Phase 1 source collection is implemented in migration 095 and the Content
+Phase 1 source collection is implemented in migrations 095–097 and the Content
 workspace. Client and super admins can add competitors; attach website, blog,
 single-page, sitemap, feed, newsletter-archive and social-profile URLs; choose
 exact, path or domain scope; set page limits and refresh cadence; and inspect
-source health and recent captures. Website sources use leased, versioned crawl
-jobs. Social and YouTube URLs are registered as `connector_required` until an
-approved API, connector or user-provided export is available.
+source health, complete capture history and captured text. Website sources use
+leased, versioned crawl jobs with durable provider-page staging and bounded
+ingestion batches. Supplied sitemap and RSS URLs are parsed directly, canonical
+apex/`www` redirects remain in scope, and all provider continuations are pinned
+to Firecrawl's HTTPS API origin.
+
+Pause requests cancel active collection instead of allowing a worker to
+reactivate the source. Transient failures use exponential retry scheduling.
+Completed authoritative crawls mark material that disappeared at the source.
+Atomic daily crawl and page reservations enforce a database-backed tenant
+budget for both manual and scheduled refreshes. Social and YouTube URLs remain
+registered as `connector_required` until an approved API, connector or
+user-provided export is available.
 
 ## Product position
 

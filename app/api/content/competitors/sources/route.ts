@@ -3,7 +3,7 @@ import { z } from "zod";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { serverError } from "@/lib/api/errors";
-import { nextRefreshAt, resolveCompetitorUrl } from "@/lib/competitors/urls";
+import { resolveCompetitorUrl } from "@/lib/competitors/urls";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const MANAGER_ROLES = ["client_admin", "super_admin"] as const;
@@ -64,7 +64,6 @@ export const POST = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "Competitor not found." }, { status: 404 });
   }
 
-  const effectiveCadence = parsed.data.refresh_cadence ?? competitor.refresh_cadence;
   const { data, error } = await db
     .from("competitor_sources")
     .insert({
@@ -79,7 +78,12 @@ export const POST = withAuth(async (req, { user }) => {
       status: resolved.requiresConnector ? "connector_required" : "active",
       refresh_cadence: parsed.data.refresh_cadence,
       max_pages: resolved.crawlScope === "exact" ? 1 : parsed.data.max_pages,
-      next_refresh_at: resolved.requiresConnector ? null : nextRefreshAt(effectiveCadence),
+      // New automatic sources are due immediately; subsequent successful
+      // collections advance according to the configured cadence.
+      next_refresh_at: resolved.requiresConnector
+        || (parsed.data.refresh_cadence ?? competitor.refresh_cadence) === "manual"
+        ? null
+        : new Date().toISOString(),
       created_by: user.id,
     })
     .select("id, source_type, platform, crawl_scope, status")
@@ -135,12 +139,16 @@ export const PATCH = withAuth(async (req, { user }) => {
         ?? "manual";
       updates.next_refresh_at = effective === "manual" ? null : new Date().toISOString();
       updates.last_error = null;
+      updates.failure_count = 0;
     }
   }
   if (parsed.data.max_pages !== undefined) updates.max_pages = parsed.data.max_pages;
   if (parsed.data.refresh_cadence !== undefined) {
     updates.refresh_cadence = parsed.data.refresh_cadence;
-    updates.next_refresh_at = parsed.data.refresh_cadence && parsed.data.refresh_cadence !== "manual"
+    const effective = parsed.data.refresh_cadence
+      ?? current.competitors?.refresh_cadence
+      ?? "manual";
+    updates.next_refresh_at = effective !== "manual"
       ? new Date().toISOString()
       : null;
   }
@@ -155,6 +163,15 @@ export const PATCH = withAuth(async (req, { user }) => {
     .maybeSingle();
   if (error) return serverError(error);
   if (!data) return NextResponse.json({ error: "Source not found." }, { status: 404 });
+  if (parsed.data.status === "paused") {
+    const { error: cancelError } = await db
+      .from("competitor_crawl_jobs")
+      .update({ cancel_requested_at: new Date().toISOString() })
+      .eq("source_id", parsed.data.id)
+      .eq("client_id", parsed.data.client_id)
+      .in("status", ["queued", "crawling", "ingesting"]);
+    if (cancelError) return serverError(cancelError);
+  }
   return NextResponse.json({ ok: true });
 }, { roles: [...MANAGER_ROLES] });
 

@@ -44,6 +44,9 @@ describe("competitor URL resolution", () => {
     "192.168.1.2",
     "169.254.169.254",
     "::1",
+    "::ffff:127.0.0.1",
+    "ff02::1",
+    "2001:db8::1",
     "fd00::1",
     "service.internal",
     "printer.local",
@@ -128,14 +131,41 @@ describe("competitor crawl boundaries", () => {
     });
     expect(capturedPageBelongsToSource("https://example.com/guide/", exact)).toBe(true);
     expect(capturedPageBelongsToSource("https://example.com/guide/part-two", exact)).toBe(false);
-    expect(buildCompetitorCrawlRequest(exact)).toMatchObject({ limit: 1, maxDepth: 0 });
+    expect(buildCompetitorCrawlRequest(exact)).toMatchObject({
+      limit: 1,
+      maxDiscoveryDepth: 0,
+      sitemap: "skip",
+    });
   });
 
   test("path collection is constrained at the provider as well as ingestion", () => {
     expect(buildCompetitorCrawlRequest(source())).toMatchObject({
       url: "https://example.com/blog",
       limit: 30,
-      includePaths: ["blog*"],
+      includePaths: ["^/blog(?:/.*)?$"],
+      sitemap: "skip",
     });
+  });
+
+  test("domain collection explicitly allows the whole approved host", () => {
+    expect(buildCompetitorCrawlRequest(source({
+      source_type: "website",
+      url: "https://example.com/resources",
+      normalized_url: "https://example.com/resources",
+      crawl_scope: "domain",
+      path_prefix: null,
+    }))).toMatchObject({
+      url: "https://example.com/resources",
+      crawlEntireDomain: true,
+      allowSubdomains: false,
+      allowExternalLinks: false,
+    });
+  });
+
+  test("accepts a canonical redirect between apex and www hosts", () => {
+    expect(capturedPageBelongsToSource(
+      "https://www.example.com/blog/post",
+      source({ url: "https://example.com/blog", normalized_url: "https://example.com/blog" }),
+    )).toBe(true);
   });
 });
