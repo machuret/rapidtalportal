@@ -12,10 +12,11 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Daily Log — RapidTal" };
 
 export default async function DailyLogPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { employee?: string };
+  searchParams: Promise<{ employee?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;

@@ -7,3 +7,4 @@ export { TopicList } from "./TopicList";
 export { TopicForm } from "./TopicForm";
 export { AiSuggestions } from "./AiSuggestions";
 export { ContentErrorBoundary } from "./ErrorBoundary";
+export { CompetitorsTab } from "./CompetitorsTab";

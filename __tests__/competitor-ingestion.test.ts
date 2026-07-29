@@ -1,0 +1,295 @@
+/** @jest-environment node */
+
+import {
+  advanceCompetitorCrawl,
+  CompetitorIngestionError,
+  startCompetitorRefresh,
+  type IngestionSource,
+} from "@/lib/competitors/ingestion";
+
+const SOURCE_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+const CLIENT_ID = "11111111-1111-4111-8111-111111111111";
+const COMPETITOR_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const JOB_ID = "99999999-9999-4999-8999-999999999999";
+const LEASE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+function source(overrides: Partial<IngestionSource> = {}): IngestionSource {
+  return {
+    id: SOURCE_ID,
+    competitor_id: COMPETITOR_ID,
+    client_id: CLIENT_ID,
+    source_type: "blog",
+    platform: "web",
+    url: "https://example.com/blog",
+    normalized_url: "https://example.com/blog",
+    crawl_scope: "path",
+    path_prefix: "/blog",
+    status: "active",
+    refresh_cadence: "weekly",
+    max_pages: 20,
+    content_count: 0,
+    last_crawled_at: null,
+    last_success_at: null,
+    next_refresh_at: null,
+    last_error: null,
+    failure_count: 0,
+    created_at: "2026-07-29T00:00:00.000Z",
+    competitor_cadence: "monthly",
+    competitor_status: "active",
+    competitor_website_url: "https://example.com",
+    ...overrides,
+  };
+}
+
+function chainWith(result: Record<string, unknown>) {
+  // Compact fluent Supabase mock used only inside this test module.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chain: Record<string, any> = {};
+  for (const method of [
+    "select", "eq", "in", "limit", "order", "insert", "update", "is",
+  ]) {
+    chain[method] = jest.fn(() => chain);
+  }
+  chain.single = jest.fn().mockResolvedValue(result);
+  chain.maybeSingle = jest.fn().mockResolvedValue(result);
+  chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve(resolve(result));
+  return chain;
+}
+
+function claimed(overrides: Record<string, unknown> = {}) {
+  return {
+    id: JOB_ID,
+    source_id: SOURCE_ID,
+    competitor_id: COMPETITOR_ID,
+    client_id: CLIENT_ID,
+    status: "crawling",
+    provider: "firecrawl_crawl",
+    provider_job_id: "fc-job",
+    provider_complete: false,
+    next_result_url: null,
+    cancel_requested_at: null,
+    lease_token: LEASE,
+    pages_discovered: 0,
+    items_captured: 0,
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  jest.restoreAllMocks();
+  process.env.FIRECRAWL_API_KEY = "test-key";
+});
+
+afterAll(() => {
+  delete process.env.FIRECRAWL_API_KEY;
+});
+
+describe("competitor source ingestion", () => {
+  test("social sources remain registered but cannot be scraped without a connector", async () => {
+    const admin = { from: jest.fn(), rpc: jest.fn() };
+    await expect(startCompetitorRefresh(
+      admin,
+      source({ source_type: "social_profile", platform: "linkedin", crawl_scope: "profile" }),
+      null,
+    )).rejects.toEqual(expect.objectContaining<Partial<CompetitorIngestionError>>({
+      status: 422,
+    }));
+    expect(admin.rpc).not.toHaveBeenCalled();
+  });
+
+  test("atomically reserves tenant budget before starting a v2 provider crawl", async () => {
+    const queued = { ...claimed(), status: "queued", provider_job_id: null };
+    const started = { ...queued, status: "crawling", provider_job_id: "fc-job" };
+    const rpc = jest.fn((name: string) => {
+      if (name !== "create_competitor_crawl_job") throw new Error(`Unexpected RPC ${name}`);
+      return { single: jest.fn().mockResolvedValue({ data: queued, error: null }) };
+    });
+    let jobCalls = 0;
+    const from = jest.fn((table: string) => {
+      if (table === "competitor_crawl_jobs") {
+        jobCalls++;
+        return chainWith({ data: started, error: null });
+      }
+      if (table === "competitor_sources") return chainWith({ data: null, error: null });
+      throw new Error(`Unexpected table ${table}`);
+    });
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: "fc-job" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const result = await startCompetitorRefresh({ from, rpc }, source(), "actor-id");
+
+    expect(result).toMatchObject({ id: JOB_ID, status: "crawling" });
+    expect(rpc).toHaveBeenCalledWith("create_competitor_crawl_job", expect.objectContaining({
+      p_client_id: CLIENT_ID,
+      p_pages_requested: 20,
+    }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.firecrawl.dev/v2/crawl",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
+      url: "https://example.com/blog",
+      limit: 20,
+      sitemap: "skip",
+      includePaths: ["^/blog(?:/.*)?$"],
+    });
+    expect(jobCalls).toBe(1);
+  });
+
+  test("checkpoints provider results before any content write", async () => {
+    const checkpoint = jest.fn();
+    const stage = jest.fn();
+    const rpc = jest.fn((name: string, args: Record<string, unknown>) => {
+      if (name === "claim_competitor_crawl_job") {
+        return { maybeSingle: jest.fn().mockResolvedValue({ data: claimed(), error: null }) };
+      }
+      if (name === "stage_competitor_crawl_pages") {
+        stage(args);
+        return Promise.resolve({ data: 1, error: null });
+      }
+      if (name === "checkpoint_competitor_crawl_job") {
+        checkpoint(args);
+        return {
+          single: jest.fn().mockResolvedValue({
+            data: { ...claimed(), status: args.p_status, pages_discovered: args.p_pages_discovered },
+            error: null,
+          }),
+        };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    });
+    const from = jest.fn((table: string) => {
+      if (table === "competitor_sources") {
+        return chainWith({
+          data: { ...source(), competitors: { refresh_cadence: "monthly", status: "active", website_url: "https://example.com" } },
+          error: null,
+        });
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        status: "completed",
+        total: 2,
+        completed: 2,
+        data: [
+          {
+            markdown: "## Useful article\n\nA long enough body to be captured for future analysis.",
+            metadata: { sourceURL: "https://example.com/blog/useful", title: "Useful article" },
+          },
+          {
+            markdown: "## Pricing\n\nThis sibling page is outside the approved collection section.",
+            metadata: { sourceURL: "https://example.com/pricing", title: "Pricing" },
+          },
+        ],
+      }), { status: 200, headers: { "content-type": "application/json" } }),
+    );
+
+    const result = await advanceCompetitorCrawl({ from, rpc }, JOB_ID, CLIENT_ID);
+
+    expect(result).toMatchObject({ status: "ingesting", pages_discovered: 2 });
+    expect(stage).toHaveBeenCalledWith(expect.objectContaining({
+      p_job_id: JOB_ID,
+      p_lease_token: LEASE,
+      p_provider_complete: true,
+      p_pages: [expect.objectContaining({
+        metadata: expect.objectContaining({ sourceURL: "https://example.com/blog/useful" }),
+      })],
+    }));
+    expect(checkpoint).toHaveBeenCalledWith(expect.objectContaining({ p_status: "ingesting" }));
+  });
+
+  test("commits one bounded staged batch and finalizes removal tracking", async () => {
+    const row = {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      payload: {
+        markdown: "## Useful article\n\nA long enough body to be captured for future analysis.",
+        metadata: { sourceURL: "https://www.example.com/blog/useful", title: "Useful article" },
+      },
+    };
+    const commit = jest.fn();
+    const finalize = jest.fn();
+    const done = { ...claimed(), status: "done", provider_complete: true, items_captured: 1 };
+    const rpc = jest.fn((name: string, args: Record<string, unknown>) => {
+      if (name === "claim_competitor_crawl_job") {
+        return {
+          maybeSingle: jest.fn().mockResolvedValue({
+            data: claimed({ provider_complete: true, pages_discovered: 2 }),
+            error: null,
+          }),
+        };
+      }
+      if (name === "commit_competitor_crawl_page") {
+        commit(args);
+        return Promise.resolve({ data: SOURCE_ID, error: null });
+      }
+      if (name === "finalize_competitor_crawl_job") {
+        finalize(args);
+        return { single: jest.fn().mockResolvedValue({ data: done, error: null }) };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    });
+    let pageCalls = 0;
+    const from = jest.fn((table: string) => {
+      if (table === "competitor_sources") {
+        return chainWith({
+          data: { ...source(), competitors: { refresh_cadence: "monthly", status: "active", website_url: "https://example.com" } },
+          error: null,
+        });
+      }
+      if (table === "competitor_crawl_pages") {
+        pageCalls++;
+        return pageCalls === 1
+          ? chainWith({ data: [row], error: null })
+          : chainWith({ count: 0, error: null });
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    const result = await advanceCompetitorCrawl({ from, rpc }, JOB_ID, CLIENT_ID);
+
+    expect(result).toMatchObject({ status: "done", items_captured: 1 });
+    expect(commit).toHaveBeenCalledWith(expect.objectContaining({
+      p_job_id: JOB_ID,
+      p_page_id: row.id,
+      p_canonical_url: "https://www.example.com/blog/useful",
+    }));
+    expect(finalize).toHaveBeenCalledWith(expect.objectContaining({
+      p_authoritative: true,
+      p_lease_token: LEASE,
+    }));
+  });
+
+  test("a pause request cancels the job instead of reactivating the source", async () => {
+    const checkpoint = jest.fn();
+    const rpc = jest.fn((name: string, args: Record<string, unknown>) => {
+      if (name === "claim_competitor_crawl_job") {
+        return { maybeSingle: jest.fn().mockResolvedValue({ data: claimed(), error: null }) };
+      }
+      if (name === "checkpoint_competitor_crawl_job") {
+        checkpoint(args);
+        return {
+          single: jest.fn().mockResolvedValue({
+            data: { ...claimed(), status: "cancelled" },
+            error: null,
+          }),
+        };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    });
+    const from = jest.fn(() => chainWith({
+      data: { ...source({ status: "paused" }), competitors: { refresh_cadence: "monthly", status: "active" } },
+      error: null,
+    }));
+    jest.spyOn(global, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+
+    const result = await advanceCompetitorCrawl({ from, rpc }, JOB_ID, CLIENT_ID);
+
+    expect(result).toMatchObject({ status: "cancelled" });
+    expect(checkpoint).toHaveBeenCalledWith(expect.objectContaining({ p_status: "cancelled" }));
+  });
+});

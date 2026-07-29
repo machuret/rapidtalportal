@@ -13,10 +13,11 @@ export const dynamic = "force-dynamic";
 const WINDOW_DAYS = 30;
 
 export default async function AdminDailyLogsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams?: { page?: string };
+  searchParams: Promise<{ page?: string }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;

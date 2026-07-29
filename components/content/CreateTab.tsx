@@ -1,20 +1,24 @@
 "use client";
 
-import { memo, useState, useCallback, useRef } from "react";
-import { Sparkles, Copy, Check, RefreshCw, ShieldCheck } from "lucide-react";
+import { memo, useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { Sparkles, Copy, Check, RefreshCw, ShieldCheck, Save, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { BrainFeedback } from "@/components/brain/BrainFeedback";
 import { toast } from "sonner";
-import { useGenerateContent } from "@/hooks/useContent";
+import { useGenerateContent, useUpdateContentPiece } from "@/hooks/useContent";
 import { CONTENT_TYPES, TONES, LENGTHS, TYPE_ICON_COLORS, TYPE_ICONS } from "@/types/content";
-import type { ContentType, ContentPiece } from "@/types/content";
+import type { ContentType, ContentPiece, ContentSourceReference } from "@/types/content";
+import {
+  contentStyleWarnings,
+  resolveContentStyle,
+} from "@/supabase/functions/_shared/content-style";
 
 interface CreateTabProps {
   clientId: string;
-  userId: string;
+  brandStyle: Record<string, unknown>;
   initialType?: ContentType | null;
   initialTitle?: string;
   initialBrief?: string;
@@ -23,24 +27,72 @@ interface CreateTabProps {
 
 export const CreateTab = memo(function CreateTab({
   clientId,
-  userId,
+  brandStyle,
   initialType = null,
   initialTitle = "",
   initialBrief = "",
   onContentGenerated,
 }: CreateTabProps) {
-  const [selectedType, setSelectedType] = useState<ContentType | null>(initialType);
+  const [selectedType, setSelectedType] = useState<ContentType | null>(
+    initialType === "social" ? "linkedin" : initialType,
+  );
   const [title, setTitle] = useState(initialTitle);
   const [brief, setBrief] = useState(initialBrief);
+  const [audience, setAudience] = useState("");
+  const [keyPoints, setKeyPoints] = useState("");
+  const [callToAction, setCallToAction] = useState("");
   const [tone, setTone] = useState("Professional");
   const [length, setLength] = useState<"short" | "medium" | "long">("medium");
   const [output, setOutput] = useState<string | null>(null);
+  const [generatedId, setGeneratedId] = useState<string | null>(null);
+  const [generatedUpdatedAt, setGeneratedUpdatedAt] = useState<string | null>(null);
+  const [draftDirty, setDraftDirty] = useState(false);
   const [critique, setCritique] = useState<{ issues: string[]; grounded: boolean } | null>(null);
+  const [appliedStyle, setAppliedStyle] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [sources, setSources] = useState<ContentSourceReference[]>([]);
   const [copied, setCopied] = useState(false);
 
   const { generate, isGenerating } = useGenerateContent();
+  const { updatePiece, isUpdating: isSavingDraft } = useUpdateContentPiece();
+  const resolvedStylePreview = useMemo(
+    () => resolveContentStyle(
+      brandStyle,
+      selectedType ?? "content",
+      tone,
+      length === "short" ? "Keep it brief and punchy." : length === "long" ? "Be comprehensive and detailed." : "Use a standard length for the format.",
+    ),
+    [brandStyle, selectedType, tone, length],
+  );
+  const stylePreview = resolvedStylePreview.summary;
+  const displayedWarnings = useMemo(() => {
+    const clientWarnings =
+      output
+        ? contentStyleWarnings(output, resolvedStylePreview)
+        : [];
+    return Array.from(new Set([...warnings, ...clientWarnings]));
+  }, [output, resolvedStylePreview, warnings]);
 
   const generatingRef = useRef(false);
+
+  // The tab remains mounted while hidden. Keep it in sync when a newly approved
+  // topic is selected from the Ideas tab.
+  useEffect(() => {
+    setSelectedType(initialType === "social" ? "linkedin" : initialType);
+    setTitle(initialTitle);
+    setBrief(initialBrief);
+    setAudience("");
+    setKeyPoints("");
+    setCallToAction("");
+    setOutput(null);
+    setGeneratedId(null);
+    setGeneratedUpdatedAt(null);
+    setDraftDirty(false);
+    setCritique(null);
+    setAppliedStyle([]);
+    setWarnings([]);
+    setSources([]);
+  }, [initialType, initialTitle, initialBrief]);
 
   const handleGenerate = useCallback(async () => {
     if (!selectedType || !title.trim()) {
@@ -51,23 +103,41 @@ export const CreateTab = memo(function CreateTab({
     if (generatingRef.current) return;
     generatingRef.current = true;
     setOutput(null);
+    setGeneratedId(null);
+    setGeneratedUpdatedAt(null);
+    setDraftDirty(false);
     setCritique(null);
+    setAppliedStyle([]);
+    setWarnings([]);
+    setSources([]);
 
     try {
       const data = await generate({
         clientId,
-        userId,
         contentType: selectedType,
         title: title.trim(),
         // Brief is optional in the UI — fall back to the topic so the generator
         // (which requires a brief) always has something to work from.
-        brief: brief.trim() || title.trim(),
-        tone: tone.toLowerCase(),
-        length,
+        brief: {
+          version: 1,
+          objective: brief.trim() || title.trim(),
+          audience: audience.trim() || null,
+          keyPoints: keyPoints.split("\n").map((point) => point.trim()).filter(Boolean),
+          callToAction: callToAction.trim() || null,
+          tone: tone.toLowerCase() as "professional" | "friendly" | "persuasive" | "casual" | "authoritative",
+          length,
+          mode: "new",
+        },
       });
 
       setOutput(data.body);
+      setGeneratedId(data.id);
+      setGeneratedUpdatedAt(data.updatedAt ?? null);
+      setDraftDirty(false);
       setCritique(data.critique ?? null);
+      setAppliedStyle(data.appliedStyle ?? []);
+      setWarnings(data.warnings ?? []);
+      setSources(data.sources ?? []);
 
       const newPiece: ContentPiece = {
         id: data.id,
@@ -83,7 +153,7 @@ export const CreateTab = memo(function CreateTab({
     } finally {
       generatingRef.current = false;
     }
-  }, [generate, clientId, userId, selectedType, title, brief, tone, length, onContentGenerated]);
+  }, [generate, clientId, selectedType, title, brief, audience, keyPoints, callToAction, tone, length, onContentGenerated]);
 
   const handleCopy = useCallback(async () => {
     if (!output) return;
@@ -94,9 +164,18 @@ export const CreateTab = memo(function CreateTab({
 
   const handleReset = useCallback(() => {
     setOutput(null);
+    setGeneratedId(null);
+    setGeneratedUpdatedAt(null);
+    setDraftDirty(false);
     setCritique(null);
+    setAppliedStyle([]);
+    setWarnings([]);
+    setSources([]);
     setTitle("");
     setBrief("");
+    setAudience("");
+    setKeyPoints("");
+    setCallToAction("");
     setSelectedType(null);
     setTone("Professional");
     setLength("medium");
@@ -104,8 +183,28 @@ export const CreateTab = memo(function CreateTab({
 
   const handleRegenerate = useCallback(() => {
     setOutput(null);
+    setGeneratedId(null);
+    setGeneratedUpdatedAt(null);
+    setDraftDirty(false);
     handleGenerate();
   }, [handleGenerate]);
+
+  const handleSaveDraft = useCallback(async () => {
+    if (!generatedId || !output?.trim()) return;
+    try {
+      const updated = await updatePiece({
+        client_id: clientId,
+        id: generatedId,
+        body: output,
+        expected_updated_at: generatedUpdatedAt ?? undefined,
+      });
+      setGeneratedUpdatedAt(updated.updated_at ?? null);
+      setDraftDirty(false);
+      toast.success("Draft saved.");
+    } catch {
+      // mutation surfaces the error
+    }
+  }, [generatedId, generatedUpdatedAt, output, updatePiece, clientId]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -125,6 +224,41 @@ export const CreateTab = memo(function CreateTab({
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Announcing our new cloud migration service"
             className="bg-zinc-900 border-zinc-700"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="content-audience">Audience</Label>
+            <Input
+              id="content-audience"
+              value={audience}
+              onChange={(event) => setAudience(event.target.value)}
+              placeholder="e.g. Sydney small-business owners"
+              className="bg-zinc-900 border-zinc-700"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="content-cta">Call to action</Label>
+            <Input
+              id="content-cta"
+              value={callToAction}
+              onChange={(event) => setCallToAction(event.target.value)}
+              placeholder="e.g. Book a discovery call"
+              className="bg-zinc-900 border-zinc-700"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="content-key-points">Key points</Label>
+          <Textarea
+            id="content-key-points"
+            value={keyPoints}
+            onChange={(event) => setKeyPoints(event.target.value)}
+            rows={4}
+            placeholder={"One required point per line\nEvidence or offer to include\nAnything that must not be omitted"}
+            className="bg-zinc-900 border-zinc-700 text-sm"
           />
         </div>
 
@@ -209,6 +343,17 @@ export const CreateTab = memo(function CreateTab({
           />
         </div>
 
+        {stylePreview.length > 0 && (
+          <div className="rounded-lg border border-purple-500/25 bg-purple-500/5 px-4 py-3">
+            <p className="text-xs font-medium text-purple-300 mb-1.5">Company DNA rules &amp; guidance that will be applied</p>
+            <ul className="space-y-1">
+              {stylePreview.map((rule) => (
+                <li key={rule} className="text-xs text-zinc-400">• {rule}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Generate Button */}
         <Button
           onClick={handleGenerate}
@@ -254,8 +399,19 @@ export const CreateTab = memo(function CreateTab({
               <p className="text-sm font-semibold text-zinc-300">Generated Draft</p>
               <div className="flex items-center gap-2">
                 <BrainFeedback clientId={clientId} surface="content_draft"
+                  artifactId={generatedId}
                   artifactText={output ?? ""}
                   context={{ type: selectedType, title }} />
+                {draftDirty && (
+                  <button
+                    onClick={handleSaveDraft}
+                    disabled={isSavingDraft}
+                    className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors px-2 py-1 rounded hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    {isSavingDraft ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    Save
+                  </button>
+                )}
                 <button
                   onClick={handleCopy}
                   className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded hover:bg-zinc-800"
@@ -292,7 +448,7 @@ export const CreateTab = memo(function CreateTab({
                 <ShieldCheck className="w-3.5 h-3.5 text-green-400 shrink-0 mt-0.5" />
                 <div className="text-zinc-400">
                   <span className="text-zinc-300 font-medium">
-                    Self-checked{critique.grounded ? " & grounded in your Vault" : ""}
+                    Self-checked{critique.grounded ? " using relevant Vault context" : ""}
                   </span>
                   {critique.issues.length > 0
                     ? <> — revised {critique.issues.length} issue{critique.issues.length === 1 ? "" : "s"}: {critique.issues.join("; ")}</>
@@ -300,10 +456,53 @@ export const CreateTab = memo(function CreateTab({
                 </div>
               </div>
             )}
+            {appliedStyle.length > 0 && (
+              <div className="px-5 py-3 border-b border-zinc-800 bg-purple-500/5">
+                <p className="text-xs font-medium text-purple-300 mb-1.5">Applied Company DNA rules &amp; guidance</p>
+                <ul className="space-y-1">
+                  {appliedStyle.map((rule) => (
+                    <li key={rule} className="text-xs text-zinc-400">• {rule}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {sources.length > 0 && (
+              <div className="px-5 py-3 border-b border-zinc-800">
+                <p className="text-xs font-medium text-zinc-500 mb-1.5">Vault sources used</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {sources.map((source) => (
+                    <span
+                      key={`${source.kind}:${source.itemId}`}
+                      title={source.excerpt}
+                      className="text-xs rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-400"
+                    >
+                      {source.title}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {displayedWarnings.length > 0 && (
+              <div className="px-5 py-3 border-b border-amber-500/20 bg-amber-500/5">
+                <p className="text-xs font-medium text-amber-300 mb-1.5 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Review before approval
+                </p>
+                {displayedWarnings.map((warning) => (
+                  <p key={warning} className="text-xs text-amber-200/80">{warning}</p>
+                ))}
+              </div>
+            )}
             <div className="flex-1 overflow-y-auto px-5 py-4">
-              <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-300 leading-relaxed">
-                {output}
-              </pre>
+              <Textarea
+                value={output}
+                onChange={(event) => {
+                  setOutput(event.target.value);
+                  setDraftDirty(true);
+                }}
+                rows={18}
+                aria-label="Generated content draft"
+                className="min-h-80 resize-y bg-zinc-950 border-zinc-700 font-sans text-sm text-zinc-300 leading-relaxed"
+              />
             </div>
           </>
         )}

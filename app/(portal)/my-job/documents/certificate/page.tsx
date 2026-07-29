@@ -15,7 +15,8 @@ export const metadata = { title: "Certificate of Employment — RapidTal" };
  * ?income=1 includes the compensation line (leave it off for documents where
  * income shouldn't be disclosed).
  */
-export default async function CertificatePage({ searchParams }: { searchParams: { income?: string } }) {
+export default async function CertificatePage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ income?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user, client } = ctx;

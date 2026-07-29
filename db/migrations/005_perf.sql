@@ -19,7 +19,7 @@ CREATE INDEX IF NOT EXISTS daily_logs_client_date_idx
 -- ============================================================
 CREATE OR REPLACE FUNCTION get_contact_status_counts(p_client_id UUID)
 RETURNS TABLE(status TEXT, count BIGINT)
-LANGUAGE sql STABLE SECURITY DEFINER
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public
 AS $$
   SELECT status::TEXT, COUNT(*)::BIGINT
   FROM crm_contacts
@@ -27,11 +27,10 @@ AS $$
   GROUP BY status;
 $$;
 
--- Grant execute to authenticated users (RLS on crm_contacts still applies
--- via SECURITY INVOKER; SECURITY DEFINER bypasses RLS so we restrict by
--- matching against the caller's own client_id inside the function)
-REVOKE ALL ON FUNCTION get_contact_status_counts(UUID) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION get_contact_status_counts(UUID) TO authenticated;
+-- This aggregation is called only through a server route using the service
+-- role. Do not expose an arbitrary client UUID parameter through PostgREST.
+REVOKE ALL ON FUNCTION get_contact_status_counts(UUID) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_contact_status_counts(UUID) TO service_role;
 
 -- Register the function in the Database type (informational comment)
 -- Update types/database.ts Functions section to include this function.

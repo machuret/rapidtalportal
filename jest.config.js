@@ -13,16 +13,24 @@ const customJestConfig = {
     '^@/(.*)$': '<rootDir>/$1',
   },
   testEnvironment: 'jest-environment-jsdom',
+  // Deno-native Edge Function tests run in the dedicated CI job.
+  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/supabase/functions/'],
   collectCoverageFrom: [
     'lib/**/*.{js,ts,tsx}',
     'app/api/**/*.{js,ts,tsx}',
     '!**/*.d.ts',
     '!**/node_modules/**',
   ],
-  // No coverage gate is enforced yet: the suite currently covers only a slice
-  // of lib/. Reintroduce a coverageThreshold (e.g. start at 30% and ratchet up)
-  // as real test coverage grows so the gate reflects reality instead of failing
-  // every `test:coverage` run.
+  // Ratchet at the current baseline: CI runs coverage and refuses regressions.
+  // Raise these numbers as route-handler integration coverage expands.
+  coverageThreshold: {
+    global: {
+      statements: 18,
+      branches: 14.5,
+      functions: 24,
+      lines: 19,
+    },
+  },
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

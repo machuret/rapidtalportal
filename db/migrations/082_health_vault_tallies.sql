@@ -4,8 +4,8 @@
 -- four columns) into the Next process and counted in JS — fine at launch, an
 -- O(all items) read that grows unbounded with every client's uploads. This does
 -- the same tally with a single grouped scan in Postgres and returns one small
--- row per client. SECURITY DEFINER + fixed search_path mirrors 059's
--- health_schema_check; the page calls it with the service-role client.
+-- row per client. The page calls it with the service-role client, so the
+-- function remains SECURITY INVOKER and is executable only by service_role.
 
 CREATE OR REPLACE FUNCTION health_vault_tallies()
 RETURNS TABLE (
@@ -15,7 +15,7 @@ RETURNS TABLE (
   indexed   BIGINT,
   errored   BIGINT
 )
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
   SELECT
     client_id,
     count(*)                                                            AS total,
@@ -25,6 +25,9 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   FROM vault_items
   GROUP BY client_id
 $$;
+
+REVOKE ALL ON FUNCTION health_vault_tallies() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION health_vault_tallies() TO service_role;
 
 INSERT INTO schema_migrations (version) VALUES ('082_health_vault_tallies.sql')
 ON CONFLICT DO NOTHING;

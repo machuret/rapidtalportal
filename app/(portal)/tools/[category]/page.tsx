@@ -7,7 +7,8 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-export default async function ToolCategoryPage({ params }: { params: { category: string } }) {
+export default async function ToolCategoryPage({ params: paramsPromise }: { params: Promise<{ category: string }> }) {
+  const params = await paramsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   if (!ctx.user.client_id) redirect("/dashboard");

@@ -40,6 +40,7 @@ export const ROUTES = {
     unindexed: () => "/api/vault/unindexed",
     text: () => "/api/vault/text",
     url: () => "/api/vault/url",
+    linkedin: () => "/api/vault/linkedin",
     crawlSite: () => "/api/vault/crawl-site",
     crawlSiteAdvance: () => "/api/vault/crawl-site/advance",
     upload: () => "/api/vault/upload",
@@ -72,7 +73,6 @@ export const ROUTES = {
   content: {
     pieces: () => "/api/content/pieces",
     generate: () => "/api/content/generate",
-    outcome: () => "/api/content/outcome",
     topics: () => "/api/content/topics",
     topicsForClient: (clientId: string) => `/api/content/topics?client_id=${clientId}`,
     topicsGenerate: () => "/api/content/topics/generate",

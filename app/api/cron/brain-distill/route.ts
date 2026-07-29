@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
   // runs even when this is empty, so idle clients always get decay + a snapshot.)
   let newMemories = 0;
   let processed = 0;
+  let failures = 0;
   for (const clientId of clientIds) {
     try {
       const r = await distillClientMemory(admin, clientId);
@@ -56,6 +57,7 @@ export async function GET(req: NextRequest) {
       processed += r.processedSignals;
       await snapshotScore(admin, clientId);
     } catch (e) {
+      failures++;
       console.error("[cron/brain-distill] client", clientId, e);
     }
   }
@@ -91,8 +93,18 @@ export async function GET(req: NextRequest) {
     console.error("[cron/brain-distill] phase 2", e);
   }
 
-  await beat({ clients: clientIds.length, memories: newMemories, swept });
-  return NextResponse.json({ ok: true, clients: clientIds.length, processedSignals: processed, newMemories, sweptIdle: swept });
+  await beat({ clients: clientIds.length, memories: newMemories, swept, failures });
+  return NextResponse.json(
+    {
+      ok: failures === 0,
+      clients: clientIds.length,
+      processedSignals: processed,
+      newMemories,
+      sweptIdle: swept,
+      failures,
+    },
+    { status: failures > 0 ? 500 : 200 },
+  );
 }
 
 // Snapshot today's Brain Score (one row per client per day) and emit a

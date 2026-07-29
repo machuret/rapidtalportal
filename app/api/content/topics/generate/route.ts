@@ -54,7 +54,15 @@ function checkRateLimit(clientId: string): { allowed: boolean; remaining: number
 // doesn't waste time on it. Env-tunable.
 const FIT_THRESHOLD = Number(process.env.BRAIN_FIT_THRESHOLD ?? 55);
 
-const VALID_TYPES = new Set(["email", "social", "newsletter", "blog"]);
+const VALID_TYPES = new Set([
+  "email",
+  "x",
+  "linkedin",
+  "facebook",
+  "instagram",
+  "newsletter",
+  "blog",
+]);
 
 export const POST = withAuth(async (req, { user }) => {
   const rl = aiGenerateLimiter.check(`topics:${user.id}`);
@@ -101,7 +109,7 @@ export const POST = withAuth(async (req, { user }) => {
   // Topic generation spans every content channel, so inject content + all
   // channel-scoped lessons (plus global). Ask/Compose-only lessons are excluded.
   const brain = await buildBrainContext(admin, parsed.data.client_id, {
-    surfaces: ["content", "email", "social", "blog", "newsletter"],
+    surfaces: ["content", "email", "x", "social", "blog", "newsletter"],
   });
 
   if (!brain.hasProfile && !brain.hasVault) {
@@ -121,7 +129,7 @@ export const POST = withAuth(async (req, { user }) => {
     `- Do NOT repeat, paraphrase, or resemble anything listed under "WHAT TO AVOID".\n` +
     `- Favour the angles/style listed under "WHAT WORKS HERE".\n` +
     `- For EACH topic, include "fit": an integer 0-100 for how well it fits THIS specific company (not generic), where below ${FIT_THRESHOLD} means weak, generic, or off-brand.\n\n` +
-    `Return JSON exactly as: { "topics": [ { "title": string, "description": string, "content_type": "email"|"social"|"newsletter"|"blog", "rationale": string, "fit": number } ] }`;
+    `Return JSON exactly as: { "topics": [ { "title": string, "description": string, "content_type": "email"|"x"|"linkedin"|"facebook"|"instagram"|"newsletter"|"blog", "rationale": string, "fit": number } ] }`;
 
   let openaiRes: Response;
   try {

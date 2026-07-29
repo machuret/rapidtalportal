@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useEffect, useCallback, type Dispatch, type SetStateAction } from "react";
+import { memo, useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import {
   Clock,
   ChevronRight,
@@ -12,18 +12,25 @@ import {
   Archive,
   RefreshCw,
   Search,
-  ThumbsUp,
-  ThumbsDown,
+  Pencil,
+  Save,
+  ShieldCheck,
+  Download,
+  GitCompare,
+  CopyPlus,
+  WandSparkles,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "@/lib/api-client";
 import { formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api } from "@/lib/api-client";
-import { ROUTES } from "@/lib/api/routes";
-import { usePieceDetail, useUpdatePieceStatus } from "@/hooks/useContent";
+import { LocalTime } from "@/components/ui/LocalTime";
+import { Textarea } from "@/components/ui/textarea";
+import { usePieceDetail, useUpdateContentPiece, useUpdatePieceStatus } from "@/hooks/useContent";
 import type { ContentPieceFull } from "@/hooks/useContent";
-import type { ContentPiece, ContentStatus, ContentOutcome } from "@/types/content";
+import type { ContentPiece, ContentSourceReference, ContentStatus, ContentType } from "@/types/content";
 import { TYPE_ICON_COLORS, TYPE_ICONS, CONTENT_STATUS_STYLES } from "@/types/content";
 
 /* ── Props ──────────────────────────────────────────────────────── */
@@ -79,62 +86,188 @@ function PieceDetail({
   canApprove,
   onBack,
   onStatusChanged,
+  onArtifactCreated,
+  onPieceChanged,
 }: {
   piece: ContentPieceFull;
   clientId: string;
   canApprove: boolean;
   onBack: () => void;
   onStatusChanged: (id: string, status: ContentStatus) => void;
+  onArtifactCreated: (piece: ContentPiece) => void;
+  onPieceChanged: (piece: ContentPieceFull) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [outcome, setOutcome] = useState<ContentOutcome | null>(piece.outcome ?? null);
-  const [savingOutcome, setSavingOutcome] = useState(false);
+  const [body, setBody] = useState(piece.body ?? "");
+  const [persistedBody, setPersistedBody] = useState(piece.body ?? "");
+  const [currentUpdatedAt, setCurrentUpdatedAt] = useState(piece.updated_at ?? "");
+  const [editing, setEditing] = useState(false);
+  const [rewriteInstruction, setRewriteInstruction] = useState("");
+  const [rewriting, setRewriting] = useState(false);
+  const [adaptType, setAdaptType] = useState<ContentType>(
+    piece.content_type === "linkedin" ? "facebook" : "linkedin",
+  );
+  const [revisions, setRevisions] = useState<{
+    id: string;
+    revision_number: number;
+    title: string;
+    body: string | null;
+    reason: string;
+    created_at: string;
+  }[]>([]);
+  const [compareRevision, setCompareRevision] = useState<string | null>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const loadedPieceId = useRef(piece.id);
 
   const { updateStatus, isUpdating } = useUpdatePieceStatus();
+  const { updatePiece, isUpdating: isSavingDraft } = useUpdateContentPiece();
 
-  const recordOutcome = useCallback(
-    async (next: ContentOutcome) => {
-      if (savingOutcome) return;
-      const prev = outcome;
-      setOutcome(next);
-      setSavingOutcome(true);
-      try {
-        await api.post(ROUTES.content.outcome(), { client_id: clientId, id: piece.id, outcome: next });
-        toast.success(next === "win" ? "Logged as a win — the Brain will learn from it." : "Noted — the Brain will adjust.");
-      } catch {
-        setOutcome(prev); // api-client already toasted
-      } finally {
-        setSavingOutcome(false);
-      }
-    },
-    [savingOutcome, outcome, clientId, piece.id],
-  );
+  useEffect(() => {
+    if (loadedPieceId.current !== piece.id) {
+      loadedPieceId.current = piece.id;
+      setBody(piece.body ?? "");
+      setPersistedBody(piece.body ?? "");
+      setCurrentUpdatedAt(piece.updated_at ?? "");
+      setEditing(false);
+      setAdaptType(piece.content_type === "linkedin" ? "facebook" : "linkedin");
+    }
+  }, [piece.id, piece.body, piece.updated_at, piece.content_type]);
+
+  const loadRevisions = useCallback(async () => {
+    try {
+      const rows = await api.get<typeof revisions>(
+        `/api/content/revisions?client_id=${clientId}&piece_id=${piece.id}`,
+        { showErrorToast: false },
+      );
+      setRevisions(rows);
+    } catch {
+      // Revision history is supportive; editing remains available if it cannot load.
+    }
+  }, [clientId, piece.id]);
+
+  useEffect(() => { void loadRevisions(); }, [loadRevisions]);
 
   const TypeIcon = TYPE_ICONS[piece.content_type] || BookText;
   const iconColor = TYPE_ICON_COLORS[piece.content_type] || "text-zinc-400";
   const statusStyle = CONTENT_STATUS_STYLES[piece.status] || CONTENT_STATUS_STYLES.draft;
 
   const handleCopy = useCallback(async () => {
-    if (!piece.body) return;
-    await navigator.clipboard.writeText(piece.body);
+    if (!body) return;
+    await navigator.clipboard.writeText(body);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [piece.body]);
+  }, [body]);
+
+  const saveDraft = useCallback(async () => {
+    try {
+      const updated = await updatePiece({
+        client_id: clientId,
+        id: piece.id,
+        body,
+        expected_updated_at: currentUpdatedAt || undefined,
+      });
+      setPersistedBody(updated.body ?? "");
+      setCurrentUpdatedAt(updated.updated_at ?? "");
+      onPieceChanged(updated);
+      setEditing(false);
+      await loadRevisions();
+      toast.success("Draft saved.");
+    } catch {
+      // mutation surfaces the error
+    }
+  }, [updatePiece, clientId, piece.id, body, currentUpdatedAt, loadRevisions, onPieceChanged]);
+
+  const rewrite = useCallback(async (scope: "full" | "section") => {
+    if (!rewriteInstruction.trim()) return;
+    const element = editorRef.current;
+    const selectedText = element && element.selectionEnd > element.selectionStart
+      ? body.slice(element.selectionStart, element.selectionEnd)
+      : "";
+    const selectionStart = element?.selectionStart ?? 0;
+    const selectionEnd = element?.selectionEnd ?? 0;
+    if (scope === "section" && !selectedText) {
+      toast.error("Select the section you want to rewrite first.");
+      return;
+    }
+    setRewriting(true);
+    try {
+      const result = await api.post<ContentPieceFull>("/content/rewrite", {
+        client_id: clientId,
+        id: piece.id,
+        scope,
+        instruction: rewriteInstruction.trim(),
+        expected_updated_at: currentUpdatedAt,
+        selectedText: scope === "section" ? selectedText : undefined,
+        selectionStart: scope === "section" ? selectionStart : undefined,
+        selectionEnd: scope === "section" ? selectionEnd : undefined,
+      });
+      setBody(result.body ?? "");
+      setPersistedBody(result.body ?? "");
+      setCurrentUpdatedAt(result.updated_at ?? "");
+      onPieceChanged(result);
+      setEditing(true);
+      setRewriteInstruction("");
+      await loadRevisions();
+      toast.success(scope === "section" ? "Section rewritten." : "Draft rewritten.");
+    } catch {
+      // API client surfaces the error.
+    } finally {
+      setRewriting(false);
+    }
+  }, [body, clientId, piece.id, rewriteInstruction, currentUpdatedAt, loadRevisions, onPieceChanged]);
+
+  const duplicate = useCallback(async () => {
+    try {
+      const created = await api.post<ContentPiece>("/content/duplicate", { client_id: clientId, id: piece.id });
+      onArtifactCreated(created);
+      toast.success("Draft duplicated. It is available in History.");
+    } catch {
+      // API client surfaces the error.
+    }
+  }, [clientId, piece.id, onArtifactCreated]);
+
+  const adapt = useCallback(async () => {
+    try {
+      const created = await api.post<ContentPiece>("/content/adapt", {
+        client_id: clientId,
+        id: piece.id,
+        target_type: adaptType,
+      });
+      onArtifactCreated(created);
+      toast.success(`Adapted into one ${adaptType} draft.`);
+    } catch {
+      // API client surfaces the error.
+    }
+  }, [clientId, piece.id, adaptType, onArtifactCreated]);
+
+  const exportText = useCallback(() => {
+    const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${piece.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "content"}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [body, piece.title]);
 
   const handleStatusChange = useCallback(
     async (newStatus: ContentStatus) => {
       try {
-        await updateStatus({
+        const updated = await updateStatus({
           client_id: clientId,
           id: piece.id,
           status: newStatus,
+          expected_updated_at: currentUpdatedAt || undefined,
         });
+        setPersistedBody(updated.body ?? persistedBody);
+        setCurrentUpdatedAt(updated.updated_at ?? "");
         onStatusChanged(piece.id, newStatus);
+        onPieceChanged(updated);
       } catch {
         // error toast handled by the mutation
       }
     },
-    [updateStatus, clientId, piece.id, onStatusChanged]
+    [updateStatus, clientId, piece.id, currentUpdatedAt, persistedBody, onStatusChanged, onPieceChanged]
   );
 
   return (
@@ -148,6 +281,27 @@ function PieceDetail({
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
+
+        {piece.status === "draft" && !editing && (
+          <button
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800"
+          >
+            <Pencil className="w-3.5 h-3.5" /> Edit draft
+          </button>
+        )}
+
+        {piece.status === "draft" && editing && (
+          <>
+            <Button size="sm" onClick={saveDraft} disabled={isSavingDraft || !body.trim()} className="text-xs h-8">
+              {isSavingDraft ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
+              Save draft
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setBody(persistedBody); setEditing(false); }} className="text-xs h-8">
+              <X className="w-3.5 h-3.5 mr-1.5" /> Cancel
+            </Button>
+          </>
+        )}
         <TypeIcon className={`w-5 h-5 shrink-0 ${iconColor}`} />
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-semibold text-white truncate">{piece.title}</h2>
@@ -164,7 +318,7 @@ function PieceDetail({
       <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={handleCopy}
-          disabled={!piece.body}
+          disabled={!body}
           className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 disabled:opacity-40"
         >
           {copied ? (
@@ -173,6 +327,33 @@ function PieceDetail({
             <><Copy className="w-3.5 h-3.5" /> Copy</>
           )}
         </button>
+        <button
+          onClick={exportText}
+          disabled={!body}
+          className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 disabled:opacity-40"
+        >
+          <Download className="w-3.5 h-3.5" /> Export .txt
+        </button>
+        <button
+          onClick={duplicate}
+          className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800"
+        >
+          <CopyPlus className="w-3.5 h-3.5" /> Duplicate
+        </button>
+        <div className="flex items-center rounded-lg border border-zinc-700 overflow-hidden">
+          <select
+            value={adaptType}
+            onChange={(event) => setAdaptType(event.target.value as ContentType)}
+            className="h-8 bg-zinc-900 px-2 text-xs text-zinc-300 border-0"
+          >
+            {(["x", "linkedin", "facebook", "instagram", "email", "newsletter", "blog", "message"] as ContentType[])
+              .filter((type) => type !== piece.content_type)
+              .map((type) => <option key={type} value={type}>{type}</option>)}
+          </select>
+          <button onClick={adapt} className="h-8 px-2 text-xs text-purple-300 hover:bg-zinc-800 border-l border-zinc-700">
+            Adapt
+          </button>
+        </div>
 
         {canApprove && piece.status === "draft" && (
           <Button
@@ -213,47 +394,93 @@ function PieceDetail({
         )}
       </div>
 
-      {/* Real-world outcome — the strongest signal the Brain can learn from */}
-      {piece.status === "approved" && (
-        <div className="flex items-center gap-2 flex-wrap rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2.5">
-          <span className="text-xs text-zinc-400 mr-1">How did this perform?</span>
-          <button
-            type="button"
-            onClick={() => recordOutcome("win")}
-            disabled={savingOutcome}
-            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-50 ${
-              outcome === "win" ? "border-green-500/50 bg-green-500/10 text-green-400" : "border-zinc-700 text-zinc-400 hover:text-green-400 hover:border-green-500/40"
-            }`}
-          >
-            <ThumbsUp className="w-3.5 h-3.5" /> Performed well
-          </button>
-          <button
-            type="button"
-            onClick={() => recordOutcome("miss")}
-            disabled={savingOutcome}
-            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-50 ${
-              outcome === "miss" ? "border-red-500/50 bg-red-500/10 text-red-400" : "border-zinc-700 text-zinc-400 hover:text-red-400 hover:border-red-500/40"
-            }`}
-          >
-            <ThumbsDown className="w-3.5 h-3.5" /> Underperformed
-          </button>
-        </div>
-      )}
-
       {/* Brief */}
       {piece.brief && (
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3">
           <p className="text-xs font-medium text-zinc-500 mb-1">Brief</p>
           <p className="text-sm text-zinc-400 leading-relaxed">{piece.brief}</p>
+          {piece.content_brief && (
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-xs">
+              {piece.content_brief.audience && <div><dt className="text-zinc-600">Audience</dt><dd className="text-zinc-400">{piece.content_brief.audience}</dd></div>}
+              <div><dt className="text-zinc-600">Tone</dt><dd className="text-zinc-400">{piece.content_brief.tone}</dd></div>
+              <div><dt className="text-zinc-600">Length</dt><dd className="text-zinc-400">{piece.content_brief.length}</dd></div>
+              {piece.content_brief.callToAction && <div><dt className="text-zinc-600">CTA</dt><dd className="text-zinc-400">{piece.content_brief.callToAction}</dd></div>}
+            </dl>
+          )}
+        </div>
+      )}
+
+      {piece.style_snapshot?.summary && piece.style_snapshot.summary.length > 0 && (
+        <div className="rounded-lg border border-purple-500/25 bg-purple-500/5 px-4 py-3">
+          <p className="text-xs font-medium text-purple-300 mb-1.5 flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Validated Company DNA snapshot
+          </p>
+          <ul className="space-y-1">
+            {piece.style_snapshot.summary.map((rule) => (
+              <li key={rule} className="text-xs text-zinc-400">• {rule}</li>
+            ))}
+          </ul>
+          {piece.style_snapshot.capturedAt && (
+            <p className="text-xs text-zinc-600 mt-2">
+              Captured <LocalTime value={piece.style_snapshot.capturedAt} />
+            </p>
+          )}
+        </div>
+      )}
+
+      {piece.source_references && piece.source_references.length > 0 && (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3">
+          <p className="text-xs font-medium text-zinc-500 mb-2">Vault sources used</p>
+          <div className="flex flex-wrap gap-1.5">
+            {piece.source_references.map((source: ContentSourceReference) => (
+              <span key={`${source.kind}:${source.itemId}`} title={source.excerpt} className="text-xs rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-400">
+                {source.title}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {piece.status === "draft" && (
+        <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 px-4 py-3">
+          <p className="text-xs font-medium text-purple-300 mb-2 flex items-center gap-1.5">
+            <WandSparkles className="w-3.5 h-3.5" /> Editorial rewrite
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input
+              value={rewriteInstruction}
+              onChange={(event) => setRewriteInstruction(event.target.value)}
+              placeholder="e.g. Lead with the customer benefit and make it more direct"
+              className="bg-zinc-950 border-zinc-700 h-9 text-sm"
+            />
+            <Button size="sm" variant="outline" disabled={rewriting || !rewriteInstruction.trim()} onClick={() => rewrite("section")}>
+              Rewrite selection
+            </Button>
+            <Button size="sm" variant="outline" disabled={rewriting || !rewriteInstruction.trim()} onClick={() => rewrite("full")}>
+              Rewrite all
+            </Button>
+          </div>
+          <p className="text-xs text-zinc-600 mt-2">For a section rewrite, select text inside the editor first.</p>
         </div>
       )}
 
       {/* Body */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 flex-1 min-h-64">
-        {piece.body ? (
+        {editing ? (
+          <div className="p-4">
+            <Textarea
+              ref={editorRef}
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              rows={18}
+              className="min-h-80 bg-zinc-950 border-zinc-700 font-sans text-sm leading-relaxed"
+            />
+          </div>
+        ) : body ? (
           <div className="px-5 py-4 overflow-y-auto max-h-[60vh]">
             <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-300 leading-relaxed">
-              {piece.body}
+              {body}
             </pre>
           </div>
         ) : (
@@ -262,6 +489,41 @@ function PieceDetail({
           </div>
         )}
       </div>
+
+      {revisions.length > 0 && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+          <p className="text-xs font-medium text-zinc-400 mb-2 flex items-center gap-1.5">
+            <GitCompare className="w-3.5 h-3.5" /> Revision history
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {revisions.map((revision) => (
+              <button
+                key={revision.id}
+                onClick={() => setCompareRevision(compareRevision === revision.id ? null : revision.id)}
+                className={`text-xs rounded-md border px-2.5 py-1.5 ${compareRevision === revision.id ? "border-purple-500/40 bg-purple-500/10 text-purple-300" : "border-zinc-700 text-zinc-400 hover:text-white"}`}
+              >
+                v{revision.revision_number} · {revision.reason}
+              </button>
+            ))}
+          </div>
+          {compareRevision && (() => {
+            const revision = revisions.find((item) => item.id === compareRevision);
+            if (!revision) return null;
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
+                <div className="rounded-lg bg-zinc-950 p-3">
+                  <p className="text-xs text-zinc-600 mb-2">Revision {revision.revision_number}</p>
+                  <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-400">{revision.body}</pre>
+                </div>
+                <div className="rounded-lg bg-zinc-950 p-3">
+                  <p className="text-xs text-zinc-600 mb-2">Current draft</p>
+                  <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-300">{body}</pre>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 }
@@ -317,6 +579,8 @@ export const HistoryTab = memo(function HistoryTab({
         canApprove={canApprove}
         onBack={handleBack}
         onStatusChanged={handleStatusChanged}
+        onArtifactCreated={(created) => onHistoryUpdate((previous) => [created, ...previous])}
+        onPieceChanged={setSelectedPiece}
       />
     );
   }

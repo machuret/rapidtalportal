@@ -32,7 +32,7 @@ export const POST = withAuth(async (req) => {
   if (file.size > MAX_BYTES) return NextResponse.json({ error: "Image must be under 5 MB." }, { status: 422 });
   if (!ALLOWED.has(file.type)) return NextResponse.json({ error: "Use PNG, JPEG, GIF, or WebP." }, { status: 422 });
 
-  const sb = createClient();
+  const sb = await createClient();
   const path = `${placementId}/${pageId}/${crypto.randomUUID()}.${EXT[file.type]}`;
   const { error } = await sb.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
   if (error) return NextResponse.json({ error: "Upload failed (or not permitted)." }, { status: 403 });
@@ -44,7 +44,7 @@ export const GET = withAuth(async (req) => {
   const path = req.nextUrl.searchParams.get("path");
   if (!path) return NextResponse.json({ error: "path required." }, { status: 422 });
 
-  const sb = createClient();
+  const sb = await createClient();
   const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, 3600);
   if (error || !data?.signedUrl) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   return NextResponse.redirect(data.signedUrl, 307);

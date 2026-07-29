@@ -28,7 +28,8 @@ const MOOD_SCORE: Record<string, number> = {
   great: 5, good: 4, neutral: 3, difficult: 2, overwhelmed: 1,
 };
 
-export default async function VaDetailPage({ params }: { params: { id: string } }) {
+export default async function VaDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;

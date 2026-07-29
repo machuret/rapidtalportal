@@ -43,6 +43,7 @@ const VA_ID = "55555555-5555-4555-8555-555555555555";
 
 const asAuth = (user: ApiUser) => (requireApiAuth as jest.Mock).mockResolvedValue({ user });
 const jsonReq = (body: unknown) => ({ json: async () => body }) as never;
+const routeCtx = { params: Promise.resolve({}) };
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -51,7 +52,7 @@ test("a VA cannot move another teammate's card", async () => {
   (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({
     tasks: { data: { client_id: CLIENT_A, assigned_to: OTHER_VA, created_by: OTHER_VA }, error: null },
   }));
-  const res = await PATCH(jsonReq({ id: TASK, status: "done" }));
+  const res = await PATCH(jsonReq({ id: TASK, status: "done" }), routeCtx);
   expect(res.status).toBe(403);
 });
 
@@ -60,7 +61,7 @@ test("a VA cannot touch a card on another client's board", async () => {
   (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({
     tasks: { data: { client_id: CLIENT_B, assigned_to: VA_ID, created_by: VA_ID }, error: null },
   }));
-  const res = await PATCH(jsonReq({ id: TASK, status: "done" }));
+  const res = await PATCH(jsonReq({ id: TASK, status: "done" }), routeCtx);
   expect(res.status).toBe(403);
 });
 
@@ -69,7 +70,7 @@ test("a VA cannot reassign a card to someone else", async () => {
   (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({
     tasks: { data: { client_id: CLIENT_A, assigned_to: VA_ID, created_by: VA_ID }, error: null },
   }));
-  const res = await PATCH(jsonReq({ id: TASK, assignedTo: OTHER_VA }));
+  const res = await PATCH(jsonReq({ id: TASK, assignedTo: OTHER_VA }), routeCtx);
   expect(res.status).toBe(403);
 });
 
@@ -78,6 +79,6 @@ test("a VA can move their own card", async () => {
   (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({
     tasks: { data: { id: TASK, client_id: CLIENT_A, assigned_to: VA_ID, created_by: VA_ID, status: "done" }, error: null },
   }));
-  const res = await PATCH(jsonReq({ id: TASK, status: "done" }));
+  const res = await PATCH(jsonReq({ id: TASK, status: "done" }), routeCtx);
   expect(res.status).toBe(200);
 });

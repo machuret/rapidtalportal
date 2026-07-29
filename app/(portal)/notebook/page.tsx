@@ -10,7 +10,8 @@ import type { NotebookPage } from "@/lib/notebook/types";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Notebook — RapidTal" };
 
-export default async function NotebookPage({ searchParams }: { searchParams: { placement?: string } }) {
+export default async function NotebookPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ placement?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;
@@ -82,7 +83,7 @@ export default async function NotebookPage({ searchParams }: { searchParams: { p
   };
 
   // PAGE CONTENT — user-scoped client → RLS gates to participants only.
-  const sb = createClient();
+  const sb = await createClient();
   const { data: pageRows } = await sb
     .from("notebook_pages")
     .select("*")

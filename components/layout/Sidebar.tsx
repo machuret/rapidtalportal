@@ -100,6 +100,7 @@ const clientAdminLinks: NavItem[] = [
   { href: "/brain-analytics",label: "Brain Analytics", icon: BarChart3 },
   { section: "Tools" },
   { href: "/crm",            label: "CRM",             icon: ContactRound },
+  { href: "/content",        label: "Content",         icon: PenLine },
   { href: "/access",         label: "Access",          icon: KeyRound },
   { section: "Account" },
   { href: "/guide",          label: "Guide",           icon: BookOpen },

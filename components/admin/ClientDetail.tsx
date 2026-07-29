@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import {
   Pencil,
   Save,
@@ -207,12 +208,12 @@ export function ClientDetail({
   return (
     <div className="flex flex-col gap-8">
       {/* Back link */}
-      <a
+      <Link
         href="/admin/clients"
         className="text-xs text-zinc-500 hover:text-zinc-300"
       >
         &larr; All clients
-      </a>
+      </Link>
 
       {/* ── Client Info Card ─────────────────────────────────────── */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">

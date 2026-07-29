@@ -15,6 +15,11 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { selectFields } from "./profile-fields";
+import {
+  memoryAppliesToSurfaces,
+  normalizeBrainScopes,
+  signalSurfacesFor,
+} from "../../supabase/functions/_shared/brain-surfaces";
 
 type Admin = SupabaseClient;
 
@@ -25,7 +30,23 @@ const PROFILE_FIELDS: { key: string; label: string }[] = selectFields("prompt").
   label: f.promptLabel,
 }));
 
-const PROFILE_SELECT = PROFILE_FIELDS.map((f) => f.key).join(", ");
+const CONTENT_STYLE_FIELDS = [
+  { key: "preferred_terms", label: "Preferred words and phrases" },
+  { key: "prohibited_terms", label: "Prohibited words and phrases" },
+  { key: "emoji_policy", label: "Emoji policy" },
+  { key: "humour_policy", label: "Humour policy" },
+  { key: "spelling_locale", label: "Spelling and locale" },
+  { key: "default_cta_style", label: "Default CTA style" },
+  { key: "approved_claims", label: "Approved claims" },
+  { key: "prohibited_claims", label: "Prohibited claims" },
+] as const;
+
+const PROFILE_SELECT = [
+  ...PROFILE_FIELDS.map((f) => f.key),
+  ...CONTENT_STYLE_FIELDS.map((f) => f.key),
+  "channel_styles",
+  "hard_rules",
+].join(", ");
 
 interface VaultRow { title: string; raw_content: string | null; category: string | null; ai_summary: string | null }
 interface TopicRow { title: string; description: string | null; flag_reason: string | null }
@@ -67,8 +88,10 @@ export async function buildBrainContext(
 ): Promise<BrainContext> {
   const vaultCharLimit = opts.vaultCharLimit ?? VAULT_CHAR_LIMIT;
   const maxMemory = opts.maxMemory ?? 40;
-  // Which surfaces this task counts as — used to inject only relevant lessons.
-  const taskSurfaces = new Set([...(opts.surfaces ?? ["content"]), "all"]);
+  // Use one canonical vocabulary for both short-term signals and durable memory.
+  const taskSurfaces = normalizeBrainScopes(opts.surfaces ?? ["content"]);
+  const effectiveSurfaces = taskSurfaces.length ? taskSurfaces : normalizeBrainScopes(["content"]);
+  const scopedSignalSurfaces = signalSurfacesFor(effectiveSurfaces);
   const [dnaRes, vaultRes, posTopicsRes, negTopicsRes, signalsRes, memoryRes] = await Promise.all([
     admin.from("company_dna").select(PROFILE_SELECT).eq("client_id", clientId).maybeSingle(),
     admin
@@ -94,12 +117,13 @@ export async function buildBrainContext(
       .or("status.eq.rejected,flagged.eq.true")
       .order("updated_at", { ascending: false })
       .limit(MAX_EXAMPLES),
-    // Cross-surface 👎 signals with reasons — generalised anti-patterns.
+    // Recent 👎 signals only from surfaces relevant to this generation.
     admin
       .from("brain_signals")
       .select("artifact_text, reason")
       .eq("client_id", clientId)
       .eq("rating", -1)
+      .in("surface", scopedSignalSurfaces)
       .order("created_at", { ascending: false })
       .limit(MAX_EXAMPLES),
     // Distilled, curated lessons — the Brain's long-term memory (pinned first).
@@ -121,11 +145,7 @@ export async function buildBrainContext(
   const memoryAll = (memoryRes.data ?? []) as MemoryRow[];
   // Keep only lessons relevant to this task: global (no scope) or overlapping.
   const memory = memoryAll
-    .filter((m) => {
-      const s = m.scope?.surfaces;
-      if (!s || s.length === 0) return true;
-      return s.some((x) => taskSurfaces.has(x));
-    })
+    .filter((m) => memoryAppliesToSurfaces(m.scope, effectiveSurfaces))
     .slice(0, maxMemory);
 
   let text = "";
@@ -142,6 +162,31 @@ export async function buildBrainContext(
     if (block) {
       hasProfile = true;
       text += `=== COMPANY BRAIN PROFILE ===\n${block}\n`;
+    }
+    const styleBlock = CONTENT_STYLE_FIELDS
+      .map(({ key, label }) => {
+        const value = dna[key];
+        return typeof value === "string" && value.trim() ? `${label}: ${value.trim()}` : "";
+      })
+      .filter(Boolean)
+      .join("\n");
+    if (styleBlock) {
+      hasProfile = true;
+      text += `=== CONTENT STYLE RULES ===\n${styleBlock}\n\n`;
+    }
+    if (Array.isArray(dna.hard_rules) && dna.hard_rules.length) {
+      hasProfile = true;
+      text += `=== STRUCTURED CONTENT HARD RULES ===\n${JSON.stringify(dna.hard_rules).slice(0, 6000)}\n\n`;
+    }
+    const channelStyles = dna.channel_styles;
+    if (channelStyles && typeof channelStyles === "object" && !Array.isArray(channelStyles)) {
+      const styleLines = Object.entries(channelStyles as Record<string, unknown>)
+        .filter(([, value]) => typeof value === "string" && value.trim())
+        .map(([channel, value]) => `${channel}: ${(value as string).trim()}`);
+      if (styleLines.length) {
+        hasProfile = true;
+        text += `=== CHANNEL WRITING STYLES ===\n${styleLines.join("\n")}\n\n`;
+      }
     }
   }
 

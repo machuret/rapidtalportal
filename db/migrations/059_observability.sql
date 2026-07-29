@@ -30,12 +30,12 @@ ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS indexed_at  TIMESTAMPTZ;
 ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS index_error TEXT;
 
 -- ── 3. Schema self-check ─────────────────────────────────────────────────────
--- Returns one row per critical schema object with whether it exists. SECURITY
--- DEFINER so it can read catalogs regardless of caller grants; super_admin and
--- the service role are the intended callers.
+-- Returns one row per critical schema object with whether it exists. The
+-- service-role caller has sufficient catalog access, so the function does not
+-- need to bypass the caller's privileges.
 CREATE OR REPLACE FUNCTION health_schema_check()
 RETURNS JSONB
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
   SELECT jsonb_agg(jsonb_build_object('name', name, 'ok', ok) ORDER BY name)
   FROM (
     SELECT 'table: vault_chunks' AS name, to_regclass('public.vault_chunks') IS NOT NULL AS ok
@@ -81,7 +81,8 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   ) checks;
 $$;
 
-GRANT EXECUTE ON FUNCTION health_schema_check() TO authenticated, service_role;
+REVOKE ALL ON FUNCTION health_schema_check() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION health_schema_check() TO service_role;
 
 INSERT INTO schema_migrations (version) VALUES ('059_observability.sql')
 ON CONFLICT DO NOTHING;

@@ -14,7 +14,8 @@ export const metadata = { title: "Access — RapidTal" };
 // Passwords (even encrypted) never enter a page payload.
 const SAFE_SELECT = "id, client_id, created_by, site, category, url, username, restricted_to, created_at, updated_at";
 
-export default async function AccessPage({ searchParams }: { searchParams: { client?: string } }) {
+export default async function AccessPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ client?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user, client } = ctx;

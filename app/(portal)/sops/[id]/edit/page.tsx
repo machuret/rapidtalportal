@@ -8,11 +8,12 @@ import { ArrowLeft } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function SopEditPage({
-  params, searchParams,
+  params: paramsPromise, searchParams: searchParamsPromise,
 }: {
-  params: { id: string };
-  searchParams: { improve?: string };
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ improve?: string }>;
 }) {
+  const [params, searchParams] = await Promise.all([paramsPromise, searchParamsPromise]);
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;

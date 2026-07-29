@@ -8,7 +8,8 @@ import { ArrowLeft, AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-export default async function SopDetailPage({ params }: { params: { id: string } }) {
+export default async function SopDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;

@@ -26,11 +26,12 @@ export const dynamic = "force-dynamic";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function ToolRunnerPage({
-  params, searchParams,
+  params: paramsPromise, searchParams: searchParamsPromise,
 }: {
-  params: { category: string; tool: string };
-  searchParams: { run?: string };
+  params: Promise<{ category: string; tool: string }>;
+  searchParams: Promise<{ run?: string }>;
 }) {
+  const [params, searchParams] = await Promise.all([paramsPromise, searchParamsPromise]);
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user, client } = ctx;

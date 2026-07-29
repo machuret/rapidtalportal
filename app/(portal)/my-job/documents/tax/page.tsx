@@ -13,7 +13,8 @@ export const metadata = { title: "Yearly Income Summary — RapidTal" };
  * contract rate, month by month, for the VA's BIR filing. Same pay math as the
  * invoice generator (lib/my-job/pay.ts) so the documents always agree.
  */
-export default async function TaxSummaryPage({ searchParams }: { searchParams: { year?: string } }) {
+export default async function TaxSummaryPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ year?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user, client } = ctx;

@@ -14,7 +14,8 @@ export const metadata = { title: "Invoice — RapidTal" };
  * editable so the VA can bill freely (fixed fees, projects, anything not tied to
  * hours). Document tool only (print / save as PDF); no payment processing.
  */
-export default async function InvoicePage({ searchParams }: { searchParams: { month?: string } }) {
+export default async function InvoicePage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ month?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user, client } = ctx;

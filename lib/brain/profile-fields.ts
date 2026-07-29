@@ -46,7 +46,7 @@ export const BRAIN_PROFILE_FIELDS: BrainProfileField[] = [
   { key: "website_content",    label: "Website content",     promptLabel: "Website content",             question: "",                                                             impact: 1, draftable: true,  onboarding: false, completeness: true,  prompt: true },
   { key: "brand_voice",        label: "Brand voice",         promptLabel: "Brand voice & tone",          question: "How should your brand sound — tone and personality?",          impact: 3, draftable: true,  onboarding: true,  completeness: true,  prompt: true },
   { key: "content_style",      label: "Content style",       promptLabel: "Content tone & style",        question: "Any content style preferences — length, format, do's/don'ts?", impact: 2, draftable: true,  onboarding: true,  completeness: true,  prompt: true },
-  { key: "internal_rules",     label: "Hard rules",          promptLabel: "Internal rules (must follow)", question: "Any hard rules the AI must always follow?",                    impact: 2, draftable: false, onboarding: true,  completeness: true,  prompt: true },
+  { key: "internal_rules",     label: "Editorial guidance",  promptLabel: "Priority editorial guidance", question: "Any editorial guidance the AI should follow?",                impact: 2, draftable: false, onboarding: true,  completeness: true,  prompt: true },
 ];
 
 type Concern = "onboarding" | "completeness" | "prompt";

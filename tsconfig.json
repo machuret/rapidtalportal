@@ -2,6 +2,7 @@
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
@@ -19,8 +20,9 @@
     ],
     "paths": {
       "@/*": ["./*"]
-    }
+    },
+    "target": "ES2017"
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "db/seed.ts", "db/seed.mjs", "supabase/functions"]
+  "exclude": ["node_modules", "db/seed.mjs", "supabase/functions"]
 }

@@ -3,16 +3,21 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ClientDetail } from "@/components/admin/ClientDetail";
+import {
+  AdminCompanyProfileEditor,
+  type AdminCompanyProfile,
+} from "@/components/admin/AdminCompanyProfileEditor";
 import type { UserRole } from "@/types/database";
 import { CheckCircle2, Circle, ArrowRight, ClipboardCheck } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 interface Props {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export default async function AdminClientDetailPage({ params }: Props) {
+export default async function AdminClientDetailPage({ params: paramsPromise }: Props) {
+  const params = await paramsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   if (ctx.user.role !== "super_admin") redirect("/dashboard");
@@ -45,12 +50,15 @@ export default async function AdminClientDetailPage({ params }: Props) {
   const [{ count: vaultCount }, { data: dossierRow }, { data: dna }, { count: gqCount }] = await Promise.all([
     admin.from("vault_items").select("id", { count: "exact", head: true }).eq("client_id", params.id),
     admin.from("vault_items").select("id").eq("client_id", params.id).contains("tags", ["dossier"]).limit(1).maybeSingle(),
-    admin.from("company_dna").select("company_name, services").eq("client_id", params.id).maybeSingle(),
+    admin.from("company_dna")
+      .select("company_name, company_description, website, address, location, phone, email, founders, client_type, services, target_demographic, social_links")
+      .eq("client_id", params.id)
+      .maybeSingle(),
     admin.from("golden_questions").select("id", { count: "exact", head: true }).eq("client_id", params.id),
   ]);
 
   const userRows = (users ?? []) as { role: string }[];
-  const dnaRow = dna as { company_name: string | null; services: string | null } | null;
+  const dnaRow = dna as AdminCompanyProfile | null;
   const checklist = [
     { done: userRows.some((u) => u.role === "client_admin"), label: "Client admin added", href: "/admin/users", hint: "Create their login in All Users" },
     { done: userRows.some((u) => u.role === "va"), label: "VA assigned", href: null, hint: "Assign one below" },
@@ -90,6 +98,14 @@ export default async function AdminClientDetailPage({ params }: Props) {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="mb-8">
+        <AdminCompanyProfileEditor
+          clientId={params.id}
+          clientName={(client as { name: string }).name}
+          initialProfile={dnaRow}
+        />
       </div>
 
       <ClientDetail

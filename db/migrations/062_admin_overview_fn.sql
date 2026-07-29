@@ -5,8 +5,8 @@
 -- The /admin overview page used to SELECT every user, vault_item, task and
 -- daily_log across all clients and aggregate in Node — unbounded as those
 -- tables grow. This does the grouping in Postgres and returns one row per
--- active client. SECURITY DEFINER so the service-role page call reads all
--- tenants; super_admin is the only caller. Idempotent.
+-- active client. The super-admin page calls it with the service role, which
+-- already has the required access; the function itself must not bypass RLS.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION admin_client_overview()
@@ -25,7 +25,7 @@ RETURNS TABLE (
   vas_logged         INT,
   last_activity      TIMESTAMPTZ
 )
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public AS $$
   SELECT
     c.id, c.name, c.created_at,
     coalesce(u.user_count, 0)::int,
@@ -69,7 +69,8 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   ORDER BY c.name;
 $$;
 
-GRANT EXECUTE ON FUNCTION admin_client_overview() TO authenticated, service_role;
+REVOKE ALL ON FUNCTION admin_client_overview() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION admin_client_overview() TO service_role;
 
 INSERT INTO schema_migrations (version) VALUES ('062_admin_overview_fn.sql')
 ON CONFLICT DO NOTHING;

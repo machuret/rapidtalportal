@@ -14,6 +14,8 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { visibleSopsForUser } from "../_shared/sop-visibility.ts";
+import { memoryAppliesToSurfaces } from "../_shared/brain-surfaces.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "https://rapidtal.online",
@@ -220,6 +222,7 @@ Deno.serve(async (req: Request) => {
     // ── Input ─────────────────────────────────────────────────────────────────
     const clientId: string = body.clientId;
     const question: string = (body.question ?? "").toString().trim();
+    const memorySurface = body.surface === "compose" ? "compose" : "vault_answer";
     const deep = body.mode === "deep";
     const matchCount: number = deep ? 18 : 8;
     // Deep mode is document-centric: it feeds the model whole sections (capped),
@@ -288,16 +291,21 @@ Deno.serve(async (req: Request) => {
     // Hybrid: vector search over chunks PLUS keyword (FTS) search over documents,
     // so exact terms (product names, codes) are caught even when vectors miss.
     const perEmbed = Math.max(deep ? 8 : 4, Math.ceil(matchCount / Math.max(1, embeddings.length)));
-    const [dnaRes, kbRes, sopRes, vaultResults, ftsResults] = await Promise.all([
+    const [dnaRes, kbRes, sopRes, sopAccessRes, vaultResults, ftsResults] = await Promise.all([
       admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
       admin.from("kb_entries").select("question, answer")
         .eq("client_id", clientId)
         .textSearch("fts", ftsQuery, { type: "websearch", config: "english" })
         .limit(3),
-      admin.from("sops").select("title, body")
-        .eq("client_id", clientId)
+      // The service-role client bypasses RLS, so include visibility metadata and
+      // enforce the viewer's actual access below before any SOP body reaches AI.
+      // Include the public global library as the SOP screen does.
+      admin.from("sops").select("id, client_id, title, body, visibility, deleted_at")
+        .is("deleted_at", null)
+        .or(`client_id.eq.${clientId},client_id.is.null`)
         .textSearch("fts", ftsQuery, { type: "websearch", config: "english" })
-        .limit(2),
+        .limit(25),
+      admin.from("sop_access").select("sop_id").eq("user_id", authUser.id),
       Promise.all(embeddings.map((e) =>
         admin.rpc("match_vault_chunks", { p_client_id: clientId, p_query_embedding: e, p_match_count: perEmbed }),
       )),
@@ -305,6 +313,7 @@ Deno.serve(async (req: Request) => {
         admin.from("vault_items").select("id, title, ai_summary, raw_content")
           .eq("client_id", clientId)
           .eq("status", "ready")
+          .eq("evidence_role", "factual")
           .textSearch("fts", q, { type: "websearch", config: "english" })
           .limit(deep ? 10 : 8),
       )),
@@ -318,6 +327,7 @@ Deno.serve(async (req: Request) => {
       const lines: string[] = [];
       const add = (label: string, v: unknown) => { if (v && String(v).trim()) lines.push(`${label}: ${String(v).trim()}`); };
       add("Company name", dna.company_name); add("Founders", dna.founders); add("Location", dna.location);
+      add("Company description", dna.company_description); add("Address", dna.address);
       add("Phone", dna.phone); add("Email", dna.email); add("Website", dna.website);
       add("Services", dna.services); add("Values", dna.values);
       add("Target audience", dna.target_demographic); add("Client type", dna.client_type);
@@ -331,19 +341,13 @@ Deno.serve(async (req: Request) => {
     }
 
     // 1b. Brain memory — learned, authoritative preferences & rules to respect.
-    // Scope-filter to lessons relevant to THIS surface (Ask-the-Vault): global
-    // lessons (no scope) plus those whose surfaces include "vault_answer" or
-    // "all". Mirrors lib/brain/context.ts so a 👎 on, say, content generation
-    // doesn't wrongly reshape vault answers, and vault feedback conditions them.
+    // Scope-filter to lessons relevant to THIS surface. The shared helper also
+    // maps legacy "ask" scopes to the canonical "vault_answer" vocabulary.
     const { data: memRows } = await admin.from("brain_memory")
       .select("kind, content, scope").eq("client_id", clientId).eq("active", true)
       .order("pinned", { ascending: false }).limit(60);
     const mem = ((memRows ?? []) as { kind: string; content: string; scope: { surfaces?: string[] } | null }[])
-      .filter((m) => {
-        const s = m.scope?.surfaces;
-        if (!s || s.length === 0) return true;
-        return s.includes("vault_answer") || s.includes("all");
-      })
+      .filter((m) => memoryAppliesToSurfaces(m.scope, [memorySurface]))
       .slice(0, 20);
     if (mem.length) {
       const memLabel: Record<string, string> = { preference: "Prefer", anti_pattern: "Avoid", rule: "Rule" };
@@ -368,7 +372,9 @@ Deno.serve(async (req: Request) => {
       const itemIds = [...new Set(matches.map((c) => c.item_id))];
       // Deep mode also pulls raw_content as a fallback for un-chunked docs.
       const { data: itemRows } = await admin
-        .from("vault_items").select(deep ? "id, title, raw_content" : "id, title").in("id", itemIds);
+        .from("vault_items").select(deep ? "id, title, raw_content" : "id, title")
+        .in("id", itemIds)
+        .eq("evidence_role", "factual");
       const rowById = new Map<string, { title: string; raw_content?: string | null }>();
       // `as unknown as` because the ternary .select() above defeats supabase-js's
       // typed-query inference (it widens to a ParserError type), so a direct cast
@@ -476,7 +482,22 @@ Deno.serve(async (req: Request) => {
 
     // 4. SOPs — keyword matches.
     if (!sopRes.error) {
-      for (const s of (sopRes.data ?? []) as { title: string; body: string }[]) {
+      type SopSearchRow = {
+        id: string;
+        client_id: string | null;
+        title: string;
+        body: string;
+        visibility: string;
+        deleted_at: string | null;
+      };
+      const grants = ((sopAccessRes.data ?? []) as { sop_id: string }[]).map((r) => r.sop_id);
+      const visibleSops = visibleSopsForUser((sopRes.data ?? []) as SopSearchRow[], {
+        clientId,
+        role,
+        grantedSopIds: grants,
+        limit: 2,
+      });
+      for (const s of visibleSops) {
         const text = (s.body ?? "").slice(0, 1500);
         blocks.push({ kind: "sop", title: s.title, text, score: lexicalScore(question, `${s.title} ${text}`) });
       }

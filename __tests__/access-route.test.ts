@@ -63,6 +63,7 @@ const admin = (clientId: string): ApiUser => ({ id: "u-ca", role: "client_admin"
 const jsonReq = (body: unknown) => ({ json: async () => body }) as never;
 const getReq = (params: Record<string, string>) =>
   ({ nextUrl: { searchParams: new URLSearchParams(params) } }) as never;
+const routeCtx = { params: Promise.resolve({}) };
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -70,7 +71,7 @@ describe("GET /api/access", () => {
   test("a VA cannot list another client's logins", async () => {
     asAuth(va(CLIENT_A));
     (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({}));
-    const res = await GET(getReq({ clientId: CLIENT_B }));
+    const res = await GET(getReq({ clientId: CLIENT_B }), routeCtx);
     expect(res.status).toBe(403);
   });
 
@@ -80,7 +81,7 @@ describe("GET /api/access", () => {
     (createAdminClient as jest.Mock).mockReturnValue(
       makeAdmin({ access_credentials: { data: [], error: null } }, calls),
     );
-    const res = await GET(getReq({}));
+    const res = await GET(getReq({}), routeCtx);
     expect(res.status).toBe(200);
     const selects = calls.filter((c) => c.op === "select").map((c) => String(c.payload));
     expect(selects.length).toBeGreaterThan(0);
@@ -92,14 +93,14 @@ describe("POST /api/access", () => {
   test("a VA cannot create a login (admin-only)", async () => {
     asAuth(va(CLIENT_A));
     (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({}));
-    const res = await POST(jsonReq({ clientId: CLIENT_A, site: "S", category: "C", password: "p" }));
+    const res = await POST(jsonReq({ clientId: CLIENT_A, site: "S", category: "C", password: "p" }), routeCtx);
     expect(res.status).toBe(403);
   });
 
   test("an admin cannot create a login for another client", async () => {
     asAuth(admin(CLIENT_A));
     (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({}));
-    const res = await POST(jsonReq({ clientId: CLIENT_B, site: "S", category: "C", password: "p" }));
+    const res = await POST(jsonReq({ clientId: CLIENT_B, site: "S", category: "C", password: "p" }), routeCtx);
     expect(res.status).toBe(403);
   });
 
@@ -112,7 +113,7 @@ describe("POST /api/access", () => {
     const res = await POST(jsonReq({
       clientId: CLIENT_A, site: "WordPress", category: "Website",
       username: "admin", password: "letmein123",
-    }));
+    }), routeCtx);
     expect(res.status).toBe(201);
     const insert = calls.find((c) => c.op === "insert")?.payload as Record<string, string>;
     expect(insert.password_enc).toBeDefined();
@@ -127,14 +128,14 @@ describe("PATCH / DELETE /api/access", () => {
     (createAdminClient as jest.Mock).mockReturnValue(
       makeAdmin({ access_credentials: { data: { id: CRED, client_id: CLIENT_B }, error: null } }),
     );
-    const res = await PATCH(jsonReq({ id: CRED, site: "X" }));
+    const res = await PATCH(jsonReq({ id: CRED, site: "X" }), routeCtx);
     expect(res.status).toBe(403);
   });
 
   test("a VA cannot delete a login (admin-only)", async () => {
     asAuth(va(CLIENT_A));
     (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({}));
-    const res = await DELETE(jsonReq({ id: CRED }));
+    const res = await DELETE(jsonReq({ id: CRED }), routeCtx);
     expect(res.status).toBe(403);
   });
 });
@@ -146,7 +147,7 @@ describe("POST /api/access/reveal", () => {
     (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({
       access_credentials: { data: { id: CRED, client_id: CLIENT_B, password_enc: encryptSecret("nope") }, error: null },
     }, calls));
-    const res = await REVEAL(jsonReq({ id: CRED }));
+    const res = await REVEAL(jsonReq({ id: CRED }), routeCtx);
     expect(res.status).toBe(403);
     expect(calls.some((c) => c.table === "access_credential_reveals" && c.op === "insert")).toBe(false);
   });
@@ -160,7 +161,7 @@ describe("POST /api/access/reveal", () => {
     }));
     let throttled = 0;
     for (let i = 0; i < 40; i++) {
-      const res = await REVEAL(jsonReq({ id: CRED }));
+      const res = await REVEAL(jsonReq({ id: CRED }), routeCtx);
       if (res.status === 429) throttled++;
     }
     expect(throttled).toBe(10); // 30 allowed per window, the next 10 rejected
@@ -173,12 +174,31 @@ describe("POST /api/access/reveal", () => {
       access_credentials: { data: { id: CRED, client_id: CLIENT_A, password_enc: encryptSecret("s3cret") }, error: null },
       access_credential_reveals: { data: null, error: null },
     }, calls));
-    const res = await REVEAL(jsonReq({ id: CRED }));
+    const res = await REVEAL(jsonReq({ id: CRED }), routeCtx);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ password: "s3cret" });
     const audit = calls.find((c) => c.table === "access_credential_reveals" && c.op === "insert")?.payload as Record<string, string>;
     expect(audit).toBeDefined();
     expect(audit.credential_id).toBe(CRED);
     expect(audit.user_id).toBe("u-va");
+  });
+
+  test("a password is not disclosed when the audit insert fails", async () => {
+    asAuth({ id: "u-audit-fail", role: "va", client_id: CLIENT_A });
+    (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({
+      access_credentials: {
+        data: { id: CRED, client_id: CLIENT_A, password_enc: encryptSecret("must-stay-secret") },
+        error: null,
+      },
+      access_credential_reveals: {
+        data: null,
+        error: { code: "42501", message: "audit table unavailable" },
+      },
+    }));
+
+    const res = await REVEAL(jsonReq({ id: CRED }), routeCtx);
+    expect(res.status).toBe(503);
+    const payload = await res.json();
+    expect(payload).not.toHaveProperty("password");
   });
 });

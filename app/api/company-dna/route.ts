@@ -4,12 +4,34 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { CONTENT_HARD_RULE_TYPES } from "@/supabase/functions/_shared/content-style";
+
+const hardRuleSchema = z.object({
+  id: z.string().min(1).max(100),
+  type: z.enum(CONTENT_HARD_RULE_TYPES),
+  value: z.string().trim().min(1).max(300).optional(),
+  limit: z.number().int().min(0).max(50000).optional(),
+  channels: z.array(z.enum([
+    "email", "x", "linkedin", "facebook", "instagram",
+    "newsletter", "blog", "message", "other",
+  ])).max(12).optional().default([]),
+}).superRefine((rule, ctx) => {
+  const numeric = ["min_words", "max_words", "max_emojis"].includes(rule.type);
+  if (numeric && rule.limit === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["limit"], message: "A numeric limit is required." });
+  }
+  if (!numeric && !rule.value) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["value"], message: "A phrase is required." });
+  }
+});
 
 const bodySchema = z.object({
   client_id:          z.string().uuid(),
   company_name:       z.string().max(200).optional().nullable(),
+  company_description:z.string().max(4000).optional().nullable(),
   founders:           z.string().max(500).optional().nullable(),
   location:           z.string().max(200).optional().nullable(),
+  address:            z.string().max(1000).optional().nullable(),
   phone:              z.string().max(50).optional().nullable(),
   email:              z.string().max(200).optional().nullable(),
   website:            z.string().max(300).optional().nullable(),
@@ -27,6 +49,19 @@ const bodySchema = z.object({
   website_content:    z.string().max(20000).optional().nullable(),
   content_style:      z.string().max(4000).optional().nullable(),
   internal_rules:     z.string().max(4000).optional().nullable(),
+  // Deliberate content-style authority (migration 087). These rules are applied
+  // before any per-draft tone request.
+  preferred_terms:    z.string().max(4000).optional().nullable(),
+  prohibited_terms:   z.string().max(4000).optional().nullable(),
+  emoji_policy:       z.string().max(2000).optional().nullable(),
+  humour_policy:      z.string().max(2000).optional().nullable(),
+  spelling_locale:    z.string().max(200).optional().nullable(),
+  default_cta_style:  z.string().max(2000).optional().nullable(),
+  approved_claims:    z.string().max(6000).optional().nullable(),
+  prohibited_claims:  z.string().max(6000).optional().nullable(),
+  channel_styles:     z.record(z.string(), z.string().max(4000)).optional(),
+  social_links:       z.record(z.string(), z.string().url().max(2000)).optional(),
+  hard_rules:         z.array(hardRuleSchema).max(100).optional(),
   // extra is a NOT NULL JSONB column — must be present on first INSERT
   extra:              z.record(z.string(), z.unknown()).optional().default({}),
 });
