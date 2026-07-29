@@ -103,4 +103,5 @@ export const MIGRATIONS = [
   "095_competitor_source_foundation.sql",
   "096_competitor_ingestion_reliability.sql",
   "097_competitor_discovery_budget.sql",
+  "098_admin_company_profile_sources.sql",
 ] as const;

@@ -220,3 +220,40 @@ describe("service-role API tenant guards", () => {
     expect(unguarded).toEqual([]);
   });
 });
+
+describe("admin company profile and LinkedIn style sources", () => {
+  const migration = read("db/migrations/098_admin_company_profile_sources.sql");
+  const clientRoute = read("app/api/admin/clients/[id]/route.ts");
+  const linkedInRoute = read("app/api/vault/linkedin/route.ts");
+  const retrieval = read("supabase/functions/_shared/content-vault-retrieval.ts");
+  const ask = read("supabase/functions/vault-ask/index.ts");
+
+  test("admin company identity is stored in Company DNA and one curated Vault source", () => {
+    expect(migration).toContain("ADD COLUMN IF NOT EXISTS company_description TEXT");
+    expect(migration).toContain("ADD COLUMN IF NOT EXISTS social_links JSONB");
+    expect(migration).toContain("CREATE OR REPLACE FUNCTION sync_admin_company_profile");
+    expect(migration).toContain("ON CONFLICT (client_id, origin_key) DO UPDATE");
+    expect(migration).toContain("DELETE FROM vault_chunks WHERE item_id = v_item_id");
+    expect(migration).toContain("FROM PUBLIC, anon, authenticated");
+    expect(migration).toContain("TO service_role");
+    expect(clientRoute).toContain('db.rpc("sync_admin_company_profile"');
+    expect(clientRoute).toContain("scheduleVaultProcess(profileVaultItemId");
+  });
+
+  test("LinkedIn collection is tenant-guarded and stores only style-example records", () => {
+    expect(linkedInRoute).toContain("assertClientAccess(user, parsed.data.clientId)");
+    expect(linkedInRoute).toContain('host !== "linkedin.com"');
+    expect(linkedInRoute).toContain('path.startsWith(`/posts/${companySlug}_`)');
+    expect(linkedInRoute).toContain('evidence_role: "style_example"');
+    expect(linkedInRoute).toContain('tags: ["linkedin", "style_example", "company_owned", "social_post"]');
+    expect(linkedInRoute).toContain('onConflict: "client_id,origin_key"');
+  });
+
+  test("style examples influence channel style but cannot become factual evidence", () => {
+    expect(migration).toContain("AND vi.evidence_role = 'factual'");
+    expect(retrieval).toContain('.eq("evidence_role", "factual")');
+    expect(retrieval).toContain('.eq("evidence_role", "style_example")');
+    expect(retrieval).toContain("Never treat them as factual evidence");
+    expect(ask).toContain('.eq("evidence_role", "factual")');
+  });
+});

@@ -272,7 +272,7 @@ export async function handleContentGenerateRequest(
 
     const { data: dna, error: dnaError } = await admin
       .from("company_dna")
-      .select("company_name,values,services,target_demographic,location,business_goals,marketing_goals,team,tools_used,content_style,brand_voice,internal_rules,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules,extra,updated_at")
+      .select("company_name,company_description,values,services,target_demographic,location,address,website,social_links,business_goals,marketing_goals,team,tools_used,content_style,brand_voice,internal_rules,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules,extra,updated_at")
       .eq("client_id", clientId)
       .maybeSingle();
     if (dnaError) {
@@ -295,6 +295,7 @@ export async function handleContentGenerateRequest(
         clientId,
         query: `${title}. ${objective}. ${String(contentBrief.additionalGuidance ?? "")}`,
         relevantCategories: relevantCats,
+        styleChannel: contentType,
       });
     } catch (error) {
       console.error("content-generate: Vault query failed:", error);
@@ -312,6 +313,9 @@ export async function handleContentGenerateRequest(
     }
     if (d.extra && typeof d.extra === "object" && !Array.isArray(d.extra)) {
       context += `additional company details: ${JSON.stringify(d.extra).slice(0, 4000)}\n`;
+    }
+    if (d.social_links && typeof d.social_links === "object" && !Array.isArray(d.social_links)) {
+      context += `official social channels: ${JSON.stringify(d.social_links).slice(0, 2000)}\n`;
     }
     context += "\n";
     if (retrieval.context) context += `${retrieval.context}\n`;
@@ -389,13 +393,16 @@ export async function handleContentGenerateRequest(
       complete,
       baseTemplate,
     });
-    const styleSnapshot = createContentStyleSnapshot(
+    const styleSnapshot = {
+      ...createContentStyleSnapshot(
       style,
       contentType,
       typeof (dna as Record<string, unknown>).updated_at === "string"
         ? (dna as Record<string, unknown>).updated_at as string
         : null,
-    );
+      ),
+      exampleSources: retrieval.styleSources,
+    };
     if (qualityWarnings.length) {
       return new Response(JSON.stringify({
         error: "The generated draft did not pass the content quality gate. No draft was created.",
@@ -451,6 +458,7 @@ export async function handleContentGenerateRequest(
       styleSnapshot,
       sources: verifiedSources,
       contextSources: retrieval.sources,
+      styleSources: retrieval.styleSources,
       contentType,
       warnings: qualityWarnings,
     }), {

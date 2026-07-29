@@ -28,8 +28,10 @@ const hardRuleSchema = z.object({
 const bodySchema = z.object({
   client_id:          z.string().uuid(),
   company_name:       z.string().max(200).optional().nullable(),
+  company_description:z.string().max(4000).optional().nullable(),
   founders:           z.string().max(500).optional().nullable(),
   location:           z.string().max(200).optional().nullable(),
+  address:            z.string().max(1000).optional().nullable(),
   phone:              z.string().max(50).optional().nullable(),
   email:              z.string().max(200).optional().nullable(),
   website:            z.string().max(300).optional().nullable(),
@@ -58,6 +60,7 @@ const bodySchema = z.object({
   approved_claims:    z.string().max(6000).optional().nullable(),
   prohibited_claims:  z.string().max(6000).optional().nullable(),
   channel_styles:     z.record(z.string(), z.string().max(4000)).optional(),
+  social_links:       z.record(z.string(), z.string().url().max(2000)).optional(),
   hard_rules:         z.array(hardRuleSchema).max(100).optional(),
   // extra is a NOT NULL JSONB column — must be present on first INSERT
   extra:              z.record(z.string(), z.unknown()).optional().default({}),

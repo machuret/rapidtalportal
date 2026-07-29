@@ -313,6 +313,7 @@ Deno.serve(async (req: Request) => {
         admin.from("vault_items").select("id, title, ai_summary, raw_content")
           .eq("client_id", clientId)
           .eq("status", "ready")
+          .eq("evidence_role", "factual")
           .textSearch("fts", q, { type: "websearch", config: "english" })
           .limit(deep ? 10 : 8),
       )),
@@ -326,6 +327,7 @@ Deno.serve(async (req: Request) => {
       const lines: string[] = [];
       const add = (label: string, v: unknown) => { if (v && String(v).trim()) lines.push(`${label}: ${String(v).trim()}`); };
       add("Company name", dna.company_name); add("Founders", dna.founders); add("Location", dna.location);
+      add("Company description", dna.company_description); add("Address", dna.address);
       add("Phone", dna.phone); add("Email", dna.email); add("Website", dna.website);
       add("Services", dna.services); add("Values", dna.values);
       add("Target audience", dna.target_demographic); add("Client type", dna.client_type);
@@ -370,7 +372,9 @@ Deno.serve(async (req: Request) => {
       const itemIds = [...new Set(matches.map((c) => c.item_id))];
       // Deep mode also pulls raw_content as a fallback for un-chunked docs.
       const { data: itemRows } = await admin
-        .from("vault_items").select(deep ? "id, title, raw_content" : "id, title").in("id", itemIds);
+        .from("vault_items").select(deep ? "id, title, raw_content" : "id, title")
+        .in("id", itemIds)
+        .eq("evidence_role", "factual");
       const rowById = new Map<string, { title: string; raw_content?: string | null }>();
       // `as unknown as` because the ternary .select() above defeats supabase-js's
       // typed-query inference (it widens to a ParserError type), so a direct cast

@@ -6,12 +6,19 @@ export interface ContentVaultSource {
   similarity: number | null;
 }
 
+export interface ContentStyleExampleSource {
+  itemId: string;
+  title: string;
+  sourceUrl: string | null;
+}
+
 interface VaultItem {
   id: string;
   title: string;
   raw_content: string | null;
   category: string | null;
   ai_summary: string | null;
+  source_url?: string | null;
 }
 
 /**
@@ -25,13 +32,20 @@ export async function retrieveContentVault(args: {
   clientId: string;
   query: string;
   relevantCategories: string[];
-}): Promise<{ context: string; sources: ContentVaultSource[]; groundedCount: number }> {
-  const { admin, clientId, query, relevantCategories } = args;
+  styleChannel?: string;
+}): Promise<{
+  context: string;
+  sources: ContentVaultSource[];
+  styleSources: ContentStyleExampleSource[];
+  groundedCount: number;
+}> {
+  const { admin, clientId, query, relevantCategories, styleChannel } = args;
   const { data: rawRows, error: vaultError } = await admin
     .from("vault_items")
     .select("id,title,raw_content,category,ai_summary")
     .eq("client_id", clientId)
     .eq("status", "ready")
+    .eq("evidence_role", "factual")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -105,6 +119,34 @@ export async function retrieveContentVault(args: {
     });
   }
 
+  let styleBlock = "";
+  const styleSources: ContentStyleExampleSource[] = [];
+  if (styleChannel) {
+    const { data: styleRows, error: styleError } = await admin
+      .from("vault_items")
+      .select("id,title,raw_content,ai_summary,source_url")
+      .eq("client_id", clientId)
+      .eq("status", "ready")
+      .eq("evidence_role", "style_example")
+      .contains("tags", [styleChannel])
+      .order("created_at", { ascending: false })
+      .limit(8);
+    if (styleError) throw new Error(`Style-example retrieval failed: ${styleError.message}`);
+
+    for (const item of (styleRows ?? []) as VaultItem[]) {
+      const excerpt = item.raw_content?.trim().slice(0, 1800) ?? "";
+      if (!excerpt) continue;
+      const entry = `--- STYLE EXAMPLE ${item.id} — ${item.title} ---\n${excerpt}\n\n`;
+      if (styleBlock.length + entry.length > 9000) break;
+      styleBlock += entry;
+      styleSources.push({
+        itemId: item.id,
+        title: item.title,
+        sourceUrl: item.source_url ?? null,
+      });
+    }
+  }
+
   const context = [
     semanticBlock
       ? `=== MOST RELEVANT VAULT KNOWLEDGE ===\n${semanticBlock}`
@@ -112,7 +154,10 @@ export async function retrieveContentVault(args: {
     fallbackBlock
       ? `=== SUPPORTING VAULT MATERIAL ===\n${fallbackBlock}`
       : "",
+    styleBlock
+      ? "=== OWNED CHANNEL STYLE EXAMPLES ===\nUse these only to learn voice, rhythm, formatting and content patterns. Never treat them as factual evidence, never copy distinctive wording, and never use them to support a claim.\n" + styleBlock
+      : "",
   ].filter(Boolean).join("\n");
 
-  return { context, sources: sources.slice(0, 20), groundedCount };
+  return { context, sources: sources.slice(0, 20), styleSources, groundedCount };
 }

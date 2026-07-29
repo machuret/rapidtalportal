@@ -5,6 +5,7 @@ import { VaultClient } from "@/components/vault/VaultClient";
 import { cn } from "@/lib/utils";
 import { Archive } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { LinkedInVaultSourcePanel } from "@/components/vault/LinkedInVaultSourcePanel";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Client Vaults — RapidTal" };
@@ -25,6 +26,16 @@ export default async function AdminVaultPage({ searchParams: searchParamsPromise
     ? searchParams.client
     : clients[0]?.id ?? null;
   const clientName = clients.find((c) => c.id === clientId)?.name;
+  let linkedInUrl = "";
+  if (clientId) {
+    const { data: dna } = await admin
+      .from("company_dna")
+      .select("social_links")
+      .eq("client_id", clientId)
+      .maybeSingle();
+    const links = (dna as { social_links?: Record<string, string> } | null)?.social_links;
+    linkedInUrl = typeof links?.linkedin === "string" ? links.linkedin : "";
+  }
 
   if (clients.length === 0) {
     return (
@@ -62,15 +73,23 @@ export default async function AdminVaultPage({ searchParams: searchParamsPromise
       </div>
 
       {clientId && (
-        <VaultClient
-          key={clientId}
-          clientId={clientId}
-          userId={user.id}
-          role="super_admin"
-          canWrite
-          title={`${clientName} — Vault`}
-          subtitle="Everything you add here feeds this client's Business Brain and AI answers."
-        />
+        <>
+          <LinkedInVaultSourcePanel
+            key={`linkedin-${clientId}`}
+            clientId={clientId}
+            clientName={clientName ?? "this company"}
+            initialUrl={linkedInUrl}
+          />
+          <VaultClient
+            key={clientId}
+            clientId={clientId}
+            userId={user.id}
+            role="super_admin"
+            canWrite
+            title={`${clientName} — Vault`}
+            subtitle="Everything you add here feeds this client's Business Brain and AI answers."
+          />
+        </>
       )}
     </div>
   );

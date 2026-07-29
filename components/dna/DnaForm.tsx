@@ -29,8 +29,10 @@ const PCT_WIDTH = ["w-0", "w-[10%]", "w-[20%]", "w-[30%]", "w-[40%]", "w-[50%]",
 
 const fields: { key: keyof DbCompanyDna; label: string; multiline?: boolean; hint?: string }[] = [
   { key: "company_name", label: "Company Name" },
+  { key: "company_description", label: "Company Description", multiline: true },
   { key: "founders", label: "Founders" },
   { key: "location", label: "Location" },
+  { key: "address", label: "Street Address" },
   { key: "phone", label: "Phone" },
   { key: "email", label: "Email" },
   { key: "website", label: "Website" },
@@ -56,6 +58,14 @@ const fields: { key: keyof DbCompanyDna; label: string; multiline?: boolean; hin
   { key: "prohibited_claims", label: "Prohibited Claims", multiline: true, hint: "Enter one complete claim per line. These are checked before approval." },
   { key: "sign_off", label: "Default Sign-off" },
 ];
+
+const SOCIAL_LINK_FIELDS = [
+  { key: "linkedin", label: "LinkedIn" },
+  { key: "facebook", label: "Facebook" },
+  { key: "instagram", label: "Instagram" },
+  { key: "x", label: "X / Twitter" },
+  { key: "youtube", label: "YouTube" },
+] as const;
 
 const CHANNEL_STYLE_FIELDS = [
   { key: "x", label: "X / Twitter", hint: "e.g. concise and specific, one idea, no hashtag stuffing, within 280 characters" },
@@ -87,6 +97,16 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
       ...f,
       channel_styles: {
         ...((f.channel_styles ?? {}) as Record<string, string>),
+        [channel]: value,
+      },
+    }));
+  }
+
+  function setSocialLink(channel: string, value: string) {
+    setForm((f) => ({
+      ...f,
+      social_links: {
+        ...((f.social_links ?? {}) as Record<string, string>),
         [channel]: value,
       },
     }));
@@ -206,6 +226,22 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
               </div>
             );
           })}
+        </div>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4">
+          <p className="text-xs font-medium text-zinc-500 mb-3">Owned Social Channels</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {SOCIAL_LINK_FIELDS.map(({ key, label }) => {
+              const value = form.social_links?.[key] ?? "";
+              return (
+                <div key={key}>
+                  <p className="text-xs text-zinc-500 mb-1">{label}</p>
+                  <p className={`text-sm break-all ${value ? "text-zinc-200" : "text-zinc-600 italic"}`}>
+                    {value || "Not set"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
         </div>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4">
           <p className="text-xs font-medium text-zinc-500 mb-3">Channel Writing Styles</p>
@@ -333,6 +369,31 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
               "Extract"
             )}
           </Button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Globe className="w-4 h-4 text-sky-400" />
+          <h3 className="text-sm font-semibold text-white">Owned Social Channels</h3>
+        </div>
+        <p className="text-xs text-zinc-400 mb-4">
+          Official company profiles. Admins can collect public LinkedIn posts as channel-style examples from the Admin Vault.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {SOCIAL_LINK_FIELDS.map(({ key, label }) => (
+            <div key={key} className="flex flex-col gap-1.5">
+              <Label htmlFor={`social-link-${key}`}>{label}</Label>
+              <Input
+                id={`social-link-${key}`}
+                type="url"
+                value={form.social_links?.[key] ?? ""}
+                onChange={(e) => setSocialLink(key, e.target.value)}
+                placeholder={`https://${key === "x" ? "x.com" : `www.${key}.com`}/…`}
+                className="bg-zinc-900 border-zinc-700 text-sm"
+              />
+            </div>
+          ))}
         </div>
       </div>
 
