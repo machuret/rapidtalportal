@@ -3,7 +3,7 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ContentStudio } from "@/components/content/ContentStudio";
 import { PageIntro } from "@/components/layout/PageIntro";
-import type { ContentPiece, ContentTopic } from "@/types/content";
+import type { ContentPiece, ContentProject, ContentTopic } from "@/types/content";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Content — RapidTal" };
@@ -20,7 +20,13 @@ export default async function ContentPage() {
   // the client boundary before this server-side read.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any;
-  const [{ data: history }, { data: topics }, { data: brandStyle }, { data: styleAnalyses }] = await Promise.all([
+  const [
+    { data: history },
+    { data: topics },
+    { data: brandStyle },
+    { data: styleAnalyses },
+    { data: projects },
+  ] = await Promise.all([
     admin
       .from("content_pieces")
       .select("id, content_type, title, status, created_at")
@@ -42,6 +48,12 @@ export default async function ContentPage() {
       .select("id,channel,analysis,source_item_ids,analysed_at,approved_at")
       .eq("client_id", user.client_id)
       .eq("status", "approved"),
+    admin
+      .from("content_projects")
+      .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,created_at,updated_at")
+      .eq("client_id", user.client_id)
+      .order("updated_at", { ascending: false })
+      .limit(50),
   ]);
   const styleAnalysisProfiles = Object.fromEntries(
     ((styleAnalyses ?? []) as Array<{ channel: string }>).map((profile) => [profile.channel, profile]),
@@ -52,9 +64,9 @@ export default async function ContentPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">Content Creation</h1>
+      <h1 className="text-2xl font-bold mb-1">Content Studio</h1>
       <p className="text-zinc-400 text-sm mb-8">
-        AI-powered drafts grounded in your Vault and Company DNA.
+        Move from a grounded idea to an approved, channel-ready artifact in one workflow.
       </p>
       <PageIntro id="content" />
       <ContentStudio
@@ -67,6 +79,7 @@ export default async function ContentPage() {
         }}
         history={(history ?? []) as ContentPiece[]}
         topics={(topics ?? []) as ContentTopic[]}
+        projects={(projects ?? []) as unknown as ContentProject[]}
       />
     </div>
   );

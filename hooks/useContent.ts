@@ -36,6 +36,8 @@ interface GenerateContentInput {
   contentType: ContentType;
   title: string;
   brief: ContentBrief;
+  projectId?: string;
+  vaultSourceIds?: string[];
 }
 
 interface UpdatePieceStatusInput {

@@ -33,25 +33,38 @@ export async function retrieveContentVault(args: {
   query: string;
   relevantCategories: string[];
   styleChannel?: string;
+  /** When supplied, factual retrieval is restricted to this explicit selection. */
+  selectedSourceIds?: string[];
 }): Promise<{
   context: string;
   sources: ContentVaultSource[];
   styleSources: ContentStyleExampleSource[];
   groundedCount: number;
 }> {
-  const { admin, clientId, query, relevantCategories, styleChannel } = args;
-  const { data: rawRows, error: vaultError } = await admin
-    .from("vault_items")
-    .select("id,title,raw_content,category,ai_summary")
-    .eq("client_id", clientId)
-    .eq("status", "ready")
-    .eq("evidence_role", "factual")
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const { admin, clientId, query, relevantCategories, styleChannel, selectedSourceIds } = args;
+  let rawRows: VaultItem[] = [];
+  let vaultError: { message: string } | null = null;
+  if (!selectedSourceIds || selectedSourceIds.length > 0) {
+    let factualQuery = admin
+      .from("vault_items")
+      .select("id,title,raw_content,category,ai_summary")
+      .eq("client_id", clientId)
+      .eq("status", "ready")
+      .eq("evidence_role", "factual");
+    factualQuery = selectedSourceIds
+      ? factualQuery.in("id", selectedSourceIds)
+      : factualQuery.order("created_at", { ascending: false }).limit(100);
+    const result = await factualQuery;
+    rawRows = (result.data ?? []) as VaultItem[];
+    vaultError = result.error;
+  }
 
   if (vaultError) throw new Error(`Vault retrieval failed: ${vaultError.message}`);
 
-  const vaultItems = ((rawRows ?? []) as VaultItem[]).sort((a, b) => {
+  const selectedSet = selectedSourceIds ? new Set(selectedSourceIds) : null;
+  const vaultItems = rawRows
+    .filter((item) => !selectedSet || selectedSet.has(item.id))
+    .sort((a, b) => {
     const ai = relevantCategories.indexOf(a.category ?? "general");
     const bi = relevantCategories.indexOf(b.category ?? "general");
     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
@@ -77,7 +90,9 @@ export async function retrieveContentVault(args: {
     if (chunkError) throw chunkError;
 
     type Chunk = { item_id: string; content: string; similarity: number };
-    const rows = ((chunks ?? []) as Chunk[]).filter((chunk) => chunk.similarity > 0.25);
+    const rows = ((chunks ?? []) as Chunk[]).filter((chunk) =>
+      chunk.similarity > 0.25 && (!selectedSet || selectedSet.has(chunk.item_id))
+    );
     const titleById = new Map(vaultItems.map((item) => [item.id, item.title]));
     for (const chunk of rows) {
       const excerpt = chunk.content.slice(0, 700);

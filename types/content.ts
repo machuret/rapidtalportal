@@ -77,6 +77,8 @@ export interface ContentBrief {
   version: 1;
   objective: string;
   audience?: string | null;
+  angle?: string | null;
+  desiredFormat?: string | null;
   keyPoints?: string[];
   callToAction?: string | null;
   language?: string | null;
@@ -121,15 +123,87 @@ export interface ContentPiece {
   style_snapshot?: {
     channel?: string;
     summary?: string[];
+    hardRules?: Array<Record<string, unknown>>;
+    styleAnalysis?: {
+      id: string;
+      channel: string;
+      summary: string;
+      sourceItemIds: string[];
+      analysedAt: string | null;
+      approvedAt: string | null;
+    } | null;
+    exampleSources?: Array<{
+      itemId: string;
+      title: string;
+      sourceUrl: string | null;
+    }>;
     companyDnaUpdatedAt?: string | null;
     capturedAt?: string;
   } | null;
   content_brief?: ContentBrief | null;
   source_references?: ContentSourceReference[];
+  project_id?: string | null;
   parent_piece_id?: string | null;
   generation_kind?: "original" | "reply" | "rewrite" | "duplicate" | "adaptation" | "manual";
   status: ContentStatus;
   created_at: string;
+}
+
+export type ContentProjectStep =
+  | "idea"
+  | "brief"
+  | "evidence"
+  | "generate"
+  | "edit"
+  | "validate"
+  | "approve"
+  | "complete";
+
+export type ContentProjectStatus =
+  | "active"
+  | "saved"
+  | "rejected"
+  | "approved"
+  | "archived";
+
+export interface ContentProjectIdea {
+  version: 1;
+  origin: "company_topic" | "competitor_intelligence" | "manual";
+  title: string;
+  channel: ContentType;
+  rationale: string;
+  differentiation: string;
+  evidenceSummary: string;
+  topicId?: string | null;
+  marketIntelligence?: ContentMarketIntelligenceProvenance | null;
+}
+
+export interface ContentProject {
+  id: string;
+  client_id: string;
+  title: string;
+  status: ContentProjectStatus;
+  current_step: ContentProjectStep;
+  idea_snapshot: ContentProjectIdea;
+  content_brief: ContentBrief | Record<string, never>;
+  vault_source_ids: string[];
+  vault_source_references: ContentSourceReference[];
+  competitor_signals: ContentMarketIntelligenceSource[];
+  style_snapshot: ContentPiece["style_snapshot"] & {
+    hardRules?: Array<Record<string, unknown>>;
+  };
+  current_piece_id: string | null;
+  current_piece?: ContentPiece | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContentEvidenceOption {
+  id: string;
+  title: string;
+  excerpt: string;
+  category: string;
+  sourceUrl: string | null;
 }
 
 export interface AiSuggestion {

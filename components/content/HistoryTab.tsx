@@ -45,6 +45,9 @@ interface HistoryTabProps {
   clientId: string;
   canApprove: boolean;
   onHistoryUpdate: Dispatch<SetStateAction<ContentPiece[]>>;
+  initialSelectedId?: string | null;
+  onBackToWorkflow?: () => void;
+  onPieceStatusChanged?: (piece: ContentPieceFull) => void;
 }
 
 /* ── List item ──────────────────────────────────────────────────── */
@@ -428,6 +431,25 @@ function PieceDetail({
               <li key={rule} className="text-xs text-zinc-400">• {rule}</li>
             ))}
           </ul>
+          {piece.style_snapshot.styleAnalysis && (
+            <p className="mt-2 text-xs text-purple-200/80">
+              Approved {piece.style_snapshot.styleAnalysis.channel} style profile:{" "}
+              {piece.style_snapshot.styleAnalysis.summary}
+            </p>
+          )}
+          {piece.style_snapshot.exampleSources && piece.style_snapshot.exampleSources.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {piece.style_snapshot.exampleSources.map((source) => (
+                <span
+                  key={source.itemId}
+                  className="rounded-full border border-purple-500/20 px-2.5 py-1 text-xs text-purple-100"
+                  title="Owned example used for style only"
+                >
+                  Style: {source.title}
+                </span>
+              ))}
+            </div>
+          )}
           {piece.style_snapshot.capturedAt && (
             <p className="text-xs text-zinc-600 mt-2">
               Captured <LocalTime value={piece.style_snapshot.capturedAt} />
@@ -574,8 +596,11 @@ export const HistoryTab = memo(function HistoryTab({
   clientId,
   canApprove,
   onHistoryUpdate,
+  initialSelectedId = null,
+  onBackToWorkflow,
+  onPieceStatusChanged,
 }: HistoryTabProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [selectedPiece, setSelectedPiece] = useState<ContentPieceFull | null>(null);
   const [search, setSearch] = useState("");
 
@@ -594,9 +619,13 @@ export const HistoryTab = memo(function HistoryTab({
   }, []);
 
   const handleBack = useCallback(() => {
+    if (onBackToWorkflow) {
+      onBackToWorkflow();
+      return;
+    }
     setSelectedId(null);
     setSelectedPiece(null);
-  }, []);
+  }, [onBackToWorkflow]);
 
   const handleStatusChanged = useCallback(
     (id: string, status: ContentStatus) => {
@@ -605,9 +634,14 @@ export const HistoryTab = memo(function HistoryTab({
         prev.map((p) => (p.id === id ? { ...p, status } : p))
       );
       // Update the detail view
-      setSelectedPiece((prev) => (prev ? { ...prev, status } : prev));
+      setSelectedPiece((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, status };
+        onPieceStatusChanged?.(next);
+        return next;
+      });
     },
-    [onHistoryUpdate]
+    [onHistoryUpdate, onPieceStatusChanged]
   );
 
   // Detail view

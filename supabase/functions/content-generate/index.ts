@@ -271,6 +271,10 @@ export async function handleContentGenerateRequest(
     const contentType = requestedContentType === "social" ? "linkedin" : requestedContentType;
     const persist = body.persist !== false;
     const sourceContext = typeof body.sourceContext === "string" ? body.sourceContext : "";
+    const projectId = typeof body.projectId === "string" ? body.projectId : null;
+    const selectedVaultSourceIds = Array.isArray(body.vaultSourceIds)
+      ? [...new Set(body.vaultSourceIds.filter((id: unknown): id is string => typeof id === "string"))]
+      : undefined;
     const requestedGenerationKind = body.generationKind;
     const parentPieceId = typeof body.parentPieceId === "string" ? body.parentPieceId : null;
     const rawBrief = body.brief;
@@ -318,7 +322,8 @@ export async function handleContentGenerateRequest(
     if (
       title.length > 300 ||
       JSON.stringify(contentBrief).length > 48000 ||
-      sourceContext.length > 50000
+      sourceContext.length > 50000 ||
+      (selectedVaultSourceIds?.length ?? 0) > 20
     ) {
       return new Response(JSON.stringify({ error: "The content request is too long." }), {
         status: 422,
@@ -352,6 +357,52 @@ export async function handleContentGenerateRequest(
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    if (projectId) {
+      if (
+        !persist ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(projectId) ||
+        !selectedVaultSourceIds ||
+        selectedVaultSourceIds.some((id) =>
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(id)
+        )
+      ) {
+        return new Response(JSON.stringify({ error: "Invalid connected content project request." }), {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: project, error: projectError } = await admin
+        .from("content_projects")
+        .select("id,status,content_brief,vault_source_ids")
+        .eq("id", projectId)
+        .eq("client_id", clientId)
+        .maybeSingle();
+      if (projectError) {
+        return new Response(JSON.stringify({ error: "Content project is temporarily unavailable." }), {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!project) {
+        return new Response(JSON.stringify({ error: "Content project not found." }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!["active", "saved"].includes(project.status)) {
+        return new Response(JSON.stringify({ error: "This content project cannot generate a new draft." }), {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!sameStringSet(project.vault_source_ids ?? [], selectedVaultSourceIds)) {
+        return new Response(JSON.stringify({ error: "The selected Vault evidence changed. Reload the project." }), {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const marketIntelligenceError = await validateMarketIntelligence(
@@ -463,6 +514,7 @@ export async function handleContentGenerateRequest(
         query: `${title}. ${objective}. ${String(contentBrief.additionalGuidance ?? "")}`,
         relevantCategories: relevantCats,
         styleChannel: contentType,
+        selectedSourceIds: projectId ? selectedVaultSourceIds : undefined,
       });
     } catch (error) {
       console.error("content-generate: Vault query failed:", error);
@@ -603,24 +655,39 @@ export async function handleContentGenerateRequest(
     let pieceId: string | null = null;
     let persistedPiece: Record<string, unknown> | null = null;
     if (persist) {
-      const { data: piece, error: dbError } = await admin
-        .from("content_pieces")
-        .insert({
-          client_id: clientId,
-          content_type: contentType,
-          title,
-          brief: objective,
-          content_brief: contentBrief,
-          source_references: verifiedSources,
-          body: finalBody,
-          status: "draft",
-          created_by: authUser.id,
-          style_snapshot: styleSnapshot,
-          generation_kind: generationKind,
-          parent_piece_id: generationKind === "adaptation" ? parentPieceId : null,
-        })
-        .select("id,content_type,title,status,generation_kind,parent_piece_id,created_at,updated_at")
-        .single();
+      const persistence = projectId
+        ? await admin.rpc("create_content_project_draft", {
+            p_client_id: clientId,
+            p_project_id: projectId,
+            p_actor_id: authUser.id,
+            p_content_type: contentType,
+            p_title: title,
+            p_body: finalBody,
+            p_content_brief: contentBrief,
+            p_source_references: verifiedSources,
+            p_style_snapshot: styleSnapshot,
+            p_generation_kind: generationKind,
+            p_parent_piece_id: generationKind === "adaptation" ? parentPieceId : null,
+          }).single()
+        : await admin
+          .from("content_pieces")
+          .insert({
+            client_id: clientId,
+            content_type: contentType,
+            title,
+            brief: objective,
+            content_brief: contentBrief,
+            source_references: verifiedSources,
+            body: finalBody,
+            status: "draft",
+            created_by: authUser.id,
+            style_snapshot: styleSnapshot,
+            generation_kind: generationKind,
+            parent_piece_id: generationKind === "adaptation" ? parentPieceId : null,
+          })
+          .select("id,content_type,title,status,generation_kind,parent_piece_id,created_at,updated_at")
+          .single();
+      const { data: piece, error: dbError } = persistence;
 
       if (dbError) {
         return new Response(JSON.stringify({ error: dbError.message }), {

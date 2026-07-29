@@ -284,19 +284,11 @@ export function resolveContentStyle(
   };
 }
 
-export function contentStyleWarnings(body: string, style: ResolvedContentStyle): string[] {
-  const phraseWarnings = style.prohibitedPhrases
-    .filter((phrase) => containsPhrase(body, phrase))
-    .slice(0, 12)
-    .map((phrase) => `Review prohibited phrase: “${phrase}”`);
-  const emojiWarnings =
-    style.disallowEmoji && /\p{Extended_Pictographic}/u.test(body)
-      ? ["Remove emoji: Company DNA disallows them for this content."]
-      : [];
+export function contentHardRuleWarnings(body: string, style: ResolvedContentStyle): string[] {
   const trimmed = body.trim();
   const wordCount = trimmed ? trimmed.split(/\s+/u).length : 0;
   const emojiCount = body.match(/\p{Extended_Pictographic}/gu)?.length ?? 0;
-  const hardRuleWarnings = style.hardRules.flatMap((rule): string[] => {
+  return style.hardRules.flatMap((rule): string[] => {
     switch (rule.type) {
       case "prohibit_phrase":
         return rule.value && containsPhrase(body, rule.value)
@@ -327,7 +319,19 @@ export function contentStyleWarnings(body: string, style: ResolvedContentStyle):
           ? [`Content allows at most ${rule.limit} emoji; found ${emojiCount}.`]
           : [];
     }
-  });
+  }).slice(0, 20);
+}
+
+export function contentStyleWarnings(body: string, style: ResolvedContentStyle): string[] {
+  const phraseWarnings = style.prohibitedPhrases
+    .filter((phrase) => containsPhrase(body, phrase))
+    .slice(0, 12)
+    .map((phrase) => `Review prohibited phrase: “${phrase}”`);
+  const emojiWarnings =
+    style.disallowEmoji && /\p{Extended_Pictographic}/u.test(body)
+      ? ["Remove emoji: Company DNA disallows them for this content."]
+      : [];
+  const hardRuleWarnings = contentHardRuleWarnings(body, style);
   return [...phraseWarnings, ...emojiWarnings, ...hardRuleWarnings].slice(0, 20);
 }
 

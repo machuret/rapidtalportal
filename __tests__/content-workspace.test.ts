@@ -13,6 +13,7 @@ describe("unified content engine", () => {
   const quality = read("supabase/functions/_shared/content-quality.ts");
   const compose = read("components/vault/ComposeClient.tsx");
   const generateRoute = read("app/api/content/generate/route.ts");
+  const projectSchema = read("lib/content/project-schema.ts");
 
   test("Content and Compose use one engine and one Vault retrieval implementation", () => {
     expect(compose).toContain('"/content/generate"');
@@ -26,10 +27,12 @@ describe("unified content engine", () => {
 
   test("the public generation boundary requires a structured brief and one platform", () => {
     expect(generateRoute).toContain("structuredBriefSchema");
-    expect(generateRoute).toContain("objective:");
-    expect(generateRoute).toContain("audience:");
-    expect(generateRoute).toContain("keyPoints:");
-    expect(generateRoute).toContain("callToAction:");
+    expect(projectSchema).toContain("objective:");
+    expect(projectSchema).toContain("audience:");
+    expect(projectSchema).toContain("angle:");
+    expect(projectSchema).toContain("desiredFormat:");
+    expect(projectSchema).toContain("keyPoints:");
+    expect(projectSchema).toContain("callToAction:");
     expect(generateRoute).not.toContain('"instagram",\n    "social",');
     expect(quality).toContain("Do not write Facebook or Instagram variants.");
     expect(generator).not.toContain("Write three clearly labelled variants");
@@ -45,7 +48,7 @@ describe("unified content engine", () => {
   });
 
   test("market intelligence is tenant-verified, hidden from factual context, and persisted with the brief", () => {
-    expect(generateRoute).toContain("marketIntelligenceSchema");
+    expect(projectSchema).toContain("contentMarketIntelligenceSchema");
     expect(generator).toContain("JSON.stringify(contentBrief).length > 48000");
     expect(generator).toContain("validateMarketIntelligence");
     expect(generator).toContain('.eq("client_id", clientId)');
