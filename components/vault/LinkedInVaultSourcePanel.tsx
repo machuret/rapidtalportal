@@ -6,6 +6,7 @@ import { CheckCircle2, FlaskConical, Loader2, Share2, ShieldCheck, XCircle } fro
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { STYLE_SOURCES_UPDATED_EVENT } from "@/lib/content/style-analysis";
 import { vaultListKeys } from "@/hooks/useVaultList";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,6 +81,9 @@ export function LinkedInVaultSourcePanel({ clientId, clientName, initialUrl }: P
         }
       } else {
         await queryClient.invalidateQueries({ queryKey: vaultListKeys.all(clientId) });
+        window.dispatchEvent(new CustomEvent(STYLE_SOURCES_UPDATED_EVENT, {
+          detail: { clientId },
+        }));
         if (result.warning) toast.warning(result.warning);
         else {
           const collected = result.collected ?? 0;

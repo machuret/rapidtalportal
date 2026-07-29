@@ -15,8 +15,8 @@ Follow these in priority order. A lower-priority request must never override a h
 5. Spelling and locale: Australian English
 5. Emoji policy: No emojis
 5. CTA style: End with one useful discussion question.
-6. Requested tone: authoritative
-6. Requested length: Keep it brief and punchy.",
+7. Requested tone: authoritative
+7. Requested length: Keep it brief and punchy.",
     "summary": [
       "Prohibited words or phrases: game-changing, world-class",
       "Deterministic hard rules: Never use “SecretCo” (linkedin); Must contain no more than 0 emoji (linkedin)",
@@ -44,8 +44,8 @@ Follow these in priority order. A lower-priority request must never override a h
 5. Spelling and locale: Australian English
 5. Emoji policy: Use sparingly
 5. CTA style: Invite the community to share.
-6. Requested tone: friendly
-6. Requested length: Aim for a standard length appropriate to the format.",
+7. Requested tone: friendly
+7. Requested length: Aim for a standard length appropriate to the format.",
     "summary": [
       "Prohibited words or phrases: limited-time miracle",
       "Deterministic hard rules: Never use “MegaCorp” (facebook)",
@@ -72,8 +72,8 @@ Follow these in priority order. A lower-priority request must never override a h
 4. instagram style: Show the human detail behind the work.
 5. Spelling and locale: Australian English
 5. Emoji policy: One emoji is welcome when it adds meaning
-6. Requested tone: playful
-6. Requested length: Keep it brief and punchy.",
+7. Requested tone: playful
+7. Requested length: Keep it brief and punchy.",
     "summary": [
       "Prohibited words or phrases: act now, life-changing",
       "Deterministic hard rules: Must contain no more than 1 emoji (instagram)",
@@ -101,8 +101,8 @@ Follow these in priority order. A lower-priority request must never override a h
 5. Emoji policy: No emojis
 5. CTA style: Ask one specific question.
 5. Default sign-off: Kind regards
-6. Requested tone: professional
-6. Requested length: Keep it brief and punchy.",
+7. Requested tone: professional
+7. Requested length: Keep it brief and punchy.",
     "summary": [
       "Prohibited words or phrases: urgent opportunity",
       "Deterministic hard rules: Must contain no more than 0 emoji (email)",
@@ -131,8 +131,8 @@ Follow these in priority order. A lower-priority request must never override a h
 5. Spelling and locale: Australian English
 5. Emoji policy: No emojis
 5. CTA style: Offer a practical next step.
-6. Requested tone: authoritative
-6. Requested length: Be comprehensive and detailed.",
+7. Requested tone: authoritative
+7. Requested length: Be comprehensive and detailed.",
     "summary": [
       "Prohibited words or phrases: ultimate solution",
       "Deterministic hard rules: Never use “ultimate solution” (blog)",
@@ -160,8 +160,8 @@ Follow these in priority order. A lower-priority request must never override a h
 5. Spelling and locale: Australian English
 5. Emoji policy: No emojis
 5. CTA style: Invite the reader to explore one next step.
-6. Requested tone: warm
-6. Requested length: Aim for a standard length appropriate to the format.",
+7. Requested tone: warm
+7. Requested length: Aim for a standard length appropriate to the format.",
     "summary": [
       "Prohibited words or phrases: unmissable deal",
       "Deterministic hard rules: Must contain no more than 0 emoji (newsletter)",

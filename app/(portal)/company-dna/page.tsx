@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { DnaForm } from "@/components/dna/DnaForm";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { StyleAnalysisManager } from "@/components/content/StyleAnalysisManager";
+import { LinkedInVaultSourcePanel } from "@/components/vault/LinkedInVaultSourcePanel";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Company DNA — RapidTal" };
@@ -25,6 +26,8 @@ export default async function CompanyDnaPage() {
   // Admin-only editing: DNA feeds every AI answer, so a stray VA edit would
   // silently poison the Brain. VAs read it; admins own it.
   const canEdit = user.role === "client_admin" || user.role === "super_admin";
+  const socialLinks = (dna as { social_links?: Record<string, string> } | null)?.social_links;
+  const linkedInUrl = typeof socialLinks?.linkedin === "string" ? socialLinks.linkedin : "";
 
   return (
     <div className="page-prose">
@@ -36,6 +39,13 @@ export default async function CompanyDnaPage() {
       </p>
       <PageIntro id="company-dna" />
       <DnaForm initialData={dna ?? null} clientId={user.client_id} readOnly={!canEdit} />
+      {canEdit && (
+        <LinkedInVaultSourcePanel
+          clientId={user.client_id}
+          clientName={client?.name ?? "this company"}
+          initialUrl={linkedInUrl}
+        />
+      )}
       <StyleAnalysisManager
         clientId={user.client_id}
         clientName={client?.name}

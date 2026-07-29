@@ -9,11 +9,21 @@ jest.mock("@/lib/brain/llm", () => ({
   chatProvider: jest.fn(),
   chatModel: jest.fn(() => "openai/gpt-4o-mini"),
 }));
+jest.mock("@/lib/rate-limit", () => {
+  const actual = jest.requireActual("@/lib/rate-limit");
+  return {
+    ...actual,
+    aiGenerateLimiter: {
+      check: jest.fn(() => ({ allowed: true, retryAfterSeconds: 0 })),
+    },
+  };
+});
 
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireApiAuth } from "@/lib/api-auth";
 import { chatProvider } from "@/lib/brain/llm";
+import { aiGenerateLimiter } from "@/lib/rate-limit";
 import {
   GET,
   PATCH,
@@ -33,6 +43,7 @@ const SOURCE_IDS = [
 const routeCtx = { params: Promise.resolve({}) };
 
 const profile: StyleAnalysisProfile = {
+  schema_version: 1,
   summary: "Direct, practical and evidence-led.",
   voice_traits: ["Candid", "Confident"],
   tone: "Professional without sounding formal.",
@@ -108,6 +119,10 @@ beforeEach(() => {
     key: "test-key",
     provider: "openrouter",
   });
+  (aiGenerateLimiter.check as jest.Mock).mockReturnValue({
+    allowed: true,
+    retryAfterSeconds: 0,
+  });
 });
 
 afterEach(() => {
@@ -149,6 +164,7 @@ test("lets a VA inspect their client's approved profile without granting writes"
   const postResponse = await POST(request("POST", {
     client_id: CLIENT_A,
     channel: "linkedin",
+    expected_updated_at: null,
   }), routeCtx);
   expect(postResponse.status).toBe(403);
 });
@@ -191,6 +207,7 @@ test("analyses processed owned examples into a review draft without activating i
   const response = await POST(request("POST", {
     client_id: CLIENT_A,
     channel: "linkedin",
+    expected_updated_at: null,
   }), routeCtx);
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toMatchObject({
@@ -206,7 +223,25 @@ test("analyses processed owned examples into a review draft without activating i
     channel: "linkedin",
     status: "draft",
     source_item_ids: SOURCE_IDS,
+    analysis: expect.objectContaining({ confidence: "low" }),
   }));
+});
+
+test("rate-limits repeated model analysis before loading service-role data", async () => {
+  (aiGenerateLimiter.check as jest.Mock).mockReturnValue({
+    allowed: false,
+    retryAfterSeconds: 60,
+  });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_A,
+    channel: "linkedin",
+    expected_updated_at: null,
+  }), routeCtx);
+
+  expect(response.status).toBe(429);
+  expect(createAdminClient).not.toHaveBeenCalled();
+  expect(chatProvider).not.toHaveBeenCalled();
 });
 
 test("requires enough processed evidence before spending a model request", async () => {
@@ -228,6 +263,7 @@ test("requires enough processed evidence before spending a model request", async
   const response = await POST(request("POST", {
     client_id: CLIENT_A,
     channel: "linkedin",
+    expected_updated_at: null,
   }), routeCtx);
   expect(response.status).toBe(422);
   await expect(response.json()).resolves.toMatchObject({
@@ -255,6 +291,7 @@ test("approves a reviewed draft only through the atomic database operation", asy
     id: ANALYSIS_ID,
     action: "approve",
     analysis: profile,
+    expected_updated_at: analysisRow("draft").updated_at,
   }), routeCtx);
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toMatchObject({
@@ -266,4 +303,150 @@ test("approves a reviewed draft only through the atomic database operation", asy
     p_analysis_id: ANALYSIS_ID,
     p_actor_id: USER_ID,
   });
+});
+
+test("records only examples actually included in the bounded model prompt", async () => {
+  const manySourceIds = Array.from(
+    { length: 20 },
+    (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+  );
+  const sourceRows = manySourceIds.map((id, index) => ({
+    id,
+    title: `Long owned post ${index + 1}`,
+    source_url: `https://www.linkedin.com/posts/company-long-${index + 1}`,
+    raw_content: "A".repeat(5000),
+    status: "ready",
+    tags: ["linkedin", "style_example"],
+    created_at: "2026-07-29T00:00:00.000Z",
+  }));
+  const sources = chain({ data: sourceRows, error: null });
+  const draftCheck = chain({ data: null, error: null });
+  const savedRow = {
+    ...analysisRow("draft"),
+    analysis: {
+      ...profile,
+      confidence: "medium",
+      evidence: manySourceIds.slice(0, 2).map((source_item_id) => ({
+        source_item_id,
+        observations: ["Repeated across included examples."],
+      })),
+    },
+  };
+  const inserted = chain({ data: savedRow, error: null });
+  let analysisCalls = 0;
+  (createAdminClient as jest.Mock).mockReturnValue({
+    from: jest.fn((table: string) => {
+      if (table === "vault_items") return sources;
+      analysisCalls++;
+      return analysisCalls === 1 ? draftCheck : inserted;
+    }),
+  });
+  const providerProfile = {
+    ...profile,
+    evidence: manySourceIds.slice(0, 2).map((source_item_id) => ({
+      source_item_id,
+      observations: ["Repeated across included examples."],
+    })),
+  };
+  const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(providerProfile) } }],
+    }), { status: 200, headers: { "content-type": "application/json" } }),
+  );
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_A,
+    channel: "linkedin",
+    expected_updated_at: null,
+  }), routeCtx);
+
+  expect(response.status).toBe(200);
+  const insertedValues = inserted.insert.mock.calls[0][0];
+  expect(insertedValues.source_item_ids.length).toBeGreaterThanOrEqual(3);
+  expect(insertedValues.source_item_ids.length).toBeLessThan(20);
+  expect(insertedValues.source_count).toBe(insertedValues.source_item_ids.length);
+  expect(insertedValues.source_character_count).toBe(insertedValues.source_count * 4000);
+  const modelBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+  const prompt = modelBody.messages[1].content as string;
+  expect(prompt).toContain(insertedValues.source_item_ids.at(-1));
+  expect(prompt).not.toContain(manySourceIds[insertedValues.source_count]);
+});
+
+test("rejects a stale refresh before calling the model", async () => {
+  const sources = chain({
+    data: SOURCE_IDS.map((id) => ({
+      id,
+      title: "Owned post",
+      source_url: null,
+      raw_content: "A".repeat(800),
+      status: "ready",
+      tags: ["linkedin"],
+      created_at: "2026-07-29T00:00:00.000Z",
+    })),
+    error: null,
+  });
+  const draftCheck = chain({
+    data: { id: ANALYSIS_ID, updated_at: "2026-07-29T03:00:00.000Z" },
+    error: null,
+  });
+  let calls = 0;
+  (createAdminClient as jest.Mock).mockReturnValue({
+    from: jest.fn(() => (++calls === 1 ? sources : draftCheck)),
+  });
+  const fetchMock = jest.spyOn(global, "fetch");
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_A,
+    channel: "linkedin",
+    expected_updated_at: "2026-07-29T01:00:00.000Z",
+  }), routeCtx);
+
+  expect(response.status).toBe(409);
+  await expect(response.json()).resolves.toMatchObject({ code: "STYLE_ANALYSIS_CONFLICT" });
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("rejects a stale edit instead of overwriting a newer draft", async () => {
+  const current = chain({
+    data: { ...analysisRow("draft"), updated_at: "2026-07-29T03:00:00.000Z" },
+    error: null,
+  });
+  (createAdminClient as jest.Mock).mockReturnValue({ from: jest.fn(() => current) });
+
+  const response = await PATCH(request("PATCH", {
+    client_id: CLIENT_A,
+    id: ANALYSIS_ID,
+    action: "save",
+    analysis: profile,
+    expected_updated_at: "2026-07-29T01:00:00.000Z",
+  }), routeCtx);
+
+  expect(response.status).toBe(409);
+  expect(current.update).not.toHaveBeenCalled();
+});
+
+test("rejects human-edited evidence that references sources outside the analysis", async () => {
+  const current = chain({ data: analysisRow("draft"), error: null });
+  (createAdminClient as jest.Mock).mockReturnValue({ from: jest.fn(() => current) });
+  const fabricatedProfile: StyleAnalysisProfile = {
+    ...profile,
+    evidence: [
+      profile.evidence[0],
+      {
+        source_item_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        observations: ["Fabricated evidence."],
+      },
+    ],
+  };
+
+  const response = await PATCH(request("PATCH", {
+    client_id: CLIENT_A,
+    id: ANALYSIS_ID,
+    action: "save",
+    analysis: fabricatedProfile,
+    expected_updated_at: analysisRow("draft").updated_at,
+  }), routeCtx);
+
+  expect(response.status).toBe(422);
+  expect(current.update).not.toHaveBeenCalled();
 });

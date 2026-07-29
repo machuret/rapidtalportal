@@ -159,6 +159,7 @@ function approvedChannelAnalysis(
   const analysis = row.analysis;
   if (!analysis || typeof analysis !== "object" || Array.isArray(analysis)) return null;
   const profile = analysis as Record<string, unknown>;
+  if (profile.schema_version !== 1) return null;
   const summary = typeof profile.summary === "string" ? profile.summary.trim() : "";
   if (!summary || typeof row.id !== "string") return null;
 
@@ -249,7 +250,7 @@ export function resolveContentStyle(
       label: `Approved ${channel} style analysis`,
       value: styleAnalysis?.prompt ?? "",
       summaryValue: styleAnalysis?.provenance.summary,
-      priority: 5,
+      priority: 6,
     },
     { label: "Preferred words or phrases", value: text(dna, "preferred_terms"), priority: 5 },
     { label: "Spelling and locale", value: text(dna, "spelling_locale"), priority: 5 },
@@ -258,9 +259,11 @@ export function resolveContentStyle(
     { label: "CTA style", value: text(dna, "default_cta_style"), priority: 5 },
     { label: "Default sign-off", value: text(dna, "sign_off"), priority: 5 },
     { label: "Approved claims", value: text(dna, "approved_claims"), priority: 5 },
-    { label: "Requested tone", value: requestedTone.trim(), priority: 6 },
-    { label: "Requested length", value: lengthHint.trim(), priority: 6 },
-  ].filter((rule) => rule.value);
+    { label: "Requested tone", value: requestedTone.trim(), priority: 7 },
+    { label: "Requested length", value: lengthHint.trim(), priority: 7 },
+  ]
+    .filter((rule) => rule.value)
+    .sort((left, right) => left.priority - right.priority);
 
   const prompt = [
     "=== WRITING STYLE AUTHORITY ===",

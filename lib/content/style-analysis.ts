@@ -9,6 +9,7 @@ export const STYLE_ANALYSIS_CHANNELS = [
   "blog",
   "newsletter",
 ] as const;
+export const STYLE_SOURCES_UPDATED_EVENT = "rapidtal:style-sources-updated";
 
 export type StyleAnalysisChannel = typeof STYLE_ANALYSIS_CHANNELS[number];
 export type StyleAnalysisStatus = "draft" | "approved" | "archived";
@@ -17,6 +18,7 @@ const shortText = z.string().trim().max(1200);
 const patternList = z.array(z.string().trim().min(1).max(300)).max(10);
 
 export const styleAnalysisProfileSchema = z.object({
+  schema_version: z.literal(1),
   summary: shortText,
   voice_traits: patternList,
   tone: shortText,
@@ -36,7 +38,7 @@ export const styleAnalysisProfileSchema = z.object({
   evidence: z.array(z.object({
     source_item_id: z.string().uuid(),
     observations: z.array(z.string().trim().min(1).max(300)).min(1).max(6),
-  })).max(20),
+  })).min(2).max(20),
 });
 
 export type StyleAnalysisProfile = z.infer<typeof styleAnalysisProfileSchema>;
@@ -78,6 +80,7 @@ export interface StyleAnalysisResponse {
 }
 
 export const emptyStyleAnalysisProfile = (): StyleAnalysisProfile => ({
+  schema_version: 1,
   summary: "",
   voice_traits: [],
   tone: "",
