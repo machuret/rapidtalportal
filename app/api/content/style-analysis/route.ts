@@ -4,6 +4,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { chatModel, chatProvider } from "@/lib/brain/llm";
+import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import {
   STYLE_ANALYSIS_CHANNELS,
   parseStyleAnalysisProfile,
@@ -22,12 +23,14 @@ const channelSchema = z.enum(STYLE_ANALYSIS_CHANNELS);
 const analyseSchema = z.object({
   client_id: z.string().uuid(),
   channel: channelSchema,
+  expected_updated_at: z.string().datetime().nullable(),
 });
 const updateSchema = z.object({
   client_id: z.string().uuid(),
   id: z.string().uuid(),
   action: z.enum(["save", "approve"]),
   analysis: styleAnalysisProfileSchema,
+  expected_updated_at: z.string().datetime(),
 });
 
 interface AnalysisRow {
@@ -80,7 +83,7 @@ function evidenceBelongsToSources(
   sourceItemIds: string[],
 ): boolean {
   const allowed = new Set(sourceItemIds);
-  return analysis.evidence.length > 0 &&
+  return analysis.evidence.length >= 2 &&
     analysis.evidence.every((entry) => allowed.has(entry.source_item_id));
 }
 
@@ -88,11 +91,19 @@ function escapeXml(value: string): string {
   return value
     .replace(/&/gu, "&amp;")
     .replace(/</gu, "&lt;")
-    .replace(/>/gu, "&gt;");
+    .replace(/>/gu, "&gt;")
+    .replace(/"/gu, "&quot;")
+    .replace(/'/gu, "&apos;");
 }
 
-function renderExamples(rows: SourceRow[]): string {
+function renderExamples(rows: SourceRow[]): {
+  text: string;
+  includedRows: SourceRow[];
+  characterCount: number;
+} {
   let rendered = "";
+  const includedRows: SourceRow[] = [];
+  let characterCount = 0;
   for (const row of rows) {
     const content = row.raw_content?.trim().slice(0, 4000) ?? "";
     if (!content) continue;
@@ -100,8 +111,23 @@ function renderExamples(rows: SourceRow[]): string {
       `${escapeXml(content)}\n</style_example>\n\n`;
     if (rendered.length + block.length > 40_000) break;
     rendered += block;
+    includedRows.push(row);
+    characterCount += content.length;
   }
-  return rendered;
+  return { text: rendered, includedRows, characterCount };
+}
+
+function conflict(message = "This style profile changed while you were working. Reload it and try again.") {
+  return NextResponse.json({ error: message, code: "STYLE_ANALYSIS_CONFLICT" }, { status: 409 });
+}
+
+function boundedConfidence(
+  confidence: z.infer<typeof styleAnalysisProfileSchema>["confidence"],
+  sourceCount: number,
+): z.infer<typeof styleAnalysisProfileSchema>["confidence"] {
+  if (sourceCount < 5) return "low";
+  if (sourceCount < 8 && confidence === "high") return "medium";
+  return confidence;
 }
 
 async function loadStyleAnalysis(clientId: string): Promise<StyleAnalysisResponse> {
@@ -185,6 +211,8 @@ export const POST = withAuth(async (request, { user }) => {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
+  const rateLimit = aiGenerateLimiter.check(`style-analysis:${user.id}`);
+  if (!rateLimit.allowed) return tooManyRequests(rateLimit.retryAfterSeconds);
 
   const provider = chatProvider();
   if (!provider) {
@@ -207,12 +235,11 @@ export const POST = withAuth(async (request, { user }) => {
     return NextResponse.json({ error: "Style examples could not be loaded." }, { status: 500 });
   }
 
-  const sources = ((sourceRows ?? []) as SourceRow[])
+  const candidateSources = ((sourceRows ?? []) as SourceRow[])
     .filter((row) => (row.raw_content?.trim().length ?? 0) >= 40);
-  const sourceCharacterCount = sources.reduce(
-    (total, row) => total + (row.raw_content?.trim().length ?? 0),
-    0,
-  );
+  const renderedExamples = renderExamples(candidateSources);
+  const sources = renderedExamples.includedRows;
+  const sourceCharacterCount = renderedExamples.characterCount;
   if (sources.length < 3 || sourceCharacterCount < 600) {
     return NextResponse.json({
       error: `Collect and process at least 3 ${parsed.data.channel} examples containing at least 600 characters before analysing style.`,
@@ -222,7 +249,23 @@ export const POST = withAuth(async (request, { user }) => {
     }, { status: 422 });
   }
 
-  const examples = renderExamples(sources);
+  const { data: currentDraft, error: draftError } = await db
+    .from("content_style_analyses")
+    .select("id,updated_at")
+    .eq("client_id", parsed.data.client_id)
+    .eq("channel", parsed.data.channel)
+    .eq("status", "draft")
+    .maybeSingle();
+  if (draftError) {
+    return NextResponse.json({ error: "The existing style draft could not be checked." }, { status: 500 });
+  }
+  if (
+    (currentDraft && currentDraft.updated_at !== parsed.data.expected_updated_at) ||
+    (!currentDraft && parsed.data.expected_updated_at !== null)
+  ) {
+    return conflict();
+  }
+
   const response = await fetch(provider.url, {
     method: "POST",
     headers: {
@@ -244,6 +287,7 @@ Do not turn a one-off phrase into a rule. Prefer patterns supported by multiple 
 Describe the style; do not copy distinctive wording.
 Return valid JSON only, using this exact shape:
 {
+  "schema_version": 1,
   "summary": string,
   "voice_traits": string[],
   "tone": string,
@@ -266,7 +310,7 @@ Every conclusion must be concise and evidence-based. Evidence IDs must exactly m
         },
         {
           role: "user",
-          content: `Channel: ${parsed.data.channel}\nExamples analysed: ${sources.length}\n\n${examples}`,
+          content: `Channel: ${parsed.data.channel}\nExamples analysed: ${sources.length}\n\n${renderedExamples.text}`,
         },
       ],
     }),
@@ -294,6 +338,7 @@ Every conclusion must be concise and evidence-based. Evidence IDs must exactly m
   const validSourceIds = new Set(sources.map((source) => source.id));
   const analysis = {
     ...analysisResult.data,
+    confidence: boundedConfidence(analysisResult.data.confidence, sources.length),
     evidence: analysisResult.data.evidence.filter((entry) => validSourceIds.has(entry.source_item_id)),
   };
   if (analysis.evidence.length < 2) {
@@ -304,17 +349,6 @@ Every conclusion must be concise and evidence-based. Evidence IDs must exactly m
   const now = new Date().toISOString();
   const sourceItemIds = sources.map((source) => source.id);
   const model = chatModel("CONTENT_STYLE_ANALYSIS_MODEL");
-  const { data: currentDraft, error: draftError } = await db
-    .from("content_style_analyses")
-    .select("id")
-    .eq("client_id", parsed.data.client_id)
-    .eq("channel", parsed.data.channel)
-    .eq("status", "draft")
-    .maybeSingle();
-  if (draftError) {
-    return NextResponse.json({ error: "The existing style draft could not be checked." }, { status: 500 });
-  }
-
   const values = {
     analysis,
     source_item_ids: sourceItemIds,
@@ -331,8 +365,10 @@ Every conclusion must be concise and evidence-based. Evidence IDs must exactly m
       .update(values)
       .eq("id", currentDraft.id)
       .eq("client_id", parsed.data.client_id)
+      .eq("status", "draft")
+      .eq("updated_at", currentDraft.updated_at)
       .select("*")
-      .single()
+      .maybeSingle()
     : db
       .from("content_style_analyses")
       .insert({
@@ -345,9 +381,11 @@ Every conclusion must be concise and evidence-based. Evidence IDs must exactly m
       .select("*")
       .single();
   const { data: saved, error: saveError } = await write;
-  if (saveError || !saved) {
+  if (saveError) {
+    if (saveError.code === "23505") return conflict();
     return NextResponse.json({ error: "The style analysis could not be saved." }, { status: 500 });
   }
+  if (!saved) return conflict();
 
   return NextResponse.json({
     success: true,
@@ -383,6 +421,7 @@ export const PATCH = withAuth(async (request, { user }) => {
   if (current.status === "archived") {
     return NextResponse.json({ error: "Archived analyses cannot be edited." }, { status: 409 });
   }
+  if (current.updated_at !== parsed.data.expected_updated_at) return conflict();
 
   const now = new Date().toISOString();
   let draft = current as AnalysisRow;
@@ -398,7 +437,7 @@ export const PATCH = withAuth(async (request, { user }) => {
       return NextResponse.json({ error: "The current style draft could not be checked." }, { status: 500 });
     }
     if (existingDraft) {
-      draft = existingDraft as AnalysisRow;
+      return conflict("A newer review draft already exists. Reload it before making changes.");
     } else {
       if (!evidenceBelongsToSources(parsed.data.analysis, current.source_item_ids ?? [])) {
         return NextResponse.json({
@@ -423,6 +462,7 @@ export const PATCH = withAuth(async (request, { user }) => {
         .select("*")
         .single();
       if (createError || !created) {
+        if (createError?.code === "23505") return conflict();
         return NextResponse.json({ error: "A review draft could not be created." }, { status: 500 });
       }
       draft = created as AnalysisRow;
@@ -444,11 +484,13 @@ export const PATCH = withAuth(async (request, { user }) => {
     .eq("id", draft.id)
     .eq("client_id", parsed.data.client_id)
     .eq("status", "draft")
+    .eq("updated_at", draft.updated_at)
     .select("*")
-    .single();
-  if (saveError || !saved) {
+    .maybeSingle();
+  if (saveError) {
     return NextResponse.json({ error: "The style analysis draft could not be saved." }, { status: 500 });
   }
+  if (!saved) return conflict();
 
   if (parsed.data.action === "approve") {
     const { data: approved, error: approveError } = await db.rpc(

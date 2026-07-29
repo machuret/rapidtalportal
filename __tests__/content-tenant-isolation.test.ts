@@ -243,6 +243,7 @@ const cases: { endpoint: string; call: () => Promise<Response> }[] = [
     call: () => createStyleAnalysis(jsonRequest("https://portal.test/api/content/style-analysis", {
       client_id: CLIENT_B,
       channel: "linkedin",
+      expected_updated_at: null,
     }), routeCtx),
   },
   {
@@ -267,9 +268,20 @@ const cases: { endpoint: string; call: () => Promise<Response> }[] = [
         hashtag_usage: "",
         content_patterns: [],
         avoid_patterns: [],
+        schema_version: 1,
         confidence: "medium",
-        evidence: [],
+        evidence: [
+          {
+            source_item_id: "55555555-5555-4555-8555-555555555555",
+            observations: ["Direct opening."],
+          },
+          {
+            source_item_id: "66666666-6666-4666-8666-666666666666",
+            observations: ["Short paragraphs."],
+          },
+        ],
       },
+      expected_updated_at: "2026-07-29T01:00:00.000Z",
     }), routeCtx),
   },
   {

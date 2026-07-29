@@ -79,6 +79,7 @@ describe("content brand style", () => {
         linkedin: {
           id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           analysis: {
+            schema_version: 1,
             summary: "Direct, evidence-led and conversational.",
             voice_traits: ["Candid", "Practical"],
             hook_patterns: ["Open with a concrete tension"],
@@ -96,6 +97,12 @@ describe("content brand style", () => {
     expect(style.prompt.indexOf("linkedin style")).toBeLessThan(
       style.prompt.indexOf("Approved linkedin style analysis"),
     );
+    expect(style.prompt.indexOf("Spelling and locale")).toBeLessThan(
+      style.prompt.indexOf("Approved linkedin style analysis"),
+    );
+    expect(style.prompt.indexOf("Approved linkedin style analysis")).toBeLessThan(
+      style.prompt.indexOf("Requested tone"),
+    );
     expect(style.summary).toContain(
       "Approved linkedin style analysis: Direct, evidence-led and conversational.",
     );
@@ -107,5 +114,23 @@ describe("content brand style", () => {
       analysedAt: "2026-07-29T01:00:00.000Z",
       approvedAt: "2026-07-29T02:00:00.000Z",
     });
+  });
+
+  test("ignores style analyses from an unsupported schema version", () => {
+    const style = resolveContentStyle({
+      ...dna,
+      style_analysis_profiles: {
+        linkedin: {
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          analysis: {
+            schema_version: 99,
+            summary: "Unknown future profile.",
+          },
+        },
+      },
+    }, "linkedin", "Professional", "Short.");
+
+    expect(style.prompt).not.toContain("Unknown future profile");
+    expect(style.styleAnalysis).toBeNull();
   });
 });

@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   CheckCircle2,
+  ExternalLink,
   FileSearch,
   Loader2,
   RefreshCw,
@@ -15,6 +17,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import {
   STYLE_ANALYSIS_CHANNELS,
+  STYLE_SOURCES_UPDATED_EVENT,
   emptyStyleAnalysisProfile,
   type StyleAnalysisChannel,
   type StyleAnalysisProfile,
@@ -97,6 +100,7 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
   const [selectedChannel, setSelectedChannel] = useState<StyleAnalysisChannel>("linkedin");
   const [form, setForm] = useState<StyleAnalysisProfile>(emptyStyleAnalysisProfile);
   const [recordId, setRecordId] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
   const [working, setWorking] = useState<"load" | "analyse" | "save" | "approve" | null>("load");
 
   async function load(silent = false) {
@@ -120,31 +124,71 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
+  useEffect(() => {
+    function refreshAfterCollection(event: Event) {
+      const collectedClientId = (event as CustomEvent<{ clientId?: string }>).detail?.clientId;
+      if (collectedClientId === clientId) void load(true);
+    }
+    window.addEventListener(STYLE_SOURCES_UPDATED_EVENT, refreshAfterCollection);
+    return () => window.removeEventListener(STYLE_SOURCES_UPDATED_EVENT, refreshAfterCollection);
+    // load intentionally uses the current clientId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+    }
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [dirty]);
+
   const channelState = data?.channels[selectedChannel] ?? null;
   const activeRecord = channelState?.draft ?? channelState?.approved ?? null;
   const approvedRecord = channelState?.approved ?? null;
-  const readySources = channelState?.sources.filter((source) =>
-    source.status === "ready" && source.character_count >= 40
-  ) ?? [];
+  const readySources = useMemo(
+    () => channelState?.sources.filter((source) =>
+      source.status === "ready" && source.character_count >= 40
+    ) ?? [],
+    [channelState?.sources],
+  );
   const readyCharacters = readySources.reduce((sum, source) => sum + source.character_count, 0);
   const evidenceReady = readySources.length >= 3 && readyCharacters >= 600;
 
   useEffect(() => {
     setRecordId(activeRecord?.id ?? null);
     setForm(cloneProfile(activeRecord?.analysis ?? emptyStyleAnalysisProfile()));
+    setDirty(false);
   }, [activeRecord, selectedChannel]);
 
   const sourceById = useMemo(
     () => new Map((channelState?.sources ?? []).map((source) => [source.id, source])),
     [channelState?.sources],
   );
+  const approvedIsStale = useMemo(() => {
+    if (!approvedRecord?.analysed_at) return false;
+    const approvedIds = new Set(approvedRecord.source_item_ids);
+    const readyIds = new Set(readySources.map((source) => source.id));
+    const missingApprovedSource = approvedRecord.source_item_ids.some((id) => !readyIds.has(id));
+    const newerUnusedSource = readySources.some((source) =>
+      !approvedIds.has(source.id) &&
+      new Date(source.created_at).getTime() > new Date(approvedRecord.analysed_at as string).getTime()
+    );
+    return missingApprovedSource || newerUnusedSource;
+  }, [approvedRecord, readySources]);
 
   async function analyse() {
+    if (dirty && !window.confirm("Refresh the analysis and replace your unsaved review changes?")) return;
     setWorking("analyse");
     try {
       await api.post(
         ROUTES.content.styleAnalysis(),
-        { client_id: clientId, channel: selectedChannel },
+        {
+          client_id: clientId,
+          channel: selectedChannel,
+          expected_updated_at: channelState?.draft?.updated_at ?? null,
+        },
         { showErrorToast: false },
       );
       await load(true);
@@ -162,7 +206,13 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
     try {
       await api.patch(
         ROUTES.content.styleAnalysis(),
-        { client_id: clientId, id: recordId, action, analysis: form },
+        {
+          client_id: clientId,
+          id: recordId,
+          action,
+          analysis: form,
+          expected_updated_at: activeRecord?.updated_at,
+        },
         { showErrorToast: false },
       );
       await load(true);
@@ -177,14 +227,22 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
   }
 
   function setText(key: (typeof TEXT_FIELDS)[number]["key"], value: string) {
+    setDirty(true);
     setForm((current) => ({ ...current, [key]: value }));
   }
 
   function setList(key: (typeof LIST_FIELDS)[number]["key"], value: string) {
+    setDirty(true);
     setForm((current) => ({
       ...current,
       [key]: value.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 10),
     }));
+  }
+
+  function changeChannel(channel: StyleAnalysisChannel) {
+    if (channel === selectedChannel) return;
+    if (dirty && !window.confirm("Discard your unsaved style changes?")) return;
+    setSelectedChannel(channel);
   }
 
   return (
@@ -217,7 +275,7 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
             <button
               key={channel}
               type="button"
-              onClick={() => setSelectedChannel(channel)}
+              onClick={() => changeChannel(channel)}
               className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
                 selectedChannel === channel
                   ? "border-purple-400/60 bg-purple-500/20 text-purple-100"
@@ -250,7 +308,9 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
                 {approvedRecord ? "Approved" : "Not approved"}
               </p>
               <p className="text-xs text-zinc-600">
-                {approvedRecord ? `Confidence: ${approvedRecord.analysis.confidence}` : "Does not influence generation yet"}
+                {approvedRecord
+                  ? `Confidence: ${approvedRecord.analysis.confidence}${approvedIsStale ? " · refresh recommended" : ""}`
+                  : "Does not influence generation yet"}
               </p>
             </div>
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
@@ -263,6 +323,47 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
               </p>
             </div>
           </div>
+
+          {(channelState?.sources.length ?? 0) > 0 && (
+            <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-medium text-zinc-300">Recent style sources</p>
+                  <p className="mt-0.5 text-xs text-zinc-600">Company-owned examples available for this channel.</p>
+                </div>
+                {approvedIsStale && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Refresh recommended
+                  </span>
+                )}
+              </div>
+              <div className="mt-3 divide-y divide-zinc-800">
+                {channelState?.sources.slice(0, 5).map((source) => (
+                  <div key={source.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs text-zinc-300">{source.title}</p>
+                      <p className="text-xs text-zinc-600">
+                        {source.status === "ready" ? "Ready" : source.status === "processing" ? "Processing" : source.status}
+                        {" · "}{source.character_count.toLocaleString()} characters
+                      </p>
+                    </div>
+                    {source.source_url && (
+                      <a
+                        href={source.source_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Open ${source.title}`}
+                        className="shrink-0 text-zinc-500 transition-colors hover:text-zinc-200"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {canEdit && (
             <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
@@ -346,6 +447,7 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
                       ...current,
                       confidence: event.target.value as StyleAnalysisProfile["confidence"],
                     }))}
+                    onInput={() => setDirty(true)}
                     className="h-8 rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 text-sm text-zinc-200"
                   >
                     <option value="low">Low</option>
@@ -387,7 +489,7 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
                     type="button"
                     variant="outline"
                     onClick={() => void save("save")}
-                    disabled={working !== null}
+                    disabled={working !== null || !dirty}
                   >
                     {working === "save" ? <Loader2 className="animate-spin" /> : <Save />}
                     Save review draft
@@ -395,7 +497,7 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
                   <Button
                     type="button"
                     onClick={() => void save("approve")}
-                    disabled={working !== null}
+                    disabled={working !== null || (!channelState?.draft && !dirty)}
                     className="bg-emerald-600 text-white hover:bg-emerald-500"
                   >
                     {working === "approve" ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
