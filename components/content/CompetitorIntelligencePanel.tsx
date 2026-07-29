@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   BarChart3,
@@ -19,6 +19,7 @@ import { api } from "@/lib/api-client";
 import type { Competitor } from "@/types/competitors";
 import type {
   CompetitorIntelligenceIdea,
+  CompetitorIntelligenceJob,
   CompetitorIntelligenceRun,
 } from "@/lib/competitors/intelligence";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,10 @@ interface Props {
   clientId: string;
   canManage: boolean;
   competitors: Competitor[];
-  onIdeaSelected?: (idea: CompetitorIntelligenceIdea) => void;
+  onIdeaSelected?: (
+    idea: CompetitorIntelligenceIdea,
+    run: CompetitorIntelligenceRun,
+  ) => void;
 }
 
 type Section = "overview" | "topics" | "formats" | "comparison" | "gaps" | "ideas";
@@ -52,6 +56,7 @@ export function CompetitorIntelligencePanel({
   onIdeaSelected,
 }: Props) {
   const [run, setRun] = useState<CompetitorIntelligenceRun | null>(null);
+  const [activeJob, setActiveJob] = useState<CompetitorIntelligenceJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [analysing, setAnalysing] = useState(false);
   const [section, setSection] = useState<Section>("overview");
@@ -63,21 +68,32 @@ export function CompetitorIntelligencePanel({
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    api.get<{ run: CompetitorIntelligenceRun | null }>(
+  const loadReport = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    try {
+      const result = await api.get<{
+        run: CompetitorIntelligenceRun | null;
+        active_job: CompetitorIntelligenceJob | null;
+      }>(
       `/content/competitors/intelligence?client_id=${clientId}`,
       { showErrorToast: false },
-    ).then((result) => {
-      if (active) setRun(result.run);
-    }).catch((error) => {
-      if (active) toast.error(error instanceof Error ? error.message : "Competitor intelligence could not be loaded.");
-    }).finally(() => {
-      if (active) setLoading(false);
-    });
-    return () => { active = false; };
+      );
+      setRun(result.run);
+      setActiveJob(result.active_job);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Competitor intelligence could not be loaded.");
+    } finally {
+      if (showLoading) setLoading(false);
+    }
   }, [clientId]);
+
+  useEffect(() => { void loadReport(true); }, [loadReport]);
+
+  useEffect(() => {
+    if (!activeJob) return;
+    const timer = window.setInterval(() => void loadReport(), 4000);
+    return () => window.clearInterval(timer);
+  }, [activeJob, loadReport]);
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -121,7 +137,10 @@ export function CompetitorIntelligencePanel({
     }
     setAnalysing(true);
     try {
-      const result = await api.post<{ run: CompetitorIntelligenceRun }>(
+      const result = await api.post<{
+        run: CompetitorIntelligenceRun;
+        active_job: null;
+      }>(
         "/content/competitors/intelligence",
         {
           client_id: clientId,
@@ -131,16 +150,24 @@ export function CompetitorIntelligencePanel({
         { showErrorToast: false },
       );
       setRun(result.run);
+      setActiveJob(null);
       setSection("overview");
       toast.success("Competitor intelligence report created.");
     } catch (error) {
+      // A second tab or user may have acquired the durable lease after this
+      // panel was loaded. Refresh so the shared in-progress state is visible.
+      await loadReport();
       toast.error(error instanceof Error ? error.message : "Competitor analysis failed.");
     } finally {
       setAnalysing(false);
     }
   }
 
-  function evidenceLinks(ids: string[]) {
+  function evidenceLinks(
+    ids: string[],
+    quotes: Array<{ source_item_id: string; quote: string }> = [],
+  ) {
+    const quoteById = new Map(quotes.map((quote) => [quote.source_item_id, quote.quote]));
     return (
       <div className="mt-3 flex flex-wrap gap-1.5">
         {ids.map((id) => {
@@ -151,10 +178,18 @@ export function CompetitorIntelligencePanel({
               href={source.url}
               target="_blank"
               rel="noreferrer"
-              title={source.title}
+              title={[
+                quoteById.get(id) ? `Verified excerpt: “${quoteById.get(id)}”` : source.title,
+                source.date_basis === "captured"
+                  ? "Publication date unavailable; collection date used."
+                  : `Published ${readableDate(source.effective_at)}`,
+              ].join("\n")}
               className="inline-flex max-w-56 items-center gap-1 rounded-full border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
             >
-              <span className="truncate">{source.competitor_name}: {source.title}</span>
+              <span className="truncate">
+                {source.competitor_name}: {source.title}
+                {source.date_basis === "captured" ? " · date estimated" : ""}
+              </span>
               <ExternalLink className="h-3 w-3 shrink-0" />
             </a>
           ) : (
@@ -206,12 +241,13 @@ export function CompetitorIntelligencePanel({
               </label>
               <Button
                 type="button"
+                data-testid="competitor-analyse-button"
                 onClick={() => void analyse()}
-                disabled={analysing || selectedIds.size === 0}
+                disabled={analysing || !!activeJob || selectedIds.size === 0}
                 className="bg-orange-500 text-white hover:bg-orange-400"
               >
-                {analysing ? <Loader2 className="animate-spin" /> : run ? <RefreshCw /> : <Sparkles />}
-                {analysing ? "Analysing…" : run ? "Refresh report" : "Analyse competitors"}
+                {analysing || activeJob ? <Loader2 className="animate-spin" /> : run ? <RefreshCw /> : <Sparkles />}
+                {analysing || activeJob ? "Analysis running…" : run ? "Refresh report" : "Analyse competitors"}
               </Button>
             </div>
           )}
@@ -239,6 +275,13 @@ export function CompetitorIntelligencePanel({
           </div>
         )}
       </div>
+
+      {activeJob && (
+        <div className="border-b border-blue-500/20 bg-blue-500/5 px-5 py-3 text-sm text-blue-200">
+          An analysis started {readableDate(activeJob.started_at)} and is running safely in one leased job.
+          This report will refresh automatically when it finishes.
+        </div>
+      )}
 
       {!run ? (
         <div className="px-5 py-10 text-center">
@@ -284,6 +327,12 @@ export function CompetitorIntelligencePanel({
                 {reportIsStale ? " · refresh recommended" : ""}
               </span>
             </div>
+            {run.fallback_date_count > 0 && (
+              <p className="mb-5 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+                {run.fallback_date_count} source{run.fallback_date_count === 1 ? "" : "s"} had no publication date.
+                Their collection date was used explicitly as a fallback and is marked on the evidence link.
+              </p>
+            )}
 
             {section === "overview" && (
               <div className="space-y-5">
@@ -309,7 +358,7 @@ export function CompetitorIntelligencePanel({
                       </p>
                       <p className="mt-1 text-sm leading-6 text-zinc-400">{profile.summary}</p>
                       <p className="mt-3 text-xs text-zinc-500">Themes: {profile.themes.join(" · ")}</p>
-                      {evidenceLinks(profile.source_item_ids)}
+                      {evidenceLinks(profile.source_item_ids, profile.evidence_quotes)}
                     </div>
                   ))}
                 </div>
@@ -330,7 +379,7 @@ export function CompetitorIntelligencePanel({
                       </span>
                     </div>
                     <p className="mt-3 text-xs text-zinc-500">Channels: {cluster.channels.join(", ")}</p>
-                    {evidenceLinks(cluster.source_item_ids)}
+                    {evidenceLinks(cluster.source_item_ids, cluster.evidence_quotes)}
                   </div>
                 ))}
               </div>
@@ -347,7 +396,7 @@ export function CompetitorIntelligencePanel({
                       <div><dt className="text-zinc-600">Structure</dt><dd className="text-zinc-400">{format.structure_pattern || "No consistent pattern"}</dd></div>
                       <div><dt className="text-zinc-600">CTA</dt><dd className="text-zinc-400">{format.cta_pattern || "No consistent pattern"}</dd></div>
                     </dl>
-                    {evidenceLinks(format.source_item_ids)}
+                    {evidenceLinks(format.source_item_ids, format.evidence_quotes)}
                   </div>
                 ))}
               </div>
@@ -373,7 +422,7 @@ export function CompetitorIntelligencePanel({
                       ))}
                     </div>
                     <p className="mt-3 text-sm text-orange-200/80">Opportunity: {comparison.opportunity}</p>
-                    {evidenceLinks(comparison.source_item_ids)}
+                    {evidenceLinks(comparison.source_item_ids, comparison.evidence_quotes)}
                   </div>
                 ))}
               </div>
@@ -394,7 +443,7 @@ export function CompetitorIntelligencePanel({
                     <p className="mt-3 text-xs text-zinc-500">
                       Company fit: {gap.company_fit} · Suggested: {gap.recommended_channels.join(", ")}
                     </p>
-                    {evidenceLinks(gap.source_item_ids)}
+                    {evidenceLinks(gap.source_item_ids, gap.evidence_quotes)}
                   </div>
                 ))}
               </div>
@@ -420,10 +469,30 @@ export function CompetitorIntelligencePanel({
                     <p className="mt-2 text-xs leading-5 text-zinc-500">
                       Suggested hook: “{idea.suggested_hook}”
                     </p>
-                    {evidenceLinks(idea.source_item_ids)}
+                    <p className="mt-2 text-xs leading-5 text-zinc-500">
+                      Compared with company content/Vault: <span className="capitalize">{idea.novelty}</span>
+                      {idea.overlap_warning ? ` · ${idea.overlap_warning}` : ""}
+                    </p>
+                    {idea.company_reference_ids.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {idea.company_reference_ids.map((id) => {
+                          const source = run.company_sources.find((candidate) => candidate.id === id);
+                          return source ? (
+                            <span
+                              key={id}
+                              title={source.excerpt}
+                              className="rounded-full border border-purple-500/25 bg-purple-500/5 px-2 py-1 text-xs text-purple-200"
+                            >
+                              {source.kind === "vault_item" ? "Vault" : "Company content"}: {source.title}
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                    {evidenceLinks(idea.source_item_ids, idea.evidence_quotes)}
                     {onIdeaSelected && (
                       <div className="mt-4 flex justify-end">
-                        <Button type="button" size="sm" onClick={() => onIdeaSelected(idea)}>
+                        <Button type="button" size="sm" onClick={() => onIdeaSelected(idea, run)}>
                           Build content brief
                           <ArrowRight />
                         </Button>

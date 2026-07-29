@@ -40,6 +40,39 @@ export type ContentTone =
   | "direct"
   | "playful";
 
+export interface ContentMarketIntelligenceSource {
+  itemId: string;
+  captureVersionId: string;
+  contentHash: string;
+  competitorId: string;
+  competitorName: string;
+  title: string;
+  url: string;
+  effectiveAt: string;
+  dateBasis: "published" | "captured";
+  evidenceQuote: string;
+}
+
+export interface ContentMarketIntelligenceCompanyReference {
+  id: string;
+  kind: "content_piece" | "vault_item";
+  title: string;
+  contentHash: string;
+}
+
+export interface ContentMarketIntelligenceProvenance {
+  version: 1;
+  runId: string;
+  reportSchemaVersion: 2;
+  ideaTitle: string;
+  confidence: "low" | "medium" | "high";
+  novelty: "new" | "adjacent" | "overlap";
+  competitorIds: string[];
+  competitorSources: ContentMarketIntelligenceSource[];
+  companyReferences: ContentMarketIntelligenceCompanyReference[];
+  generatedAt: string;
+}
+
 export interface ContentBrief {
   version: 1;
   objective: string;
@@ -52,6 +85,7 @@ export interface ContentBrief {
   mode?: "new" | "reply";
   inboundContext?: string | null;
   additionalGuidance?: string | null;
+  marketIntelligence?: ContentMarketIntelligenceProvenance | null;
   recipient?: {
     id?: string | null;
     name: string;

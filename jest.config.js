@@ -14,7 +14,7 @@ const customJestConfig = {
   },
   testEnvironment: 'jest-environment-jsdom',
   // Deno-native Edge Function tests run in the dedicated CI job.
-  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/supabase/functions/'],
+  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/supabase/functions/', '/e2e/'],
   collectCoverageFrom: [
     'lib/**/*.{js,ts,tsx}',
     'app/api/**/*.{js,ts,tsx}',

@@ -52,6 +52,140 @@ async function promptOverride(admin: any, slug: string, fallback: string): Promi
   }
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function uniqueStrings(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) return null;
+  const strings = value as string[];
+  return new Set(strings).size === strings.length ? strings : null;
+}
+
+function sameStringSet(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value) => right.includes(value));
+}
+
+// A content brief may carry market inspiration, but it must reference the exact
+// immutable report owned by this tenant. Direct Edge Function callers therefore
+// cannot forge competitor evidence or attach another tenant's intelligence.
+// deno-lint-ignore no-explicit-any
+async function validateMarketIntelligence(admin: any, clientId: string, value: unknown): Promise<string | null> {
+  if (value === undefined || value === null) return null;
+  const provenance = record(value);
+  if (
+    !provenance ||
+    provenance.version !== 1 ||
+    provenance.reportSchemaVersion !== 2 ||
+    typeof provenance.runId !== "string" ||
+    typeof provenance.ideaTitle !== "string" ||
+    !["low", "medium", "high"].includes(String(provenance.confidence)) ||
+    !["new", "adjacent", "overlap"].includes(String(provenance.novelty))
+  ) return "Market intelligence provenance is malformed.";
+
+  const competitorIds = uniqueStrings(provenance.competitorIds);
+  const competitorSources = Array.isArray(provenance.competitorSources)
+    ? provenance.competitorSources.map(record)
+    : null;
+  const companyReferences = Array.isArray(provenance.companyReferences)
+    ? provenance.companyReferences.map(record)
+    : null;
+  if (
+    !competitorIds?.length ||
+    !competitorSources ||
+    competitorSources.length < 2 ||
+    competitorSources.some((source) => !source) ||
+    !companyReferences ||
+    companyReferences.some((source) => !source)
+  ) return "Market intelligence provenance is incomplete.";
+
+  const { data: report, error } = await admin
+    .from("competitor_intelligence_runs")
+    .select("id,client_id,schema_version,analysis,source_evidence,company_evidence")
+    .eq("id", provenance.runId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) return "Market intelligence provenance could not be verified.";
+  if (!report || report.schema_version !== 2) return "Market intelligence report was not found.";
+
+  const analysis = record(report.analysis);
+  const ideas = Array.isArray(analysis?.recommended_ideas)
+    ? analysis.recommended_ideas.map(record).filter(Boolean) as Record<string, unknown>[]
+    : [];
+  const idea = ideas.find((candidate) =>
+    candidate.title === provenance.ideaTitle &&
+    candidate.confidence === provenance.confidence &&
+    candidate.novelty === provenance.novelty);
+  if (!idea) return "The selected idea is not part of the verified report.";
+
+  const ideaCompetitorIds = uniqueStrings(idea.competitor_ids);
+  const ideaSourceIds = uniqueStrings(idea.source_item_ids);
+  const ideaCompanyIds = uniqueStrings(idea.company_reference_ids);
+  const evidenceQuotes = Array.isArray(idea.evidence_quotes)
+    ? idea.evidence_quotes.map(record).filter(Boolean) as Record<string, unknown>[]
+    : [];
+  if (
+    !ideaCompetitorIds ||
+    !ideaSourceIds ||
+    !ideaCompanyIds ||
+    !sameStringSet(competitorIds, ideaCompetitorIds)
+  ) return "The selected idea provenance does not match its report.";
+
+  const sourceEvidence = Array.isArray(report.source_evidence)
+    ? report.source_evidence.map(record).filter(Boolean) as Record<string, unknown>[]
+    : [];
+  const sourceById = new Map(sourceEvidence.map((source) => [String(source.item_id), source]));
+  const submittedSourceIds: string[] = [];
+  for (const source of competitorSources as Record<string, unknown>[]) {
+    if (
+      typeof source.itemId !== "string" ||
+      typeof source.captureVersionId !== "string" ||
+      typeof source.contentHash !== "string" ||
+      typeof source.competitorId !== "string" ||
+      typeof source.evidenceQuote !== "string"
+    ) return "A market intelligence source is malformed.";
+    const saved = sourceById.get(source.itemId);
+    const quote = evidenceQuotes.find((entry) => entry.source_item_id === source.itemId);
+    if (
+      !saved ||
+      saved.capture_version_id !== source.captureVersionId ||
+      saved.content_hash !== source.contentHash ||
+      saved.competitor_id !== source.competitorId ||
+      quote?.quote !== source.evidenceQuote
+    ) return "A market intelligence source does not match the immutable report.";
+    submittedSourceIds.push(source.itemId);
+  }
+  if (!sameStringSet(submittedSourceIds, ideaSourceIds)) {
+    return "The market intelligence source set is incomplete.";
+  }
+
+  const companyEvidence = Array.isArray(report.company_evidence)
+    ? report.company_evidence.map(record).filter(Boolean) as Record<string, unknown>[]
+    : [];
+  const companyById = new Map(companyEvidence.map((source) => [String(source.id), source]));
+  const submittedCompanyIds: string[] = [];
+  for (const source of companyReferences as Record<string, unknown>[]) {
+    if (
+      typeof source.id !== "string" ||
+      typeof source.kind !== "string" ||
+      typeof source.contentHash !== "string"
+    ) return "A company comparison reference is malformed.";
+    const saved = companyById.get(source.id);
+    if (
+      !saved ||
+      saved.kind !== source.kind ||
+      saved.content_hash !== source.contentHash
+    ) return "A company comparison reference does not match the report.";
+    submittedCompanyIds.push(source.id);
+  }
+  if (!sameStringSet(submittedCompanyIds, ideaCompanyIds)) {
+    return "The company comparison reference set is incomplete.";
+  }
+  return null;
+}
+
 export async function handleContentGenerateRequest(
   req: Request,
   dependencies: {
@@ -215,6 +349,18 @@ export async function handleContentGenerateRequest(
     if (role !== "super_admin" && userClientId !== clientId) {
       return new Response(JSON.stringify({ error: "Forbidden." }), {
         status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const marketIntelligenceError = await validateMarketIntelligence(
+      admin,
+      clientId,
+      contentBrief.marketIntelligence,
+    );
+    if (marketIntelligenceError) {
+      return new Response(JSON.stringify({ error: marketIntelligenceError }), {
+        status: 422,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -395,6 +541,25 @@ export async function handleContentGenerateRequest(
       return json.choices?.[0]?.message?.content ?? "";
     };
 
+    const marketIntelligence = record(contentBrief.marketIntelligence);
+    const modelContentBrief = marketIntelligence
+      ? {
+          ...contentBrief,
+          marketIntelligence: {
+            ideaTitle: marketIntelligence.ideaTitle,
+            confidence: marketIntelligence.confidence,
+            novelty: marketIntelligence.novelty,
+            competitorSourceCount: Array.isArray(marketIntelligence.competitorSources)
+              ? marketIntelligence.competitorSources.length
+              : 0,
+            companyReferenceCount: Array.isArray(marketIntelligence.companyReferences)
+              ? marketIntelligence.companyReferences.length
+              : 0,
+            instruction: "Market intelligence is inspiration only. Company facts must come from the Vault context.",
+          },
+        }
+      : contentBrief;
+
     console.log(`✍️ Generating ${contentType} content...`);
     const {
       finalBody,
@@ -404,7 +569,7 @@ export async function handleContentGenerateRequest(
     } = await runContentGenerationOrchestration({
       contentType: contentType as keyof typeof CONTENT_TYPE_INSTRUCTIONS,
       title,
-      contentBrief,
+      contentBrief: modelContentBrief,
       context,
       sourceContext,
       style,

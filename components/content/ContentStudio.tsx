@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { ContentPiece, ContentTopic, ContentType } from "@/types/content";
+import type {
+  ContentMarketIntelligenceProvenance,
+  ContentPiece,
+  ContentTopic,
+  ContentType,
+} from "@/types/content";
 import { TopicsTab } from "./TopicsTab";
 import { CreateTab } from "./CreateTab";
 import { HistoryTab } from "./HistoryTab";
@@ -46,6 +51,9 @@ function ContentStudioInner({
     type: string | null;
     title: string;
     brief: string;
+    keyPoints: string[];
+    additionalGuidance: string;
+    marketIntelligence: ContentMarketIntelligenceProvenance | null;
   } | null>(null);
 
   const handleTopicSelected = useCallback((topic: ContentTopic) => {
@@ -53,6 +61,9 @@ function ContentStudioInner({
       type: topic.content_type,
       title: topic.title,
       brief: topic.description ?? "",
+      keyPoints: [],
+      additionalGuidance: "",
+      marketIntelligence: null,
     });
     setActiveTab("create");
   }, []);
@@ -61,8 +72,19 @@ function ContentStudioInner({
     setHistory((prev) => [piece, ...prev]);
   }, []);
 
-  const handleCompetitorIdeaSelected = useCallback((idea: CompetitorIntelligenceIdea) => {
-    setPrefill(competitorIdeaToBrief(idea));
+  const handleCompetitorIdeaSelected = useCallback((
+    idea: CompetitorIntelligenceIdea,
+    run: Parameters<typeof competitorIdeaToBrief>[1],
+  ) => {
+    const intelligenceBrief = competitorIdeaToBrief(idea, run);
+    setPrefill({
+      type: intelligenceBrief.type,
+      title: intelligenceBrief.title,
+      brief: intelligenceBrief.objective,
+      keyPoints: intelligenceBrief.keyPoints,
+      additionalGuidance: intelligenceBrief.additionalGuidance,
+      marketIntelligence: intelligenceBrief.marketIntelligence,
+    });
     setActiveTab("create");
   }, []);
 
@@ -73,6 +95,7 @@ function ContentStudioInner({
         {TABS.map((t) => (
           <button
             key={t.id}
+            data-testid={`content-tab-${t.id}`}
             onClick={() => setActiveTab(t.id)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
               activeTab === t.id
@@ -105,6 +128,9 @@ function ContentStudioInner({
           initialType={(prefill?.type ?? null) as ContentType | null}
           initialTitle={prefill?.title}
           initialBrief={prefill?.brief}
+          initialKeyPoints={prefill?.keyPoints}
+          initialAdditionalGuidance={prefill?.additionalGuidance}
+          initialMarketIntelligence={prefill?.marketIntelligence}
           onContentGenerated={handleContentGenerated}
         />
       </div>

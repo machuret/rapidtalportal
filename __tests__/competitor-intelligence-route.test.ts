@@ -35,15 +35,34 @@ const OTHER_CLIENT_ID = "22222222-2222-4222-8222-222222222222";
 const COMPETITOR_ID = "33333333-3333-4333-8333-333333333333";
 const USER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const RUN_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const JOB_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const LEASE_TOKEN = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const COMPANY_CONTENT_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const VAULT_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const SOURCE_IDS = Array.from(
   { length: 6 },
   (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
 );
+const CAPTURE_IDS = Array.from(
+  { length: 6 },
+  (_, index) => `10000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+);
 const UNKNOWN_SOURCE_ID = "99999999-9999-4999-8999-999999999999";
 const routeCtx = { params: Promise.resolve({}) };
 
+function exactQuote(index: number): string {
+  return `Practical market explanation ${index + 1}. Useful detail helps teams make better decisions.`;
+}
+
+function quotes(ids = SOURCE_IDS.slice(0, 3)) {
+  return ids.map((id) => ({
+    source_item_id: id,
+    quote: exactQuote(SOURCE_IDS.indexOf(id)),
+  }));
+}
+
 const analysis: CompetitorIntelligence = {
-  schema_version: 1,
+  schema_version: 2,
   executive_summary: "The competitor consistently teaches practical market concepts.",
   topic_clusters: [{
     id: "practical-education",
@@ -52,6 +71,7 @@ const analysis: CompetitorIntelligence = {
     signal_strength: "established",
     competitor_ids: [COMPETITOR_ID],
     source_item_ids: SOURCE_IDS.slice(0, 3),
+    evidence_quotes: quotes(),
     channels: ["linkedin", "blog"],
   }],
   format_patterns: [{
@@ -62,6 +82,7 @@ const analysis: CompetitorIntelligence = {
     cta_pattern: "Invite discussion.",
     competitor_ids: [COMPETITOR_ID],
     source_item_ids: SOURCE_IDS.slice(1, 4),
+    evidence_quotes: quotes(SOURCE_IDS.slice(1, 4)),
     channels: ["linkedin"],
   }],
   positioning_profiles: [{
@@ -72,6 +93,7 @@ const analysis: CompetitorIntelligence = {
     value_propositions: ["Simplifies complex choices"],
     tone: ["Direct", "Educational"],
     source_item_ids: SOURCE_IDS.slice(0, 3),
+    evidence_quotes: quotes(),
   }],
   comparisons: [],
   positioning_gaps: [{
@@ -82,6 +104,7 @@ const analysis: CompetitorIntelligence = {
     company_fit: "high",
     competitor_ids: [COMPETITOR_ID],
     source_item_ids: SOURCE_IDS.slice(0, 3),
+    evidence_quotes: quotes(),
     recommended_channels: ["linkedin", "blog"],
     suggested_angles: ["Walk through one real decision process"],
   }],
@@ -89,14 +112,18 @@ const analysis: CompetitorIntelligence = {
     {
       title: "The decision checklist most teams skip",
       channel: "linkedin",
-      format: "Practical checklist",
-      objective: "Help readers make a defensible decision.",
+      format: "Checklist",
+      objective: "Help readers make one practical decision.",
       why_valuable: "It turns a recurring market topic into an actionable framework.",
       differentiation: "Uses a transparent process rather than another broad opinion.",
       suggested_hook: "Most teams do not need another prediction.",
       key_points: ["Define the decision", "Show the trade-offs"],
       competitor_ids: [COMPETITOR_ID],
       source_item_ids: SOURCE_IDS.slice(0, 3),
+      evidence_quotes: quotes(),
+      company_reference_ids: [COMPANY_CONTENT_ID, VAULT_ID],
+      novelty: "adjacent",
+      overlap_warning: "The company has covered decisions, but not as a checklist.",
       confidence: "high",
     },
     {
@@ -110,6 +137,13 @@ const analysis: CompetitorIntelligence = {
       key_points: ["One", "Two"],
       competitor_ids: [COMPETITOR_ID],
       source_item_ids: [UNKNOWN_SOURCE_ID, SOURCE_IDS[0]],
+      evidence_quotes: [
+        { source_item_id: UNKNOWN_SOURCE_ID, quote: "This fabricated quote has enough characters to pass the schema." },
+        { source_item_id: SOURCE_IDS[0], quote: exactQuote(0) },
+      ],
+      company_reference_ids: [COMPANY_CONTENT_ID],
+      novelty: "new",
+      overlap_warning: "",
       confidence: "high",
     },
   ],
@@ -118,7 +152,7 @@ const analysis: CompetitorIntelligence = {
 function chain(result: { data: unknown; error: unknown }) {
   const builder: Record<string, jest.Mock | ((resolve: (value: unknown) => unknown) => Promise<unknown>)> = {};
   for (const method of [
-    "select", "eq", "in", "gte", "order", "limit",
+    "select", "eq", "in", "gte", "lte", "or", "order", "limit",
   ]) {
     builder[method] = jest.fn(() => builder);
   }
@@ -138,23 +172,167 @@ function request(method: "GET" | "POST", body?: unknown, clientId = CLIENT_ID) {
   });
 }
 
+function evidenceRows() {
+  return SOURCE_IDS.map((id, index) => ({
+    id,
+    capture_version_id: CAPTURE_IDS[index],
+    content_hash: `sha256-${String(index + 1).padStart(58, "0")}`,
+    competitor_id: COMPETITOR_ID,
+    canonical_url: `https://competitor.test/post-${index + 1}`,
+    platform: "linkedin",
+    content_type: "social_post",
+    title: `Post ${index + 1}`,
+    raw_content: `${exactQuote(index)} ${"Useful detail. ".repeat(80)}`,
+    published_at: `2026-0${(index % 3) + 5}-01T00:00:00.000Z`,
+    captured_at: "2026-07-02T00:00:00.000Z",
+    effective_at: `2026-0${(index % 3) + 5}-01T00:00:00.000Z`,
+    date_basis: "published" as const,
+  }));
+}
+
+function sourceEvidence() {
+  return evidenceRows().map((row) => ({
+    item_id: row.id,
+    capture_version_id: row.capture_version_id,
+    content_hash: row.content_hash,
+    competitor_id: row.competitor_id,
+    competitor_name: "Market Co",
+    title: row.title,
+    url: row.canonical_url,
+    platform: row.platform,
+    content_type: row.content_type,
+    published_at: row.published_at,
+    captured_at: row.captured_at,
+    effective_at: row.effective_at,
+    date_basis: row.date_basis,
+  }));
+}
+
+function companyEvidence() {
+  return [
+    {
+      id: COMPANY_CONTENT_ID,
+      kind: "content_piece",
+      title: "Existing decision guide",
+      excerpt: "A previous company article about making sound decisions.",
+      content_hash: "company-content-hash-000000000000000000000000000000000001",
+    },
+    {
+      id: VAULT_ID,
+      kind: "vault_item",
+      title: "Company services",
+      excerpt: "Verified details about the company's advisory service.",
+      content_hash: "vault-content-hash-0000000000000000000000000000000000001",
+    },
+  ];
+}
+
 function runRow() {
   return {
     id: RUN_ID,
+    job_id: JOB_ID,
     client_id: CLIENT_ID,
     status: "complete",
-    schema_version: 1,
+    schema_version: 2,
     window_start: "2026-01-30T00:00:00.000Z",
     window_end: "2026-07-29T00:00:00.000Z",
     competitor_ids: [COMPETITOR_ID],
     source_item_ids: SOURCE_IDS,
     source_count: SOURCE_IDS.length,
     source_character_count: 6000,
+    fallback_date_count: 0,
+    source_evidence: sourceEvidence(),
+    company_evidence: companyEvidence(),
     analysis,
     model: "test-intelligence-model",
     created_at: "2026-07-29T00:00:00.000Z",
     updated_at: "2026-07-29T00:00:00.000Z",
   };
+}
+
+function postDb(options: {
+  ready?: boolean;
+  modelAnalysis?: CompetitorIntelligence;
+  claimError?: { code: string; message: string } | null;
+} = {}) {
+  const competitorQuery = chain({
+    data: [{ id: COMPETITOR_ID, name: "Market Co", description: null }],
+    error: null,
+  });
+  const dnaQuery = chain({
+    data: { company_name: "Client Co", services: "Advisory" },
+    error: null,
+  });
+  const topicQuery = chain({ data: [], error: null });
+  const contentQuery = chain({
+    data: [{
+      id: COMPANY_CONTENT_ID,
+      title: "Existing decision guide",
+      brief: "Help teams decide.",
+      body: "A previous company article about making sound decisions.",
+      content_type: "blog",
+      status: "approved",
+      created_at: "2026-06-01T00:00:00.000Z",
+    }],
+    error: null,
+  });
+  const vaultQuery = chain({
+    data: [{
+      id: VAULT_ID,
+      title: "Company services",
+      raw_content: "Verified details about the company's advisory service.",
+      ai_summary: "Company advisory services.",
+      category: "services",
+    }],
+    error: null,
+  });
+  const rpc = jest.fn((name: string) => {
+    if (name === "competitor_intelligence_readiness") {
+      return Promise.resolve({
+        data: [{ competitor_id: COMPETITOR_ID, ready: options.ready ?? true }],
+        error: null,
+      });
+    }
+    if (name === "competitor_intelligence_evidence") {
+      return Promise.resolve({ data: evidenceRows(), error: null });
+    }
+    if (name === "start_competitor_intelligence_job") {
+      return Promise.resolve(options.claimError
+        ? { data: null, error: options.claimError }
+        : {
+            data: {
+              id: JOB_ID,
+              status: "running",
+              lease_token: LEASE_TOKEN,
+              lease_until: "2026-07-29T01:00:00.000Z",
+              started_at: "2026-07-29T00:00:00.000Z",
+            },
+            error: null,
+          });
+    }
+    if (name === "complete_competitor_intelligence_job") {
+      return Promise.resolve({ data: runRow(), error: null });
+    }
+    if (name === "fail_competitor_intelligence_job") {
+      return Promise.resolve({ data: true, error: null });
+    }
+    throw new Error(`Unexpected RPC ${name}`);
+  });
+  const from = jest.fn((table: string) => {
+    if (table === "competitors") return competitorQuery;
+    if (table === "company_dna") return dnaQuery;
+    if (table === "content_topics") return topicQuery;
+    if (table === "content_pieces") return contentQuery;
+    if (table === "vault_items") return vaultQuery;
+    throw new Error(`Unexpected table ${table}`);
+  });
+  (createAdminClient as jest.Mock).mockReturnValue({ from, rpc });
+  jest.spyOn(global, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(options.modelAnalysis ?? analysis) } }],
+    }), { status: 200, headers: { "content-type": "application/json" } }),
+  );
+  return { rpc, from };
 }
 
 beforeEach(() => {
@@ -177,40 +355,27 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-test("lets a VA read the tenant report while keeping generation manager-only", async () => {
+test("lets a VA read immutable tenant report provenance while keeping generation manager-only", async () => {
   (requireApiAuth as jest.Mock).mockResolvedValue({
     user: { id: USER_ID, role: "va", client_id: CLIENT_ID },
   });
   const report = chain({ data: runRow(), error: null });
-  const items = chain({
-    data: SOURCE_IDS.map((id) => ({
-      id,
-      competitor_id: COMPETITOR_ID,
-      canonical_url: `https://competitor.test/${id}`,
-      platform: "linkedin",
-      content_type: "social_post",
-      title: "Captured post",
-      published_at: "2026-07-01T00:00:00.000Z",
-    })),
-    error: null,
-  });
-  const competitors = chain({
-    data: [{ id: COMPETITOR_ID, name: "Market Co" }],
-    error: null,
-  });
+  const jobs = chain({ data: null, error: null });
   (createAdminClient as jest.Mock).mockReturnValue({
-    from: jest.fn((table: string) => {
-      if (table === "competitor_intelligence_runs") return report;
-      if (table === "competitor_content_items") return items;
-      return competitors;
-    }),
+    from: jest.fn((table: string) =>
+      table === "competitor_intelligence_runs" ? report : jobs),
   });
 
   const response = await GET(request("GET"), routeCtx);
   expect(response.status).toBe(200);
   const json = await response.json();
   expect(json.run.id).toBe(RUN_ID);
-  expect(json.run.sources[0]).toMatchObject({ competitor_name: "Market Co" });
+  expect(json.run.sources[0]).toMatchObject({
+    capture_version_id: CAPTURE_IDS[0],
+    content_hash: evidenceRows()[0].content_hash,
+    competitor_name: "Market Co",
+  });
+  expect(json.run.company_sources).toHaveLength(2);
 
   const post = await POST(request("POST", {
     client_id: CLIENT_ID,
@@ -226,54 +391,8 @@ test("rejects another tenant before creating a service-role client", async () =>
   expect(createAdminClient).not.toHaveBeenCalled();
 });
 
-test("creates a durable report and removes recommendations with fabricated evidence", async () => {
-  const competitorQuery = chain({
-    data: [{ id: COMPETITOR_ID, name: "Market Co", description: null }],
-    error: null,
-  });
-  const dnaQuery = chain({
-    data: { company_name: "Client Co", services: "Advisory" },
-    error: null,
-  });
-  const topicQuery = chain({ data: [], error: null });
-  const evidenceRows = SOURCE_IDS.map((id, index) => ({
-    id,
-    competitor_id: COMPETITOR_ID,
-    canonical_url: `https://competitor.test/post-${index + 1}`,
-    platform: "linkedin",
-    content_type: "social_post",
-    title: `Post ${index + 1}`,
-    raw_content: `Practical market explanation ${index + 1}. ${"Useful detail. ".repeat(80)}`,
-    published_at: "2026-07-01T00:00:00.000Z",
-    captured_at: "2026-07-02T00:00:00.000Z",
-  }));
-  const itemsQuery = chain({ data: evidenceRows, error: null });
-  const saved = runRow();
-  const rpc = jest.fn((name: string) => {
-    if (name === "competitor_intelligence_readiness") {
-      return Promise.resolve({
-        data: [{ competitor_id: COMPETITOR_ID, ready: true }],
-        error: null,
-      });
-    }
-    return Promise.resolve({ data: saved, error: null });
-  });
-  (createAdminClient as jest.Mock).mockReturnValue({
-    from: jest.fn((table: string) => {
-      if (table === "competitors") return competitorQuery;
-      if (table === "company_dna") return dnaQuery;
-      if (table === "content_topics") return topicQuery;
-      if (table === "competitor_content_items") return itemsQuery;
-      throw new Error(`Unexpected table ${table}`);
-    }),
-    rpc,
-  });
-  const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
-    new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify(analysis) } }],
-    }), { status: 200, headers: { "content-type": "application/json" } }),
-  );
-
+test("uses publication-window evidence, exact quotes, company material and an atomic leased completion", async () => {
+  const { rpc } = postDb();
   const response = await POST(request("POST", {
     client_id: CLIENT_ID,
     competitor_ids: [COMPETITOR_ID],
@@ -285,44 +404,70 @@ test("creates a durable report and removes recommendations with fabricated evide
   expect(json.run.analysis.recommended_ideas).toHaveLength(1);
   expect(json.run.analysis.recommended_ideas[0]).toMatchObject({
     title: "The decision checklist most teams skip",
-    confidence: "low",
+    confidence: "medium",
+    company_reference_ids: [COMPANY_CONTENT_ID, VAULT_ID],
   });
   expect(rpc).toHaveBeenCalledWith(
-    "replace_competitor_intelligence_run",
+    "competitor_intelligence_evidence",
     expect.objectContaining({
       p_client_id: CLIENT_ID,
       p_competitor_ids: [COMPETITOR_ID],
-      p_source_item_ids: SOURCE_IDS,
-      p_analysis: expect.objectContaining({
-        recommended_ideas: [expect.objectContaining({
-          title: "The decision checklist most teams skip",
-        })],
-      }),
+      p_window_start: expect.any(String),
+      p_window_end: expect.any(String),
     }),
   );
+  expect(rpc).toHaveBeenCalledWith(
+    "complete_competitor_intelligence_job",
+    expect.objectContaining({
+      p_job_id: JOB_ID,
+      p_lease_token: LEASE_TOKEN,
+      p_source_evidence: expect.arrayContaining([
+        expect.objectContaining({
+          item_id: SOURCE_IDS[0],
+          capture_version_id: CAPTURE_IDS[0],
+          content_hash: evidenceRows()[0].content_hash,
+          date_basis: "published",
+        }),
+      ]),
+      p_company_evidence: expect.arrayContaining([
+        expect.objectContaining({ id: COMPANY_CONTENT_ID, kind: "content_piece" }),
+        expect.objectContaining({ id: VAULT_ID, kind: "vault_item" }),
+      ]),
+    }),
+  );
+  const fetchMock = global.fetch as jest.Mock;
   const modelBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
-  expect(modelBody.messages[0].content).toContain("Never treat competitor claims as facts");
-  expect(modelBody.messages[1].content).toContain(`id="${SOURCE_IDS[0]}"`);
+  expect(modelBody.messages[0].content).toContain("exact, contiguous quotes");
+  expect(modelBody.messages[1].content).toContain(`company_reference id="${COMPANY_CONTENT_ID}"`);
+  expect(modelBody.messages[1].content).toContain(`capture_version_id="${CAPTURE_IDS[0]}"`);
 });
 
-test("requires evidence-ready selected competitors before loading captured content", async () => {
-  const competitorQuery = chain({
-    data: [{ id: COMPETITOR_ID, name: "Market Co", description: null }],
-    error: null,
-  });
-  const empty = chain({ data: null, error: null });
-  const topics = chain({ data: [], error: null });
-  const rpc = jest.fn().mockResolvedValue({
-    data: [{ competitor_id: COMPETITOR_ID, ready: false }],
-    error: null,
-  });
-  const from = jest.fn((table: string) => {
-    if (table === "competitors") return competitorQuery;
-    if (table === "content_topics") return topics;
-    return empty;
-  });
-  (createAdminClient as jest.Mock).mockReturnValue({ from, rpc });
-  const fetchMock = jest.spyOn(global, "fetch");
+test("rejects a model insight whose quote is not an exact source excerpt and fails the lease", async () => {
+  const invalid = structuredClone(analysis);
+  invalid.recommended_ideas[0].evidence_quotes[0].quote =
+    "This quote was invented and is not present in the immutable source.";
+  const { rpc } = postDb({ modelAnalysis: invalid });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(502);
+  expect(rpc).toHaveBeenCalledWith(
+    "fail_competitor_intelligence_job",
+    expect.objectContaining({ p_job_id: JOB_ID, p_lease_token: LEASE_TOKEN }),
+  );
+  expect(rpc).not.toHaveBeenCalledWith(
+    "complete_competitor_intelligence_job",
+    expect.anything(),
+  );
+});
+
+test("requires evidence-ready selected competitors before loading immutable evidence", async () => {
+  const { rpc } = postDb({ ready: false });
+  const fetchMock = global.fetch as jest.Mock;
 
   const response = await POST(request("POST", {
     client_id: CLIENT_ID,
@@ -333,6 +478,28 @@ test("requires evidence-ready selected competitors before loading captured conte
   expect(response.status).toBe(422);
   await expect(response.json()).resolves.toMatchObject({
     code: "COMPETITOR_EVIDENCE_NOT_READY",
+  });
+  expect(rpc).not.toHaveBeenCalledWith("competitor_intelligence_evidence", expect.anything());
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("returns a conflict without a model call when another durable lease is active", async () => {
+  postDb({
+    claimError: {
+      code: "55P03",
+      message: "A competitor analysis is already running for this client.",
+    },
+  });
+  const fetchMock = global.fetch as jest.Mock;
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(409);
+  await expect(response.json()).resolves.toMatchObject({
+    code: "COMPETITOR_ANALYSIS_RUNNING",
   });
   expect(fetchMock).not.toHaveBeenCalled();
 });

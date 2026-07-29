@@ -20,7 +20,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
-import type { CompetitorIntelligenceIdea } from "@/lib/competitors/intelligence";
+import type {
+  CompetitorIntelligenceIdea,
+  CompetitorIntelligenceRun,
+} from "@/lib/competitors/intelligence";
 import type {
   Competitor,
   CompetitorCrawlJob,
@@ -37,7 +40,10 @@ interface CompetitorsTabProps {
   clientId: string;
   canManage: boolean;
   active?: boolean;
-  onIdeaSelected?: (idea: CompetitorIntelligenceIdea) => void;
+  onIdeaSelected?: (
+    idea: CompetitorIntelligenceIdea,
+    run: CompetitorIntelligenceRun,
+  ) => void;
 }
 
 const CADENCES: { value: CompetitorRefreshCadence; label: string }[] = [
@@ -459,6 +465,7 @@ export function CompetitorsTab({
           <Button
             type="button"
             size="sm"
+            data-testid="competitor-add-button"
             onClick={() => setShowCreate((value) => !value)}
             className="bg-orange-500 text-white hover:bg-orange-400"
           >
