@@ -272,8 +272,11 @@ export async function handleContentGenerateRequest(
     const persist = body.persist !== false;
     const sourceContext = typeof body.sourceContext === "string" ? body.sourceContext : "";
     const projectId = typeof body.projectId === "string" ? body.projectId : null;
-    const selectedVaultSourceIds = Array.isArray(body.vaultSourceIds)
-      ? [...new Set(body.vaultSourceIds.filter((id: unknown): id is string => typeof id === "string"))]
+    const selectedVaultSourceIds: string[] | undefined = Array.isArray(body.vaultSourceIds)
+      ? Array.from(new Set<string>(
+          (body.vaultSourceIds as unknown[])
+            .filter((id: unknown): id is string => typeof id === "string"),
+        ))
       : undefined;
     const requestedGenerationKind = body.generationKind;
     const parentPieceId = typeof body.parentPieceId === "string" ? body.parentPieceId : null;
