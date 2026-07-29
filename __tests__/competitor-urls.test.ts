@@ -90,6 +90,24 @@ describe("competitor URL resolution", () => {
     });
   });
 
+  test("collects public LinkedIn company pages but keeps personal profiles connector-only", () => {
+    expect(resolveCompetitorUrl("https://www.linkedin.com/company/example/")).toMatchObject({
+      normalizedUrl: "https://www.linkedin.com/company/example",
+      platform: "linkedin",
+      sourceType: "social_profile",
+      requiresConnector: false,
+    });
+    expect(resolveCompetitorUrl("https://www.linkedin.com/in/example")).toMatchObject({
+      platform: "linkedin",
+      sourceType: "social_profile",
+      requiresConnector: true,
+    });
+    expect(resolveCompetitorUrl("https://au.linkedin.com/company/example/")).toMatchObject({
+      normalizedUrl: "https://au.linkedin.com/company/example",
+      requiresConnector: false,
+    });
+  });
+
   test("allows an explicit scope for ordinary public pages", () => {
     expect(resolveCompetitorUrl("https://example.com/resources/guide", "domain")).toMatchObject({
       sourceType: "website",
@@ -167,5 +185,28 @@ describe("competitor crawl boundaries", () => {
       "https://www.example.com/blog/post",
       source({ url: "https://example.com/blog", normalized_url: "https://example.com/blog" }),
     )).toBe(true);
+  });
+
+  test("a LinkedIn company source accepts only posts belonging to its public slug", () => {
+    const linkedin = source({
+      source_type: "social_profile",
+      platform: "linkedin",
+      url: "https://www.linkedin.com/company/example",
+      normalized_url: "https://www.linkedin.com/company/example",
+      crawl_scope: "profile",
+      path_prefix: null,
+    });
+    expect(capturedPageBelongsToSource(
+      "https://www.linkedin.com/posts/example_activity-123",
+      linkedin,
+    )).toBe(true);
+    expect(capturedPageBelongsToSource(
+      "https://www.linkedin.com/posts/other_activity-123",
+      linkedin,
+    )).toBe(false);
+    expect(capturedPageBelongsToSource(
+      "https://www.linkedin.com/company/example",
+      linkedin,
+    )).toBe(false);
   });
 });

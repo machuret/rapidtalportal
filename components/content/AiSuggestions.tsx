@@ -29,6 +29,7 @@ interface AiSuggestionsProps {
   suggestions: AiSuggestion[] | null;
   isGenerating: boolean;
   isSubmitting: boolean;
+  mode?: "company" | "competitor_gap";
   onGenerate: () => Promise<void>;
   onSubmitSelected: (selected: AiSuggestion[]) => Promise<void>;
   onClose: () => void;
@@ -87,6 +88,19 @@ const SuggestionCard = memo(function SuggestionCard({
             {suggestion.rationale && (
               <p className="text-xs text-zinc-600 mt-1.5 italic line-clamp-1">💡 {suggestion.rationale}</p>
             )}
+            {suggestion.opportunity_type && (
+              <p className="mt-1.5 text-xs font-medium capitalize text-orange-300">
+                {suggestion.opportunity_type.replace(/_/gu, " ")}
+                {suggestion.competitor_evidence?.length
+                  ? ` · ${suggestion.competitor_evidence.length} verified source${suggestion.competitor_evidence.length === 1 ? "" : "s"}`
+                  : ""}
+              </p>
+            )}
+            {suggestion.evidence_summary && (
+              <p className="mt-1 text-xs leading-relaxed text-zinc-500 line-clamp-2">
+                Evidence: {suggestion.evidence_summary}
+              </p>
+            )}
             {whySentence(suggestion.why) && (
               <p className="text-xs text-orange-400/80 mt-1.5 flex items-start gap-1">
                 <Info className="w-3 h-3 shrink-0 mt-0.5" /> <span>{whySentence(suggestion.why)}</span>
@@ -125,6 +139,7 @@ export const AiSuggestions = memo(function AiSuggestions({
   suggestions,
   isGenerating,
   isSubmitting,
+  mode = "company",
   onGenerate,
   onSubmitSelected,
   onClose,
@@ -201,8 +216,14 @@ export const AiSuggestions = memo(function AiSuggestions({
       <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 bg-zinc-800/60">
         <div className="flex items-center gap-2">
           <Wand2 className="w-4 h-4 text-purple-400" />
-          <p className="text-sm font-semibold text-white">AI-Generated Topic Ideas</p>
-          <span className="text-xs text-zinc-500">from your Company Brain</span>
+          <p className="text-sm font-semibold text-white">
+            {mode === "competitor_gap" ? "Competitor-Gap Topic Ideas" : "AI-Generated Topic Ideas"}
+          </p>
+          <span className="text-xs text-zinc-500">
+            {mode === "competitor_gap"
+              ? "Company Brain + verified competitor evidence"
+              : "from your Company Brain"}
+          </span>
         </div>
         <button
           type="button"
@@ -217,7 +238,11 @@ export const AiSuggestions = memo(function AiSuggestions({
       {isGenerating ? (
         <div className="flex items-center justify-center gap-3 py-12">
           <RefreshCw className="w-5 h-5 text-purple-400 animate-spin" />
-          <p className="text-zinc-400 text-sm">Analyzing your Brain and generating ideas…</p>
+          <p className="text-zinc-400 text-sm">
+            {mode === "competitor_gap"
+              ? "Comparing your company with verified competitor evidence…"
+              : "Analyzing your Brain and generating ideas…"}
+          </p>
         </div>
       ) : visibleCount === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 text-center">

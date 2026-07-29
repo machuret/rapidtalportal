@@ -68,6 +68,10 @@ function formatDate(value: string | null): string {
   }).format(date);
 }
 
+function formatCompact(value: number): string {
+  return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
 function sourceState(source: CompetitorSource): {
   label: string;
   className: string;
@@ -607,6 +611,38 @@ export function CompetitorsTab({ clientId, canManage, active = true }: Competito
               </div>
 
               <div className="space-y-3 p-5">
+                <div className={`rounded-lg border p-4 ${
+                  competitor.readiness.ready
+                    ? "border-emerald-500/25 bg-emerald-500/5"
+                    : "border-amber-500/25 bg-amber-500/5"
+                }`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-zinc-200">
+                        Mini Vault: {competitor.readiness.ready ? "Ready for gap ideas" : "Building evidence"}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {competitor.readiness.captured_items} items ·{" "}
+                        {formatCompact(competitor.readiness.content_characters)} characters ·{" "}
+                        {competitor.readiness.article_count} articles ·{" "}
+                        {competitor.readiness.social_post_count} social posts
+                      </p>
+                    </div>
+                    <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                      competitor.readiness.ready
+                        ? "border-emerald-500/30 text-emerald-300"
+                        : "border-amber-500/30 text-amber-300"
+                    }`}>
+                      {competitor.readiness.readiness_score}/100 evidence
+                    </span>
+                  </div>
+                  {!competitor.readiness.ready && (
+                    <p className="mt-2 text-xs text-amber-200/80">
+                      Collect at least 5 recent items and 3,000 characters. Add the company website,
+                      blog, RSS feed, exact article URLs or its public LinkedIn company page, then refresh each source.
+                    </p>
+                  )}
+                </div>
                 {competitor.sources.map((source) => {
                   const state = sourceState(source);
                   const busy = Boolean(state.activeJob);
@@ -793,6 +829,10 @@ export function CompetitorsTab({ clientId, canManage, active = true }: Competito
                         />
                       </label>
                     </div>
+                    <p className="text-xs text-zinc-500">
+                      Supported now: websites, blog sections, RSS/Atom feeds, sitemaps, exact article URLs,
+                      and public LinkedIn company pages such as linkedin.com/company/company-name.
+                    </p>
                     <div className="flex justify-end gap-2">
                       <Button type="button" size="sm" variant="ghost" onClick={() => setAddingSourceTo(null)}>Cancel</Button>
                       <Button type="submit" size="sm" disabled={working === `source:${competitor.id}`}>

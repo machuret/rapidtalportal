@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import { toast } from "sonner";
-import type { ContentTopic, ContentType } from "@/types/content";
+import type { AiSuggestion, ContentTopic, ContentType } from "@/types/content";
 
 const TOPICS_KEY = "topics";
 
@@ -59,9 +59,10 @@ async function deleteTopic(input: DeleteTopicInput): Promise<void> {
 // Generate AI Topic Ideas
 async function generateTopicIdeas(
   clientId: string,
-  count: number = 8
-): Promise<{ topics: Array<{ title: string; description: string; content_type: string; rationale: string; fit?: number | null; ai_flagged?: boolean; why?: Record<string, unknown> | null }> }> {
-  return api.post("/content/topics/generate", { client_id: clientId, count });
+  count: number = 8,
+  mode: "company" | "competitor_gap" = "company",
+): Promise<{ topics: AiSuggestion[]; mode: "company" | "competitor_gap"; warning?: string }> {
+  return api.post("/content/topics/generate", { client_id: clientId, count, mode });
 }
 
 // Hook for topics management
@@ -187,7 +188,10 @@ export function useTopics(clientId: string, initialTopics: ContentTopic[] = []) 
 
   // AI generation mutation
   const generateIdeasMutation = useMutation({
-    mutationFn: ({ count }: { count: number }) => generateTopicIdeas(clientId, count),
+    mutationFn: ({ count, mode = "company" }: {
+      count: number;
+      mode?: "company" | "competitor_gap";
+    }) => generateTopicIdeas(clientId, count, mode),
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Failed to generate ideas");
     },

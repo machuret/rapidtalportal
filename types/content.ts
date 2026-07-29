@@ -109,6 +109,15 @@ export interface AiSuggestion {
   ai_flagged?: boolean;
   /** Provenance for "Why this?" — what the Brain drew on. */
   why?: BrainWhy | null;
+  opportunity_type?: "gap" | "differentiation" | "counter_position" | "market_pattern" | null;
+  evidence_summary?: string;
+  competitor_evidence?: Array<{
+    item_id: string;
+    competitor_id: string;
+    competitor_name: string;
+    title: string;
+    url: string;
+  }>;
 }
 
 /** What the Brain used to produce a suggestion (powers "Why this?"). */
@@ -119,6 +128,11 @@ export interface BrainWhy {
   examples?: number;
   grounded?: boolean;
   fit?: number | null;
+  competitor_evidence?: number;
+  competitors?: string[];
+  competitor_sources?: AiSuggestion["competitor_evidence"];
+  opportunity_type?: AiSuggestion["opportunity_type"];
+  evidence_summary?: string;
 }
 
 export interface ContentGenerationParams {

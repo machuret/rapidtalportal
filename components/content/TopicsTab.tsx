@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState, useCallback } from "react";
-import { Plus, Wand2, RefreshCw, Search } from "lucide-react";
+import { Plus, Wand2, RefreshCw, Search, Radar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTopics } from "@/hooks/useTopics";
@@ -26,6 +26,7 @@ export const TopicsTab = memo(function TopicsTab({
 }: TopicsTabProps) {
   const [showForm, setShowForm] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [ideaMode, setIdeaMode] = useState<"company" | "competitor_gap">("company");
   const [search, setSearch] = useState("");
 
   const {
@@ -75,9 +76,12 @@ export const TopicsTab = memo(function TopicsTab({
     [deleteTopic, clientId]
   );
 
-  const handleGenerateIdeas = useCallback(async () => {
-    await generateIdeas({ count: 8 });
-  }, [generateIdeas]);
+  const handleGenerateIdeas = useCallback(async (
+    mode: "company" | "competitor_gap" = ideaMode,
+  ) => {
+    setIdeaMode(mode);
+    await generateIdeas({ count: 8, mode });
+  }, [generateIdeas, ideaMode]);
 
   const handleSubmitSuggestions = useCallback(
     async (selected: AiSuggestion[]) => {
@@ -127,10 +131,9 @@ export const TopicsTab = memo(function TopicsTab({
           <Button
             size="sm"
             onClick={() => {
+              setIdeaMode("company");
               setShowSuggestions(true);
-              if (!suggestions) {
-                handleGenerateIdeas();
-              }
+              void handleGenerateIdeas("company");
             }}
             disabled={isGenerating}
             className="bg-purple-600 hover:bg-purple-700 text-white border-0"
@@ -146,6 +149,22 @@ export const TopicsTab = memo(function TopicsTab({
                 Generate Ideas
               </>
             )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setIdeaMode("competitor_gap");
+              setShowSuggestions(true);
+              void handleGenerateIdeas("competitor_gap");
+            }}
+            disabled={isGenerating}
+            className="border-orange-500/40 text-orange-300 hover:bg-orange-500/10"
+          >
+            {isGenerating && ideaMode === "competitor_gap"
+              ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              : <Radar className="w-4 h-4 mr-2" />}
+            Competitor Gap Ideas
           </Button>
           <Button
             size="sm"
@@ -165,7 +184,8 @@ export const TopicsTab = memo(function TopicsTab({
           suggestions={suggestions as AiSuggestion[] | null}
           isGenerating={isGenerating}
           isSubmitting={isCreating}
-          onGenerate={handleGenerateIdeas}
+          mode={ideaMode}
+          onGenerate={() => handleGenerateIdeas(ideaMode)}
           onSubmitSelected={handleSubmitSuggestions}
           onClose={() => setShowSuggestions(false)}
         />

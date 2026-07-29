@@ -99,7 +99,7 @@ describe("competitor configuration routes", () => {
     }));
   });
 
-  test("registers social profile URLs as connector-required without scheduling a crawl", async () => {
+  test("registers public LinkedIn company pages as collectable sources", async () => {
     const competitorQuery = fluent({
       data: { id: COMPETITOR_ID, refresh_cadence: "weekly" },
       error: null,
@@ -110,7 +110,7 @@ describe("competitor configuration routes", () => {
         source_type: "social_profile",
         platform: "linkedin",
         crawl_scope: "profile",
-        status: "connector_required",
+        status: "active",
       },
       error: null,
     });
@@ -129,9 +129,7 @@ describe("competitor configuration routes", () => {
       source_type: "social_profile",
       platform: "linkedin",
       crawl_scope: "profile",
-      status: "connector_required",
-      next_refresh_at: null,
+      status: "active",
     }));
   });
 });
-

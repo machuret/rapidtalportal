@@ -77,6 +77,7 @@ function claimed(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   jest.restoreAllMocks();
+  jest.clearAllMocks();
   process.env.FIRECRAWL_API_KEY = "test-key";
 });
 
@@ -85,16 +86,74 @@ afterAll(() => {
 });
 
 describe("competitor source ingestion", () => {
-  test("social sources remain registered but cannot be scraped without a connector", async () => {
+  test("personal social sources remain registered but cannot be scraped without a connector", async () => {
     const admin = { from: jest.fn(), rpc: jest.fn() };
     await expect(startCompetitorRefresh(
       admin,
-      source({ source_type: "social_profile", platform: "linkedin", crawl_scope: "profile" }),
+      source({
+        source_type: "social_profile",
+        platform: "linkedin",
+        url: "https://www.linkedin.com/in/example",
+        normalized_url: "https://www.linkedin.com/in/example",
+        crawl_scope: "profile",
+      }),
       null,
     )).rejects.toEqual(expect.objectContaining<Partial<CompetitorIngestionError>>({
       status: 422,
     }));
     expect(admin.rpc).not.toHaveBeenCalled();
+  });
+
+  test("discovers bounded public company posts before starting a durable batch scrape", async () => {
+    const linkedinSource = source({
+      source_type: "social_profile",
+      platform: "linkedin",
+      url: "https://www.linkedin.com/company/example",
+      normalized_url: "https://www.linkedin.com/company/example",
+      crawl_scope: "profile",
+      path_prefix: null,
+      max_pages: 10,
+      competitor_name: "Example",
+    });
+    const queued = { ...claimed(), status: "queued", provider_job_id: null };
+    const started = { ...queued, status: "crawling", provider_job_id: "batch-job" };
+    const rpc = jest.fn(() => ({
+      single: jest.fn().mockResolvedValue({ data: queued, error: null }),
+    }));
+    const from = jest.fn((table: string) =>
+      chainWith(table === "competitor_crawl_jobs"
+        ? { data: started, error: null }
+        : { data: null, error: null }));
+    const fetchMock = jest.spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        data: {
+          web: [
+            { url: "https://www.linkedin.com/posts/example_activity-123" },
+            { url: "https://www.linkedin.com/posts/other_activity-456" },
+            { url: "https://evil.example/posts/example_activity-789" },
+          ],
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "batch-job" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }));
+
+    await startCompetitorRefresh({ from, rpc }, linkedinSource, "actor-id");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.firecrawl.dev/v2/search");
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
+      includeDomains: ["linkedin.com"],
+      limit: 10,
+    });
+    expect(fetchMock.mock.calls[1][0]).toBe("https://api.firecrawl.dev/v2/batch/scrape");
+    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body))).toMatchObject({
+      urls: ["https://www.linkedin.com/posts/example_activity-123"],
+    });
+    expect(rpc).toHaveBeenCalledWith("create_competitor_crawl_job", expect.objectContaining({
+      p_pages_requested: 11,
+    }));
   });
 
   test("atomically reserves tenant budget before starting a v2 provider crawl", async () => {

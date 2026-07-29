@@ -82,6 +82,19 @@ export interface CompetitorContentItem {
   is_removed?: boolean;
 }
 
+export interface CompetitorReadiness {
+  source_count: number;
+  collectable_source_count: number;
+  captured_items: number;
+  article_count: number;
+  social_post_count: number;
+  distinct_platforms: number;
+  content_characters: number;
+  latest_capture: string | null;
+  readiness_score: number;
+  ready: boolean;
+}
+
 export interface Competitor {
   id: string;
   client_id: string;
@@ -94,4 +107,5 @@ export interface Competitor {
   updated_at: string;
   sources: CompetitorSource[];
   recent_items: CompetitorContentItem[];
+  readiness: CompetitorReadiness;
 }

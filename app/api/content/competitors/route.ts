@@ -9,6 +9,7 @@ import type {
   Competitor,
   CompetitorContentItem,
   CompetitorCrawlJob,
+  CompetitorReadiness,
   CompetitorSource,
 } from "@/types/competitors";
 
@@ -51,7 +52,13 @@ export const GET = withAuth(async (req, { user }) => {
   // Migration 095 tables are accessed before the next generated-type refresh.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any;
-  const [{ data: competitors, error }, { data: sources, error: sourceError }, { data: jobs, error: jobError }, { data: items, error: itemError }] = await Promise.all([
+  const [
+    { data: competitors, error },
+    { data: sources, error: sourceError },
+    { data: jobs, error: jobError },
+    { data: items, error: itemError },
+    { data: readinessRows, error: readinessError },
+  ] = await Promise.all([
     db
       .from("competitors")
       .select("id, client_id, name, description, website_url, status, refresh_cadence, created_at, updated_at")
@@ -75,11 +82,15 @@ export const GET = withAuth(async (req, { user }) => {
       .eq("is_removed", false)
       .order("captured_at", { ascending: false })
       .limit(50),
+    db.rpc("competitor_intelligence_readiness", {
+      p_client_id: parsed.data.client_id,
+    }),
   ]);
   if (error) return serverError(error);
   if (sourceError) return serverError(sourceError);
   if (jobError) return serverError(jobError);
   if (itemError) return serverError(itemError);
+  if (readinessError) return serverError(readinessError);
 
   const jobBySource = new Map<string, CompetitorCrawlJob>();
   for (const job of (jobs ?? []) as CompetitorCrawlJob[]) {
@@ -98,11 +109,29 @@ export const GET = withAuth(async (req, { user }) => {
     if (group.length < 5) group.push(item);
     itemsByCompetitor.set(item.competitor_id, group);
   }
+  const readinessByCompetitor = new Map<string, CompetitorReadiness>();
+  for (const row of (readinessRows ?? []) as Array<CompetitorReadiness & { competitor_id: string }>) {
+    const { competitor_id, ...readiness } = row;
+    readinessByCompetitor.set(competitor_id, readiness);
+  }
+  const emptyReadiness: CompetitorReadiness = {
+    source_count: 0,
+    collectable_source_count: 0,
+    captured_items: 0,
+    article_count: 0,
+    social_post_count: 0,
+    distinct_platforms: 0,
+    content_characters: 0,
+    latest_capture: null,
+    readiness_score: 0,
+    ready: false,
+  };
 
-  const response = ((competitors ?? []) as Omit<Competitor, "sources" | "recent_items">[]).map((competitor) => ({
+  const response = ((competitors ?? []) as Omit<Competitor, "sources" | "recent_items" | "readiness">[]).map((competitor) => ({
     ...competitor,
     sources: sourcesByCompetitor.get(competitor.id) ?? [],
     recent_items: itemsByCompetitor.get(competitor.id) ?? [],
+    readiness: readinessByCompetitor.get(competitor.id) ?? emptyReadiness,
   }));
   return NextResponse.json({ competitors: response });
 });
