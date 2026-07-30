@@ -641,6 +641,50 @@ test("preserves valid verified sections when another model section is malformed"
   );
 });
 
+test("normalizes harmless provider formatting while keeping evidence fields strict", async () => {
+  const noisy = structuredClone(analysis) as unknown as Record<string, unknown>;
+  const clusters = noisy.topic_clusters as Array<Record<string, unknown>>;
+  clusters[0].id = "Practical Education!";
+  clusters[0].channels = ["website"];
+  clusters[0].signal_strength = "strong";
+  clusters[0].description = `${clusters[0].description}${" detail".repeat(300)}`;
+  const ideas = noisy.recommended_ideas as Array<Record<string, unknown>>;
+  ideas[0].channel = "twitter";
+  ideas[0].confidence = "uncertain";
+  const { rpc } = postDb({
+    modelResponses: [{ analysis: noisy }],
+  });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(201);
+  expect(global.fetch).toHaveBeenCalledTimes(1);
+  expect(rpc).toHaveBeenCalledWith(
+    "complete_competitor_intelligence_job",
+    expect.objectContaining({
+      p_analysis: expect.objectContaining({
+        topic_clusters: [
+          expect.objectContaining({
+            id: "practical-education",
+            channels: ["blog"],
+            signal_strength: "established",
+          }),
+        ],
+        recommended_ideas: [
+          expect.objectContaining({
+            channel: "x",
+            confidence: "medium",
+          }),
+        ],
+      }),
+    }),
+  );
+});
+
 test("requires evidence-ready selected competitors before loading immutable evidence", async () => {
   const { rpc } = postDb({ ready: false });
   const fetchMock = global.fetch as jest.Mock;

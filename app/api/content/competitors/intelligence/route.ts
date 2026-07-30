@@ -283,6 +283,142 @@ function normalizeAnalysisEnvelope(value: unknown): unknown {
   };
 }
 
+function normalizeAnalysisItem(key: string, value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const item = { ...(value as Record<string, unknown>) };
+  const text = (field: string, maximum: number) => {
+    if (typeof item[field] === "string") {
+      item[field] = item[field].trim().slice(0, maximum);
+    }
+  };
+  const list = (field: string, maximumItems: number, maximumLength = 240) => {
+    if (Array.isArray(item[field])) {
+      item[field] = item[field]
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => entry.trim().slice(0, maximumLength))
+        .filter(Boolean)
+        .slice(0, maximumItems);
+    }
+  };
+  const identifiers = (field: string, maximumItems = 12) => {
+    if (Array.isArray(item[field])) {
+      item[field] = item[field]
+        .filter((entry): entry is string => typeof entry === "string")
+        .slice(0, maximumItems);
+    }
+  };
+  const channel = (entry: string) => {
+    const normalized = entry.trim().toLocaleLowerCase();
+    if (["web", "website", "article", "articles"].includes(normalized)) return "blog";
+    if (normalized === "twitter") return "x";
+    return normalized;
+  };
+  const channelList = (field: string) => {
+    if (Array.isArray(item[field])) {
+      item[field] = [...new Set(item[field]
+        .filter((entry): entry is string => typeof entry === "string")
+        .map(channel)
+        .filter((entry) =>
+          ["linkedin", "facebook", "instagram", "x", "email", "blog", "newsletter"]
+            .includes(entry)))].slice(0, 7);
+    }
+  };
+  const quotes = () => {
+    if (!Array.isArray(item.evidence_quotes)) return;
+    item.evidence_quotes = item.evidence_quotes.flatMap((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+      const quote = entry as Record<string, unknown>;
+      if (
+        typeof quote.source_item_id !== "string" ||
+        typeof quote.quote !== "string"
+      ) return [];
+      const content = quote.quote.trim().slice(0, 500);
+      return content.length >= 20
+        ? [{ source_item_id: quote.source_item_id, quote: content }]
+        : [];
+    }).slice(0, 12);
+  };
+
+  identifiers("source_item_ids");
+  identifiers("competitor_ids");
+  quotes();
+  text("description", 1200);
+  if (key === "topic_clusters") {
+    text("label", 120);
+    channelList("channels");
+    const idSource = typeof item.id === "string"
+      ? item.id
+      : typeof item.label === "string" ? item.label : "";
+    const normalizedId = idSource.toLocaleLowerCase()
+      .replace(/[^a-z0-9]+/gu, "-")
+      .replace(/^-+|-+$/gu, "")
+      .slice(0, 80)
+      .replace(/-+$/gu, "");
+    item.id = normalizedId.length >= 2 ? normalizedId : "verified-topic";
+    if (!["emerging", "established"].includes(String(item.signal_strength))) {
+      item.signal_strength = "emerging";
+    }
+  } else if (key === "format_patterns") {
+    text("name", 120);
+    text("hook_pattern", 400);
+    text("structure_pattern", 600);
+    text("cta_pattern", 400);
+    channelList("channels");
+  } else if (key === "positioning_profiles") {
+    list("audience", 10);
+    list("themes", 10);
+    list("value_propositions", 10);
+    list("tone", 10);
+    text("summary", 1200);
+  } else if (key === "comparisons") {
+    text("dimension", 120);
+    text("opportunity", 1200);
+    if (Array.isArray(item.observations)) {
+      item.observations = item.observations.flatMap((entry) => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+        const observation = entry as Record<string, unknown>;
+        return typeof observation.competitor_id === "string" &&
+            typeof observation.value === "string"
+          ? [{
+              competitor_id: observation.competitor_id,
+              value: observation.value.trim().slice(0, 500),
+            }]
+          : [];
+      }).slice(0, 20);
+    }
+  } else if (key === "positioning_gaps") {
+    text("title", 180);
+    text("rationale", 1200);
+    channelList("recommended_channels");
+    list("suggested_angles", 10);
+    if (!["topic", "audience", "format", "proof", "positioning", "counter_position"]
+      .includes(String(item.gap_type))) {
+      item.gap_type = "positioning";
+    }
+    if (!["low", "medium", "high"].includes(String(item.company_fit))) {
+      item.company_fit = "medium";
+    }
+  } else if (key === "recommended_ideas") {
+    text("title", 220);
+    text("format", 120);
+    text("objective", 1200);
+    text("why_valuable", 1200);
+    text("differentiation", 1200);
+    text("suggested_hook", 500);
+    text("overlap_warning", 600);
+    list("key_points", 10);
+    identifiers("company_reference_ids");
+    if (typeof item.channel === "string") item.channel = channel(item.channel);
+    if (!["new", "adjacent", "overlap"].includes(String(item.novelty))) {
+      item.novelty = "new";
+    }
+    if (!["low", "medium", "high"].includes(String(item.confidence))) {
+      item.confidence = "low";
+    }
+  }
+  return item;
+}
+
 function salvageAnalysisEnvelope(value: unknown): CompetitorIntelligence | null {
   const normalized = normalizeAnalysisEnvelope(value);
   if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) return null;
@@ -295,7 +431,7 @@ function salvageAnalysisEnvelope(value: unknown): CompetitorIntelligence | null 
   ): T[] => {
     const candidates = Array.isArray(record[key]) ? record[key].slice(0, maximum) : [];
     return candidates.flatMap((candidate) => {
-      const result = parser.safeParse(candidate);
+      const result = parser.safeParse(normalizeAnalysisItem(key, candidate));
       return result.success ? [result.data] : [];
     });
   };
