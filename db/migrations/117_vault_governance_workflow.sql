@@ -5,6 +5,16 @@
 -- states at the database boundary.
 -- ============================================================
 
+-- Production predates parts of the historical learning-loop migrations.
+-- Repair the small prerequisites this workflow depends on instead of trusting
+-- a migration ledger that may have been baselined after manual schema changes.
+ALTER TABLE vault_queries
+  ADD COLUMN IF NOT EXISTS dismissed BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE kb_entries
+  ADD COLUMN IF NOT EXISTS category TEXT,
+  ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT false;
+
 ALTER TABLE vault_items
   ADD COLUMN IF NOT EXISTS authority_level TEXT NOT NULL DEFAULT 'supporting'
     CHECK (authority_level IN ('authoritative', 'supporting')),

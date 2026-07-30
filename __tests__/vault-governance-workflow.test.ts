@@ -168,6 +168,7 @@ test("the migration enforces lifecycle-safe retrieval and traceable gap resoluti
 
   expect(sql).toContain("authority_level TEXT NOT NULL");
   expect(sql).toContain("knowledge_status TEXT NOT NULL");
+  expect(sql).toContain("ADD COLUMN IF NOT EXISTS dismissed BOOLEAN NOT NULL DEFAULT false");
   expect(sql).toContain("resolved_by_vault_item_id UUID REFERENCES vault_items");
   expect(sql).toContain("CREATE TABLE IF NOT EXISTS vault_item_versions");
   expect(sql).toContain("CREATE TRIGGER vault_items_capture_version");
