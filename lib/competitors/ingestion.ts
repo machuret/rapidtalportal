@@ -84,6 +84,11 @@ function configuredLimit(name: string, fallback: number): number {
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
+function providerTimeoutSignal(name: string, fallback: number): AbortSignal {
+  const configured = configuredLimit(name, fallback);
+  return AbortSignal.timeout(Math.min(configured, 120_000));
+}
+
 function firecrawlHeaders(includeContentType = false): Record<string, string> {
   return {
     Authorization: `Bearer ${firecrawlKey()}`,
@@ -122,7 +127,18 @@ export function buildCompetitorCrawlRequest(source: IngestionSource) {
 }
 
 async function firecrawlJson(url: string, init?: RequestInit) {
-  const response = await fetch(url, init);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      signal: init?.signal ?? providerTimeoutSignal("FIRECRAWL_HTTP_TIMEOUT_MS", 60_000),
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+      throw new CompetitorIngestionError("The collection provider timed out. The job can be retried safely.", 504);
+    }
+    throw error;
+  }
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new CompetitorIngestionError(
@@ -278,6 +294,7 @@ async function discoverLinkedinPostsWithApify(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
+    signal: providerTimeoutSignal("APIFY_HTTP_TIMEOUT_MS", 100_000),
     body: JSON.stringify({
       targetUrls: [source.normalized_url],
       maxPosts: source.max_pages,
@@ -711,6 +728,7 @@ async function cancelProvider(job: CompetitorCrawlJob): Promise<void> {
   await fetch(`${FIRECRAWL_API}/${path}/${encodeURIComponent(job.provider_job_id)}`, {
     method: "DELETE",
     headers: firecrawlHeaders(),
+    signal: providerTimeoutSignal("FIRECRAWL_CANCEL_TIMEOUT_MS", 10_000),
   }).catch(() => undefined);
 }
 

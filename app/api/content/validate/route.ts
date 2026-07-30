@@ -43,7 +43,7 @@ export const POST = withAuth(async (req, { user }) => {
   ] = await Promise.all([
     db
       .from("content_pieces")
-      .select("id,project_id,content_type,body,source_references")
+      .select("id,project_id,content_type,body,source_references,updated_at")
       .eq("id", parsed.data.piece_id)
       .eq("project_id", parsed.data.project_id)
       .eq("client_id", parsed.data.client_id)
@@ -94,7 +94,29 @@ export const POST = withAuth(async (req, { user }) => {
     { id: "platform", label: "Platform structure", warnings: platform },
     { id: "hard_rules", label: "Enforced hard rules", warnings: hardRules },
   ];
-  if (checks.some((check) => check.warnings.length > 0)) {
+  const valid = checks.every((check) => check.warnings.length === 0);
+  // Persist the verdict against the exact draft timestamp. The RPC locks the
+  // project and rejects the write if the draft changed while checks ran.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: validation, error: validationError } = await (db as any)
+    .rpc("record_content_project_validation", {
+      p_client_id: parsed.data.client_id,
+      p_project_id: parsed.data.project_id,
+      p_piece_id: parsed.data.piece_id,
+      p_actor_id: user.id,
+      p_expected_piece_updated_at: piece.updated_at,
+      p_passed: valid,
+      p_checks: checks,
+    })
+    .single();
+  if (validationError) {
+    if (validationError.code === "40001") {
+      return NextResponse.json({ error: validationError.message }, { status: 409 });
+    }
+    return serverError(validationError);
+  }
+
+  if (!valid) {
     await recordWorkflowEvent(db as unknown as PilotDbClient, {
       clientId: parsed.data.client_id,
       projectId: parsed.data.project_id,
@@ -110,11 +132,11 @@ export const POST = withAuth(async (req, { user }) => {
     });
   }
   return NextResponse.json({
-    valid: checks.every((check) => check.warnings.length === 0),
+    valid,
     checks: checks.map((check) => ({
       ...check,
       passed: check.warnings.length === 0,
     })),
-    validated_at: new Date().toISOString(),
+    validated_at: validation.validated_at,
   });
 });

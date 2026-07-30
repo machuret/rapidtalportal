@@ -148,6 +148,7 @@ export function ContentProjectWorkflow({
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const [retryOperation, setRetryOperation] = useState<RetryOperation | null>(null);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [loadingMoreArtifacts, setLoadingMoreArtifacts] = useState(false);
   const autosaveTimer = useRef<number | null>(null);
   const [history, setHistory] = useState<ContentPiece[]>(
     project.pieces?.length
@@ -588,6 +589,40 @@ export function ContentProjectWorkflow({
     }
   }, [clientId, loadProject, onContentGenerated, onProjectChange, project.id]);
 
+  const loadMoreArtifacts = useCallback(async () => {
+    if (loadingMoreArtifacts || !project.pieces_has_more) return;
+    setLoadingMoreArtifacts(true);
+    try {
+      const loaded = await api.get<ContentProject>(
+        ROUTES.content.projectArtifacts(
+          clientId,
+          project.id,
+          project.pieces_next_offset ?? history.length,
+        ),
+        { showErrorToast: false },
+      );
+      const additional = loaded.pieces ?? [];
+      const mergedHistory = [
+        ...history,
+        ...additional.filter((item) => !history.some((existing) => existing.id === item.id)),
+      ];
+      setHistory(mergedHistory);
+      onProjectChange({ ...loaded, pieces: mergedHistory });
+    } catch (error) {
+      toast.error(errorMessage(error, "Older project drafts could not be loaded."));
+    } finally {
+      setLoadingMoreArtifacts(false);
+    }
+  }, [
+    clientId,
+    history,
+    loadingMoreArtifacts,
+    onProjectChange,
+    project.id,
+    project.pieces_has_more,
+    project.pieces_next_offset,
+  ]);
+
   if (project.status === "rejected") {
     return (
       <div className="space-y-5">
@@ -622,6 +657,9 @@ export function ContentProjectWorkflow({
             initialSelectedId={project.current_piece_id}
             onBackToWorkflow={onClose}
             onPieceStatusChanged={handlePieceStatusChanged}
+            hasMore={project.pieces_has_more}
+            loadingMore={loadingMoreArtifacts}
+            onLoadMore={loadMoreArtifacts}
             onArtifactCreated={handleDerivedArtifactCreated}
           />
         )}
@@ -827,7 +865,19 @@ export function ContentProjectWorkflow({
               <Button disabled={draftDirty || busy} onClick={() => patchProject({ current_step: "validate" })}>Validate draft <ArrowRight className="ml-2 h-4 w-4" /></Button>
             </div>
           </div>
-          <HistoryTab history={history} clientId={clientId} canApprove={false} onHistoryUpdate={setHistory} initialSelectedId={project.current_piece_id} onBackToWorkflow={() => patchProject({ current_step: "generate" })} onDirtyChange={setDraftDirty} onArtifactCreated={handleDerivedArtifactCreated} />
+          <HistoryTab
+            history={history}
+            clientId={clientId}
+            canApprove={false}
+            onHistoryUpdate={setHistory}
+            initialSelectedId={project.current_piece_id}
+            onBackToWorkflow={() => patchProject({ current_step: "generate" })}
+            onDirtyChange={setDraftDirty}
+            onArtifactCreated={handleDerivedArtifactCreated}
+            hasMore={project.pieces_has_more}
+            loadingMore={loadingMoreArtifacts}
+            onLoadMore={loadMoreArtifacts}
+          />
         </div>
       )}
 
@@ -854,7 +904,20 @@ export function ContentProjectWorkflow({
             <p className="flex items-center gap-2 font-medium text-green-300"><FileText className="h-4 w-4" /> Final approval</p>
             <p className="mt-1 text-xs text-zinc-400">{canApprove ? "Review the connected draft, then approve it below." : "A client approver must complete this final step."}</p>
           </div>
-          <HistoryTab history={history} clientId={clientId} canApprove={canApprove} onHistoryUpdate={setHistory} initialSelectedId={project.current_piece_id} onBackToWorkflow={() => patchProject({ current_step: "validate" })} onPieceStatusChanged={handlePieceStatusChanged} onDirtyChange={setDraftDirty} onArtifactCreated={handleDerivedArtifactCreated} />
+          <HistoryTab
+            history={history}
+            clientId={clientId}
+            canApprove={canApprove}
+            onHistoryUpdate={setHistory}
+            initialSelectedId={project.current_piece_id}
+            onBackToWorkflow={() => patchProject({ current_step: "validate" })}
+            onPieceStatusChanged={handlePieceStatusChanged}
+            onDirtyChange={setDraftDirty}
+            onArtifactCreated={handleDerivedArtifactCreated}
+            hasMore={project.pieces_has_more}
+            loadingMore={loadingMoreArtifacts}
+            onLoadMore={loadMoreArtifacts}
+          />
         </div>
       )}
     </div>

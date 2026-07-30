@@ -33,6 +33,8 @@ async function approvedStyleProfile(db: any, clientId: string, channel: string) 
 const querySchema = z.object({
   client_id: z.string().uuid(),
   id: z.string().uuid().optional(),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
 const updateSchema = z.object({
@@ -131,8 +133,14 @@ export const GET = withAuth(async (req, { user }) => {
   const { searchParams } = new URL(req.url);
   const clientId = searchParams.get("client_id");
   const id = searchParams.get("id") ?? undefined;
+  const paged = searchParams.has("offset") || searchParams.has("limit");
 
-  const parsed = querySchema.safeParse({ client_id: clientId, id });
+  const parsed = querySchema.safeParse({
+    client_id: clientId,
+    id,
+    offset: searchParams.get("offset") ?? undefined,
+    limit: searchParams.get("limit") ?? undefined,
+  });
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid parameters." }, { status: 400 });
   }
@@ -166,14 +174,22 @@ export const GET = withAuth(async (req, { user }) => {
     .select("id, project_id, content_type, title, status, generation_kind, parent_piece_id, created_at")
     .eq("client_id", parsed.data.client_id)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .range(parsed.data.offset, parsed.data.offset + parsed.data.limit);
 
   if (error) {
     console.error("[content/pieces GET list]", error.code, error.message);
     return serverError(error);
   }
 
-  return NextResponse.json(data ?? []);
+  const rows = data ?? [];
+  if (!paged) return NextResponse.json(rows.slice(0, parsed.data.limit));
+  const items = rows.slice(0, parsed.data.limit);
+  const hasMore = rows.length > parsed.data.limit;
+  return NextResponse.json({
+    items,
+    hasMore,
+    nextOffset: hasMore ? parsed.data.offset + items.length : null,
+  });
 });
 
 // PATCH /api/content/pieces — update status, title, or body

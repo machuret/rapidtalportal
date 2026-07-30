@@ -248,6 +248,7 @@ describe("competitor source ingestion", () => {
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({
       Authorization: "Bearer apify-test-token",
     });
+    expect((fetchMock.mock.calls[0][1] as RequestInit).signal).toBeInstanceOf(AbortSignal);
     expect(stage).toHaveBeenCalledWith(expect.objectContaining({
       p_pages: [expect.objectContaining({
         markdown: expect.stringContaining("private credit"),
@@ -421,6 +422,7 @@ describe("competitor source ingestion", () => {
       "https://api.firecrawl.dev/v2/crawl",
       expect.objectContaining({ method: "POST" }),
     );
+    expect((fetchMock.mock.calls[0][1] as RequestInit).signal).toBeInstanceOf(AbortSignal);
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
       url: "https://example.com/blog",
       limit: 20,

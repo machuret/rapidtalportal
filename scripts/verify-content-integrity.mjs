@@ -131,6 +131,31 @@ try {
   if (reclaimError || !reclaimed?.lease_token) {
     throw reclaimError ?? new Error("The project could not be claimed after release.");
   }
+  const { error: releaseReclaimedError } = await admin.rpc(
+    "release_content_project_generation",
+    {
+      p_client_id: clientId,
+      p_project_id: project.id,
+      p_actor_id: adminId,
+      p_lease_token: reclaimed.lease_token,
+    },
+  );
+  if (releaseReclaimedError) throw releaseReclaimedError;
+
+  const { error: skippedValidationError } = await admin
+    .from("content_projects")
+    .update({ current_step: "approve" })
+    .eq("id", project.id)
+    .eq("client_id", clientId);
+  assert(
+    skippedValidationError?.code === "22023",
+    "The database allowed a project to jump directly from generation to approval.",
+  );
+
+  const { error: dnaError } = await admin
+    .from("company_dna")
+    .insert({ client_id: clientId, company_name: `Integrity company ${suffix}` });
+  if (dnaError) throw dnaError;
 
   const { data: piece, error: pieceError } = await admin
     .from("content_pieces")
@@ -143,7 +168,7 @@ try {
       status: "draft",
       created_by: adminId,
     })
-    .select("id")
+    .select("id,updated_at")
     .single();
   if (pieceError || !piece) throw pieceError ?? new Error("Could not create the test draft.");
 
@@ -179,7 +204,65 @@ try {
   });
   assert(vaRpcError?.code === "42501", "The actor-aware lifecycle RPC did not reject a VA.");
 
-  console.log("PASS: concurrent lease exclusion, renewal/release, tenant read access, and VA lifecycle denial.");
+  const { error: editStepError } = await admin
+    .from("content_projects")
+    .update({ current_piece_id: piece.id, current_step: "edit" })
+    .eq("id", project.id)
+    .eq("client_id", clientId);
+  if (editStepError) throw editStepError;
+  const { error: validateStepError } = await admin
+    .from("content_projects")
+    .update({ current_step: "validate" })
+    .eq("id", project.id)
+    .eq("client_id", clientId);
+  if (validateStepError) throw validateStepError;
+
+  const { error: validationError } = await admin
+    .rpc("record_content_project_validation", {
+      p_client_id: clientId,
+      p_project_id: project.id,
+      p_piece_id: piece.id,
+      p_actor_id: adminId,
+      p_expected_piece_updated_at: piece.updated_at,
+      p_passed: true,
+      p_checks: [],
+    })
+    .single();
+  if (validationError) throw validationError;
+  const { error: approveStepError } = await admin
+    .from("content_projects")
+    .update({ current_step: "approve" })
+    .eq("id", project.id)
+    .eq("client_id", clientId);
+  if (approveStepError) throw approveStepError;
+
+  const { error: returnToValidationError } = await admin
+    .from("content_projects")
+    .update({ current_step: "validate" })
+    .eq("id", project.id)
+    .eq("client_id", clientId);
+  if (returnToValidationError) throw returnToValidationError;
+  const { data: editedPiece, error: editPieceError } = await admin
+    .from("content_pieces")
+    .update({ body: "The draft changed after its successful validation." })
+    .eq("id", piece.id)
+    .eq("client_id", clientId)
+    .select("updated_at")
+    .single();
+  if (editPieceError || !editedPiece) throw editPieceError ?? new Error("Could not edit the validated draft.");
+  const { error: staleValidationError } = await admin
+    .from("content_projects")
+    .update({ current_step: "approve" })
+    .eq("id", project.id)
+    .eq("client_id", clientId);
+  assert(
+    staleValidationError?.code === "22023",
+    "A draft edit did not invalidate the successful validation prerequisite.",
+  );
+
+  console.log(
+    "PASS: lease exclusion, tenant lifecycle denial, state transitions, and exact-version validation enforcement.",
+  );
 } finally {
   if (clientId) await admin.from("clients").delete().eq("id", clientId);
   for (const id of authUserIds) await admin.auth.admin.deleteUser(id);

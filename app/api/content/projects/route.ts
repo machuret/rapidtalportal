@@ -31,6 +31,17 @@ function completeEditorialBrief(
   return !!brief?.objective.trim();
 }
 
+const ALLOWED_STEP_TRANSITIONS: Record<string, string[]> = {
+  idea: ["brief"],
+  brief: ["idea", "evidence"],
+  evidence: ["brief", "generate"],
+  generate: ["evidence", "edit"],
+  edit: ["generate", "validate"],
+  validate: ["edit", "approve"],
+  approve: ["validate", "complete"],
+  complete: ["edit"],
+};
+
 function sameSet(left: string[], right: string[]): boolean {
   const leftSet = new Set(left);
   const rightSet = new Set(right);
@@ -143,6 +154,10 @@ async function verifyMarketIntelligence(
 const querySchema = z.object({
   client_id: z.string().uuid(),
   id: z.string().uuid().optional(),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+  limit: z.coerce.number().int().min(1).max(200).default(200),
+  artifact_offset: z.coerce.number().int().min(0).max(100_000).default(0),
+  artifact_limit: z.coerce.number().int().min(1).max(100).default(100),
 });
 
 const createSchema = z.object({
@@ -219,6 +234,10 @@ export const GET = withAuth(async (req, { user }) => {
   const parsed = querySchema.safeParse({
     client_id: searchParams.get("client_id"),
     id: searchParams.get("id") ?? undefined,
+    offset: searchParams.get("offset") ?? undefined,
+    limit: searchParams.get("limit") ?? undefined,
+    artifact_offset: searchParams.get("artifact_offset") ?? undefined,
+    artifact_limit: searchParams.get("artifact_limit") ?? undefined,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid project query." }, { status: 400 });
@@ -229,14 +248,23 @@ export const GET = withAuth(async (req, { user }) => {
   const db = createAdminClient();
   const columns = "id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,created_at,updated_at";
   if (!parsed.data.id) {
+    const paged = searchParams.has("offset") || searchParams.has("limit");
     const { data, error } = await db
       .from("content_projects")
       .select(columns)
       .eq("client_id", parsed.data.client_id)
       .order("updated_at", { ascending: false })
-      .limit(200);
+      .range(parsed.data.offset, parsed.data.offset + parsed.data.limit);
     if (error) return serverError(error);
-    return NextResponse.json(data ?? []);
+    const rows = data ?? [];
+    if (!paged) return NextResponse.json(rows.slice(0, parsed.data.limit));
+    const items = rows.slice(0, parsed.data.limit);
+    const hasMore = rows.length > parsed.data.limit;
+    return NextResponse.json({
+      items,
+      hasMore,
+      nextOffset: hasMore ? parsed.data.offset + items.length : null,
+    });
   }
 
   const { data: project, error } = await db
@@ -265,9 +293,23 @@ export const GET = withAuth(async (req, { user }) => {
     .eq("project_id", project.id)
     .eq("client_id", parsed.data.client_id)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .range(
+      parsed.data.artifact_offset,
+      parsed.data.artifact_offset + parsed.data.artifact_limit,
+    );
   if (piecesError) return serverError(piecesError);
-  return NextResponse.json({ ...project, current_piece: currentPiece, pieces: pieces ?? [] });
+  const artifactRows = pieces ?? [];
+  const artifactItems = artifactRows.slice(0, parsed.data.artifact_limit);
+  const piecesHasMore = artifactRows.length > parsed.data.artifact_limit;
+  return NextResponse.json({
+    ...project,
+    current_piece: currentPiece,
+    pieces: artifactItems,
+    pieces_has_more: piecesHasMore,
+    pieces_next_offset: piecesHasMore
+      ? parsed.data.artifact_offset + artifactItems.length
+      : null,
+  });
 });
 
 export const POST = withAuth(async (req, { user }) => {
@@ -343,6 +385,16 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (["rejected", "approved", "archived"].includes(current.status)) {
     return NextResponse.json({ error: "This completed project cannot be changed." }, { status: 422 });
   }
+  if (
+    parsed.data.current_step &&
+    parsed.data.current_step !== current.current_step &&
+    !(parsed.data.status === "rejected" && parsed.data.current_step === "complete") &&
+    !(ALLOWED_STEP_TRANSITIONS[current.current_step] ?? []).includes(parsed.data.current_step)
+  ) {
+    return NextResponse.json({
+      error: `Invalid content workflow transition from ${current.current_step} to ${parsed.data.current_step}.`,
+    }, { status: 422 });
+  }
   if (parsed.data.current_step === "complete" && parsed.data.status !== "rejected") {
     return NextResponse.json({
       error: "A project is completed only by rejecting the idea or approving its connected draft.",
@@ -364,6 +416,21 @@ export const PATCH = withAuth(async (req, { user }) => {
     !current.current_piece_id
   ) {
     return NextResponse.json({ error: "Generate the connected draft before continuing." }, { status: 422 });
+  }
+  if (parsed.data.current_step === "approve") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: validationIsCurrent, error: validationError } = await (db as any)
+      .rpc("content_project_validation_is_current", {
+        p_client_id: parsed.data.client_id,
+        p_project_id: parsed.data.id,
+        p_piece_id: current.current_piece_id,
+      });
+    if (validationError) return serverError(validationError);
+    if (validationIsCurrent !== true) {
+      return NextResponse.json({
+        error: "Validate the latest draft successfully before approval.",
+      }, { status: 422 });
+    }
   }
 
   const updates: Record<string, unknown> = {};

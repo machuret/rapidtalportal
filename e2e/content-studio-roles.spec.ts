@@ -120,7 +120,7 @@ test.describe("signed-in Content Studio roles", () => {
       if (start.status() === 409) continue;
       const payload = await start.json() as { job: { id: string; status: string } };
       let status = payload.job.status;
-      for (let cycle = 0; cycle < 30 && !["complete", "failed"].includes(status); cycle++) {
+      for (let cycle = 0; cycle < 30 && !["done", "error", "cancelled"].includes(status); cycle++) {
         const advance = await page.request.post("/api/content/competitors/crawl/advance", {
           data: { client_id: clientId, job_id: payload.job.id },
         });
@@ -129,7 +129,7 @@ test.describe("signed-in Content Studio roles", () => {
         status = result.job?.status ?? status;
         if (result.busy) await page.waitForTimeout(750);
       }
-      expect(status, `collection job ${payload.job.id}`).toBe("complete");
+      expect(status, `collection job ${payload.job.id}`).toBe("done");
     }
 
     const refreshed = await page.request.get(`/api/content/competitors?client_id=${clientId}`);

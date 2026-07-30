@@ -224,6 +224,40 @@ Reply with your choice. Contact us for another option.`,
       "instagram",
     )).toContain("Instagram requires 2-8 relevant hashtags.");
   });
+
+  test("enforces Instagram section cardinality and a non-empty caption", () => {
+    expect(contentStructureWarnings(
+      "Caption:\n\nVisual direction: A clear product image.\n\n#One #Two",
+      "instagram",
+    )).toContain("Instagram caption cannot be empty.");
+    expect(contentStructureWarnings(
+      "Caption:\nFirst caption.\n\nCaption:\nSecond caption.\n\nVisual direction: A clear product image.\n\n#One #Two",
+      "instagram",
+    )).toContain("Instagram requires exactly one `Caption:` section; found 2.");
+  });
+
+  test("rejects multiple blog CTAs even when one is in the conclusion", () => {
+    const body = `# A practical guide
+
+## First section
+
+${"Useful context helps the reader make a grounded decision. ".repeat(40)}
+
+## Second section
+
+${"A concrete example makes the recommendation easier to apply. ".repeat(40)}
+
+Contact us for the first next step.
+
+## Conclusion
+
+${"A concise summary keeps the final recommendation clear. ".repeat(30)}
+
+Reply today for another next step.`;
+    expect(contentStructureWarnings(body, "blog")).toContain(
+      "Blog requires exactly 1 call-to-action or discussion question; found 2.",
+    );
+  });
 });
 
 describe("unsupported factual claims", () => {

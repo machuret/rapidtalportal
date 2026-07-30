@@ -135,8 +135,30 @@ export function contentStructureWarnings(
       requireExactCtaCount(warnings, trimmed, "Facebook");
       break;
     case "instagram": {
-      if (!/^Caption:\s*$/imu.test(trimmed)) warnings.push("Instagram requires a `Caption:` section.");
-      if (!/^Visual direction:\s*\S.+$/imu.test(trimmed)) warnings.push("Instagram requires a `Visual direction:` section.");
+      const captionHeaders = trimmed.match(/^Caption:\s*$/gimu) ?? [];
+      const visualHeaders = trimmed.match(/^Visual direction:\s*\S.+$/gimu) ?? [];
+      if (captionHeaders.length !== 1) {
+        warnings.push(`Instagram requires exactly one \`Caption:\` section; found ${captionHeaders.length}.`);
+      }
+      if (visualHeaders.length !== 1) {
+        warnings.push(`Instagram requires exactly one \`Visual direction:\` section; found ${visualHeaders.length}.`);
+      }
+      const captionHeader = /^Caption:\s*$/imu.exec(trimmed);
+      const visualHeader = /^Visual direction:/imu.exec(trimmed);
+      const captionBody = captionHeader?.index === undefined
+        ? ""
+        : trimmed
+          .slice(
+            captionHeader.index + captionHeader[0].length,
+            visualHeader?.index !== undefined && visualHeader.index > captionHeader.index
+              ? visualHeader.index
+              : undefined,
+          )
+          .replace(/#[\p{L}\p{N}_]+/gu, " ")
+          .trim();
+      if (captionHeaders.length === 1 && !captionBody) {
+        warnings.push("Instagram caption cannot be empty.");
+      }
       const hashtags = trimmed.match(/#[\p{L}\p{N}_]+/gu) ?? [];
       if (hashtags.length < 2 || hashtags.length > 8) {
         warnings.push("Instagram requires 2-8 relevant hashtags.");
@@ -164,7 +186,10 @@ export function contentStructureWarnings(
         warnings.push(`Blog requires 600-900 words; found ${wordCount}.`);
       }
       const finalBlock = blocks.at(-1) ?? "";
-      if (!ctaUnits(finalBlock).length) warnings.push("Blog requires a concluding call-to-action.");
+      requireExactCtaCount(warnings, trimmed, "Blog");
+      if (ctaUnits(finalBlock).length !== 1) {
+        warnings.push("Blog requires its single call-to-action in the concluding block.");
+      }
       break;
     }
   }

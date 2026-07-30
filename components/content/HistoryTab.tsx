@@ -50,6 +50,9 @@ interface HistoryTabProps {
   onPieceStatusChanged?: (piece: ContentPieceFull) => void;
   onDirtyChange?: (dirty: boolean) => void;
   onArtifactCreated?: (piece: ContentPiece) => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void | Promise<void>;
 }
 
 /* ── List item ──────────────────────────────────────────────────── */
@@ -117,6 +120,8 @@ function PieceDetail({
   const [editing, setEditing] = useState(false);
   const [rewriteInstruction, setRewriteInstruction] = useState("");
   const [rewriting, setRewriting] = useState(false);
+  const [derivedAction, setDerivedAction] = useState<"duplicate" | "adapt" | null>(null);
+  const derivedActionRef = useRef<"duplicate" | "adapt" | null>(null);
   const [adaptType, setAdaptType] = useState<ContentType>(
     piece.content_type === "linkedin" ? "facebook" : "linkedin",
   );
@@ -137,7 +142,18 @@ function PieceDetail({
   const { updatePiece, isUpdating: isSavingDraft } = useUpdateContentPiece();
 
   useEffect(() => {
-    if (loadedPieceId.current !== piece.id) {
+    const changedPiece = loadedPieceId.current !== piece.id;
+    const localDirty = body !== persistedBody;
+    const incomingTimestamp = Date.parse(piece.updated_at ?? "");
+    const localTimestamp = Date.parse(currentUpdatedAt);
+    const incomingIsNewer =
+      Number.isFinite(incomingTimestamp) &&
+      (!Number.isFinite(localTimestamp) || incomingTimestamp > localTimestamp);
+    const refreshedPiece = incomingIsNewer || (
+      piece.updated_at === currentUpdatedAt &&
+      (piece.body ?? "") !== persistedBody
+    );
+    if (changedPiece || (!localDirty && refreshedPiece)) {
       loadedPieceId.current = piece.id;
       setBody(piece.body ?? "");
       setPersistedBody(piece.body ?? "");
@@ -145,7 +161,15 @@ function PieceDetail({
       setEditing(false);
       setAdaptType(piece.content_type === "linkedin" ? "facebook" : "linkedin");
     }
-  }, [piece.id, piece.body, piece.updated_at, piece.content_type]);
+  }, [
+    body,
+    currentUpdatedAt,
+    persistedBody,
+    piece.body,
+    piece.content_type,
+    piece.id,
+    piece.updated_at,
+  ]);
 
   const loadRevisions = useCallback(async () => {
     try {
@@ -246,16 +270,25 @@ function PieceDetail({
   }, [body, clientId, piece.id, rewriteInstruction, currentUpdatedAt, loadRevisions, onPieceChanged]);
 
   const duplicate = useCallback(async () => {
+    if (derivedActionRef.current) return;
+    derivedActionRef.current = "duplicate";
+    setDerivedAction("duplicate");
     try {
       const created = await api.post<ContentPiece>("/content/duplicate", { client_id: clientId, id: piece.id });
       onArtifactCreated(created);
       toast.success("Draft duplicated. It is available in History.");
     } catch {
       // API client surfaces the error.
+    } finally {
+      derivedActionRef.current = null;
+      setDerivedAction(null);
     }
   }, [clientId, piece.id, onArtifactCreated]);
 
   const adapt = useCallback(async () => {
+    if (derivedActionRef.current) return;
+    derivedActionRef.current = "adapt";
+    setDerivedAction("adapt");
     try {
       const created = await api.post<ContentPiece>("/content/adapt", {
         client_id: clientId,
@@ -266,6 +299,9 @@ function PieceDetail({
       toast.success(`Adapted into one ${adaptType} draft.`);
     } catch {
       // API client surfaces the error.
+    } finally {
+      derivedActionRef.current = null;
+      setDerivedAction(null);
     }
   }, [clientId, piece.id, adaptType, onArtifactCreated]);
 
@@ -371,23 +407,27 @@ function PieceDetail({
         </button>
         <button
           onClick={duplicate}
-          disabled={dirty}
+          disabled={dirty || derivedAction !== null}
           className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 disabled:opacity-40"
         >
-          <CopyPlus className="w-3.5 h-3.5" /> Duplicate
+          {derivedAction === "duplicate"
+            ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            : <CopyPlus className="w-3.5 h-3.5" />}
+          {derivedAction === "duplicate" ? "Duplicating…" : "Duplicate"}
         </button>
         <div className="flex items-center rounded-lg border border-zinc-700 overflow-hidden">
           <select
             value={adaptType}
             onChange={(event) => setAdaptType(event.target.value as ContentType)}
+            disabled={derivedAction !== null}
             className="h-8 bg-zinc-900 px-2 text-xs text-zinc-300 border-0"
           >
             {(["x", "linkedin", "facebook", "instagram", "email", "newsletter", "blog", "message"] as ContentType[])
               .filter((type) => type !== piece.content_type)
               .map((type) => <option key={type} value={type}>{type}</option>)}
           </select>
-          <button disabled={dirty} onClick={adapt} className="h-8 px-2 text-xs text-purple-300 hover:bg-zinc-800 border-l border-zinc-700 disabled:opacity-40">
-            Adapt
+          <button disabled={dirty || derivedAction !== null} onClick={adapt} className="h-8 px-2 text-xs text-purple-300 hover:bg-zinc-800 border-l border-zinc-700 disabled:opacity-40">
+            {derivedAction === "adapt" ? "Adapting…" : "Adapt"}
           </button>
         </div>
 
@@ -637,6 +677,9 @@ export const HistoryTab = memo(function HistoryTab({
   onPieceStatusChanged,
   onDirtyChange,
   onArtifactCreated,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }: HistoryTabProps) {
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [selectedPiece, setSelectedPiece] = useState<ContentPieceFull | null>(null);
@@ -657,6 +700,7 @@ export const HistoryTab = memo(function HistoryTab({
   }, [detailQuery.data]);
 
   const handleItemClick = useCallback((piece: ContentPiece) => {
+    setSelectedPiece(null);
     setSelectedId(piece.id);
   }, []);
 
@@ -712,6 +756,26 @@ export const HistoryTab = memo(function HistoryTab({
     );
   }
 
+  if (selectedId && detailQuery.isError) {
+    return (
+      <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-8 text-center">
+        <p className="font-medium text-red-200">This content could not be opened.</p>
+        <p className="mt-1 text-sm text-zinc-400">
+          {detailQuery.error instanceof Error
+            ? detailQuery.error.message
+            : "The detail request failed. Your content has not been removed."}
+        </p>
+        <div className="mt-4 flex justify-center gap-2">
+          <Button variant="outline" onClick={() => void detailQuery.refetch()}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${detailQuery.isFetching ? "animate-spin" : ""}`} />
+            Retry
+          </Button>
+          <Button variant="ghost" onClick={handleBack}>Back to History</Button>
+        </div>
+      </div>
+    );
+  }
+
   // Empty state
   if (history.length === 0) {
     return (
@@ -753,6 +817,15 @@ export const HistoryTab = memo(function HistoryTab({
         filtered.map((piece) => (
           <HistoryItem key={piece.id} piece={piece} onClick={handleItemClick} />
         ))
+      )}
+      {hasMore && !search.trim() && onLoadMore && (
+        <Button
+          variant="outline"
+          disabled={loadingMore}
+          onClick={() => void onLoadMore()}
+        >
+          {loadingMore ? "Loading older content…" : "Load older content"}
+        </Button>
       )}
     </div>
   );

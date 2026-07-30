@@ -72,10 +72,16 @@ export const ROUTES = {
   },
   content: {
     pieces: () => "/api/content/pieces",
+    piecesPage: (clientId: string, offset: number, limit = 50) =>
+      `/api/content/pieces?client_id=${clientId}&offset=${offset}&limit=${limit}`,
     projects: () => "/api/content/projects",
     projectsForClient: (clientId: string) => `/api/content/projects?client_id=${clientId}`,
+    projectsPage: (clientId: string, offset: number, limit = 100) =>
+      `/api/content/projects?client_id=${clientId}&offset=${offset}&limit=${limit}`,
     project: (clientId: string, projectId: string) =>
       `/api/content/projects?client_id=${clientId}&id=${projectId}`,
+    projectArtifacts: (clientId: string, projectId: string, offset: number, limit = 100) =>
+      `/api/content/projects?client_id=${clientId}&id=${projectId}&artifact_offset=${offset}&artifact_limit=${limit}`,
     projectEvidence: (clientId: string, projectId: string) =>
       `/api/content/projects/evidence?client_id=${clientId}&project_id=${projectId}`,
     validate: () => "/api/content/validate",

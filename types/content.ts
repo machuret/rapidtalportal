@@ -202,6 +202,8 @@ export interface ContentProject {
   current_piece_id: string | null;
   current_piece?: ContentPiece | null;
   pieces?: ContentPiece[];
+  pieces_has_more?: boolean;
+  pieces_next_offset?: number | null;
   created_at: string;
   updated_at: string;
 }

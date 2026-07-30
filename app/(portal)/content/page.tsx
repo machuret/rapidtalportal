@@ -27,7 +27,7 @@ export default async function ContentPage() {
       .select("id, content_type, title, status, created_at")
       .eq("client_id", user.client_id)
       .order("created_at", { ascending: false })
-      .limit(50),
+      .limit(51),
     admin
       .from("content_topics")
       .select("id, title, description, content_type, status, created_at, created_by")
@@ -48,7 +48,7 @@ export default async function ContentPage() {
       .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,created_at,updated_at")
       .eq("client_id", user.client_id)
       .order("updated_at", { ascending: false })
-      .limit(200),
+      .limit(201),
     admin
       .from("vault_queries")
       .select("question,answered,dismissed,created_at")
@@ -76,6 +76,8 @@ export default async function ContentPage() {
   const styleAnalysisProfiles = Object.fromEntries(
     ((styleAnalyses ?? []) as Array<{ channel: string }>).map((profile) => [profile.channel, profile]),
   );
+  const initialHistory = (history ?? []) as ContentPiece[];
+  const initialProjects = (projects ?? []) as unknown as ContentProject[];
 
   // VAs can prepare and validate drafts; final approval remains a client/admin decision.
   const canApprove = hasContentCapability(user.role, "approve_content");
@@ -100,9 +102,11 @@ export default async function ContentPage() {
           ...((brandStyle ?? {}) as Record<string, unknown>),
           style_analysis_profiles: styleAnalysisProfiles,
         }}
-        history={(history ?? []) as ContentPiece[]}
+        history={initialHistory.slice(0, 50)}
+        historyHasMore={initialHistory.length > 50}
         topics={(topics ?? []) as ContentTopic[]}
-        projects={(projects ?? []) as unknown as ContentProject[]}
+        projects={initialProjects.slice(0, 200)}
+        projectsHasMore={initialProjects.length > 200}
         vaultGaps={vaultGaps}
       />
     </div>

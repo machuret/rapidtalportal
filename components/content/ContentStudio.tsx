@@ -42,9 +42,17 @@ interface ContentStudioProps {
   canManageCompetitors: boolean;
   brandStyle: Record<string, unknown>;
   history: ContentPiece[];
+  historyHasMore: boolean;
   topics: ContentTopic[];
   projects: ContentProject[];
+  projectsHasMore: boolean;
   vaultGaps: string[];
+}
+
+interface ContentPage<T> {
+  items: T[];
+  hasMore: boolean;
+  nextOffset: number | null;
 }
 
 function projectProgress(project: ContentProject): string {
@@ -60,14 +68,20 @@ function ContentStudioInner({
   canApprove,
   canManageCompetitors,
   history: initialHistory,
+  historyHasMore: initialHistoryHasMore,
   topics: initialTopics,
   projects: initialProjects,
+  projectsHasMore: initialProjectsHasMore,
   vaultGaps,
 }: ContentStudioProps) {
   const [view, setView] = useState<DiscoverView>("ideas");
   const [history, setHistory] = useState<ContentPiece[]>(initialHistory);
+  const [historyHasMore, setHistoryHasMore] = useState(initialHistoryHasMore);
+  const [loadingMoreHistory, setLoadingMoreHistory] = useState(false);
   const [topics, setTopics] = useState<ContentTopic[]>(initialTopics);
   const [projects, setProjects] = useState<ContentProject[]>(initialProjects);
+  const [projectsHasMore, setProjectsHasMore] = useState(initialProjectsHasMore);
+  const [loadingMoreProjects, setLoadingMoreProjects] = useState(false);
   const [activeProject, setActiveProject] = useState<ContentProject | null>(null);
   const [openingProject, setOpeningProject] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState("");
@@ -213,6 +227,46 @@ function ContentStudioInner({
     setHistory((previous) => [piece, ...previous.filter((item) => item.id !== piece.id)]);
   }, []);
 
+  const loadMoreHistory = useCallback(async () => {
+    if (loadingMoreHistory || !historyHasMore) return;
+    setLoadingMoreHistory(true);
+    try {
+      const page = await api.get<ContentPage<ContentPiece>>(
+        ROUTES.content.piecesPage(clientId, history.length),
+        { showErrorToast: false },
+      );
+      setHistory((previous) => [
+        ...previous,
+        ...page.items.filter((item) => !previous.some((existing) => existing.id === item.id)),
+      ]);
+      setHistoryHasMore(page.hasMore);
+    } catch {
+      toast.error("Older content could not be loaded. Please try again.");
+    } finally {
+      setLoadingMoreHistory(false);
+    }
+  }, [clientId, history.length, historyHasMore, loadingMoreHistory]);
+
+  const loadMoreProjects = useCallback(async () => {
+    if (loadingMoreProjects || !projectsHasMore) return;
+    setLoadingMoreProjects(true);
+    try {
+      const page = await api.get<ContentPage<ContentProject>>(
+        ROUTES.content.projectsPage(clientId, projects.length),
+        { showErrorToast: false },
+      );
+      setProjects((previous) => [
+        ...previous,
+        ...page.items.filter((item) => !previous.some((existing) => existing.id === item.id)),
+      ]);
+      setProjectsHasMore(page.hasMore);
+    } catch {
+      toast.error("Older content projects could not be loaded. Please try again.");
+    } finally {
+      setLoadingMoreProjects(false);
+    }
+  }, [clientId, loadingMoreProjects, projects.length, projectsHasMore]);
+
   if (activeProject) {
     return (
       <ContentErrorBoundary>
@@ -308,7 +362,7 @@ function ContentStudioInner({
                 className="sm:col-span-2 xl:col-span-3"
                 onClick={() => setShowAllProjects((value) => !value)}
               >
-                {showAllProjects ? "Show recent projects" : `View all ${unfinished.length} unfinished projects`}
+                {showAllProjects ? "Show recent projects" : `View all ${unfinished.length}${projectsHasMore ? "+" : ""} unfinished projects`}
               </Button>
             )}
           </div>
@@ -317,6 +371,16 @@ function ContentStudioInner({
             <FileText className="mx-auto h-7 w-7 text-zinc-700" />
             <p className="mt-2 text-sm text-zinc-500">No unfinished projects. Discover an opportunity below.</p>
           </div>
+        )}
+        {projectsHasMore && (
+          <Button
+            variant="outline"
+            className="mt-4 w-full"
+            disabled={loadingMoreProjects}
+            onClick={() => void loadMoreProjects()}
+          >
+            {loadingMoreProjects ? "Loading older projects…" : "Load older projects"}
+          </Button>
         )}
       </section>
 
@@ -393,7 +457,15 @@ function ContentStudioInner({
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
             <p className="rounded-lg border border-zinc-800 bg-zinc-900 py-2 pl-9 text-sm text-zinc-500">Open any draft to edit, compare, duplicate, adapt, approve, archive, copy or export.</p>
           </div>
-          <HistoryTab history={history} clientId={clientId} canApprove={canApprove} onHistoryUpdate={setHistory} />
+          <HistoryTab
+            history={history}
+            clientId={clientId}
+            canApprove={canApprove}
+            onHistoryUpdate={setHistory}
+            hasMore={historyHasMore}
+            loadingMore={loadingMoreHistory}
+            onLoadMore={loadMoreHistory}
+          />
         </div>
       )}
     </div>
