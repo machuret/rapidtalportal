@@ -61,7 +61,15 @@ export const GET = withAuth(async (req, { user }) => {
   const pageIds = rawItems.map((i) => (i as { id: string }).id);
   let indexedIds = new Set<string>();
   if (pageIds.length) {
-    const { data: ch } = await admin.from("vault_chunks").select("item_id").in("item_id", pageIds);
+    const { data: ch, error: chunkError } = await admin
+      .from("vault_chunks")
+      .select("item_id")
+      .in("item_id", pageIds);
+    if (chunkError) return serverError(chunkError, {
+      userId: user.id,
+      clientId,
+      url: "/api/vault/items",
+    });
     indexedIds = new Set((ch ?? []).map((c) => (c as { item_id: string }).item_id));
   }
   const items = rawItems.map((i) => ({ ...(i as Record<string, unknown>), indexed: indexedIds.has((i as { id: string }).id) }));
@@ -73,7 +81,8 @@ export const GET = withAuth(async (req, { user }) => {
     const countFor = async (s?: string) => {
       let cq = admin.from("vault_items").select("id", { count: "exact", head: true }).eq("client_id", clientId);
       if (s) cq = cq.eq("status", s);
-      const { count } = await cq;
+      const { count, error: countError } = await cq;
+      if (countError) throw countError;
       return count ?? 0;
     };
     const [total, ready, processing, pending, errored] = await Promise.all([

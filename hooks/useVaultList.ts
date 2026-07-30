@@ -101,6 +101,8 @@ export function useVaultList(clientId: string, filters: VaultListFilters = {}) {
     hasNextPage: !!query.hasNextPage,
     fetchNextPage: query.fetchNextPage,
     refetch: query.refetch,
+    error: query.error,
+    isError: query.isError,
 
     deleteItems: deleteMutation.mutateAsync,
     isDeleting: deleteMutation.isPending,

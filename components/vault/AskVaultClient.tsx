@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { errorMessage } from "@/lib/error-message";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -137,10 +138,14 @@ export function AskVaultClient({
       setTurns((prev) => [...prev, { question: trimmed, answer: r.answer, sources: r.sources }]);
     } else {
       try {
-        const res = await api.post<AskResponse>(ROUTES.vault.ask(), { clientId, question: trimmed, history });
+        const res = await api.post<AskResponse>(
+          ROUTES.vault.ask(),
+          { clientId, question: trimmed, history },
+          { showErrorToast: false },
+        );
         setTurns((prev) => [...prev, { question: trimmed, answer: res.answer, sources: res.sources ?? [] }]);
-      } catch {
-        // api-client already surfaces a toast on failure.
+      } catch (error) {
+        toast.error(errorMessage(error, "The Vault could not answer that question."));
       }
     }
     setInterim(null);
@@ -267,12 +272,12 @@ function ChatTurn({
     try {
       await api.post(ROUTES.vault.teach(), {
         clientId, question: turn.question, answer: teachText.trim(),
-      });
+      }, { showErrorToast: false });
       setTaught(true);
       setTeaching(false);
       toast.success("Thanks — the brain learned it. Next person who asks gets your answer.");
-    } catch {
-      // api-client surfaces a toast
+    } catch (error) {
+      toast.error(errorMessage(error, "The answer could not be taught to the Vault."));
     } finally {
       setTeachBusy(false);
     }
@@ -291,10 +296,10 @@ function ChatTurn({
           question: turn.question,
           mode: "deep",
           history,
-        });
+        }, { showErrorToast: false });
         setDeepAnswer(res.answer);
-      } catch {
-        // api-client surfaces a toast
+      } catch (error) {
+        toast.error(errorMessage(error, "The deeper answer could not be generated."));
       }
     }
     setDeepLoading(false);
@@ -312,8 +317,9 @@ function ChatTurn({
         sources: turn.sources.map((s) => ({ kind: s.kind, title: s.title, itemId: s.itemId })),
       }, { showErrorToast: false });
       toast.success("Thanks for the feedback.");
-    } catch {
+    } catch (error) {
       setRated(null);
+      toast.error(errorMessage(error, "Your feedback could not be saved."));
     }
   }
 
@@ -322,11 +328,11 @@ function ChatTurn({
     try {
       await api.post(ROUTES.vault.promoteKb(), {
         clientId, question: turn.question, answer: deepAnswer ?? turn.answer,
-      });
+      }, { showErrorToast: false });
       setSaved(true);
       toast.success("Saved to the Knowledge Base.");
-    } catch {
-      // api-client surfaces a toast
+    } catch (error) {
+      toast.error(errorMessage(error, "The answer could not be saved to the Knowledge Base."));
     }
   }
 

@@ -18,6 +18,8 @@ import { withAuth } from "@/lib/api/with-auth";
 import { deepAnalysisLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { renderPrompt } from "@/lib/prompts/server";
 import { waitUntil } from "@vercel/functions";
+import { errorMessage } from "@/lib/error-message";
+import { captureError } from "@/lib/error-tracking";
 
 export const maxDuration = 60;
 
@@ -37,7 +39,16 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  const { data } = await admin.from("vault_analyses").select("*").eq("client_id", clientId).maybeSingle();
+  const { data, error } = await admin
+    .from("vault_analyses")
+    .select("*")
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) return serverError(error, {
+    userId: user.id,
+    clientId,
+    url: "/api/vault/expand",
+  });
   return NextResponse.json({ analysis: data ?? null });
 });
 
@@ -61,7 +72,10 @@ export const POST = withAuth(async (req, { user }) => {
   // Assemble the corpus from everything we know about the company:
   //   declared Company DNA (authoritative) + crawl dossier + product catalog +
   //   real excerpts from the richest pages + a summary of every page.
-  const [{ data: rows }, { data: dnaRow }] = await Promise.all([
+  const [
+    { data: rows, error: itemsError },
+    { data: dnaRow, error: dnaError },
+  ] = await Promise.all([
     admin
       .from("vault_items")
       .select("title, source_url, ai_summary, raw_content, tags, category")
@@ -73,6 +87,16 @@ export const POST = withAuth(async (req, { user }) => {
       .eq("client_id", parsed.data.clientId)
       .maybeSingle(),
   ]);
+  if (itemsError) return serverError(itemsError, {
+    userId: user.id,
+    clientId: parsed.data.clientId,
+    url: "/api/vault/expand",
+  });
+  if (dnaError) return serverError(dnaError, {
+    userId: user.id,
+    clientId: parsed.data.clientId,
+    url: "/api/vault/expand",
+  });
   const items = (rows ?? []) as { title: string; source_url: string | null; ai_summary: string | null; raw_content: string | null; tags: string[]; category: string | null }[];
 
   // Declared profile — human-curated, so it grounds positioning/voice/audience
@@ -179,7 +203,7 @@ export const POST = withAuth(async (req, { user }) => {
           }
         }
         if (full.trim()) {
-          await admin.from("vault_analyses").upsert({
+          const { error: persistError } = await admin.from("vault_analyses").upsert({
             client_id: parsed.data.clientId,
             content: full,
             model: MODEL,
@@ -188,9 +212,14 @@ export const POST = withAuth(async (req, { user }) => {
             created_by: user.id,
             updated_at: new Date().toISOString(),
           }, { onConflict: "client_id" });
+          if (persistError) throw persistError;
         }
       } catch (e) {
-        console.error("[vault/expand stream] persist failed:", e);
+        captureError("api", e, {
+          userId: user.id,
+          clientId: parsed.data.clientId,
+          url: "/api/vault/expand/stream-persist",
+        });
       }
     })());
 
@@ -220,7 +249,10 @@ export const POST = withAuth(async (req, { user }) => {
     });
     const json = await res.json();
     if (!res.ok) {
-      return NextResponse.json({ error: `Analysis failed: ${json?.error?.message ?? `model returned ${res.status}`}` }, { status: 502 });
+      return NextResponse.json(
+        { error: `Analysis failed: ${errorMessage(json, `model returned ${res.status}`)}` },
+        { status: 502 },
+      );
     }
     content = json.choices?.[0]?.message?.content ?? "";
     tokens = json.usage?.total_tokens ?? 0;

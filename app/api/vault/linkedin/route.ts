@@ -5,6 +5,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
+import { errorMessage } from "@/lib/error-message";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -309,22 +310,23 @@ export const POST = withAuth(async (req, { user }) => {
     });
     const searchJson = await searchResponse.json().catch(() => ({})) as {
       success?: boolean;
-      error?: string;
+      error?: unknown;
       data?: { web?: SearchResult[] } | SearchResult[];
       web?: SearchResult[];
     };
     const results = searchResults(searchJson);
+    const providerError = !searchResponse.ok || searchJson.success === false
+      ? errorMessage(searchJson, `Search returned ${searchResponse.status}`)
+      : null;
     attempts.push({
       provider: "firecrawl",
       query,
       status: searchResponse.status,
       returned: results.length,
-      error: !searchResponse.ok || searchJson.success === false
-        ? searchJson.error ?? `Search returned ${searchResponse.status}`
-        : null,
+      error: providerError,
     });
     if (!searchResponse.ok || searchJson.success === false) {
-      lastSearchError = searchJson.error ?? `Search returned ${searchResponse.status}`;
+      lastSearchError = providerError ?? `Search returned ${searchResponse.status}`;
       continue;
     }
     for (const result of results) {

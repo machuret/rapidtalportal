@@ -12,6 +12,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { verifyFigures } from "@/lib/crawl/classify";
+import { serverError } from "@/lib/api/errors";
 
 const schema = z.object({
   clientId: z.string().uuid(),
@@ -29,12 +30,17 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("vault_items")
     .select("raw_content")
     .eq("client_id", parsed.data.clientId)
     .eq("status", "ready")
     .limit(200);
+  if (error) return serverError(error, {
+    userId: user.id,
+    clientId: parsed.data.clientId,
+    url: "/api/vault/verify",
+  });
 
   const corpus =
     ((data ?? []) as { raw_content: string | null }[]).map((r) => r.raw_content ?? "").join("\n").slice(0, 400_000) +

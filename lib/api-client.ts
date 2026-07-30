@@ -4,6 +4,7 @@
  */
 
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/error-message";
 
 export class ApiError extends Error {
   constructor(
@@ -77,9 +78,9 @@ export async function apiClient<T>(
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new ApiError(
-          errorData.error || `Request failed with status ${response.status}`,
+          errorMessage(errorData, `Request failed with status ${response.status}`),
           response.status,
-          errorData.code || "UNKNOWN_ERROR"
+          typeof errorData?.code === "string" ? errorData.code : "UNKNOWN_ERROR"
         );
       }
       

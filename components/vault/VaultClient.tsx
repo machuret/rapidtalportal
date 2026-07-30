@@ -5,6 +5,7 @@ import type { DbVaultItem, VaultCategory } from "@/types/database";
 import { toast } from "sonner";
 import {
   FileText, Trash2, Search, Loader2, CheckSquare, Square, X, Sparkles, Radar,
+  AlertTriangle, RefreshCw,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,9 @@ function VaultClientInner({
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
+    refetch,
+    error: vaultLoadError,
+    isError: vaultLoadFailed,
     deleteItems,
     isDeleting: bulkDeleting,
     reprocessItem,
@@ -100,19 +104,35 @@ function VaultClientInner({
         return;
       }
       setIndexing({ done: 0, total: itemIds.length });
-      let done = 0;
+      let cursor = 0;
+      let completed = 0;
+      let succeeded = 0;
+      let failed = 0;
       const CONCURRENCY = 3;
       const worker = async () => {
-        while (done < itemIds.length) {
-          const id = itemIds[done++ ];
+        for (;;) {
+          const index = cursor++;
+          if (index >= itemIds.length) break;
+          const id = itemIds[index];
           if (!id) break;
-          try { await api.post(ROUTES.vault.reprocess(id), { clientId }, { showErrorToast: false }); }
-          catch { /* keep going; partial backfill is fine */ }
-          setIndexing({ done: Math.min(done, itemIds.length), total: itemIds.length });
+          try {
+            await api.post(ROUTES.vault.reprocess(id), { clientId }, { showErrorToast: false });
+            succeeded++;
+          } catch {
+            failed++;
+          } finally {
+            completed++;
+            setIndexing({ done: completed, total: itemIds.length });
+          }
         }
       };
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, itemIds.length) }, worker));
-      toast.success(`Indexed ${itemIds.length} item${itemIds.length !== 1 ? "s" : ""} for AI search.`);
+      if (succeeded > 0) {
+        toast.success(`Indexed ${succeeded} item${succeeded !== 1 ? "s" : ""} for AI search.`);
+      }
+      if (failed > 0) {
+        toast.error(`${failed} item${failed !== 1 ? "s" : ""} could not be indexed. They remain marked for retry.`);
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Indexing failed.");
     } finally {
@@ -178,6 +198,30 @@ function VaultClientInner({
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
+      </div>
+    );
+  }
+
+  if (vaultLoadFailed) {
+    return (
+      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-8 text-center">
+        <AlertTriangle className="mx-auto mb-3 h-7 w-7 text-red-300" />
+        <p className="font-medium text-red-200">This client&apos;s Vault could not be loaded.</p>
+        <p className="mt-1 text-sm text-red-300/80">
+          {vaultLoadError instanceof Error
+            ? vaultLoadError.message
+            : "No data has been changed. Try loading it again."}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void refetch()}
+          className="mt-4 gap-1.5 border-red-400/40"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Retry
+        </Button>
       </div>
     );
   }

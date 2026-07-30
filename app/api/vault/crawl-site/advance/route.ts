@@ -28,6 +28,7 @@ import {
 } from "@/lib/crawl/classify";
 import { dossierSystemPrompt } from "@/lib/crawl/prompts";
 import { notify } from "@/lib/notifications";
+import { errorMessage } from "@/lib/error-message";
 
 export const maxDuration = 60;
 
@@ -92,7 +93,7 @@ async function llm(model: string, system: string, user: string, maxTokens: numbe
     }),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json?.error?.message ?? `LLM call failed (${res.status})`);
+  if (!res.ok) throw new Error(errorMessage(json, `LLM call failed (${res.status})`));
   return { text: json.choices?.[0]?.message?.content ?? "", tokens: json.usage?.total_tokens ?? 0 };
 }
 
@@ -104,7 +105,7 @@ async function fetchCrawlPages(firecrawlId: string, key: string): Promise<{ stat
   for (let hop = 0; url && hop < 10; hop++) {
     const res: Response = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
     const json = await res.json();
-    if (!res.ok) throw new Error(json?.error ?? `Firecrawl status check failed (${res.status})`);
+    if (!res.ok) throw new Error(errorMessage(json, `Firecrawl status check failed (${res.status})`));
     status = json.status ?? status;
     total = json.total ?? total;
     completed = json.completed ?? completed;
@@ -192,17 +193,18 @@ export const POST = withAuth(async (req, { user }) => {
 
         // core / blog → real vault item with the REAL page content.
         // Idempotent: one item per (client, source_url).
-        const { data: existing } = await admin
+        const { data: existing, error: existingError } = await admin
           .from("vault_items")
           .select("id")
           .eq("client_id", job.client_id)
           .eq("source_url", pageUrl)
           .maybeSingle();
+        if (existingError) throw existingError;
         if (existing) {
           (meta.kept = meta.kept ?? []).push((existing as { id: string }).id);
           continue;
         }
-        const { data: item } = await admin
+        const { data: item, error: insertError } = await admin
           .from("vault_items")
           .insert({
             client_id: job.client_id,
@@ -216,11 +218,11 @@ export const POST = withAuth(async (req, { user }) => {
           })
           .select("id")
           .single();
-        if (item) {
-          created++;
-          (meta.kept = meta.kept ?? []).push((item as { id: string }).id);
-          scheduleVaultProcess((item as { id: string }).id, job.client_id);
-        }
+        if (insertError) throw insertError;
+        if (!item) throw new Error(`The crawled page could not be saved: ${pageUrl}`);
+        created++;
+        (meta.kept = meta.kept ?? []).push((item as { id: string }).id);
+        scheduleVaultProcess((item as { id: string }).id, job.client_id);
       }
 
       meta.cursor = cursor + batch.length;
@@ -238,7 +240,7 @@ export const POST = withAuth(async (req, { user }) => {
       if (step === "catalog") {
         if ((meta.catalog ?? []).length > 0) {
           const md = buildCatalogMarkdown(host, meta.catalog!);
-          const { data: item } = await admin
+          const { data: item, error: catalogError } = await admin
             .from("vault_items")
             .insert({
               client_id: job.client_id,
@@ -251,10 +253,10 @@ export const POST = withAuth(async (req, { user }) => {
             })
             .select("id")
             .single();
-          if (item) {
-            patch.items_created = job.items_created + 1;
-            scheduleVaultProcess((item as { id: string }).id, job.client_id);
-          }
+          if (catalogError) throw catalogError;
+          if (!item) throw new Error("The generated product catalog could not be saved.");
+          patch.items_created = job.items_created + 1;
+          scheduleVaultProcess((item as { id: string }).id, job.client_id);
         }
         meta.syn_step = "map";
         meta.map_i = 0;
@@ -271,10 +273,11 @@ export const POST = withAuth(async (req, { user }) => {
           if (batchIds.length === 0) {
             meta.syn_step = "reduce";
           } else {
-            const { data: items } = await admin
+            const { data: items, error: itemsError } = await admin
               .from("vault_items")
               .select("title, source_url, raw_content")
               .in("id", batchIds);
+            if (itemsError) throw itemsError;
             const corpus = ((items ?? []) as { title: string; source_url: string | null; raw_content: string | null }[])
               .map((it) => `### PAGE: ${it.title}\nURL: ${it.source_url}\n${(it.raw_content ?? "").slice(0, 6000)}`)
               .join("\n\n");
@@ -306,10 +309,11 @@ export const POST = withAuth(async (req, { user }) => {
       } else if (step === "finalize") {
         // Grounding: verify every quoted figure against the real scraped text.
         const kept = meta.kept ?? [];
-        const { data: items } = await admin
+        const { data: items, error: sourceError } = await admin
           .from("vault_items")
           .select("raw_content")
           .in("id", kept.slice(0, 60));
+        if (sourceError) throw sourceError;
         const sourceText =
           ((items ?? []) as { raw_content: string | null }[]).map((x) => x.raw_content ?? "").join("\n") +
           "\n" + buildCatalogMarkdown(host, meta.catalog ?? []);
@@ -321,7 +325,7 @@ export const POST = withAuth(async (req, { user }) => {
           ? `\n\n---\n\n## Verification\n${verified} figures verified against scraped pages. ⚠️ Could not verify: ${unverified.join(", ")} — confirm before quoting to customers.`
           : `\n\n---\n\n## Verification\nAll ${verified} quoted figures verified against the scraped pages.`;
 
-        const { data: dossierItem } = await admin
+        const { data: dossierItem, error: dossierError } = await admin
           .from("vault_items")
           .insert({
             client_id: job.client_id,
@@ -337,11 +341,11 @@ export const POST = withAuth(async (req, { user }) => {
           })
           .select("id")
           .single();
-        if (dossierItem) {
-          patch.dossier_item_id = (dossierItem as { id: string }).id;
-          patch.items_created = job.items_created + 1;
-          scheduleVaultProcess((dossierItem as { id: string }).id, job.client_id);
-        }
+        if (dossierError) throw dossierError;
+        if (!dossierItem) throw new Error("The generated company dossier could not be saved.");
+        patch.dossier_item_id = (dossierItem as { id: string }).id;
+        patch.items_created = job.items_created + 1;
+        scheduleVaultProcess((dossierItem as { id: string }).id, job.client_id);
 
         // Company DNA: fill ONLY fields that are still empty — never overwrite
         // anything a human wrote.

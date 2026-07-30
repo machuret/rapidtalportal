@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { errorMessage } from "@/lib/error-message";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Circle, GraduationCap, X, Loader2, Check } from "lucide-react";
@@ -27,13 +28,15 @@ export function KnowledgeGaps({ gaps, clientId, canCurate }: {
     if (answer.trim().length < 3 || busy) return;
     setBusy(question);
     try {
-      await api.post(ROUTES.vault.teach(), { clientId, question, answer: answer.trim() });
+      await api.post(ROUTES.vault.teach(), { clientId, question, answer: answer.trim() }, { showErrorToast: false });
       setDone((d) => new Set(d).add(question));
       setAnswering(null);
       setAnswer("");
       toast.success("Gap closed — the brain learned it.");
       router.refresh();
-    } catch { /* api-client surfaces a toast */ } finally {
+    } catch (error) {
+      toast.error(errorMessage(error, "The answer could not be saved."));
+    } finally {
       setBusy(null);
     }
   }
@@ -42,11 +45,13 @@ export function KnowledgeGaps({ gaps, clientId, canCurate }: {
     if (busy) return;
     setBusy(question);
     try {
-      await api.post(ROUTES.vault.gaps(), { clientId, question, action: "dismiss" });
+      await api.post(ROUTES.vault.gaps(), { clientId, question, action: "dismiss" }, { showErrorToast: false });
       setDone((d) => new Set(d).add(question));
       toast.success("Dismissed.");
       router.refresh();
-    } catch { /* api-client surfaces a toast */ } finally {
+    } catch (error) {
+      toast.error(errorMessage(error, "The gap could not be dismissed."));
+    } finally {
       setBusy(null);
     }
   }

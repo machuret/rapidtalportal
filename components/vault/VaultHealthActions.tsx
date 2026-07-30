@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { errorMessage } from "@/lib/error-message";
 import { Loader2, Trash2 } from "lucide-react";
 
 interface HealthItem { id: string; title: string }
@@ -27,11 +28,13 @@ export function HealthGroupActions({ label, hint, items, clientId, deletable }: 
     if (!confirm(`Delete ${items.length} item${items.length !== 1 ? "s" : ""} (${label.toLowerCase()})? This cannot be undone.`)) return;
     setBusy(true);
     try {
-      await api.post(ROUTES.vault.delete(), { itemIds: items.map((i) => i.id), clientId });
+      await api.post(ROUTES.vault.delete(), { itemIds: items.map((i) => i.id), clientId }, { showErrorToast: false });
       setGone(true);
       toast.success(`${items.length} item${items.length !== 1 ? "s" : ""} removed — the brain just got cleaner.`);
       router.refresh();
-    } catch { /* api-client surfaces a toast */ } finally {
+    } catch (error) {
+      toast.error(errorMessage(error, "The Vault items could not be deleted."));
+    } finally {
       setBusy(false);
     }
   }

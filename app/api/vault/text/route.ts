@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
+import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 
 const schema = z.object({
@@ -40,12 +41,13 @@ export const POST = withAuth(async (req, { user }) => {
 
   // Deduplicate on exact content within the client (same as upload/url paths)
   const contentHash = createHash("sha256").update(content).digest("hex");
-  const { data: duplicate } = await supabase
+  const { data: duplicate, error: duplicateError } = await supabase
     .from("vault_items")
     .select("id, title")
     .eq("client_id", clientId)
     .eq("content_hash", contentHash)
     .maybeSingle();
+  if (duplicateError) return serverError(duplicateError, { userId, clientId });
 
   if (duplicate) {
     return NextResponse.json(

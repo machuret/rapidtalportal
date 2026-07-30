@@ -6,8 +6,9 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { vaultListKeys } from "@/hooks/useVaultList";
 import { cn } from "@/lib/utils";
-import { Globe, Loader2, CheckCircle2, AlertTriangle, X, Sparkles } from "lucide-react";
+import { Globe, Loader2, CheckCircle2, AlertTriangle, X, Sparkles, RefreshCw } from "lucide-react";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { errorMessage } from "@/lib/error-message";
 
 export interface CrawlJob {
   id: string;
@@ -43,9 +44,18 @@ export function CrawlJobPanel({ clientId, startedJob }: { clientId: string; star
   const queryClient = useQueryClient();
   const [job, setJob] = useState<CrawlJob | null>(startedJob ?? null);
   const [dismissed, setDismissed] = useState(false);
+  const [pollError, setPollError] = useState<string | null>(null);
   const ticking = useRef(false);
+  const consecutiveFailures = useRef(0);
 
-  useEffect(() => { if (startedJob) { setJob(startedJob); setDismissed(false); } }, [startedJob]);
+  useEffect(() => {
+    if (startedJob) {
+      setJob(startedJob);
+      setDismissed(false);
+      setPollError(null);
+      consecutiveFailures.current = 0;
+    }
+  }, [startedJob]);
 
   // Resume any job that was running when the page was last closed.
   useEffect(() => {
@@ -68,11 +78,21 @@ export function CrawlJobPanel({ clientId, startedJob }: { clientId: string; star
       const { job: next } = await api.post<{ job: CrawlJob }>(
         ROUTES.vault.crawlSiteAdvance(), { jobId: job.id }, { showErrorToast: false },
       );
+      consecutiveFailures.current = 0;
+      setPollError(null);
       setJob(next);
       if (next.status === "done" || (next.status === "ingesting" && (next.meta.cursor ?? 0) > 0)) {
         queryClient.invalidateQueries({ queryKey: vaultListKeys.all(clientId) });
       }
-    } catch { /* transient — next poll retries */ } finally {
+    } catch (error) {
+      consecutiveFailures.current += 1;
+      if (consecutiveFailures.current >= 3) {
+        setPollError(errorMessage(
+          error,
+          "The crawl is still saved, but progress checks are failing.",
+        ));
+      }
+    } finally {
       ticking.current = false;
     }
   }, [job, clientId, queryClient]);
@@ -127,6 +147,28 @@ export function CrawlJobPanel({ clientId, startedJob }: { clientId: string; star
           {job.pages_dropped > 0 && `${job.pages_dropped} skipped (no knowledge value) · `}
           You can leave this page — the crawl resumes whenever the Vault is open.
         </p>
+      )}
+
+      {isActive && pollError && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-amber-200">Progress could not be refreshed after three attempts.</p>
+            <p className="mt-0.5 break-words text-xs text-amber-300/80">{pollError}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              consecutiveFailures.current = 0;
+              setPollError(null);
+              void advance();
+            }}
+            className="inline-flex shrink-0 items-center gap-1 text-xs text-amber-200 hover:text-white"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry now
+          </button>
+        </div>
       )}
 
       {job.status === "done" && (

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { errorMessage } from "@/lib/error-message";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -154,7 +155,7 @@ export function ComposeClient({
         body: string;
         sources?: ContentSourceReference[];
         appliedStyle?: string[];
-      }>("/content/generate", { clientId, contentType, title, brief });
+      }>("/content/generate", { clientId, contentType, title, brief }, { showErrorToast: false });
       setVariants([{
         id: result.id,
         updatedAt: result.updatedAt ?? null,
@@ -165,8 +166,9 @@ export function ComposeClient({
         appliedStyle: result.appliedStyle ?? [],
       }]);
       toast.success("Draft created and saved to Content.");
-    } catch {
+    } catch (error) {
       setVariants([]);
+      toast.error(errorMessage(error, "The draft could not be generated."));
     }
   }
 
@@ -186,6 +188,7 @@ export function ComposeClient({
           instruction,
           expected_updated_at: current.updatedAt,
         },
+        { showErrorToast: false },
       );
       setVariants((prev) => prev.map((variant, index) =>
         index === active
@@ -198,9 +201,10 @@ export function ComposeClient({
               sources: result.sources ?? variant.sources,
             }
           : variant));
-    } catch {
+    } catch (error) {
       setVariants((prev) => prev.map((variant, index) =>
         index === active ? { ...variant, loading: false } : variant));
+      toast.error(errorMessage(error, "The draft could not be rewritten."));
     }
   }
 
@@ -225,6 +229,7 @@ export function ComposeClient({
           body: current.text,
           expected_updated_at: current.updatedAt,
         },
+        { showErrorToast: false },
       );
       setVariants((previous) => previous.map((variant, index) =>
         index === active
@@ -236,6 +241,8 @@ export function ComposeClient({
             }
           : variant));
       toast.success("Draft changes saved.");
+    } catch (error) {
+      toast.error(errorMessage(error, "The draft changes could not be saved."));
     } finally {
       setSavingDraft(false);
     }
@@ -251,8 +258,8 @@ export function ComposeClient({
       const r = await api.post<{ unverified: string[] }>(ROUTES.vault.verify(),
         { clientId, text: cur.text, context }, { showErrorToast: false });
       setCheckResult({ idx: active, unverified: r.unverified });
-    } catch {
-      toast.error("Couldn't run the check.");
+    } catch (error) {
+      toast.error(errorMessage(error, "Couldn't run the check."));
     } finally {
       setChecking(false);
     }

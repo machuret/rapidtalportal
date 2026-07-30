@@ -9,6 +9,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { vaultListKeys } from "@/hooks/useVaultList";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/error-message";
 import { CloudUpload, Globe, Type, Loader2, Sparkles, Plus } from "lucide-react";
 
 import type { CrawlJob } from "./CrawlJobPanel";
@@ -59,8 +60,10 @@ export function AddVaultItem({ clientId, onAdded, onCrawlStarted }: AddVaultItem
         fd.append("clientId", clientId);
         const res = await fetch(ROUTES.vault.upload(), { method: "POST", body: fd });
         const j = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(j.error ?? "Upload failed.");
-        if (j.warning) toast.warning(`${f.name}: ${j.warning}`);
+        if (!res.ok) throw new Error(errorMessage(j, "Upload failed."));
+        if (j.warning) {
+          toast.warning(`${f.name}: ${errorMessage(j.warning, "The file was added with a warning.")}`);
+        }
         ok++;
       } catch (e) {
         errors.push(`${f.name}: ${e instanceof Error ? e.message : "failed"}`);

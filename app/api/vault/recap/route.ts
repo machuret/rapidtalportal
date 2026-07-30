@@ -53,10 +53,11 @@ export const GET = withAuth(async (req, { user }) => {
   const heroIds = [dossierLight?.id, catalogLight?.id].filter(Boolean) as string[];
   const fullById = new Map<string, string>();
   if (heroIds.length) {
-    const { data: fulls } = await admin
+    const { data: fulls, error: fullsError } = await admin
       .from("vault_items")
       .select("id, raw_content")
       .in("id", heroIds);
+    if (fullsError) return serverError(fullsError);
     for (const f of (fulls ?? []) as { id: string; raw_content: string | null }[]) {
       fullById.set(f.id, f.raw_content ?? "");
     }

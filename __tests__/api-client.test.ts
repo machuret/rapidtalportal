@@ -9,6 +9,7 @@
 jest.mock("sonner", () => ({ toast: { error: jest.fn() } }));
 
 import { api } from "@/lib/api-client";
+import { errorMessage } from "@/lib/error-message";
 
 describe("api-client retry safety", () => {
   beforeEach(() => { (global as { fetch: unknown }).fetch = jest.fn(); });
@@ -41,5 +42,31 @@ describe("api-client retry safety", () => {
     (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 400, json: async () => ({ error: "bad" }) });
     await expect(api.get("/x", { retries: 3 })).rejects.toBeTruthy();
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("structured validation errors become readable text, never [object Object]", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({
+        error: {
+          formErrors: [],
+          fieldErrors: {
+            status: ["Invalid option: expected one of draft, approved, archived"],
+            expected_updated_at: ["Required"],
+          },
+        },
+      }),
+    });
+
+    await expect(api.patch("/content/pieces", {})).rejects.toThrow(
+      "status: Invalid option: expected one of draft, approved, archived; expected_updated_at: Required",
+    );
+  });
+
+  test("provider error objects and opaque values have safe messages", () => {
+    expect(errorMessage({ error: { message: "Provider quota exceeded" } })).toBe("Provider quota exceeded");
+    expect(errorMessage(new Error("[object Object]"), "Readable fallback")).toBe("Readable fallback");
+    expect(errorMessage({ unexpected: { value: 1 } }, "Readable fallback")).toBe("Readable fallback");
   });
 });

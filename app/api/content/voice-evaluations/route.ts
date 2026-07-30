@@ -6,6 +6,7 @@ import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { chatModel, chatProvider } from "@/lib/brain/llm";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
+import { errorMessage } from "@/lib/error-message";
 import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import {
   STYLE_ANALYSIS_CHANNELS,
@@ -140,7 +141,7 @@ async function edgeDraft(body: Record<string, unknown>): Promise<EdgeDraft> {
   const response = await proxyToEdgeFunction("content-generate", body);
   const payload = await response.json() as EdgeDraft;
   if (!response.ok || typeof payload.body !== "string" || !payload.body.trim()) {
-    throw new Error(payload.error || "A voice-evaluation draft could not be generated.");
+    throw new Error(errorMessage(payload, "A voice-evaluation draft could not be generated."));
   }
   return payload;
 }

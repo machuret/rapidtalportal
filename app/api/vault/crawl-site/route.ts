@@ -14,6 +14,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { siteCrawlLimiter, tooManyRequests } from "@/lib/rate-limit";
+import { errorMessage } from "@/lib/error-message";
 
 const PAGE_CAP = 50;
 
@@ -40,13 +41,18 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("crawl_jobs")
     .select("*")
     .eq("client_id", clientId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (error) return serverError(error, {
+    userId: user.id,
+    clientId,
+    url: "/api/vault/crawl-site",
+  });
 
   return NextResponse.json({ job: data ?? null });
 });
@@ -75,13 +81,18 @@ export const POST = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
 
   // One active crawl per client at a time — they're heavyweight.
-  const { data: active } = await admin
+  const { data: active, error: activeError } = await admin
     .from("crawl_jobs")
     .select("id, status")
     .eq("client_id", parsed.data.clientId)
     .in("status", ["crawling", "ingesting", "synthesizing"])
     .limit(1)
     .maybeSingle();
+  if (activeError) return serverError(activeError, {
+    userId: user.id,
+    clientId: parsed.data.clientId,
+    url: "/api/vault/crawl-site",
+  });
   if (active) {
     return NextResponse.json({ error: "A crawl is already running for this client. Let it finish first." }, { status: 409 });
   }
@@ -101,7 +112,7 @@ export const POST = withAuth(async (req, { user }) => {
   const fcJson = await fcRes.json().catch(() => ({}));
   if (!fcRes.ok || !fcJson?.id) {
     return NextResponse.json(
-      { error: `Couldn't start the crawl: ${fcJson?.error ?? `Firecrawl returned ${fcRes.status}`}` },
+      { error: `Couldn't start the crawl: ${errorMessage(fcJson, `Firecrawl returned ${fcRes.status}`)}` },
       { status: 502 },
     );
   }

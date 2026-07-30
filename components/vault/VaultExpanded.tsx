@@ -7,7 +7,8 @@ import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "./Markdown";
 import { formatDate } from "@/lib/utils";
-import { Telescope, Loader2, RefreshCw, Sparkles, Info } from "lucide-react";
+import { Telescope, Loader2, RefreshCw, Sparkles, Info, AlertTriangle } from "lucide-react";
+import { errorMessage } from "@/lib/error-message";
 
 interface Analysis {
   content: string;
@@ -21,16 +22,28 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadNonce, setLoadNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     api.get<{ analysis: Analysis | null }>(`${ROUTES.vault.expand()}?clientId=${clientId}`, { showErrorToast: false })
-      .then((d) => { if (!cancelled) setAnalysis(d.analysis); })
-      .catch(() => { if (!cancelled) setAnalysis(null); })
+      .then((d) => {
+        if (!cancelled) {
+          setAnalysis(d.analysis);
+          setLoadError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setAnalysis(null);
+          setLoadError(errorMessage(error, "The expanded Vault analysis could not be loaded."));
+        }
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [clientId]);
+  }, [clientId, loadNonce]);
 
   // Non-streaming fallback used if the stream fails to start.
   async function generateNonStreaming() {
@@ -98,6 +111,25 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
 
   if (loading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-5 h-5 animate-spin text-zinc-500" /></div>;
+  }
+  if (loadError) {
+    return (
+      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-10 text-center">
+        <AlertTriangle className="mx-auto mb-3 h-6 w-6 text-red-300" />
+        <p className="font-medium text-red-200">Expanded View unavailable</p>
+        <p className="mt-1 text-sm text-red-300/80">{loadError}</p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setLoadNonce((value) => value + 1)}
+          className="mt-4 gap-1.5 border-red-400/40"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Retry
+        </Button>
+      </div>
+    );
   }
 
   const generatingState = (

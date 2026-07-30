@@ -17,6 +17,8 @@ import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import { dossierSystemPrompt } from "@/lib/crawl/prompts";
 import { verifyFigures } from "@/lib/crawl/classify";
 import { briefingLimiter, tooManyRequests } from "@/lib/rate-limit";
+import { errorMessage } from "@/lib/error-message";
+import { serverError } from "@/lib/api/errors";
 
 export const maxDuration = 60;
 
@@ -46,11 +48,16 @@ export const POST = withAuth(async (req, { user }) => {
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   const admin = createAdminClient();
-  const { data: rows } = await admin
+  const { data: rows, error: itemsError } = await admin
     .from("vault_items")
     .select("id, title, source_url, ai_summary, raw_content, tags")
     .eq("client_id", parsed.data.clientId)
     .order("created_at", { ascending: false });
+  if (itemsError) return serverError(itemsError, {
+    userId: user.id,
+    clientId: parsed.data.clientId,
+    url: "/api/vault/refresh-dossier",
+  });
   const items = (rows ?? []) as Item[];
   if (items.length === 0) {
     return NextResponse.json({ error: "Nothing in the vault to summarize yet." }, { status: 409 });
@@ -88,7 +95,12 @@ export const POST = withAuth(async (req, { user }) => {
       }),
     });
     const json = await res.json();
-    if (!res.ok) return NextResponse.json({ error: `Synthesis failed: ${json?.error?.message ?? res.status}` }, { status: 502 });
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: `Synthesis failed: ${errorMessage(json, `model returned ${res.status}`)}` },
+        { status: 502 },
+      );
+    }
     dossier = json.choices?.[0]?.message?.content ?? "";
     tokens = json.usage?.total_tokens ?? 0;
   } catch (err) {
@@ -106,10 +118,15 @@ export const POST = withAuth(async (req, { user }) => {
 
   let dossierId: string;
   if (existingDossier) {
-    await admin
+    const { error: updateError } = await admin
       .from("vault_items")
       .update({ raw_content: finalContent, status: "processing", updated_at: new Date().toISOString(), updated_by: user.id })
       .eq("id", existingDossier.id);
+    if (updateError) return serverError(updateError, {
+      userId: user.id,
+      clientId: parsed.data.clientId,
+      url: "/api/vault/refresh-dossier",
+    });
     dossierId = existingDossier.id;
   } else {
     const { data: created, error } = await admin
@@ -128,7 +145,11 @@ export const POST = withAuth(async (req, { user }) => {
       })
       .select("id")
       .single();
-    if (error || !created) return NextResponse.json({ error: error?.message ?? "Failed to save dossier." }, { status: 500 });
+    if (error || !created) return serverError(error ?? new Error("Dossier insert returned no row."), {
+      userId: user.id,
+      clientId: parsed.data.clientId,
+      url: "/api/vault/refresh-dossier",
+    });
     dossierId = (created as { id: string }).id;
   }
 

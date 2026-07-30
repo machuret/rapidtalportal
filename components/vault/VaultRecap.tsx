@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "./Markdown";
 import { VAULT_CATEGORIES, isVaultCategory } from "@/lib/taxonomy/vault-categories";
+import { errorMessage } from "@/lib/error-message";
 import {
   Loader2, FileText, ExternalLink, ChevronDown, ChevronRight, BookOpen, Package, Sparkles, AlertTriangle, RefreshCw,
 } from "lucide-react";
@@ -34,12 +35,17 @@ export function VaultRecap({ clientId, canWrite }: { clientId: string; canWrite:
   const [loading, setLoading] = useState(true);
   const [showCatalog, setShowCatalog] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const d = await api.get<RecapData>(`${ROUTES.vault.recap()}?clientId=${clientId}`, { showErrorToast: false });
       setData(d);
-    } catch { setData(null); }
+      setLoadError(null);
+    } catch (error) {
+      setData(null);
+      setLoadError(errorMessage(error, "The Vault recap could not be loaded."));
+    }
   }, [clientId]);
 
   useEffect(() => {
@@ -76,6 +82,19 @@ export function VaultRecap({ clientId, canWrite }: { clientId: string; canWrite:
 
   if (loading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-5 h-5 animate-spin text-zinc-500" /></div>;
+  }
+  if (loadError) {
+    return (
+      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-10 text-center">
+        <AlertTriangle className="mx-auto mb-3 h-6 w-6 text-red-300" />
+        <p className="font-medium text-red-200">Vault recap unavailable</p>
+        <p className="mt-1 text-sm text-red-300/80">{loadError}</p>
+        <Button type="button" variant="outline" size="sm" onClick={() => void load()} className="mt-4 gap-1.5 border-red-400/40">
+          <RefreshCw className="h-3.5 w-3.5" />
+          Retry
+        </Button>
+      </div>
+    );
   }
   if (!data || data.counts.total === 0) {
     return (

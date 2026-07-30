@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { errorMessage } from "@/lib/error-message";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { GraduationCap, Check, Loader2 } from "lucide-react";
@@ -32,10 +33,12 @@ export function AnswersToReview({ items, clientId }: { items: ReviewItem[]; clie
     if (busy) return;
     setBusy(id);
     try {
-      await api.patch(ROUTES.vault.feedback(), { clientId, id, resolved: true });
+      await api.patch(ROUTES.vault.feedback(), { clientId, id, resolved: true }, { showErrorToast: false });
       setCleared((c) => new Set(c).add(id));
       router.refresh();
-    } catch { /* api-client surfaces a toast */ } finally {
+    } catch (error) {
+      toast.error(errorMessage(error, "The review could not be resolved."));
+    } finally {
       setBusy(null);
     }
   }
@@ -46,14 +49,16 @@ export function AnswersToReview({ items, clientId }: { items: ReviewItem[]; clie
     try {
       // The correction becomes a pinned KB entry that outranks the bad source,
       // then the review item resolves.
-      await api.post(ROUTES.vault.teach(), { clientId, question: item.question, answer: correction.trim() });
-      await api.patch(ROUTES.vault.feedback(), { clientId, id: item.id, resolved: true });
+      await api.post(ROUTES.vault.teach(), { clientId, question: item.question, answer: correction.trim() }, { showErrorToast: false });
+      await api.patch(ROUTES.vault.feedback(), { clientId, id: item.id, resolved: true }, { showErrorToast: false });
       setCleared((c) => new Set(c).add(item.id));
       setFixing(null);
       setCorrection("");
       toast.success("Correction saved — the brain will use it from now on.");
       router.refresh();
-    } catch { /* api-client surfaces a toast */ } finally {
+    } catch (error) {
+      toast.error(errorMessage(error, "The correction could not be saved."));
+    } finally {
       setBusy(null);
     }
   }

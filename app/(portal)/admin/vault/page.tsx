@@ -21,20 +21,41 @@ export default async function AdminVaultPage({ searchParams: searchParamsPromise
   const { user } = await requireSuperAdmin();
 
   const admin = createAdminClient();
-  const { data } = await admin.from("clients").select("id, name").is("archived_at", null).order("name");
+  const { data, error: clientsError } = await admin
+    .from("clients")
+    .select("id, name")
+    .is("archived_at", null)
+    .order("name");
   const clients = (data ?? []) as { id: string; name: string }[];
+
+  if (clientsError) {
+    return (
+      <div>
+        <AdminPageHeader icon={Archive} gradient="from-emerald-500 to-teal-600 shadow-emerald-500/20"
+          title="Client Vaults" subtitle="Feed any client's Business Brain." />
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-6">
+          <p className="font-medium text-red-200">Client Vaults could not be loaded.</p>
+          <p className="mt-1 text-sm text-red-300/80">
+            No data has been changed. Refresh the page; if this continues, check Admin Errors.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const clientId = searchParams.client && clients.some((c) => c.id === searchParams.client)
     ? searchParams.client
     : clients[0]?.id ?? null;
   const clientName = clients.find((c) => c.id === clientId)?.name;
   let linkedInUrl = "";
+  let companyProfileLoadFailed = false;
   if (clientId) {
-    const { data: dna } = await admin
+    const { data: dna, error: dnaError } = await admin
       .from("company_dna")
       .select("social_links")
       .eq("client_id", clientId)
       .maybeSingle();
+    companyProfileLoadFailed = !!dnaError;
     const links = (dna as { social_links?: Record<string, string> } | null)?.social_links;
     linkedInUrl = typeof links?.linkedin === "string" ? links.linkedin : "";
   }
@@ -76,6 +97,12 @@ export default async function AdminVaultPage({ searchParams: searchParamsPromise
 
       {clientId && (
         <>
+          {companyProfileLoadFailed && (
+            <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              The company profile could not be loaded, so the saved LinkedIn URL may be missing.
+              Vault items remain available and unchanged.
+            </div>
+          )}
           <LinkedInVaultSourcePanel
             key={`linkedin-${clientId}`}
             clientId={clientId}

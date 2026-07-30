@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import { errorMessage } from "@/lib/error-message";
 import { cn, formatDate } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,6 +27,8 @@ interface GoldenQuestion {
 export function GoldenQuestions({ clientId, onAsk }: { clientId: string; onAsk: (q: string) => void }) {
   const [questions, setQuestions] = useState<GoldenQuestion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadNonce, setLoadNonce] = useState(0);
   const [open, setOpen] = useState(true);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -33,39 +36,56 @@ export function GoldenQuestions({ clientId, onAsk }: { clientId: string; onAsk: 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadError(null);
     api.get<{ questions: GoldenQuestion[] }>(`${ROUTES.goldenQuestions()}?clientId=${clientId}`, { showErrorToast: false })
       .then((d) => { if (!cancelled) setQuestions(d.questions); })
-      .catch(() => { if (!cancelled) setQuestions([]); })
+      .catch((error) => {
+        if (!cancelled) setLoadError(errorMessage(error, "Golden questions could not be loaded."));
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [clientId]);
+  }, [clientId, loadNonce]);
 
   async function add() {
     const q = draft.trim();
     if (q.length < 5) return;
     setBusy("add");
     try {
-      const { question } = await api.post<{ question: GoldenQuestion }>(ROUTES.goldenQuestions(), { clientId, question: q });
+      const { question } = await api.post<{ question: GoldenQuestion }>(
+        ROUTES.goldenQuestions(),
+        { clientId, question: q },
+        { showErrorToast: false },
+      );
       setQuestions((p) => [...p, question]);
       setDraft("");
-    } catch { /* api-client toasts */ } finally { setBusy(null); }
+    } catch (error) {
+      toast.error(errorMessage(error, "The golden question could not be added."));
+    } finally { setBusy(null); }
   }
 
   async function record(id: string, status: "pass" | "fail") {
     setBusy(id);
     try {
-      const { question } = await api.patch<{ question: GoldenQuestion }>(ROUTES.goldenQuestions(), { id, status });
+      const { question } = await api.patch<{ question: GoldenQuestion }>(
+        ROUTES.goldenQuestions(),
+        { id, status },
+        { showErrorToast: false },
+      );
       setQuestions((p) => p.map((x) => (x.id === id ? question : x)));
       toast.success(status === "pass" ? "Marked as passing." : "Marked as failing — feed the Vault and re-check.");
-    } catch { /* api-client toasts */ } finally { setBusy(null); }
+    } catch (error) {
+      toast.error(errorMessage(error, "The result could not be recorded."));
+    } finally { setBusy(null); }
   }
 
   async function remove(id: string) {
     setBusy(id);
     try {
-      await api.delete(ROUTES.goldenQuestions(), { id });
+      await api.delete(ROUTES.goldenQuestions(), { id }, { showErrorToast: false });
       setQuestions((p) => p.filter((x) => x.id !== id));
-    } catch { /* api-client toasts */ } finally { setBusy(null); }
+    } catch (error) {
+      toast.error(errorMessage(error, "The golden question could not be removed."));
+    } finally { setBusy(null); }
   }
 
   const passing = questions.filter((q) => q.last_status === "pass").length;
@@ -87,6 +107,17 @@ export function GoldenQuestions({ clientId, onAsk }: { clientId: string; onAsk: 
         <div className="px-4 pb-4">
           {loading ? (
             <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-zinc-500" /></div>
+          ) : loadError ? (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+              <p>{loadError}</p>
+              <button
+                type="button"
+                onClick={() => setLoadNonce((value) => value + 1)}
+                className="mt-2 text-xs font-medium text-red-100 underline underline-offset-2"
+              >
+                Retry
+              </button>
+            </div>
           ) : (
             <>
               {questions.length > 0 && (

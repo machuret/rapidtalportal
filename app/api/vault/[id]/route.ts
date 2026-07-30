@@ -41,12 +41,13 @@ export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
   const supabase = createAdminClient();
 
   // Verify item exists and belongs to this client before updating
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("vault_items")
     .select("id, client_id, created_by")
     .eq("id", params.id)
     .eq("client_id", clientId)
     .maybeSingle();
+  if (existingError) return serverError(existingError, { userId: user.id, clientId });
 
   if (!existing) {
     return NextResponse.json({ error: "Item not found." }, { status: 404 });

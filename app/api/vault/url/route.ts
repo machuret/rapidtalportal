@@ -5,6 +5,7 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import { z } from "zod";
+import { errorMessage } from "@/lib/error-message";
 
 const schema = z.object({
   title: z.string().max(200).optional(),
@@ -99,11 +100,17 @@ export const POST = withAuth(async (req, { user }) => {
       const crawlData = await crawlRes.json();
       const content = crawlData?.data?.markdown ?? crawlData?.markdown ?? "";
       if (!crawlRes.ok || !content) {
-        const reason = crawlData?.error ?? "the page took too long or returned no content";
-        await supabase
+        const reason = errorMessage(
+          crawlData,
+          "the page took too long or returned no content",
+        );
+        const { error: fetchStatusError } = await supabase
           .from("vault_items")
           .update({ status: "error", error_message: `Couldn't fetch this page — ${reason}.` })
           .eq("id", itemId);
+        if (fetchStatusError) {
+          return NextResponse.json({ error: errorMessage(fetchStatusError) }, { status: 500 });
+        }
         return NextResponse.json(
           { error: `Couldn't fetch this page — ${reason}. Try "Add page" on a lighter URL, or paste the text directly.` },
           { status: 422 },
@@ -114,13 +121,14 @@ export const POST = withAuth(async (req, { user }) => {
       const contentHash = createHash("sha256").update(content).digest("hex");
 
       // Check for duplicate URL content within the same client
-      const { data: duplicate } = await supabase
+      const { data: duplicate, error: duplicateError } = await supabase
         .from("vault_items")
         .select("id, title")
         .eq("client_id", clientId)
         .eq("content_hash", contentHash)
         .neq("id", itemId)
         .maybeSingle();
+      if (duplicateError) throw duplicateError;
 
       if (duplicate) {
         await supabase.from("vault_items").delete().eq("id", itemId);
@@ -151,16 +159,27 @@ export const POST = withAuth(async (req, { user }) => {
       // Index for AI search — survives past the response via waitUntil.
       scheduleVaultProcess(itemId, clientId);
     } catch (err) {
-      await supabase
+      const message = errorMessage(err, "The page could not be processed.");
+      const { error: statusError } = await supabase
         .from("vault_items")
-        .update({ status: "error", error_message: String(err) })
+        .update({ status: "error", error_message: message })
         .eq("id", itemId);
+      if (statusError) return NextResponse.json({ error: errorMessage(statusError) }, { status: 500 });
+      return NextResponse.json(
+        { error: `The URL was saved, but the page could not be processed: ${message}` },
+        { status: 422 },
+      );
     }
   } else {
-    await supabase
+    const { error: statusError } = await supabase
       .from("vault_items")
       .update({ status: "error", error_message: "FIRECRAWL_API_KEY not configured." })
       .eq("id", itemId);
+    if (statusError) return NextResponse.json({ error: errorMessage(statusError) }, { status: 500 });
+    return NextResponse.json(
+      { error: "The URL was saved, but website crawling is not configured." },
+      { status: 503 },
+    );
   }
 
   return NextResponse.json({ success: true });

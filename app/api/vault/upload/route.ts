@@ -7,6 +7,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { vaultUploadLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import { safeKeyName } from "@/lib/storage-keys";
+import { errorMessage } from "@/lib/error-message";
 
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
 
@@ -81,6 +82,7 @@ export const POST = withAuth(async (req, { user }) => {
     .single();
 
   if (insertError || !item) {
+    await supabase.storage.from("vault").remove([storagePath]);
     return serverError(insertError ?? new Error("Insert failed"), { userId, clientId });
   }
 
@@ -110,13 +112,14 @@ export const POST = withAuth(async (req, { user }) => {
     const contentHash = createHash("sha256").update(text).digest("hex");
 
     // Check for duplicate content within the same client
-    const { data: duplicate } = await supabase
+    const { data: duplicate, error: duplicateError } = await supabase
       .from("vault_items")
       .select("id, title")
       .eq("client_id", clientId)
       .eq("content_hash", contentHash)
       .neq("id", itemId)
       .maybeSingle();
+    if (duplicateError) throw duplicateError;
 
     if (duplicate) {
       // Remove the new item and its storage file — it's a duplicate
@@ -134,7 +137,7 @@ export const POST = withAuth(async (req, { user }) => {
     // marking it "ready" — a scanned/image PDF would otherwise become a silent
     // blind spot the brain can never answer from.
     if (text.trim().length < 50) {
-      await supabase
+      const { error: emptyTextError } = await supabase
         .from("vault_items")
         .update({
           raw_content: text,
@@ -146,6 +149,7 @@ export const POST = withAuth(async (req, { user }) => {
               : "No readable text could be extracted from this file.",
         })
         .eq("id", itemId);
+      if (emptyTextError) throw emptyTextError;
       return NextResponse.json({
         success: true,
         warning: "No readable text found in this file — it was flagged for attention.",
@@ -177,10 +181,16 @@ export const POST = withAuth(async (req, { user }) => {
     // Index for AI search — survives past the response via waitUntil.
     scheduleVaultProcess(itemId, clientId);
   } catch (err) {
-    await supabase
+    const message = errorMessage(err, "The file could not be read.");
+    const { error: statusError } = await supabase
       .from("vault_items")
-      .update({ status: "error", error_message: String(err) })
+      .update({ status: "error", error_message: message })
       .eq("id", itemId);
+    if (statusError) return serverError(statusError, { userId, clientId });
+    return NextResponse.json(
+      { error: `The file was uploaded, but its contents could not be processed: ${message}` },
+      { status: 422 },
+    );
   }
 
   return NextResponse.json({ success: true });
