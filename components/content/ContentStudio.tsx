@@ -29,6 +29,7 @@ import { CompetitorsTab } from "./CompetitorsTab";
 import { ContentErrorBoundary } from "./ErrorBoundary";
 import { ContentProjectWorkflow } from "./ContentProjectWorkflow";
 import { ContentPilotPanel } from "./ContentPilotPanel";
+import { AppliedStylePreview } from "./AppliedStylePreview";
 import {
   competitorIdeaToBrief,
   type CompetitorIntelligenceIdea,
@@ -67,6 +68,7 @@ function ContentStudioInner({
   clientId,
   canApprove,
   canManageCompetitors,
+  brandStyle,
   history: initialHistory,
   historyHasMore: initialHistoryHasMore,
   topics: initialTopics,
@@ -86,6 +88,7 @@ function ContentStudioInner({
   const [openingProject, setOpeningProject] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState("");
   const [manualType, setManualType] = useState<ContentType>("linkedin");
+  const [previewType, setPreviewType] = useState<ContentType>("linkedin");
   const [showManual, setShowManual] = useState(false);
   const [ideaGenerationRequest, setIdeaGenerationRequest] = useState(0);
   const [showAllProjects, setShowAllProjects] = useState(false);
@@ -274,6 +277,7 @@ function ContentStudioInner({
           key={activeProject.id}
           clientId={clientId}
           canApprove={canApprove}
+          brandStyle={brandStyle}
           project={activeProject}
           onProjectChange={updateProject}
           onClose={() => setActiveProject(null)}
@@ -304,12 +308,15 @@ function ContentStudioInner({
         </div>
 
         {showManual && (
-          <div className="mt-4 flex flex-col gap-2 rounded-xl border border-zinc-700 bg-zinc-900 p-4 sm:flex-row">
-            <Input value={manualTitle} onChange={(event) => setManualTitle(event.target.value)} placeholder="What should the company talk about?" className="flex-1 bg-zinc-950" />
-            <select value={manualType} onChange={(event) => setManualType(event.target.value as ContentType)} className="h-9 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm">
-              {["linkedin", "facebook", "instagram", "x", "email", "newsletter", "blog"].map((type) => <option key={type} value={type}>{type}</option>)}
-            </select>
-            <Button onClick={handleManualIdea}>Review idea</Button>
+          <div className="mt-4 space-y-3 rounded-xl border border-zinc-700 bg-zinc-900 p-4">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input value={manualTitle} onChange={(event) => setManualTitle(event.target.value)} placeholder="What should the company talk about?" className="flex-1 bg-zinc-950" />
+              <select value={manualType} onChange={(event) => setManualType(event.target.value as ContentType)} className="h-9 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm">
+                {["linkedin", "facebook", "instagram", "x", "email", "newsletter", "blog"].map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+              <Button onClick={handleManualIdea}>Review idea</Button>
+            </div>
+            <AppliedStylePreview brandStyle={brandStyle} channel={manualType} compact />
           </div>
         )}
 
@@ -399,6 +406,21 @@ function ContentStudioInner({
       {view === "ideas" && (
         <ContentErrorBoundary>
           <div className="space-y-5">
+            <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
+              <label className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-xs text-zinc-400">
+                Preview channel
+                <select
+                  value={previewType}
+                  onChange={(event) => setPreviewType(event.target.value as ContentType)}
+                  className="mt-2 h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm capitalize text-white"
+                >
+                  {["linkedin", "facebook", "instagram", "x", "email", "newsletter", "blog"].map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </label>
+              <AppliedStylePreview brandStyle={brandStyle} channel={previewType} compact />
+            </div>
             <section className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
               <div>
                 <p className="text-sm font-medium text-blue-200">Observed Vault gaps</p>

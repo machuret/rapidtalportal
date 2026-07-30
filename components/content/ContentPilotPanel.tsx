@@ -53,9 +53,15 @@ export function ContentPilotPanel({
     Object.fromEntries(SCORE_FIELDS.map(([field]) => [field, 4])),
   );
   const [submitting, setSubmitting] = useState(false);
-  const reviewProject = useMemo(
-    () => projects.find((project) => project.status === "approved" && project.current_piece_id),
+  const reviewProjects = useMemo(
+    () => projects.filter((project) => project.status === "approved" && project.current_piece_id),
     [projects],
+  );
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const reviewProject = useMemo(
+    () => reviewProjects.find((project) => project.id === selectedProjectId) ??
+      reviewProjects[0],
+    [reviewProjects, selectedProjectId],
   );
 
   const load = useCallback(async () => {
@@ -144,7 +150,19 @@ export function ContentPilotPanel({
       )}
       {showFeedback && reviewProject && (
         <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-          <p className="text-sm font-medium text-white">Review “{reviewProject.title}”</p>
+          <label className="text-sm font-medium text-white">
+            Artifact to review
+            <select
+              aria-label="Artifact to review"
+              value={reviewProject.id}
+              onChange={(event) => setSelectedProjectId(event.target.value)}
+              className="mt-2 block h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white"
+            >
+              {reviewProjects.map((project) => (
+                <option key={project.id} value={project.id}>{project.title}</option>
+              ))}
+            </select>
+          </label>
           <div className="mt-3 grid gap-3 sm:grid-cols-5">
             {SCORE_FIELDS.map(([field, label]) => (
               <label key={field} className="text-xs text-zinc-400">

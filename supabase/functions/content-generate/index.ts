@@ -36,6 +36,115 @@ const baseCorsHeaders = {
 // Default base system prompt — kept in sync with the "content.generate" entry
 // in lib/prompts/registry.ts so that saving the default in admin resets cleanly.
 const DEFAULT_SYSTEM = DEFAULT_CONTENT_SYSTEM;
+const DEFAULT_CONTENT_MODEL = "openai/gpt-4o-mini";
+const DEFAULT_MODEL_TIMEOUT_MS = 75_000;
+
+export class ContentGenerationFailure extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string,
+  ) {
+    super(message);
+    this.name = "ContentGenerationFailure";
+  }
+}
+
+function boundedInteger(
+  raw: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum
+    ? parsed
+    : fallback;
+}
+
+export async function requestContentModel(args: {
+  request: ContentModelRequest;
+  apiKey: string;
+  model: string;
+  timeoutMs: number;
+  fetchImpl?: typeof fetch;
+}): Promise<string> {
+  const fetchModel = args.fetchImpl ?? fetch;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), args.timeoutMs);
+  try {
+    let response: Response;
+    try {
+      response = await fetchModel("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${args.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: args.model,
+          max_tokens: args.request.maxTokens,
+          ...(args.request.temperature === undefined
+            ? {}
+            : { temperature: args.request.temperature }),
+          ...(args.request.json
+            ? { response_format: { type: "json_object" } }
+            : {}),
+          messages: [
+            { role: "system", content: args.request.system },
+            { role: "user", content: args.request.user },
+          ],
+        }),
+      });
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        (error instanceof Error &&
+          (error.name === "AbortError" || error.name === "TimeoutError"))
+      ) {
+        throw new ContentGenerationFailure(
+          "The writing provider timed out. No draft was created; please try again.",
+          504,
+          "provider_timeout",
+        );
+      }
+      throw new ContentGenerationFailure(
+        "The writing provider is temporarily unavailable. No draft was created.",
+        503,
+        "provider_unavailable",
+      );
+    }
+
+    const payload = await response.json().catch(() => null) as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+    } | null;
+    if (!response.ok) {
+      console.error("content-generate: provider request failed", {
+        status: response.status,
+        model: args.model,
+      });
+      throw new ContentGenerationFailure(
+        response.status === 429
+          ? "The writing provider is busy. No draft was created; please try again shortly."
+          : "The writing provider could not generate this draft. Please try again.",
+        response.status === 429 ? 503 : 502,
+        response.status === 429 ? "provider_rate_limited" : "provider_rejected",
+      );
+    }
+    const content = payload?.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      throw new ContentGenerationFailure(
+        "The writing provider returned an empty draft. Please try again.",
+        502,
+        "provider_empty_response",
+      );
+    }
+    return content;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 /**
  * Admin prompt override (/admin/prompts → ai_prompts table). When a row exists
@@ -277,6 +386,14 @@ export async function handleContentGenerateRequest(
     const serviceKey = envGet("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = envGet("SUPABASE_ANON_KEY")!;
     const openrouterKey = envGet("OPENROUTER_API_KEY");
+    const contentModel =
+      envGet("CONTENT_GENERATION_MODEL")?.trim() || DEFAULT_CONTENT_MODEL;
+    const contentModelTimeoutMs = boundedInteger(
+      envGet("CONTENT_GENERATION_TIMEOUT_MS"),
+      DEFAULT_MODEL_TIMEOUT_MS,
+      5_000,
+      120_000,
+    );
 
     if (!openrouterKey) {
       return new Response(JSON.stringify({ error: "OpenRouter not configured." }), {
@@ -702,35 +819,20 @@ export async function handleContentGenerateRequest(
           p_lease_seconds: 600,
         });
         if (renewError) {
-          throw new Error(renewError.message || "The generation claim expired.");
+          throw new ContentGenerationFailure(
+            "The generation claim expired. Reload the project and try again.",
+            409,
+            "generation_lease_expired",
+          );
         }
       }
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 75_000);
-      try {
-        const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          signal: controller.signal,
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openrouterKey}` },
-          body: JSON.stringify({
-            model: "openai/gpt-4o-mini",
-            max_tokens: request.maxTokens,
-            ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
-            ...(request.json ? { response_format: { type: "json_object" } } : {}),
-            messages: [
-              { role: "system", content: request.system },
-              { role: "user", content: request.user },
-            ],
-          }),
-        });
-        const json = await response.json();
-        if (!response.ok) {
-          throw new Error(`OpenAI failed: ${json?.error?.message ?? "Unknown"}`);
-        }
-        return json.choices?.[0]?.message?.content ?? "";
-      } finally {
-        clearTimeout(timeout);
-      }
+      return requestContentModel({
+        request,
+        apiKey: openrouterKey,
+        model: contentModel,
+        timeoutMs: contentModelTimeoutMs,
+        fetchImpl,
+      });
     };
 
     const marketIntelligence = record(contentBrief.marketIntelligence);
@@ -947,10 +1049,18 @@ export async function handleContentGenerateRequest(
 
   } catch (error) {
     console.error("❌ content-generate error:", error);
+    const publicFailure = error instanceof ContentGenerationFailure
+      ? error
+      : new ContentGenerationFailure(
+          "Content generation failed safely. No draft was created; please try again.",
+          500,
+          "generation_failed",
+        );
     return new Response(JSON.stringify({
-      error: error instanceof Error ? error.message : "Internal server error",
+      error: publicFailure.message,
+      code: publicFailure.code,
     }), {
-      status: 500,
+      status: publicFailure.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

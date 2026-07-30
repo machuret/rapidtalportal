@@ -51,7 +51,8 @@ describe("Content Studio high-priority integrity repairs", () => {
     expect(generator).toContain("p_generation_lease_token: generationLeaseToken");
     expect(generator).toContain('rpc("release_content_project_generation"');
     expect(generator).toContain('rpc("renew_content_project_generation"');
-    expect(generator).toContain("setTimeout(() => controller.abort(), 75_000)");
+    expect(generator).toContain("setTimeout(() => controller.abort(), args.timeoutMs)");
+    expect(generator).toContain('envGet("CONTENT_GENERATION_TIMEOUT_MS")');
   });
 
   test("derived content gets a new project and never reopens the source", () => {

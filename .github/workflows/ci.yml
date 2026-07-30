@@ -83,4 +83,4 @@ jobs:
 
       - name: Exercise Edge Function tenant boundaries
         working-directory: supabase/functions
-        run: deno test content-generate/tenant-boundary.test.ts
+        run: deno test content-generate/*.test.ts

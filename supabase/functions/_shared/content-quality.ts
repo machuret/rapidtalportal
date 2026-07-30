@@ -270,6 +270,8 @@ const WE_COPULA_FACT_PATTERN =
   /\bwe\s+(?:are|were)\s+(?:(?:not|fully|currently|independently|locally|an?)\s+){0,3}(?:accredited|authori[sz]ed|based|certified|headquartered|licensed|located|members?|owned|partners?|providers?|registered|regulated)\b/iu;
 const PROPER_NAME_FACT_PATTERN =
   /^[\p{Lu}][\p{L}\p{N}&'’-]*\s+[\p{Lu}][\p{L}\p{N}&'’-]*(?:\s+[\p{Lu}][\p{L}\p{N}&'’-]*){0,4}\s+(?:is|are|has|provides?|offers?|operates?|serves?|supports?|integrates?|uses?|charges?|speciali[sz]es?|delivers?)\b/u;
+const SINGLE_NAME_FACT_PATTERN =
+  /^([\p{Lu}][\p{L}\p{N}&'’-]{1,80})\s+(?:is|are|has|provides?|offers?|operates?|serves?|supports?|integrates?|uses?|charges?|speciali[sz]es?|delivers?)\b/u;
 const SUBJECTIVE_COMPANY_PATTERN =
   /\bwe\s+(?:believe|think|hope|aim|want|invite|encourage|recommend)\b/iu;
 
@@ -298,7 +300,7 @@ function meaningfulClaimTerms(sentence: string): string[] {
   ));
 }
 
-function isNaturalCompanyClaim(sentence: string): boolean {
+function isNaturalCompanyClaim(sentence: string, supportText: string): boolean {
   const trimmed = sentence.trim();
   if (
     trimmed.endsWith("?") ||
@@ -307,11 +309,19 @@ function isNaturalCompanyClaim(sentence: string): boolean {
   ) {
     return false;
   }
+  const singleName = trimmed.match(SINGLE_NAME_FACT_PATTERN)?.[1] ?? "";
+  const knownSingleName = singleName
+    ? new RegExp(
+        `(^|[^\\p{L}\\p{N}])${escapeRegExp(singleName)}(?=$|[^\\p{L}\\p{N}])`,
+        "iu",
+      ).test(supportText)
+    : false;
   return (
     DIRECT_COMPANY_FACT_PATTERN.test(trimmed) ||
     OUR_NOUN_FACT_PATTERN.test(trimmed) ||
     WE_COPULA_FACT_PATTERN.test(trimmed) ||
-    PROPER_NAME_FACT_PATTERN.test(trimmed)
+    PROPER_NAME_FACT_PATTERN.test(trimmed) ||
+    knownSingleName
   );
 }
 
@@ -369,7 +379,7 @@ export function unsupportedClaimWarnings(
   for (const sentence of sentences) {
     const claimText = stripPlaceholders(sentence);
     const anchors = claimAnchors(claimText);
-    const naturalClaim = isNaturalCompanyClaim(claimText);
+    const naturalClaim = isNaturalCompanyClaim(claimText, supportText);
     if (!anchors.length && !naturalClaim) continue;
     const supported = supportSentences.some((supportSentence) =>
       sentenceSupportsClaim(claimText, anchors, supportSentence, naturalClaim)
@@ -414,6 +424,14 @@ export function claimSupportFromDna(
   const values = supportedFields
     .map((field) => dna?.[field])
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  const companyName = typeof dna?.company_name === "string" ? dna.company_name.trim() : "";
+  const location = typeof dna?.location === "string" ? dna.location.trim() : "";
+  if (companyName && location) {
+    // Preserve the relationship between two structured DNA fields. Joining
+    // them as unrelated lines cannot support a sentence such as
+    // “RapidTal is based in Sydney”, even though both facts are approved.
+    values.push(`${companyName} is based in ${location}.`);
+  }
   if (dna?.extra && typeof dna.extra === "object") {
     values.push(JSON.stringify(dna.extra));
   }

@@ -310,6 +310,22 @@ describe("unsupported factual claims", () => {
     ]);
   });
 
+  test("checks single-token company names and supports structured DNA relationships", () => {
+    expect(unsupportedClaimWarnings(
+      "RapidTal is based in Sydney.",
+      "RapidTal provides virtual assistant services.",
+    )).toEqual([
+      "Unsupported factual claim: “RapidTal is based in Sydney.”",
+    ]);
+
+    const support = claimSupportFromDna({
+      company_name: "RapidTal",
+      location: "Sydney",
+    });
+    expect(support).toContain("RapidTal is based in Sydney.");
+    expect(unsupportedClaimWarnings("RapidTal is based in Sydney.", support)).toEqual([]);
+  });
+
   test("requires the same polarity for ordinary negative company assertions", () => {
     expect(unsupportedClaimWarnings(
       "Our service does not charge establishment fees.",

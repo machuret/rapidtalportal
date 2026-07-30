@@ -9,7 +9,7 @@ const querySchema = z.object({ client_id: z.string().uuid() });
 const feedbackSchema = z.object({
   client_id: z.string().uuid(),
   project_id: z.string().uuid(),
-  piece_id: z.string().uuid().nullable().optional(),
+  piece_id: z.string().uuid(),
   voice_accuracy: z.number().int().min(1).max(5),
   idea_usefulness: z.number().int().min(1).max(5),
   differentiation_quality: z.number().int().min(1).max(5),
@@ -49,6 +49,7 @@ export const GET = withAuth(async (req, { user }) => {
     { data: client, error: clientError },
     { data: events, error: eventError },
     { data: attempts, error: attemptError },
+    { data: totalCost, error: totalCostError },
     { data: abandoned, error: abandonedError },
     { data: feedback, error: feedbackError },
     { data: evaluations, error: evaluationError },
@@ -67,6 +68,9 @@ export const GET = withAuth(async (req, { user }) => {
       .eq("client_id", parsed.data.client_id)
       .order("started_at", { ascending: false })
       .limit(100),
+    db.rpc("content_analysis_total_cost", {
+      p_client_id: parsed.data.client_id,
+    }),
     db.from("content_projects")
       .select("id,title,current_step,updated_at")
       .eq("client_id", parsed.data.client_id)
@@ -82,7 +86,8 @@ export const GET = withAuth(async (req, { user }) => {
       .eq("client_id", parsed.data.client_id)
       .eq("status", "reviewed"),
   ]);
-  const error = clientError ?? eventError ?? attemptError ?? abandonedError ?? feedbackError ?? evaluationError;
+  const error = clientError ?? eventError ?? attemptError ?? totalCostError ??
+    abandonedError ?? feedbackError ?? evaluationError;
   if (error) return serverError(error);
   if (!client) return NextResponse.json({ error: "Client not found." }, { status: 404 });
 
@@ -128,10 +133,7 @@ export const GET = withAuth(async (req, { user }) => {
       ),
     },
     analysis: {
-      total_cost_usd: Number(attemptRows.reduce(
-        (sum, row) => sum + Number(row.estimated_cost_usd || 0),
-        0,
-      ).toFixed(6)),
+      total_cost_usd: Number(Number(totalCost ?? 0).toFixed(6)),
       running: attemptRows.filter((row) => row.status === "running"),
       failures: attemptRows.filter((row) => row.status === "failed").slice(0, 20),
       recent: attemptRows.slice(0, 20),
@@ -169,7 +171,11 @@ export const POST = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any;
-  const [{ data: client, error: clientError }, { data: project, error: projectError }] =
+  const [
+    { data: client, error: clientError },
+    { data: project, error: projectError },
+    { data: piece, error: pieceError },
+  ] =
     await Promise.all([
       db.from("clients")
         .select("content_pilot_enabled")
@@ -180,20 +186,31 @@ export const POST = withAuth(async (req, { user }) => {
         .eq("id", parsed.data.project_id)
         .eq("client_id", parsed.data.client_id)
         .maybeSingle(),
+      db.from("content_pieces")
+        .select("id,project_id,status")
+        .eq("id", parsed.data.piece_id)
+        .eq("project_id", parsed.data.project_id)
+        .eq("client_id", parsed.data.client_id)
+        .eq("status", "approved")
+        .maybeSingle(),
     ]);
-  if (clientError || projectError) return serverError(clientError ?? projectError);
+  if (clientError || projectError || pieceError) {
+    return serverError(clientError ?? projectError ?? pieceError);
+  }
   if (!client?.content_pilot_enabled) {
     return NextResponse.json({ error: "This client is not in the Content Studio pilot." }, { status: 422 });
   }
   if (!project) return NextResponse.json({ error: "Content project not found." }, { status: 404 });
-  if (parsed.data.piece_id && parsed.data.piece_id !== project.current_piece_id) {
-    return NextResponse.json({ error: "The reviewed draft is not connected to this project." }, { status: 422 });
+  if (!piece) {
+    return NextResponse.json({
+      error: "Select an approved artifact connected to this project.",
+    }, { status: 422 });
   }
 
   const { data, error } = await db.from("content_pilot_feedback").upsert({
     client_id: parsed.data.client_id,
     project_id: parsed.data.project_id,
-    piece_id: parsed.data.piece_id ?? project.current_piece_id,
+    piece_id: piece.id,
     reviewer_id: user.id,
     voice_accuracy: parsed.data.voice_accuracy,
     idea_usefulness: parsed.data.idea_usefulness,

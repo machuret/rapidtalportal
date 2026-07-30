@@ -38,6 +38,7 @@ import {
 } from "@/types/content";
 import { HistoryTab } from "./HistoryTab";
 import { errorMessage } from "@/lib/error-message";
+import { AppliedStylePreview } from "./AppliedStylePreview";
 
 const STEPS: Array<{ id: ContentProjectStep; label: string }> = [
   { id: "idea", label: "Idea" },
@@ -63,6 +64,7 @@ interface ValidationResult {
 interface ContentProjectWorkflowProps {
   clientId: string;
   canApprove: boolean;
+  brandStyle: Record<string, unknown>;
   project: ContentProject;
   onProjectChange: (project: ContentProject) => void;
   onClose: () => void;
@@ -134,6 +136,7 @@ function ProjectProgress({ project }: { project: ContentProject }) {
 export function ContentProjectWorkflow({
   clientId,
   canApprove,
+  brandStyle,
   project,
   onProjectChange,
   onClose,
@@ -727,6 +730,13 @@ export function ContentProjectWorkflow({
                 </p>
               </div>
             )}
+            <div className="mt-5 border-t border-zinc-800 pt-5">
+              <AppliedStylePreview
+                brandStyle={brandStyle}
+                channel={project.idea_snapshot.channel}
+                compact
+              />
+            </div>
           </section>
           <aside className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
             <p className="text-sm font-medium text-white">What next?</p>
@@ -773,6 +783,14 @@ export function ContentProjectWorkflow({
             <div className="sm:col-span-2"><Label htmlFor="project-points">Key points <span className="text-zinc-600">(optional)</span></Label><Textarea id="project-points" className="mt-1.5 bg-zinc-950" value={keyPoints} onChange={(event) => setKeyPoints(event.target.value)} rows={4} placeholder="Add only points that must be included" /></div>
             <div><Label htmlFor="project-tone">Requested tone</Label><select id="project-tone" value={tone} onChange={(event) => setTone(event.target.value as ContentBrief["tone"])} className="mt-1.5 h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm">{TONES.map((item) => <option key={item} value={item.toLowerCase()}>{item}</option>)}</select></div>
             <div><Label>Length</Label><div className="mt-1.5 flex gap-2">{LENGTHS.map((item) => <button key={item.id} type="button" onClick={() => setLength(item.id)} className={`flex-1 rounded-md border px-2 py-2 text-xs ${length === item.id ? "border-purple-500 bg-purple-500/10 text-white" : "border-zinc-700 text-zinc-400"}`}>{item.label}</button>)}</div></div>
+          </div>
+          <div className="mt-5">
+            <AppliedStylePreview
+              brandStyle={brandStyle}
+              channel={project.idea_snapshot.channel}
+              tone={tone}
+              length={length}
+            />
           </div>
           <div className="mt-6 flex justify-between">
             <Button variant="ghost" onClick={() => patchProject({ current_step: "idea" })}><ArrowLeft className="mr-2 h-4 w-4" /> Idea</Button>
