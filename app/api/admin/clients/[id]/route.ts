@@ -58,6 +58,7 @@ const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with dashes").optional(),
   archived: z.boolean().optional(),
+  content_pilot_enabled: z.boolean().optional(),
   company_profile: companyProfileSchema.optional(),
 });
 
@@ -76,9 +77,13 @@ export const PATCH = withSuperAdmin<{ id: string }>(async (req, { params, user }
 
   const admin = createAdminClient();
 
-  const { archived, company_profile: companyProfile, ...rest } = parsed.data;
+  const { archived, content_pilot_enabled: pilotEnabled, company_profile: companyProfile, ...rest } = parsed.data;
   const updates: Record<string, unknown> = { ...rest };
   if (archived !== undefined) updates.archived_at = archived ? new Date().toISOString() : null;
+  if (pilotEnabled !== undefined) {
+    updates.content_pilot_enabled = pilotEnabled;
+    updates.content_pilot_started_at = pilotEnabled ? new Date().toISOString() : null;
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any;
@@ -87,11 +92,11 @@ export const PATCH = withSuperAdmin<{ id: string }>(async (req, { params, user }
       .from("clients")
       .update(updates)
       .eq("id", params.id)
-      .select("id, name, slug, created_at, archived_at")
+      .select("id, name, slug, created_at, archived_at, content_pilot_enabled, content_pilot_started_at")
       .single()
     : db
       .from("clients")
-      .select("id, name, slug, created_at, archived_at")
+      .select("id, name, slug, created_at, archived_at, content_pilot_enabled, content_pilot_started_at")
       .eq("id", params.id)
       .single();
   const { data, error } = await clientQuery;

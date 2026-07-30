@@ -3,6 +3,12 @@ import { z } from "zod";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasContentCapability } from "@/lib/auth/content-capabilities";
+import {
+  finishAnalysisAttempt,
+  recordWorkflowEvent,
+  startAnalysisAttempt,
+} from "@/lib/content/pilot-observability";
 import { chatModel, chatProvider } from "@/lib/brain/llm";
 import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import {
@@ -64,7 +70,7 @@ interface SourceRow {
 }
 
 function canEditStyle(role: string): boolean {
-  return role === "client_admin" || role === "super_admin";
+  return hasContentCapability(role, "edit_style_profiles");
 }
 
 function recordFromRow(row: AnalysisRow): StyleAnalysisRecord | null {
@@ -295,6 +301,20 @@ export const POST = withAuth(async (request, { user }) => {
   const sources = renderedExamples.includedRows;
   const sourceCharacterCount = renderedExamples.characterCount;
   if (sources.length < 3 || sourceCharacterCount < 600) {
+    await recordWorkflowEvent(db, {
+      clientId: parsed.data.client_id,
+      actorId: user.id,
+      eventType: "analysis_failed",
+      stage: "discover",
+      metadata: {
+        analysisKind: "style_analysis",
+        errorCode: "STYLE_EVIDENCE_NOT_READY",
+        channel: parsed.data.channel,
+        sourceCount: sources.length,
+        sourceCharacterCount,
+        preflight: true,
+      },
+    });
     return NextResponse.json({
       error: `Collect and process at least 3 ${parsed.data.channel} examples containing at least 600 characters before analysing style.`,
       code: "STYLE_EVIDENCE_NOT_READY",
@@ -320,14 +340,28 @@ export const POST = withAuth(async (request, { user }) => {
     return conflict();
   }
 
-  const response = await fetch(provider.url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${provider.key}`,
+  const model = chatModel("CONTENT_STYLE_ANALYSIS_MODEL");
+  const attempt = await startAnalysisAttempt(db, {
+    clientId: parsed.data.client_id,
+    actorId: user.id,
+    kind: "style_analysis",
+    relatedId: currentDraft?.id ?? null,
+    inputSummary: {
+      channel: parsed.data.channel,
+      sourceCount: sources.length,
+      sourceCharacterCount,
     },
-    body: JSON.stringify({
-      model: chatModel("CONTENT_STYLE_ANALYSIS_MODEL"),
+  });
+  let response: Response;
+  try {
+    response = await fetch(provider.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${provider.key}`,
+      },
+      body: JSON.stringify({
+      model,
       temperature: 0.2,
       max_tokens: 4000,
       response_format: { type: "json_object" },
@@ -367,11 +401,38 @@ Every conclusion must be concise and evidence-based. Evidence IDs must exactly m
           content: `Channel: ${parsed.data.channel}\nExamples analysed: ${sources.length}\n\n${renderedExamples.text}`,
         },
       ],
-    }),
-  });
+      }),
+    });
+  } catch {
+    await finishAnalysisAttempt(db, attempt, {
+      clientId: parsed.data.client_id,
+      actorId: user.id,
+      kind: "style_analysis",
+      status: "failed",
+      provider: "openrouter",
+      model,
+      errorCode: "PROVIDER_UNREACHABLE",
+      errorMessage: "The style analysis provider could not be reached.",
+    });
+    return NextResponse.json({ error: "The style analysis provider could not be reached." }, { status: 502 });
+  }
   const json = await response.json().catch(() => ({}));
+  const usage = (json as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage;
+  const finishFailed = (code: string, message: string) => finishAnalysisAttempt(db, attempt, {
+    clientId: parsed.data.client_id,
+    actorId: user.id,
+    kind: "style_analysis",
+    status: "failed",
+    provider: "openrouter",
+    model,
+    inputTokens: usage?.prompt_tokens ?? 0,
+    outputTokens: usage?.completion_tokens ?? 0,
+    errorCode: code,
+    errorMessage: message,
+  });
   if (!response.ok) {
     const message = (json as { error?: { message?: string } }).error?.message;
+    await finishFailed(`PROVIDER_HTTP_${response.status}`, message ?? "The style analysis provider failed.");
     return NextResponse.json({ error: message ?? "The style analysis provider failed." }, { status: 502 });
   }
 
@@ -382,10 +443,12 @@ Every conclusion must be concise and evidence-based. Evidence IDs must exactly m
         .choices?.[0]?.message?.content ?? "{}",
     );
   } catch {
+    await finishFailed("INVALID_PROVIDER_JSON", "The style analyser returned an unreadable result.");
     return NextResponse.json({ error: "The style analyser returned an unreadable result." }, { status: 502 });
   }
   const analysisResult = styleAnalysisProfileSchema.safeParse(rawAnalysis);
   if (!analysisResult.success) {
+    await finishFailed("INVALID_ANALYSIS_SCHEMA", "The style analyser returned an incomplete result.");
     return NextResponse.json({ error: "The style analyser returned an incomplete result." }, { status: 502 });
   }
 
@@ -396,13 +459,13 @@ Every conclusion must be concise and evidence-based. Evidence IDs must exactly m
     evidence: analysisResult.data.evidence.filter((entry) => validSourceIds.has(entry.source_item_id)),
   };
   if (analysis.evidence.length < 2) {
+    await finishFailed("INSUFFICIENT_VERIFIED_INSIGHTS", "The style analyser did not provide enough source-linked evidence.");
     return NextResponse.json({
       error: "The style analyser did not provide enough source-linked evidence.",
     }, { status: 502 });
   }
   const now = new Date().toISOString();
   const sourceItemIds = sources.map((source) => source.id);
-  const model = chatModel("CONTENT_STYLE_ANALYSIS_MODEL");
   const values = {
     analysis,
     source_item_ids: sourceItemIds,
@@ -436,10 +499,31 @@ Every conclusion must be concise and evidence-based. Evidence IDs must exactly m
       .single();
   const { data: saved, error: saveError } = await write;
   if (saveError) {
+    await finishFailed("PERSISTENCE_FAILED", saveError.message ?? "The style analysis could not be saved.");
     if (saveError.code === "23505") return conflict();
     return NextResponse.json({ error: "The style analysis could not be saved." }, { status: 500 });
   }
-  if (!saved) return conflict();
+  if (!saved) {
+    await finishFailed("PERSISTENCE_CONFLICT", "The style profile changed before the analysis could be saved.");
+    return conflict();
+  }
+  await finishAnalysisAttempt(db, attempt, {
+    clientId: parsed.data.client_id,
+    actorId: user.id,
+    kind: "style_analysis",
+    status: "succeeded",
+    relatedId: saved.id,
+    provider: "openrouter",
+    model,
+    inputTokens: usage?.prompt_tokens ?? 0,
+    outputTokens: usage?.completion_tokens ?? 0,
+    resultSummary: {
+      channel: parsed.data.channel,
+      sourceCount: sources.length,
+      evidenceCount: analysis.evidence.length,
+      confidence: analysis.confidence,
+    },
+  });
 
   return NextResponse.json({
     success: true,

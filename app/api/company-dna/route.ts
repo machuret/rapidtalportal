@@ -5,6 +5,7 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CONTENT_HARD_RULE_TYPES } from "@/supabase/functions/_shared/content-style";
+import { hasContentCapability } from "@/lib/auth/content-capabilities";
 
 const hardRuleSchema = z.object({
   id: z.string().min(1).max(100),
@@ -69,7 +70,7 @@ const bodySchema = z.object({
 export const POST = withAuth(async (req, { user }) => {
   // Admin-only: Company DNA feeds every AI answer, so writes are restricted
   // to client_admin / super_admin (VAs have read-only access in the UI).
-  if (!["client_admin", "super_admin"].includes(user.role)) {
+  if (!hasContentCapability(user.role, "edit_company_dna")) {
     return NextResponse.json({ error: "Only admins can edit Company DNA." }, { status: 403 });
   }
 

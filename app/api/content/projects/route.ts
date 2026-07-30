@@ -12,6 +12,10 @@ import {
 } from "@/lib/content/project-schema";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  recordWorkflowEvent,
+  type PilotDbClient,
+} from "@/lib/content/pilot-observability";
+import {
   createContentStyleSnapshot,
   resolveContentStyle,
 } from "@/supabase/functions/_shared/content-style";
@@ -303,6 +307,14 @@ export const POST = withAuth(async (req, { user }) => {
     .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,created_at,updated_at")
     .single();
   if (error) return serverError(error);
+  await recordWorkflowEvent(db as unknown as PilotDbClient, {
+    clientId: parsed.data.client_id,
+    projectId: data.id,
+    actorId: user.id,
+    eventType: "idea_promoted",
+    stage: "idea",
+    metadata: { origin: parsed.data.idea.origin, channel: parsed.data.idea.channel },
+  });
   return NextResponse.json(data, { status: 201 });
 });
 
@@ -428,6 +440,18 @@ export const PATCH = withAuth(async (req, { user }) => {
     return NextResponse.json({
       error: "This project changed in another tab. Reload it before continuing.",
     }, { status: 409 });
+  }
+  if (
+    parsed.data.current_step === "evidence" &&
+    completeEditorialBrief(resolvedBrief)
+  ) {
+    await recordWorkflowEvent(db as unknown as PilotDbClient, {
+      clientId: parsed.data.client_id,
+      projectId: parsed.data.id,
+      actorId: user.id,
+      eventType: "brief_completed",
+      stage: "brief",
+    });
   }
   return NextResponse.json(data);
 });

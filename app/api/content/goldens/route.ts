@@ -9,6 +9,7 @@ import {
   goldenExampleUpdateSchema,
 } from "@/lib/content/voice-calibration";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasContentCapability } from "@/lib/auth/content-capabilities";
 
 const querySchema = z.object({
   client_id: z.string().uuid(),
@@ -21,7 +22,7 @@ const archiveSchema = z.object({
 });
 
 function canManage(role: string): boolean {
-  return role === "client_admin" || role === "super_admin";
+  return hasContentCapability(role, "edit_style_profiles");
 }
 
 const columns = "id,client_id,channel,title,body,source_url,published_at,content_type,represents_brand_strongly,voice_traits,structural_traits,vocabulary_preferences,admin_notes,evaluation_permission,status,content_hash,approved_at,created_at,updated_at";

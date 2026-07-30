@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ContentStudio } from "@/components/content/ContentStudio";
 import { PageIntro } from "@/components/layout/PageIntro";
 import type { ContentPiece, ContentProject, ContentTopic } from "@/types/content";
+import { hasContentCapability } from "@/lib/auth/content-capabilities";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Content — RapidTal" };
@@ -69,7 +70,7 @@ export default async function ContentPage() {
   );
 
   // VAs can prepare and validate drafts; final approval remains a client/admin decision.
-  const canApprove = ["client_admin", "super_admin"].includes(user.role);
+  const canApprove = hasContentCapability(user.role, "approve_content");
   const vaultGaps = Array.from(new Set(
     ((vaultQueries ?? []) as Array<{ question: string }>)
       .map((query) => query.question.trim())
@@ -86,7 +87,7 @@ export default async function ContentPage() {
       <ContentStudio
         clientId={user.client_id}
         canApprove={canApprove}
-        canManageCompetitors={["client_admin", "super_admin"].includes(user.role)}
+        canManageCompetitors={hasContentCapability(user.role, "manage_competitors")}
         brandStyle={{
           ...((brandStyle ?? {}) as Record<string, unknown>),
           style_analysis_profiles: styleAnalysisProfiles,

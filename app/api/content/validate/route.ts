@@ -5,6 +5,10 @@ import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  recordWorkflowEvent,
+  type PilotDbClient,
+} from "@/lib/content/pilot-observability";
+import {
   claimSupportFromDna,
   contentStructureWarnings,
   unsupportedClaimWarnings,
@@ -90,6 +94,21 @@ export const POST = withAuth(async (req, { user }) => {
     { id: "platform", label: "Platform structure", warnings: platform },
     { id: "hard_rules", label: "Enforced hard rules", warnings: hardRules },
   ];
+  if (checks.some((check) => check.warnings.length > 0)) {
+    await recordWorkflowEvent(db as unknown as PilotDbClient, {
+      clientId: parsed.data.client_id,
+      projectId: parsed.data.project_id,
+      pieceId: parsed.data.piece_id,
+      actorId: user.id,
+      eventType: "validation_failed",
+      stage: "validate",
+      metadata: {
+        failedChecks: checks
+          .filter((check) => check.warnings.length > 0)
+          .map((check) => check.id),
+      },
+    });
+  }
   return NextResponse.json({
     valid: checks.every((check) => check.warnings.length === 0),
     checks: checks.map((check) => ({

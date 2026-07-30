@@ -9,12 +9,15 @@ export interface ClientInfo {
   name: string;
   slug: string;
   created_at: string;
+  content_pilot_enabled: boolean;
+  content_pilot_started_at: string | null;
 }
 
 interface UpdateClientInput {
   id: string;
-  name: string;
-  slug: string;
+  name?: string;
+  slug?: string;
+  content_pilot_enabled?: boolean;
 }
 
 // Update a client's name / slug

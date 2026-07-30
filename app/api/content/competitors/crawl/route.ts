@@ -9,6 +9,7 @@ import {
 } from "@/lib/competitors/ingestion";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { siteCrawlLimiter, tooManyRequests } from "@/lib/rate-limit";
+import { rolesWithContentCapability } from "@/lib/auth/content-capabilities";
 
 const schema = z.object({
   client_id: z.string().uuid(),
@@ -55,4 +56,4 @@ export const POST = withAuth(async (req, { user }) => {
       { status },
     );
   }
-}, { roles: ["client_admin", "super_admin"] });
+}, { roles: rolesWithContentCapability("collect_competitor_content") });

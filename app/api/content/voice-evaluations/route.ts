@@ -17,6 +17,7 @@ import {
   type ContentGoldenExample,
 } from "@/lib/content/voice-calibration";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasContentCapability } from "@/lib/auth/content-capabilities";
 
 export const maxDuration = 120;
 
@@ -41,7 +42,7 @@ const reviewSchema = z.object({
 });
 
 function canManage(role: string): boolean {
-  return role === "client_admin" || role === "super_admin";
+  return hasContentCapability(role, "edit_style_profiles");
 }
 
 interface EdgeDraft {

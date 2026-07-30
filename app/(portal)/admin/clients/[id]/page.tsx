@@ -28,7 +28,7 @@ export default async function AdminClientDetailPage({ params: paramsPromise }: P
     await Promise.all([
       admin
         .from("clients")
-        .select("id, name, slug, created_at")
+        .select("id, name, slug, created_at, content_pilot_enabled, content_pilot_started_at")
         .eq("id", params.id)
         .single(),
       admin
@@ -103,13 +103,20 @@ export default async function AdminClientDetailPage({ params: paramsPromise }: P
       <div className="mb-8">
         <AdminCompanyProfileEditor
           clientId={params.id}
-          clientName={(client as { name: string }).name}
+          clientName={(client as unknown as { name: string }).name}
           initialProfile={dnaRow}
         />
       </div>
 
       <ClientDetail
-      client={client as { id: string; name: string; slug: string; created_at: string }}
+      client={client as unknown as {
+        id: string;
+        name: string;
+        slug: string;
+        created_at: string;
+        content_pilot_enabled: boolean;
+        content_pilot_started_at: string | null;
+      }}
       users={
         (users ?? []) as {
           id: string;

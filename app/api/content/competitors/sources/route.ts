@@ -5,8 +5,9 @@ import { withAuth } from "@/lib/api/with-auth";
 import { serverError } from "@/lib/api/errors";
 import { isCollectableLinkedinCompanyUrl, resolveCompetitorUrl } from "@/lib/competitors/urls";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { rolesWithContentCapability } from "@/lib/auth/content-capabilities";
 
-const MANAGER_ROLES = ["client_admin", "super_admin"] as const;
+const MANAGER_ROLES = rolesWithContentCapability("manage_competitors");
 const cadence = z.enum(["manual", "daily", "weekly", "monthly"]);
 const createSchema = z.object({
   client_id: z.string().uuid(),

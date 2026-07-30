@@ -7,6 +7,7 @@ import {
   CompetitorIngestionError,
 } from "@/lib/competitors/ingestion";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { rolesWithContentCapability } from "@/lib/auth/content-capabilities";
 
 export const maxDuration = 60;
 
@@ -46,4 +47,4 @@ export const POST = withAuth(async (req, { user }) => {
       { status },
     );
   }
-}, { roles: ["client_admin", "super_admin"] });
+}, { roles: rolesWithContentCapability("collect_competitor_content") });

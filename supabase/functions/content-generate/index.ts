@@ -830,6 +830,26 @@ export async function handleContentGenerateRequest(
       }
       pieceId = (piece as { id: string }).id;
       persistedPiece = piece as Record<string, unknown>;
+      const { error: eventError } = await admin.from("content_workflow_events").insert({
+        client_id: clientId,
+        project_id: projectId ?? null,
+        piece_id: pieceId,
+        actor_id: authUser.id,
+        event_type: generationKind === "original" || generationKind === "reply"
+          ? "draft_generated"
+          : "draft_revised",
+        workflow_stage: generationKind === "original" || generationKind === "reply"
+          ? "generate"
+          : "edit",
+        metadata: {
+          generationKind,
+          contentType,
+          sourceCount: verifiedSources.length,
+        },
+      });
+      if (eventError) {
+        console.error("content-generate: workflow telemetry failed:", eventError);
+      }
       console.log(`✅ Content saved: ${pieceId}`);
     }
 

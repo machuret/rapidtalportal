@@ -106,6 +106,19 @@ export function ClientDetail({
     setEditingClient(false);
   }, [client]);
 
+  const handlePilotChange = useCallback(async (enabled: boolean) => {
+    try {
+      const updated = await updateClientMutation.mutateAsync({
+        id: client.id,
+        content_pilot_enabled: enabled,
+      });
+      setClient(updated);
+      toast.success(enabled ? "Content pilot enabled" : "Content pilot disabled");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update pilot access");
+    }
+  }, [client.id, updateClientMutation]);
+
   /* ── Create new user ──────────────────────────────────────────── */
   const handleCreateUser = useCallback(
     async (e: React.FormEvent) => {
@@ -295,6 +308,34 @@ export function ClientDetail({
             </div>
           </div>
         )}
+      </div>
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <h2 className="font-semibold text-zinc-100">Content Studio production pilot</h2>
+            <p className="mt-1 max-w-2xl text-sm text-zinc-400">
+              Enables pilot reporting, recoverability monitoring and explicit reviewer feedback
+              for this client. It does not use publishing performance as learning data.
+            </p>
+            {client.content_pilot_started_at && (
+              <p className="mt-2 text-xs text-zinc-500">
+                Pilot started {formatDate(client.content_pilot_started_at)}
+              </p>
+            )}
+          </div>
+          <label className="flex shrink-0 items-center gap-2 text-sm text-zinc-300">
+            <input
+              data-testid="content-pilot-toggle"
+              type="checkbox"
+              checked={client.content_pilot_enabled}
+              disabled={savingClient}
+              onChange={(event) => void handlePilotChange(event.target.checked)}
+              className="h-4 w-4 rounded border-zinc-600"
+            />
+            Enabled
+          </label>
+        </div>
       </div>
 
       {/* ── Users Section ────────────────────────────────────────── */}

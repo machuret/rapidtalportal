@@ -55,6 +55,10 @@ import {
   POST as createPiece,
 } from "@/app/api/content/pieces/route";
 import {
+  GET as getPilot,
+  POST as createPilotFeedback,
+} from "@/app/api/content/pilot/route";
+import {
   GET as getProjects,
   PATCH as patchProject,
   POST as createProject,
@@ -290,6 +294,26 @@ const cases: { endpoint: string; call: () => Promise<Response> }[] = [
       client_id: CLIENT_B,
       id: PIECE_ID,
       body: "Cross-tenant edit",
+    }), routeCtx),
+  },
+  {
+    endpoint: "pilot:GET",
+    call: () => getPilot(
+      new NextRequest(`https://portal.test/api/content/pilot?client_id=${CLIENT_B}`),
+      routeCtx,
+    ),
+  },
+  {
+    endpoint: "pilot:POST",
+    call: () => createPilotFeedback(jsonRequest("https://portal.test/api/content/pilot", {
+      client_id: CLIENT_B,
+      project_id: PROJECT_ID,
+      piece_id: PIECE_ID,
+      voice_accuracy: 4,
+      idea_usefulness: 4,
+      differentiation_quality: 4,
+      source_trust: 4,
+      workflow_ease: 4,
     }), routeCtx),
   },
   {

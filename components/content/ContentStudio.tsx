@@ -28,6 +28,7 @@ import { HistoryTab } from "./HistoryTab";
 import { CompetitorsTab } from "./CompetitorsTab";
 import { ContentErrorBoundary } from "./ErrorBoundary";
 import { ContentProjectWorkflow } from "./ContentProjectWorkflow";
+import { ContentPilotPanel } from "./ContentPilotPanel";
 import {
   competitorIdeaToBrief,
   type CompetitorIntelligenceIdea,
@@ -215,6 +216,7 @@ function ContentStudioInner({
 
   return (
     <div className="space-y-6">
+      <ContentPilotPanel clientId={clientId} projects={projects} />
       <section className="rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

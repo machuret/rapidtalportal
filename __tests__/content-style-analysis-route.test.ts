@@ -361,7 +361,10 @@ test("records only examples actually included in the bounded model prompt", asyn
   }), routeCtx);
 
   expect(response.status).toBe(200);
-  const insertedValues = inserted.insert.mock.calls[0][0];
+  const insertedValues = inserted.insert.mock.calls
+    .map(([values]) => values)
+    .find((values) => Array.isArray(values?.source_item_ids));
+  expect(insertedValues).toBeDefined();
   expect(insertedValues.source_item_ids.length).toBeGreaterThanOrEqual(3);
   expect(insertedValues.source_item_ids.length).toBeLessThan(20);
   expect(insertedValues.source_count).toBe(insertedValues.source_item_ids.length);

@@ -12,6 +12,7 @@ import type {
   CompetitorReadiness,
   CompetitorSource,
 } from "@/types/competitors";
+import { rolesWithContentCapability } from "@/lib/auth/content-capabilities";
 
 const cadence = z.enum(["manual", "daily", "weekly", "monthly"]);
 const querySchema = z.object({ client_id: z.string().uuid() });
@@ -38,7 +39,7 @@ const deleteSchema = z.object({
   id: z.string().uuid(),
 });
 
-const MANAGER_ROLES = ["client_admin", "super_admin"] as const;
+const MANAGER_ROLES = rolesWithContentCapability("manage_competitors");
 
 export const GET = withAuth(async (req, { user }) => {
   const parsed = querySchema.safeParse({

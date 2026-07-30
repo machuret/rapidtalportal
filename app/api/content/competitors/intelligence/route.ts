@@ -9,6 +9,12 @@ import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { captureError } from "@/lib/error-tracking";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  finishAnalysisAttempt,
+  recordWorkflowEvent,
+  startAnalysisAttempt,
+} from "@/lib/content/pilot-observability";
+import { rolesWithContentCapability } from "@/lib/auth/content-capabilities";
+import {
   competitorIntelligenceSchema,
   parseCompetitorIntelligence,
   type CompetitorIntelligence,
@@ -512,6 +518,20 @@ export const POST = withAuth(async (request, { user }) => {
   const admin = createAdminClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any;
+  const recordPreflightFailure = async (code: string, details: Record<string, unknown>) => {
+    await recordWorkflowEvent(db, {
+      clientId: parsed.data.client_id,
+      actorId: user.id,
+      eventType: "analysis_failed",
+      stage: "discover",
+      metadata: {
+        analysisKind: "competitor_intelligence",
+        errorCode: code,
+        preflight: true,
+        ...details,
+      },
+    });
+  };
   const [
     { data: competitorRows, error: competitorError },
     { data: readinessRows, error: readinessError },
@@ -573,6 +593,10 @@ export const POST = withAuth(async (request, { user }) => {
     competitors.length === 0 ||
     (requested && competitors.length !== requested.size)
   ) {
+    await recordPreflightFailure("COMPETITOR_EVIDENCE_NOT_READY", {
+      selectedCompetitorCount: requested?.size ?? competitors.length,
+      readyCompetitorCount: competitors.length,
+    });
     return NextResponse.json({
       error: "Every selected competitor needs at least 5 recent items and 3,000 characters before reliable analysis.",
       code: "COMPETITOR_EVIDENCE_NOT_READY",
@@ -603,6 +627,10 @@ export const POST = withAuth(async (request, { user }) => {
   const names = new Map(competitors.map((competitor) => [competitor.id, competitor.name]));
   const rendered = renderEvidence(candidates, names);
   if (rendered.rows.length < 5 || rendered.characterCount < 2500) {
+    await recordPreflightFailure("COMPETITOR_WINDOW_NOT_READY", {
+      sourceCount: rendered.rows.length,
+      sourceCharacterCount: rendered.characterCount,
+    });
     return NextResponse.json({
       error: "The selected publication window does not contain enough usable competitor content.",
       code: "COMPETITOR_WINDOW_NOT_READY",
@@ -645,7 +673,21 @@ export const POST = withAuth(async (request, { user }) => {
     return serverError(claimError ?? new Error("The analysis job could not be started."));
   }
   const job = claimed as JobRow;
-  const failJob = async (message: string) => {
+  const attempt = await startAnalysisAttempt(db, {
+    clientId: parsed.data.client_id,
+    actorId: user.id,
+    kind: "competitor_intelligence",
+    relatedId: job.id,
+    inputSummary: {
+      competitorCount: competitors.length,
+      sourceCount: rendered.rows.length,
+      sourceCharacterCount: rendered.characterCount,
+      windowDays: parsed.data.window_days,
+    },
+  });
+  const model = chatModel("COMPETITOR_INTELLIGENCE_MODEL");
+  let providerUsage = { input: 0, output: 0 };
+  const failJob = async (message: string, code = "PROVIDER_OR_ANALYSIS_FAILURE") => {
     try {
       const { error } = await db.rpc("fail_competitor_intelligence_job", {
         p_job_id: job.id,
@@ -666,9 +708,21 @@ export const POST = withAuth(async (request, { user }) => {
         url: "/api/content/competitors/intelligence",
       });
     }
+    await finishAnalysisAttempt(db, attempt, {
+      clientId: parsed.data.client_id,
+      actorId: user.id,
+      kind: "competitor_intelligence",
+      status: "failed",
+      relatedId: job.id,
+      provider: "openrouter",
+      model,
+      inputTokens: providerUsage.input,
+      outputTokens: providerUsage.output,
+      errorCode: code,
+      errorMessage: message,
+    });
   };
 
-  const model = chatModel("COMPETITOR_INTELLIGENCE_MODEL");
   let response: Response;
   try {
     response = await fetch(provider.url, {
@@ -726,15 +780,22 @@ ${rendered.text}`,
       }),
     });
   } catch {
-    await failJob("The competitor intelligence provider could not be reached.");
+    await failJob("The competitor intelligence provider could not be reached.", "PROVIDER_UNREACHABLE");
     return NextResponse.json({ error: "The competitor intelligence provider could not be reached." }, { status: 502 });
   }
 
   const providerJson = await response.json().catch(() => ({}));
+  const usage = (providerJson as {
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  }).usage;
+  providerUsage = {
+    input: usage?.prompt_tokens ?? 0,
+    output: usage?.completion_tokens ?? 0,
+  };
   if (!response.ok) {
     const message = (providerJson as { error?: { message?: string } }).error?.message ??
       "The competitor intelligence provider failed.";
-    await failJob(message);
+    await failJob(message, `PROVIDER_HTTP_${response.status}`);
     return NextResponse.json({ error: message }, { status: 502 });
   }
   let rawAnalysis: unknown;
@@ -744,12 +805,12 @@ ${rendered.text}`,
         .choices?.[0]?.message?.content ?? "{}",
     );
   } catch {
-    await failJob("The competitor analyser returned unreadable data.");
+    await failJob("The competitor analyser returned unreadable data.", "INVALID_PROVIDER_JSON");
     return NextResponse.json({ error: "The competitor analyser returned unreadable data." }, { status: 502 });
   }
   const parsedAnalysis = competitorIntelligenceSchema.safeParse(rawAnalysis);
   if (!parsedAnalysis.success) {
-    await failJob("The competitor analyser returned an incomplete report.");
+    await failJob("The competitor analyser returned an incomplete report.", "INVALID_ANALYSIS_SCHEMA");
     return NextResponse.json({ error: "The competitor analyser returned an incomplete report." }, { status: 502 });
   }
   const bounded = boundAnalysis(
@@ -763,7 +824,7 @@ ${rendered.text}`,
     bounded.positioning_gaps.length === 0 ||
     bounded.recommended_ideas.length === 0
   ) {
-    await failJob("The analyser did not provide enough exactly verified intelligence.");
+    await failJob("The analyser did not provide enough exactly verified intelligence.", "INSUFFICIENT_VERIFIED_INSIGHTS");
     return NextResponse.json({
       error: "The competitor analyser did not provide enough exactly verified, source-linked intelligence.",
     }, { status: 502 });
@@ -783,7 +844,7 @@ ${rendered.text}`,
     },
   );
   if (saveError || !saved) {
-    await failJob(saveError?.message ?? "Analysis was not saved.");
+    await failJob(saveError?.message ?? "Analysis was not saved.", "PERSISTENCE_FAILED");
     if (saveError?.code === "55P03") {
       return NextResponse.json({
         error: "This analysis lease expired before it could be saved. Run it again.",
@@ -792,6 +853,22 @@ ${rendered.text}`,
     return serverError(saveError ?? new Error("Analysis was not saved."));
   }
   const savedRun = saved as RunRow;
+  await finishAnalysisAttempt(db, attempt, {
+    clientId: parsed.data.client_id,
+    actorId: user.id,
+    kind: "competitor_intelligence",
+    status: "succeeded",
+    relatedId: savedRun.id,
+    provider: "openrouter",
+    model,
+    inputTokens: providerUsage.input,
+    outputTokens: providerUsage.output,
+    resultSummary: {
+      sourceCount: snapshots.length,
+      topicClusterCount: bounded.topic_clusters.length,
+      ideaCount: bounded.recommended_ideas.length,
+    },
+  });
 
   return NextResponse.json({
     run: {
@@ -830,4 +907,4 @@ ${rendered.text}`,
     },
     active_job: null,
   }, { status: 201 });
-}, { roles: ["client_admin", "super_admin"] });
+}, { roles: rolesWithContentCapability("manage_competitors") });

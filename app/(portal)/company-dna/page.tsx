@@ -6,6 +6,7 @@ import { PageIntro } from "@/components/layout/PageIntro";
 import { StyleAnalysisManager } from "@/components/content/StyleAnalysisManager";
 import { VoiceGoldenLibrary } from "@/components/content/VoiceGoldenLibrary";
 import { LinkedInVaultSourcePanel } from "@/components/vault/LinkedInVaultSourcePanel";
+import { hasContentCapability } from "@/lib/auth/content-capabilities";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Company DNA — RapidTal" };
@@ -26,7 +27,7 @@ export default async function CompanyDnaPage() {
 
   // Admin-only editing: DNA feeds every AI answer, so a stray VA edit would
   // silently poison the Brain. VAs read it; admins own it.
-  const canEdit = user.role === "client_admin" || user.role === "super_admin";
+  const canEdit = hasContentCapability(user.role, "edit_company_dna");
   const socialLinks = (dna as { social_links?: Record<string, string> } | null)?.social_links;
   const linkedInUrl = typeof socialLinks?.linkedin === "string" ? socialLinks.linkedin : "";
 

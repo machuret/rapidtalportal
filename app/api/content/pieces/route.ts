@@ -5,6 +5,11 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notifications";
+import { hasContentCapability } from "@/lib/auth/content-capabilities";
+import {
+  recordWorkflowEvent,
+  type PilotDbClient,
+} from "@/lib/content/pilot-observability";
 import {
   createContentStyleSnapshot,
   resolveContentStyle,
@@ -185,7 +190,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
 
   // VAs prepare and validate drafts, but final approval is a client/admin decision.
-  if (parsed.data.status === "approved" && !["client_admin", "super_admin"].includes(user.role)) {
+  if (parsed.data.status === "approved" && !hasContentCapability(user.role, "approve_content")) {
     return NextResponse.json({ error: "Not allowed to approve content." }, { status: 403 });
   }
 
@@ -195,7 +200,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: current, error: currentError } = await (admin as any)
     .from("content_pieces")
-    .select("content_type, body, status, updated_at, source_references, style_snapshot")
+    .select("project_id, content_type, body, status, updated_at, source_references, style_snapshot")
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
     .single();
@@ -327,6 +332,29 @@ export const PATCH = withAuth(async (req, { user }) => {
       type: "content_approved",
       title: `Content approved: ${piece.title.slice(0, 120)}`,
       href: "/content",
+    });
+  }
+  if (parsed.data.status === "approved") {
+    await recordWorkflowEvent(admin as unknown as PilotDbClient, {
+      clientId: parsed.data.client_id,
+      projectId: current.project_id,
+      pieceId: parsed.data.id,
+      actorId: user.id,
+      eventType: "draft_approved",
+      stage: "complete",
+    });
+  } else if (parsed.data.body !== undefined || parsed.data.title !== undefined) {
+    await recordWorkflowEvent(admin as unknown as PilotDbClient, {
+      clientId: parsed.data.client_id,
+      projectId: current.project_id,
+      pieceId: parsed.data.id,
+      actorId: user.id,
+      eventType: "draft_revised",
+      stage: "edit",
+      metadata: {
+        bodyChanged: parsed.data.body !== undefined,
+        titleChanged: parsed.data.title !== undefined,
+      },
     });
   }
 
