@@ -301,9 +301,35 @@ function normalizeAnalysisEnvelope(value: unknown): unknown {
   };
 }
 
-function normalizeAnalysisItem(key: string, value: unknown): unknown {
+function normalizeAnalysisItem(
+  key: string,
+  value: unknown,
+  fallbackCompetitorIds: string[],
+): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const item = { ...(value as Record<string, unknown>) };
+  const alias = (target: string, ...alternatives: string[]) => {
+    if (item[target] !== undefined) return;
+    const found = alternatives.find((field) => item[field] !== undefined);
+    if (found) item[target] = item[found];
+  };
+  alias("source_item_ids", "sourceItemIds", "source_ids", "sourceIds");
+  alias("competitor_ids", "competitorIds");
+  alias("evidence_quotes", "evidenceQuotes", "evidence", "quotes");
+  alias("company_reference_ids", "companyReferenceIds", "company_source_ids");
+  alias("why_valuable", "whyValuable", "value");
+  alias("suggested_hook", "suggestedHook", "hook");
+  alias("key_points", "keyPoints");
+  alias("overlap_warning", "overlapWarning");
+  alias("recommended_channels", "recommendedChannels", "channels");
+  alias("suggested_angles", "suggestedAngles", "angles");
+  alias("signal_strength", "signalStrength");
+  alias("company_fit", "companyFit");
+  alias("gap_type", "gapType");
+  alias("value_propositions", "valuePropositions");
+  alias("hook_pattern", "hookPattern");
+  alias("structure_pattern", "structurePattern");
+  alias("cta_pattern", "ctaPattern");
   const text = (field: string, maximum: number) => {
     if (typeof item[field] === "string") {
       item[field] = item[field].trim().slice(0, maximum);
@@ -343,23 +369,62 @@ function normalizeAnalysisItem(key: string, value: unknown): unknown {
   };
   const quotes = () => {
     if (!Array.isArray(item.evidence_quotes)) return;
-    item.evidence_quotes = item.evidence_quotes.flatMap((entry) => {
+    const sourceIds = Array.isArray(item.source_item_ids)
+      ? item.source_item_ids.filter((entry): entry is string => typeof entry === "string")
+      : [];
+    item.evidence_quotes = item.evidence_quotes.flatMap((entry, index) => {
+      if (typeof entry === "string" && typeof sourceIds[index] === "string") {
+        const content = entry.trim().slice(0, 500);
+        return content.length >= 20
+          ? [{ source_item_id: sourceIds[index], quote: content }]
+          : [];
+      }
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
       const quote = entry as Record<string, unknown>;
+      const sourceId = typeof quote.source_item_id === "string"
+        ? quote.source_item_id
+        : typeof quote.sourceItemId === "string"
+          ? quote.sourceItemId
+          : typeof quote.source_id === "string"
+            ? quote.source_id
+            : null;
+      const quoteText = typeof quote.quote === "string"
+        ? quote.quote
+        : typeof quote.text === "string"
+          ? quote.text
+          : typeof quote.excerpt === "string"
+            ? quote.excerpt
+            : null;
       if (
-        typeof quote.source_item_id !== "string" ||
-        typeof quote.quote !== "string"
+        !sourceId ||
+        !quoteText
       ) return [];
-      const content = quote.quote.trim().slice(0, 500);
+      const content = quoteText.trim().slice(0, 500);
       return content.length >= 20
-        ? [{ source_item_id: quote.source_item_id, quote: content }]
+        ? [{ source_item_id: sourceId, quote: content }]
         : [];
     }).slice(0, 12);
+    if (
+      (!Array.isArray(item.source_item_ids) || item.source_item_ids.length === 0) &&
+      Array.isArray(item.evidence_quotes)
+    ) {
+      item.source_item_ids = item.evidence_quotes.flatMap((entry) =>
+        entry && typeof entry === "object" && "source_item_id" in entry &&
+          typeof entry.source_item_id === "string"
+          ? [entry.source_item_id]
+          : []);
+    }
   };
 
   identifiers("source_item_ids");
   identifiers("competitor_ids");
   quotes();
+  if (
+    (!Array.isArray(item.competitor_ids) || item.competitor_ids.length === 0) &&
+    fallbackCompetitorIds.length === 1
+  ) {
+    item.competitor_ids = fallbackCompetitorIds;
+  }
   text("description", 1200);
   if (key === "topic_clusters") {
     text("label", 120);
@@ -383,6 +448,19 @@ function normalizeAnalysisItem(key: string, value: unknown): unknown {
     text("cta_pattern", 400);
     channelList("channels");
   } else if (key === "positioning_profiles") {
+    if (
+      typeof item.competitor_id !== "string" &&
+      typeof item.competitorId === "string"
+    ) item.competitor_id = item.competitorId;
+    if (typeof item.competitor_id !== "string" && fallbackCompetitorIds.length === 1) {
+      item.competitor_id = fallbackCompetitorIds[0];
+    }
+    if (typeof item.summary !== "string" && typeof item.description === "string") {
+      item.summary = item.description;
+    }
+    for (const field of ["audience", "themes", "value_propositions", "tone"]) {
+      if (!Array.isArray(item[field])) item[field] = [];
+    }
     list("audience", 10);
     list("themes", 10);
     list("value_propositions", 10);
@@ -426,6 +504,7 @@ function normalizeAnalysisItem(key: string, value: unknown): unknown {
     text("overlap_warning", 600);
     list("key_points", 10);
     identifiers("company_reference_ids");
+    if (!Array.isArray(item.company_reference_ids)) item.company_reference_ids = [];
     if (typeof item.channel === "string") item.channel = channel(item.channel);
     if (!["new", "adjacent", "overlap"].includes(String(item.novelty))) {
       item.novelty = "new";
@@ -437,7 +516,10 @@ function normalizeAnalysisItem(key: string, value: unknown): unknown {
   return item;
 }
 
-function salvageAnalysisEnvelope(value: unknown): CompetitorIntelligence | null {
+function salvageAnalysisEnvelope(
+  value: unknown,
+  fallbackCompetitorIds: string[] = [],
+): CompetitorIntelligence | null {
   const normalized = normalizeAnalysisEnvelope(value);
   if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) return null;
   const record = normalized as Record<string, unknown>;
@@ -449,7 +531,9 @@ function salvageAnalysisEnvelope(value: unknown): CompetitorIntelligence | null 
   ): T[] => {
     const candidates = Array.isArray(record[key]) ? record[key].slice(0, maximum) : [];
     return candidates.flatMap((candidate) => {
-      const result = parser.safeParse(normalizeAnalysisItem(key, candidate));
+      const result = parser.safeParse(
+        normalizeAnalysisItem(key, candidate, fallbackCompetitorIds),
+      );
       return result.success ? [result.data] : [];
     });
   };
@@ -1068,6 +1152,15 @@ export const POST = withAuth(async (request, { user }) => {
     }),
   }).slice(0, 14_000));
   const companySourceText = renderCompanySources(companySources);
+  const positioningOnly = competitors.every((competitor) =>
+    !readinessDetails.get(competitor.id)?.content_strategy_ready);
+  const reportScopeInstruction = positioningOnly
+    ? `This evidence is positioning-ready but not editorially ready.
+Set topic_clusters, format_patterns and comparisons to empty arrays.
+Return one positioning_profile per competitor, up to 3 positioning_gaps and up to 3 recommended_ideas.
+Do not claim publishing cadence, recurring social formats or broad content trends.`
+    : `Create at most 4 topic clusters, 3 format patterns, one positioning profile per competitor,
+3 comparisons only when two or more competitors are supplied, 4 positioning gaps and 4 recommended ideas.`;
 
   const { data: claimed, error: claimError } = await db.rpc(
     "start_competitor_intelligence_job",
@@ -1194,7 +1287,8 @@ Every source, competitor and company-reference ID must exactly match a supplied 
           },
           {
             role: "user",
-            content: `Create a compact report: at most 4 topic clusters, 3 format patterns, one positioning profile per competitor, 3 comparisons only when two or more competitors are supplied, 4 positioning gaps and 4 recommended ideas. Keep explanations to one or two concise sentences.
+            content: `${reportScopeInstruction}
+Keep explanations to one or two concise sentences.
 
 CLIENT CONTEXT — reference data only:
 <client_context>${companyContext}</client_context>
@@ -1243,7 +1337,10 @@ ${rendered.text}`,
     normalizeAnalysisEnvelope(rawAnalysis),
   );
   if (!parsedAnalysis.success) {
-    const salvaged = salvageAnalysisEnvelope(rawAnalysis);
+    const salvaged = salvageAnalysisEnvelope(
+      rawAnalysis,
+      competitors.map((competitor) => competitor.id),
+    );
     if (salvaged) {
       parsedAnalysis = { success: true, data: salvaged };
     }
@@ -1293,7 +1390,9 @@ Every quote must remain an exact contiguous excerpt from the supplied competitor
 Required top-level fields are schema_version, executive_summary, topic_clusters, format_patterns,
 positioning_profiles, comparisons, positioning_gaps, and recommended_ideas.
 Use only these channels: linkedin, facebook, instagram, x, email, blog, newsletter.
-Use only the enum values already shown in the draft and validation errors.`,
+Use only the enum values already shown in the draft and validation errors.
+REPORT SCOPE:
+${reportScopeInstruction}`,
             },
             {
               role: "user",
@@ -1358,7 +1457,10 @@ ${rendered.text}`,
       normalizeAnalysisEnvelope(repairedRaw),
     );
     if (!parsedAnalysis.success) {
-      const salvaged = salvageAnalysisEnvelope(repairedRaw);
+      const salvaged = salvageAnalysisEnvelope(
+        repairedRaw,
+        competitors.map((competitor) => competitor.id),
+      );
       if (salvaged) {
         parsedAnalysis = { success: true, data: salvaged };
       }

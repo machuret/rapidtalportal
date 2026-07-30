@@ -262,6 +262,7 @@ function runRow() {
 
 function postDb(options: {
   ready?: boolean;
+  contentReady?: boolean;
   modelAnalysis?: CompetitorIntelligence;
   modelResponses?: unknown[];
   evidenceOverride?: ReturnType<typeof evidenceRows>;
@@ -313,7 +314,7 @@ function postDb(options: {
           source_count: 1,
           collectable_source_count: 1,
           captured_items: 5,
-          article_count: 5,
+          article_count: options.contentReady === false ? 0 : 5,
           social_post_count: 0,
           distinct_platforms: 1,
           content_characters: 6000,
@@ -735,6 +736,77 @@ test("normalizes harmless provider formatting while keeping evidence fields stri
         ],
       }),
     }),
+  );
+});
+
+test("salvages common camelCase evidence aliases for a single selected competitor", async () => {
+  const aliased = {
+    schema_version: "2",
+    executive_summary: "A useful positioning pattern is visible.",
+    topic_clusters: [],
+    format_patterns: [],
+    positioning_profiles: [{
+      description: "The competitor presents practical lending guidance.",
+      audience: ["Property investors"],
+      themes: ["Speed"],
+      valuePropositions: ["Fast access to capital"],
+      tone: ["Direct"],
+      evidenceQuotes: [{
+        sourceItemId: SOURCE_IDS[0],
+        text: exactQuote(0),
+      }],
+    }],
+    comparisons: [],
+    positioning_gaps: [],
+    recommended_ideas: [],
+  };
+  const { rpc } = postDb({ modelResponses: [{ result: aliased }] });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(201);
+  expect(global.fetch).toHaveBeenCalledTimes(1);
+  expect(rpc).toHaveBeenCalledWith(
+    "complete_competitor_intelligence_job",
+    expect.objectContaining({
+      p_analysis: expect.objectContaining({
+        positioning_profiles: [
+          expect.objectContaining({
+            competitor_id: COMPETITOR_ID,
+            source_item_ids: [SOURCE_IDS[0]],
+            evidence_quotes: [{
+              source_item_id: SOURCE_IDS[0],
+              quote: exactQuote(0),
+            }],
+          }),
+        ],
+      }),
+    }),
+  );
+});
+
+test("limits a positioning-only corpus to claims supported by website evidence", async () => {
+  postDb({ contentReady: false });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(201);
+  const modelBody = JSON.parse(String(
+    ((global.fetch as jest.Mock).mock.calls[0][1] as RequestInit).body,
+  ));
+  expect(modelBody.messages[1].content).toContain(
+    "Set topic_clusters, format_patterns and comparisons to empty arrays.",
+  );
+  expect(modelBody.messages[1].content).toContain(
+    "Do not claim publishing cadence, recurring social formats or broad content trends.",
   );
 });
 
