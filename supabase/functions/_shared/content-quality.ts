@@ -409,6 +409,22 @@ export function contentQualityWarnings(args: {
   ])).slice(0, 20);
 }
 
+/**
+ * Only safety and enforceable Company DNA failures block persistence.
+ * Platform structure and editorial length are returned as visible warnings so
+ * an editor can work with the draft instead of losing a paid generation.
+ */
+export function contentBlockingWarnings(args: {
+  body: string;
+  style: ResolvedContentStyle;
+  claimSupportText: string;
+}): string[] {
+  return Array.from(new Set([
+    ...contentStyleWarnings(args.body, args.style),
+    ...unsupportedClaimWarnings(args.body, args.claimSupportText),
+  ])).slice(0, 20);
+}
+
 export function claimSupportFromDna(
   dna: Record<string, unknown> | null | undefined,
   sourceExcerpts: string[] = [],

@@ -93,6 +93,11 @@ export interface CompetitorReadiness {
   latest_capture: string | null;
   readiness_score: number;
   ready: boolean;
+  positioning_readiness_score: number;
+  editorial_readiness_score: number;
+  positioning_ready: boolean;
+  content_strategy_ready: boolean;
+  limitations: string[];
 }
 
 export interface Competitor {
@@ -108,4 +113,5 @@ export interface Competitor {
   sources: CompetitorSource[];
   recent_items: CompetitorContentItem[];
   readiness: CompetitorReadiness;
+  identity_warnings: string[];
 }

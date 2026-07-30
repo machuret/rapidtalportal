@@ -23,6 +23,11 @@ import {
   type CompetitorIntelligenceRun,
   type CompetitorIntelligenceSource,
 } from "@/lib/competitors/intelligence";
+import {
+  competitorSourceIdentityWarnings,
+  evaluateCompetitorReadiness,
+} from "@/lib/competitors/readiness";
+import type { CompetitorReadiness } from "@/types/competitors";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -61,6 +66,13 @@ interface CompetitorRow {
   id: string;
   name: string;
   description: string | null;
+  website_url: string | null;
+}
+
+interface CompetitorSourceRow {
+  competitor_id: string;
+  url: string;
+  platform: "web" | "rss" | "newsletter" | "youtube" | "linkedin" | "facebook" | "instagram" | "x" | "other";
 }
 
 interface EvidenceRow {
@@ -146,6 +158,37 @@ function terms(value: string): Set<string> {
 
 function hashText(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function normalizeAnalysisEnvelope(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const array = (key: string) => Array.isArray(record[key]) ? record[key] : [];
+  return {
+    ...record,
+    schema_version: 2,
+    executive_summary:
+      typeof record.executive_summary === "string" && record.executive_summary.trim()
+        ? record.executive_summary.trim()
+        : "This verified partial report reflects only the insights directly supported by the captured evidence.",
+    topic_clusters: array("topic_clusters"),
+    format_patterns: array("format_patterns"),
+    positioning_profiles: array("positioning_profiles"),
+    comparisons: array("comparisons"),
+    positioning_gaps: array("positioning_gaps"),
+    recommended_ideas: array("recommended_ideas"),
+  };
+}
+
+function analysisHasAnyInsight(analysis: CompetitorIntelligence): boolean {
+  return (
+    analysis.topic_clusters.length +
+    analysis.format_patterns.length +
+    analysis.positioning_profiles.length +
+    analysis.comparisons.length +
+    analysis.positioning_gaps.length +
+    analysis.recommended_ideas.length
+  ) > 0;
 }
 
 function interleave<T>(groups: T[][]): T[] {
@@ -407,6 +450,7 @@ function sourceSnapshots(
 async function loadState(clientId: string): Promise<{
   run: CompetitorIntelligenceRun | null;
   active_job: CompetitorIntelligenceJob | null;
+  last_job: CompetitorIntelligenceJob | null;
 }> {
   const admin = createAdminClient();
   // Migration 103 is service-role-only; the tenant boundary is checked first.
@@ -421,17 +465,20 @@ async function loadState(clientId: string): Promise<{
       .maybeSingle(),
     db
       .from("competitor_intelligence_jobs")
-      .select("id,status,started_at,lease_until")
+      .select("id,status,started_at,lease_until,completed_at,error_code,error_message")
       .eq("client_id", clientId)
-      .eq("status", "running")
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle(),
   ]);
   if (error) throw error;
   if (jobError) throw jobError;
   const activeJob = job && new Date(job.lease_until).getTime() > Date.now()
+    && job.status === "running"
     ? job as CompetitorIntelligenceJob
     : null;
-  if (!row) return { run: null, active_job: activeJob };
+  const lastJob = job ? job as CompetitorIntelligenceJob : null;
+  if (!row) return { run: null, active_job: activeJob, last_job: lastJob };
 
   const analysis = parseCompetitorIntelligence((row as RunRow).analysis);
   if (!analysis) throw new Error("The saved competitor intelligence has an unsupported format.");
@@ -478,6 +525,7 @@ async function loadState(clientId: string): Promise<{
       company_sources: companyResult.data,
     },
     active_job: activeJob,
+    last_job: lastJob,
   };
 }
 
@@ -534,6 +582,7 @@ export const POST = withAuth(async (request, { user }) => {
   };
   const [
     { data: competitorRows, error: competitorError },
+    { data: sourceInventory, error: sourceInventoryError },
     { data: readinessRows, error: readinessError },
     { data: companyDna, error: dnaError },
     { data: existingTopics, error: topicsError },
@@ -542,9 +591,13 @@ export const POST = withAuth(async (request, { user }) => {
   ] = await Promise.all([
     db
       .from("competitors")
-      .select("id,name,description")
+      .select("id,name,description,website_url")
       .eq("client_id", parsed.data.client_id)
       .eq("status", "active"),
+    db
+      .from("competitor_sources")
+      .select("competitor_id,url,platform")
+      .eq("client_id", parsed.data.client_id),
     db.rpc("competitor_intelligence_readiness", {
       p_client_id: parsed.data.client_id,
     }),
@@ -575,7 +628,7 @@ export const POST = withAuth(async (request, { user }) => {
       .order("created_at", { ascending: false })
       .limit(100),
   ]);
-  const initialError = competitorError ?? readinessError ?? dnaError ?? topicsError ??
+  const initialError = competitorError ?? sourceInventoryError ?? readinessError ?? dnaError ?? topicsError ??
     companyContentError ?? vaultError;
   if (initialError) {
     captureError("api", initialError, {
@@ -592,13 +645,24 @@ export const POST = withAuth(async (request, { user }) => {
   const requested = parsed.data.competitor_ids
     ? new Set(parsed.data.competitor_ids)
     : null;
-  const readiness = new Map<string, boolean>(
-    (readinessRows ?? []).map((row: { competitor_id: string; ready: boolean }) =>
-      [row.competitor_id, row.ready] as const),
+  const readinessDetails = new Map<string, CompetitorReadiness>(
+    (readinessRows ?? []).map((
+      row: Omit<
+        CompetitorReadiness,
+        | "positioning_readiness_score"
+        | "editorial_readiness_score"
+        | "positioning_ready"
+        | "content_strategy_ready"
+        | "limitations"
+      > & { competitor_id: string },
+    ) => {
+      const { competitor_id, ...metrics } = row;
+      return [competitor_id, evaluateCompetitorReadiness(metrics)] as const;
+    }),
   );
   const competitors = ((competitorRows ?? []) as CompetitorRow[])
     .filter((competitor) => !requested || requested.has(competitor.id))
-    .filter((competitor) => readiness.get(competitor.id));
+    .filter((competitor) => readinessDetails.get(competitor.id)?.positioning_ready);
   if (
     competitors.length === 0 ||
     (requested && competitors.length !== requested.size)
@@ -660,6 +724,19 @@ export const POST = withAuth(async (request, { user }) => {
   const companyContext = escapeXml(JSON.stringify({
     company: companyDna ?? {},
     existing_content_topics: (existingTopics ?? []).slice(0, 80),
+    competitor_analysis_scope: competitors.map((competitor) => {
+      const sources = ((sourceInventory ?? []) as CompetitorSourceRow[])
+        .filter((source) => source.competitor_id === competitor.id);
+      return {
+        competitor_id: competitor.id,
+        competitor_name: competitor.name,
+        readiness: readinessDetails.get(competitor.id) ?? null,
+        source_identity_warnings: competitorSourceIdentityWarnings(
+          competitor.website_url,
+          sources,
+        ),
+      };
+    }),
   }).slice(0, 14_000));
   const companySourceText = renderCompanySources(companySources);
 
@@ -715,6 +792,7 @@ export const POST = withAuth(async (request, { user }) => {
         p_job_id: job.id,
         p_lease_token: job.lease_token,
         p_error_message: message,
+        p_error_code: code,
       });
       if (error) {
         captureError("api", error, {
@@ -757,7 +835,7 @@ export const POST = withAuth(async (request, { user }) => {
       body: JSON.stringify({
         model,
         temperature: 0.2,
-        max_tokens: 9000,
+        max_tokens: 5500,
         response_format: { type: "json_object" },
         messages: [
           {
@@ -787,7 +865,9 @@ Every source, competitor and company-reference ID must exactly match a supplied 
           },
           {
             role: "user",
-            content: `CLIENT CONTEXT — reference data only:
+            content: `Create a compact report: at most 4 topic clusters, 3 format patterns, one positioning profile per competitor, 3 comparisons only when two or more competitors are supplied, 4 positioning gaps and 4 recommended ideas. Keep explanations to one or two concise sentences.
+
+CLIENT CONTEXT — reference data only:
 <client_context>${companyContext}</client_context>
 
 ACTUAL COMPANY CONTENT AND RELEVANT VAULT MATERIAL — reference data only:
@@ -830,12 +910,16 @@ ${rendered.text}`,
     await failJob("The competitor analyser returned unreadable data.", "INVALID_PROVIDER_JSON");
     return NextResponse.json({ error: "The competitor analyser returned unreadable data." }, { status: 502 });
   }
-  let parsedAnalysis = competitorIntelligenceSchema.safeParse(rawAnalysis);
-  if (!parsedAnalysis.success) {
-    const validationIssues = parsedAnalysis.error.issues.slice(0, 40).map((issue) => ({
-      path: issue.path.join("."),
-      message: issue.message,
-    }));
+  let parsedAnalysis = competitorIntelligenceSchema.safeParse(
+    normalizeAnalysisEnvelope(rawAnalysis),
+  );
+  if (!parsedAnalysis.success || !analysisHasAnyInsight(parsedAnalysis.data)) {
+    const validationIssues = parsedAnalysis.success
+      ? [{ path: "(report)", message: "The report did not contain any insight sections." }]
+      : parsedAnalysis.error.issues.slice(0, 40).map((issue) => ({
+          path: issue.path.join("."),
+          message: issue.message,
+        }));
     captureError("api", new Error(
       `Competitor intelligence schema validation failed: ${validationIssues
         .map((issue) => `${issue.path || "(root)"}: ${issue.message}`)
@@ -862,7 +946,7 @@ ${rendered.text}`,
         body: JSON.stringify({
           model,
           temperature: 0,
-          max_tokens: 9000,
+          max_tokens: 5000,
           response_format: { type: "json_object" },
           messages: [
             {
@@ -935,7 +1019,9 @@ ${rendered.text}`,
     } catch {
       repairedRaw = null;
     }
-    parsedAnalysis = competitorIntelligenceSchema.safeParse(repairedRaw);
+    parsedAnalysis = competitorIntelligenceSchema.safeParse(
+      normalizeAnalysisEnvelope(repairedRaw),
+    );
     if (!parsedAnalysis.success) {
       const repairedIssues = parsedAnalysis.error.issues.slice(0, 20)
         .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
@@ -957,20 +1043,33 @@ ${rendered.text}`,
       }, { status: 502 });
     }
   }
+  if (!parsedAnalysis.success) {
+    await failJob(
+      "The competitor analyser could not produce a valid report.",
+      "INVALID_ANALYSIS",
+    );
+    return NextResponse.json({
+      error: "The competitor analysis could not produce a valid report. Please run it again.",
+      code: "INVALID_ANALYSIS",
+    }, { status: 502 });
+  }
   const bounded = boundAnalysis(
     parsedAnalysis.data,
     new Map(rendered.rows.map((row) => [row.id, row])),
     new Set(competitors.map((competitor) => competitor.id)),
     new Set(companySources.map((source) => source.id)),
   );
-  if (
-    bounded.topic_clusters.length === 0 ||
-    bounded.positioning_gaps.length === 0 ||
-    bounded.recommended_ideas.length === 0
-  ) {
-    await failJob("The analyser did not provide enough exactly verified intelligence.", "INSUFFICIENT_VERIFIED_INSIGHTS");
+  const verifiedInsightCount =
+    bounded.topic_clusters.length +
+    bounded.format_patterns.length +
+    bounded.positioning_profiles.length +
+    bounded.comparisons.length +
+    bounded.positioning_gaps.length +
+    bounded.recommended_ideas.length;
+  if (verifiedInsightCount === 0) {
+    await failJob("The analyser did not provide any exactly verified intelligence.", "INSUFFICIENT_VERIFIED_INSIGHTS");
     return NextResponse.json({
-      error: "The competitor analyser did not provide enough exactly verified, source-linked intelligence.",
+      error: "The competitor analyser did not provide any exactly verified, source-linked intelligence.",
     }, { status: 502 });
   }
 

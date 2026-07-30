@@ -37,7 +37,7 @@ export const competitorIntelligenceSchema = z.object({
     source_item_ids: multiSourceIds,
     evidence_quotes: evidenceQuotes.min(2),
     channels,
-  })).min(1).max(12),
+  })).max(6),
   format_patterns: z.array(z.object({
     name: z.string().trim().min(1).max(120),
     description: concise,
@@ -48,7 +48,7 @@ export const competitorIntelligenceSchema = z.object({
     source_item_ids: multiSourceIds,
     evidence_quotes: evidenceQuotes.min(2),
     channels,
-  })).max(10),
+  })).max(5),
   positioning_profiles: z.array(z.object({
     competitor_id: z.string().uuid(),
     summary: concise,
@@ -58,7 +58,7 @@ export const competitorIntelligenceSchema = z.object({
     tone: shortList,
     source_item_ids: sourceIds,
     evidence_quotes: evidenceQuotes,
-  })).min(1).max(20),
+  })).max(10),
   comparisons: z.array(z.object({
     dimension: z.string().trim().min(1).max(120),
     observations: z.array(z.object({
@@ -68,7 +68,7 @@ export const competitorIntelligenceSchema = z.object({
     opportunity: concise,
     source_item_ids: multiSourceIds,
     evidence_quotes: evidenceQuotes.min(2),
-  })).max(10),
+  })).max(5),
   positioning_gaps: z.array(z.object({
     title: z.string().trim().min(1).max(180),
     description: concise,
@@ -87,7 +87,7 @@ export const competitorIntelligenceSchema = z.object({
     evidence_quotes: evidenceQuotes.min(2),
     recommended_channels: channels,
     suggested_angles: shortList,
-  })).min(1).max(12),
+  })).max(6),
   recommended_ideas: z.array(z.object({
     title: z.string().trim().min(1).max(220),
     channel: z.enum([
@@ -112,7 +112,7 @@ export const competitorIntelligenceSchema = z.object({
     novelty: z.enum(["new", "adjacent", "overlap"]),
     overlap_warning: z.string().trim().max(600),
     confidence: z.enum(["low", "medium", "high"]),
-  })).min(1).max(12),
+  })).max(6),
 });
 
 export type CompetitorIntelligence = z.infer<typeof competitorIntelligenceSchema>;
@@ -144,9 +144,12 @@ export interface CompetitorIntelligenceCompanySource {
 
 export interface CompetitorIntelligenceJob {
   id: string;
-  status: "running";
+  status: "running" | "complete" | "failed";
   started_at: string;
   lease_until: string;
+  completed_at?: string | null;
+  error_code?: string | null;
+  error_message?: string | null;
 }
 
 export interface CompetitorIntelligenceRun {

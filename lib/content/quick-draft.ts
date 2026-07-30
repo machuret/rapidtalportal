@@ -18,11 +18,13 @@ interface GenerationResponse {
   body: string;
   sources?: ContentPiece["source_references"];
   styleSnapshot?: ContentPiece["style_snapshot"];
+  warnings?: string[];
 }
 
 export interface QuickDraftResult {
   project: ContentProject;
   piece: ContentPiece;
+  warnings?: string[];
 }
 
 /**
@@ -124,5 +126,7 @@ export async function generateQuickDraft({
     created_at: new Date().toISOString(),
   };
 
-  return { project: loaded, piece };
+  return generated.warnings?.length
+    ? { project: loaded, piece, warnings: generated.warnings }
+    : { project: loaded, piece };
 }

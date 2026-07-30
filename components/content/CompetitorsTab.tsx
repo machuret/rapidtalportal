@@ -636,14 +636,18 @@ export function CompetitorsTab({
 
               <div className="space-y-3 p-5">
                 <div className={`rounded-lg border p-4 ${
-                  competitor.readiness.ready
+                  competitor.readiness.positioning_ready
                     ? "border-emerald-500/25 bg-emerald-500/5"
                     : "border-amber-500/25 bg-amber-500/5"
                 }`}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-sm font-medium text-zinc-200">
-                        Mini Vault: {competitor.readiness.ready ? "Ready for gap ideas" : "Building evidence"}
+                        Mini Vault: {competitor.readiness.content_strategy_ready
+                          ? "Ready for content intelligence"
+                          : competitor.readiness.positioning_ready
+                            ? "Ready for positioning analysis"
+                            : "Building evidence"}
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
                         {competitor.readiness.captured_items} items ·{" "}
@@ -652,19 +656,39 @@ export function CompetitorsTab({
                         {competitor.readiness.social_post_count} social posts
                       </p>
                     </div>
-                    <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                      competitor.readiness.ready
-                        ? "border-emerald-500/30 text-emerald-300"
-                        : "border-amber-500/30 text-amber-300"
-                    }`}>
-                      {competitor.readiness.readiness_score}/100 evidence
-                    </span>
+                    <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
+                      <span className="rounded-full border border-emerald-500/30 px-2.5 py-1 text-emerald-300">
+                        {competitor.readiness.positioning_readiness_score}/100 positioning
+                      </span>
+                      <span className={`rounded-full border px-2.5 py-1 ${
+                        competitor.readiness.content_strategy_ready
+                          ? "border-emerald-500/30 text-emerald-300"
+                          : "border-amber-500/30 text-amber-300"
+                      }`}>
+                        {competitor.readiness.editorial_readiness_score}/100 editorial
+                      </span>
+                    </div>
                   </div>
-                  {!competitor.readiness.ready && (
+                  {!competitor.readiness.positioning_ready && (
                     <p className="mt-2 text-xs text-amber-200/80">
                       Collect at least 5 recent items and 3,000 characters. Add the company website,
                       blog, RSS feed, exact article URLs or its public LinkedIn company page, then refresh each source.
                     </p>
+                  )}
+                  {competitor.readiness.limitations.length > 0 && (
+                    <ul className="mt-3 space-y-1 text-xs leading-5 text-amber-200/80">
+                      {competitor.readiness.limitations.slice(0, 3).map((limitation) => (
+                        <li key={limitation}>• {limitation}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {competitor.identity_warnings.length > 0 && (
+                    <div className="mt-3 rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-xs leading-5 text-red-200">
+                      <p className="font-medium">Possible competitor identity mismatch</p>
+                      {competitor.identity_warnings.map((warning) => (
+                        <p key={warning} className="mt-1">{warning}</p>
+                      ))}
+                    </div>
                   )}
                 </div>
                 {competitor.sources.map((source) => {

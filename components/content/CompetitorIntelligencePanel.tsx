@@ -58,6 +58,8 @@ export function CompetitorIntelligencePanel({
 }: Props) {
   const [run, setRun] = useState<CompetitorIntelligenceRun | null>(null);
   const [activeJob, setActiveJob] = useState<CompetitorIntelligenceJob | null>(null);
+  const [lastJob, setLastJob] = useState<CompetitorIntelligenceJob | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [analysing, setAnalysing] = useState(false);
   const [section, setSection] = useState<Section>("overview");
@@ -73,6 +75,17 @@ export function CompetitorIntelligencePanel({
     [competitors],
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectedLimitations = useMemo(
+    () => readyCompetitors
+      .filter((competitor) => selectedIds.has(competitor.id))
+      .flatMap((competitor) => [
+        ...competitor.readiness.limitations.map((limitation) =>
+          `${competitor.name}: ${limitation}`),
+        ...competitor.identity_warnings.map((warning) =>
+          `${competitor.name}: ${warning}`),
+      ]),
+    [readyCompetitors, selectedIds],
+  );
 
   const loadReport = useCallback(async (showLoading = false, silent = false) => {
     if (showLoading) setLoading(true);
@@ -80,12 +93,14 @@ export function CompetitorIntelligencePanel({
       const result = await api.get<{
         run: CompetitorIntelligenceRun | null;
         active_job: CompetitorIntelligenceJob | null;
+        last_job: CompetitorIntelligenceJob | null;
       }>(
       ROUTES.content.competitorIntelligenceForClient(clientId),
       { showErrorToast: false },
       );
       setRun(result.run);
       setActiveJob(result.active_job);
+      setLastJob(result.last_job);
     } catch (error) {
       if (!silent) {
         toast.error(error instanceof Error ? error.message : "Competitor intelligence could not be loaded.");
@@ -128,6 +143,17 @@ export function CompetitorIntelligencePanel({
       competitor.readiness.latest_capture !== null &&
       new Date(competitor.readiness.latest_capture).getTime() > reportCreatedAt);
   }, [competitors, run]);
+  const incompleteSections = useMemo(() => {
+    if (!run) return [];
+    return [
+      ["topic clusters", run.analysis.topic_clusters.length],
+      ["format patterns", run.analysis.format_patterns.length],
+      ["positioning profiles", run.analysis.positioning_profiles.length],
+      ["comparisons", run.analysis.comparisons.length],
+      ["positioning gaps", run.analysis.positioning_gaps.length],
+      ["recommended ideas", run.analysis.recommended_ideas.length],
+    ].filter(([, count]) => count === 0).map(([label]) => String(label));
+  }, [run]);
 
   function toggleCompetitor(id: string) {
     setSelectedIds((current) => {
@@ -144,6 +170,7 @@ export function CompetitorIntelligencePanel({
       return;
     }
     setAnalysing(true);
+    setAnalysisError(null);
     try {
       const result = await api.post<{
         run: CompetitorIntelligenceRun;
@@ -159,13 +186,14 @@ export function CompetitorIntelligencePanel({
       );
       setRun(result.run);
       setActiveJob(null);
+      setLastJob(null);
       setSection("overview");
       toast.success("Competitor intelligence report created.");
     } catch (error) {
       // A second tab or user may have acquired the durable lease after this
       // panel was loaded. Refresh so the shared in-progress state is visible.
       await loadReport(false, true);
-      toast.error(error instanceof Error ? error.message : "Competitor analysis failed.");
+      setAnalysisError(error instanceof Error ? error.message : "Competitor analysis failed.");
     } finally {
       setAnalysing(false);
     }
@@ -263,7 +291,7 @@ export function CompetitorIntelligencePanel({
 
         {canManage && readyCompetitors.length > 0 && (
           <div className="mt-4">
-            <p className="mb-2 text-xs text-zinc-500">Evidence-ready competitors included</p>
+            <p className="mb-2 text-xs text-zinc-500">Competitors included in this report</p>
             <div className="flex flex-wrap gap-2">
               {readyCompetitors.map((competitor) => (
                 <button
@@ -276,10 +304,22 @@ export function CompetitorIntelligencePanel({
                       : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
                   }`}
                 >
-                  {competitor.name} · {competitor.readiness.captured_items} items
+                  {competitor.name} · {competitor.readiness.content_strategy_ready
+                    ? "content-ready"
+                    : "positioning-only"}
                 </button>
               ))}
             </div>
+          </div>
+        )}
+        {selectedLimitations.length > 0 && (
+          <div className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+            <p className="text-xs font-medium text-amber-200">Report scope limitations</p>
+            <ul className="mt-1 space-y-1 text-xs leading-5 text-amber-200/80">
+              {selectedLimitations.slice(0, 6).map((limitation) => (
+                <li key={limitation}>• {limitation}</li>
+              ))}
+            </ul>
           </div>
         )}
         {canManage && buildingCompetitors.length > 0 && (
@@ -304,6 +344,37 @@ export function CompetitorIntelligencePanel({
         <div className="border-b border-blue-500/20 bg-blue-500/5 px-5 py-3 text-sm text-blue-200">
           An analysis started {readableDate(activeJob.started_at)} and is running safely in one leased job.
           This report will refresh automatically when it finishes.
+        </div>
+      )}
+
+      {!activeJob && (analysisError || lastJob?.status === "failed") && (
+        <div className="border-b border-red-500/20 bg-red-500/5 px-5 py-4" role="alert">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-red-200">The latest analysis did not finish</p>
+              <p className="mt-1 text-sm leading-5 text-zinc-300">
+                {analysisError || lastJob?.error_message || "The report could not be completed."}
+              </p>
+              <p className="mt-2 text-xs text-zinc-500">
+                {run
+                  ? "Your previous valid report is still available below."
+                  : "No previous report was replaced."}
+                {lastJob?.error_code ? ` Reference: ${lastJob.error_code}.` : ""}
+              </p>
+            </div>
+            {canManage && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={analysing || selectedIds.size === 0}
+                onClick={() => void analyse()}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry analysis
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -356,6 +427,15 @@ export function CompetitorIntelligencePanel({
                 {run.fallback_date_count} source{run.fallback_date_count === 1 ? "" : "s"} had no publication date.
                 Their collection date was used explicitly as a fallback and is marked on the evidence link.
               </p>
+            )}
+            {incompleteSections.length > 0 && (
+              <div className="mb-5 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-3 text-xs leading-5 text-amber-100">
+                <p className="font-medium">Verified partial report</p>
+                <p className="mt-1 text-amber-200/80">
+                  The available evidence did not safely support: {incompleteSections.join(", ")}.
+                  Verified sections were preserved instead of discarding the entire report.
+                </p>
+              </div>
             )}
 
             {section === "overview" && (

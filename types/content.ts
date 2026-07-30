@@ -200,6 +200,11 @@ export interface ContentProject {
   competitor_signals: ContentMarketIntelligenceSource[];
   style_snapshot: NonNullable<ContentPiece["style_snapshot"]>;
   current_piece_id: string | null;
+  last_operation?: "quick_draft" | "generate" | "save_brief" | "save_evidence" | "validate" | null;
+  last_error_code?: string | null;
+  last_error_message?: string | null;
+  last_error_at?: string | null;
+  last_generation_warnings?: string[];
   current_piece?: ContentPiece | null;
   pieces?: ContentPiece[];
   pieces_has_more?: boolean;

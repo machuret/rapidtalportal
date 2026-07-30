@@ -79,8 +79,9 @@ describe("unified content engine", () => {
 
   test("quality validation runs before persistence and preserves section-only rewriting", () => {
     expect(orchestration).toContain("contentQualityWarnings({");
-    expect(generator).toContain("The generated draft did not pass the content quality gate. No draft was created.");
-    expect(generator.indexOf("if (qualityWarnings.length)")).toBeLessThan(
+    expect(orchestration).toContain("contentBlockingWarnings({");
+    expect(generator).toContain("The generated draft contained an unsupported claim or broke a mandatory Company DNA rule.");
+    expect(generator.indexOf("if (blockingWarnings.length)")).toBeLessThan(
       generator.indexOf("if (persist)"),
     );
     expect(orchestration).toContain("enforceStructure: !sectionOnlyRewrite");

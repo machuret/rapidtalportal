@@ -4,6 +4,10 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { serverError } from "@/lib/api/errors";
 import { resolveCompetitorUrl } from "@/lib/competitors/urls";
+import {
+  competitorSourceIdentityWarnings,
+  evaluateCompetitorReadiness,
+} from "@/lib/competitors/readiness";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   Competitor,
@@ -111,11 +115,20 @@ export const GET = withAuth(async (req, { user }) => {
     itemsByCompetitor.set(item.competitor_id, group);
   }
   const readinessByCompetitor = new Map<string, CompetitorReadiness>();
-  for (const row of (readinessRows ?? []) as Array<CompetitorReadiness & { competitor_id: string }>) {
+  for (const row of (readinessRows ?? []) as Array<
+    Omit<
+      CompetitorReadiness,
+      | "positioning_readiness_score"
+      | "editorial_readiness_score"
+      | "positioning_ready"
+      | "content_strategy_ready"
+      | "limitations"
+    > & { competitor_id: string }
+  >) {
     const { competitor_id, ...readiness } = row;
-    readinessByCompetitor.set(competitor_id, readiness);
+    readinessByCompetitor.set(competitor_id, evaluateCompetitorReadiness(readiness));
   }
-  const emptyReadiness: CompetitorReadiness = {
+  const emptyReadiness = evaluateCompetitorReadiness({
     source_count: 0,
     collectable_source_count: 0,
     captured_items: 0,
@@ -126,14 +139,24 @@ export const GET = withAuth(async (req, { user }) => {
     latest_capture: null,
     readiness_score: 0,
     ready: false,
-  };
+  });
 
-  const response = ((competitors ?? []) as Omit<Competitor, "sources" | "recent_items" | "readiness">[]).map((competitor) => ({
-    ...competitor,
-    sources: sourcesByCompetitor.get(competitor.id) ?? [],
-    recent_items: itemsByCompetitor.get(competitor.id) ?? [],
-    readiness: readinessByCompetitor.get(competitor.id) ?? emptyReadiness,
-  }));
+  const response = ((competitors ?? []) as Omit<
+    Competitor,
+    "sources" | "recent_items" | "readiness" | "identity_warnings"
+  >[]).map((competitor) => {
+    const competitorSources = sourcesByCompetitor.get(competitor.id) ?? [];
+    return {
+      ...competitor,
+      sources: competitorSources,
+      recent_items: itemsByCompetitor.get(competitor.id) ?? [],
+      readiness: readinessByCompetitor.get(competitor.id) ?? emptyReadiness,
+      identity_warnings: competitorSourceIdentityWarnings(
+        competitor.website_url,
+        competitorSources,
+      ),
+    };
+  });
   return NextResponse.json({ competitors: response });
 });
 

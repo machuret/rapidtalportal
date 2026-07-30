@@ -22,6 +22,19 @@ interface TopicsTabProps {
   onOpenIntelligence: () => void;
 }
 
+function isStoredSuggestion(value: unknown): value is AiSuggestion {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.title === "string" &&
+    candidate.title.trim().length > 0 &&
+    typeof candidate.description === "string" &&
+    typeof candidate.content_type === "string" &&
+    ["email", "x", "linkedin", "facebook", "instagram", "newsletter", "blog"]
+      .includes(candidate.content_type)
+  );
+}
+
 export const TopicsTab = memo(function TopicsTab({
   clientId,
   canApprove,
@@ -34,6 +47,7 @@ export const TopicsTab = memo(function TopicsTab({
 }: TopicsTabProps) {
   const [showForm, setShowForm] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [recoveredSuggestions, setRecoveredSuggestions] = useState<AiSuggestion[] | null>(null);
   const [search, setSearch] = useState("");
   const handledRegenerateRequest = useRef(0);
 
@@ -51,6 +65,43 @@ export const TopicsTab = memo(function TopicsTab({
     generationWarning,
     generationError,
   } = useTopics(clientId, initialTopics);
+  const suggestionStorageKey = `rapidtal:content-ideas:${clientId}`;
+
+  const persistSuggestions = useCallback((next: AiSuggestion[] | null) => {
+    setRecoveredSuggestions(next);
+    try {
+      if (next?.length) {
+        window.localStorage.setItem(suggestionStorageKey, JSON.stringify({
+          savedAt: new Date().toISOString(),
+          suggestions: next,
+        }));
+      } else {
+        window.localStorage.removeItem(suggestionStorageKey);
+      }
+    } catch {
+      // Browser storage is a convenience. The explicit Save idea action remains
+      // the durable server-side path.
+    }
+  }, [suggestionStorageKey]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(suggestionStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { suggestions?: unknown };
+      if (Array.isArray(parsed.suggestions)) {
+        const valid = parsed.suggestions.filter(isStoredSuggestion).slice(0, 20);
+        if (valid.length) {
+          setRecoveredSuggestions(valid);
+          setShowSuggestions(true);
+        } else {
+          window.localStorage.removeItem(suggestionStorageKey);
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(suggestionStorageKey);
+    }
+  }, [suggestionStorageKey]);
 
   useEffect(() => {
     onTopicsChange?.(topics);
@@ -96,8 +147,9 @@ export const TopicsTab = memo(function TopicsTab({
     // Four explainable ideas complete reliably inside the interactive request
     // window. Editors can regenerate for another batch without waiting for one
     // oversized response.
-    await generateIdeas({ count: 4, mode: "company" });
-  }, [generateIdeas]);
+    const result = await generateIdeas({ count: 4, mode: "company" });
+    persistSuggestions(result.topics);
+  }, [generateIdeas, persistSuggestions]);
 
   useEffect(() => {
     if (
@@ -142,9 +194,20 @@ export const TopicsTab = memo(function TopicsTab({
         toast.error("Failed to add topics");
       }
 
+      const savedKeys = new Set(selected.map((suggestion) =>
+        `${suggestion.content_type}:${suggestion.title.trim().toLocaleLowerCase()}`));
+      persistSuggestions((suggestions ?? recoveredSuggestions ?? []).filter((suggestion) =>
+        !savedKeys.has(`${suggestion.content_type}:${suggestion.title.trim().toLocaleLowerCase()}`)));
       setShowSuggestions(false);
     },
-    [canApprove, createTopic, clientId]
+    [
+      canApprove,
+      createTopic,
+      clientId,
+      persistSuggestions,
+      recoveredSuggestions,
+      suggestions,
+    ]
   );
 
   const handleSaveApprovedSuggestion = useCallback(
@@ -170,8 +233,19 @@ export const TopicsTab = memo(function TopicsTab({
           ? "Idea saved to IDEAS approved."
           : "Idea saved for approval.",
       );
+      const savedKey = `${suggestion.content_type}:${suggestion.title.trim().toLocaleLowerCase()}`;
+      persistSuggestions((suggestions ?? recoveredSuggestions ?? []).filter((candidate) =>
+        `${candidate.content_type}:${candidate.title.trim().toLocaleLowerCase()}` !== savedKey));
     },
-    [canApprove, clientId, createTopic, onTopicApproved],
+    [
+      canApprove,
+      clientId,
+      createTopic,
+      onTopicApproved,
+      persistSuggestions,
+      recoveredSuggestions,
+      suggestions,
+    ],
   );
 
   return (
@@ -230,7 +304,7 @@ export const TopicsTab = memo(function TopicsTab({
       {showSuggestions && (
         <AiSuggestions
           clientId={clientId}
-          suggestions={suggestions as AiSuggestion[] | null}
+          suggestions={(suggestions ?? recoveredSuggestions) as AiSuggestion[] | null}
           isGenerating={isGenerating}
           isSubmitting={isCreating}
           warning={generationWarning}

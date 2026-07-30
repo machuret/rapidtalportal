@@ -3,6 +3,7 @@
 import { COMPANY_VOICE_GOLDENS } from "@/__fixtures__/content-golden-examples";
 import {
   claimSupportFromDna,
+  contentBlockingWarnings,
   CONTENT_TYPE_INSTRUCTIONS,
   contentQualityWarnings,
   contentStructureWarnings,
@@ -141,6 +142,41 @@ describe("hard style authority", () => {
 });
 
 describe("platform structure contracts", () => {
+  test("keeps editorial structure warnings editable while safety violations remain blocking", () => {
+    const style = resolveContentStyle(
+      { hard_rules: [], brand_voice: "Clear and practical." },
+      "linkedin",
+      "professional",
+      "Keep it short.",
+    );
+    const incompleteStructure = "One unbroken LinkedIn paragraph.";
+    expect(contentQualityWarnings({
+      body: incompleteStructure,
+      contentType: "linkedin",
+      style,
+      claimSupportText: "",
+    }).length).toBeGreaterThan(0);
+    expect(contentBlockingWarnings({
+      body: incompleteStructure,
+      style,
+      claimSupportText: "",
+    })).toEqual([]);
+
+    const safetyStyle = resolveContentStyle({
+      hard_rules: [{
+        id: "no-guarantee",
+        type: "prohibit_phrase",
+        value: "guaranteed results",
+        channels: [],
+      }],
+    }, "linkedin", "professional", "Keep it short.");
+    expect(contentBlockingWarnings({
+      body: "We provide guaranteed results.",
+      style: safetyStyle,
+      claimSupportText: "",
+    })).toContain("Remove prohibited hard-rule phrase: “guaranteed results”");
+  });
+
   test.each(COMPANY_VOICE_GOLDENS)(
     "$contentType golden satisfies its required structure",
     (golden) => {

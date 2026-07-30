@@ -923,6 +923,7 @@ export async function handleContentGenerateRequest(
       critique,
       verifiedSources,
       qualityWarnings,
+      blockingWarnings,
     } = orchestration;
     const styleSnapshot = {
       ...createContentStyleSnapshot(
@@ -934,11 +935,13 @@ export async function handleContentGenerateRequest(
       ),
       exampleSources: retrieval.styleSources,
     };
-    if (qualityWarnings.length && !evaluationStyleMode) {
+    if (blockingWarnings.length && !evaluationStyleMode) {
       await releaseGenerationLease();
       return new Response(JSON.stringify({
-        error: "The generated draft did not pass the content quality gate. No draft was created.",
+        error: "The generated draft contained an unsupported claim or broke a mandatory Company DNA rule. No draft was created.",
+        code: "content_safety_blocked",
         warnings: qualityWarnings,
+        blockingWarnings,
         critique,
       }), {
         status: 422,

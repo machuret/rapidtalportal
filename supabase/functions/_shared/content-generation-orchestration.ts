@@ -2,6 +2,7 @@ import type { ContentVaultSource } from "./content-vault-retrieval.ts";
 import type { ResolvedContentStyle } from "./content-style.ts";
 import {
   claimSupportFromDna,
+  contentBlockingWarnings,
   CONTENT_TYPE_INSTRUCTIONS,
   contentQualityWarnings,
   type QualityContentType,
@@ -95,6 +96,7 @@ export async function runContentGenerationOrchestration(args: {
   citedSourceIds: string[];
   verifiedSources: ContentVaultSource[];
   qualityWarnings: string[];
+  blockingWarnings: string[];
   systemPrompt: string;
   userPrompt: string;
 }> {
@@ -149,6 +151,14 @@ export async function runContentGenerationOrchestration(args: {
     ),
     enforceStructure: !sectionOnlyRewrite,
   });
+  const blockingWarnings = contentBlockingWarnings({
+    body: finalBody,
+    style: args.style,
+    claimSupportText: claimSupportFromDna(
+      args.dna,
+      verifiedSources.map((source) => source.excerpt),
+    ),
+  });
 
   return {
     finalBody,
@@ -156,6 +166,7 @@ export async function runContentGenerationOrchestration(args: {
     citedSourceIds,
     verifiedSources,
     qualityWarnings,
+    blockingWarnings,
     systemPrompt,
     userPrompt,
   };

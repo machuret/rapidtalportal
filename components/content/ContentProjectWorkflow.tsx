@@ -78,6 +78,25 @@ type RetryOperation =
   | { kind: "quick_draft" }
   | { kind: "generate" };
 
+interface OperationFailure {
+  title: string;
+  message: string;
+  code: string | null;
+  occurredAt: string | null;
+}
+
+function generationFailureFromProject(project: ContentProject): OperationFailure | null {
+  if (!project.last_error_message) return null;
+  return {
+    title: project.last_operation === "validate"
+      ? "Validation could not finish"
+      : "Draft generation did not finish",
+    message: project.last_error_message,
+    code: project.last_error_code ?? null,
+    occurredAt: project.last_error_at ?? null,
+  };
+}
+
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value && typeof value === "object") {
@@ -151,6 +170,9 @@ export function ContentProjectWorkflow({
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const [retryOperation, setRetryOperation] = useState<RetryOperation | null>(null);
+  const [operationFailure, setOperationFailure] = useState<OperationFailure | null>(
+    generationFailureFromProject(project),
+  );
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [loadingMoreArtifacts, setLoadingMoreArtifacts] = useState(false);
   const autosaveTimer = useRef<number | null>(null);
@@ -197,6 +219,17 @@ export function ContentProjectWorkflow({
     );
   }, [project.current_piece, project.pieces]);
 
+  useEffect(() => {
+    const durableFailure = generationFailureFromProject(project);
+    if (durableFailure) {
+      setOperationFailure(durableFailure);
+      if (project.last_operation === "generate") {
+        setRetryOperation({ kind: "generate" });
+      }
+    }
+    else if (project.current_piece) setOperationFailure(null);
+  }, [project]);
+
   const loadProject = useCallback(async () => {
     const loaded = await api.get<ContentProject>(
       ROUTES.content.project(clientId, project.id),
@@ -219,12 +252,19 @@ export function ContentProjectWorkflow({
       }, { showErrorToast: false });
       onProjectChange(updated);
       setRetryOperation(null);
+      setOperationFailure(null);
       setSaveState("saved");
       return updated;
     } catch (error) {
       // Keep the exact failed payload. A generic "retry the current step" loses
       // intent for save/reject/back/validate transitions after a conflict reload.
       setRetryOperation({ kind: "patch", updates });
+      setOperationFailure({
+        title: "Project change was not saved",
+        message: errorMessage(error, "The project could not be saved."),
+        code: error instanceof ApiError ? error.code : null,
+        occurredAt: new Date().toISOString(),
+      });
       if (error instanceof ApiError && error.statusCode === 409) {
         try {
           await loadProject();
@@ -385,17 +425,28 @@ export function ContentProjectWorkflow({
       onContentGenerated(piece);
       onProjectChange(result.project);
       setRetryOperation(null);
+      setOperationFailure(null);
       setSaveState("saved");
-      toast.success("Draft generated with an automatic Vault shortlist.");
+      const warningCount = result.warnings?.length ?? 0;
+      toast.success(warningCount
+        ? `Draft generated with ${warningCount} editorial check${warningCount === 1 ? "" : "s"} to review.`
+        : "Draft generated with an automatic Vault shortlist.");
     } catch (error) {
       setRetryOperation({ kind: "quick_draft" });
-      setSaveState("error");
+      setSaveState("saved");
+      setOperationFailure({
+        title: "Quick Create could not finish the draft",
+        message: errorMessage(error, "The quick draft could not be generated."),
+        code: error instanceof ApiError ? error.code : null,
+        occurredAt: new Date().toISOString(),
+      });
       try {
         const recovered = await loadProject();
         if (recovered.current_piece && recovered.current_step === "edit") {
           setHistory([recovered.current_piece]);
           onContentGenerated(recovered.current_piece);
           setSaveState("saved");
+          setOperationFailure(null);
           toast.success("Draft generated and recovered from the saved project.");
           return;
         }
@@ -455,16 +506,27 @@ export function ContentProjectWorkflow({
       setHistory([piece]);
       await loadProject();
       setRetryOperation(null);
+      setOperationFailure(null);
       setSaveState("saved");
-    } catch {
+      if (data.warnings?.length) {
+        toast.warning(`${data.warnings.length} editorial check${data.warnings.length === 1 ? "" : "s"} remain for review.`);
+      }
+    } catch (error) {
       setRetryOperation({ kind: "generate" });
-      setSaveState("error");
+      setSaveState("saved");
+      setOperationFailure({
+        title: "Draft generation did not finish",
+        message: errorMessage(error, "The draft could not be generated."),
+        code: error instanceof ApiError ? error.code : null,
+        occurredAt: new Date().toISOString(),
+      });
       try {
         const recovered = await loadProject();
         if (recovered.current_piece && recovered.current_step === "edit") {
           setHistory([recovered.current_piece]);
           onContentGenerated(recovered.current_piece);
           setSaveState("saved");
+          setOperationFailure(null);
           toast.success("Draft generated and recovered from the saved project.");
         }
       } catch {
@@ -615,22 +677,66 @@ export function ContentProjectWorkflow({
         </Button>
         <div className="text-right">
           <p className="text-sm font-semibold text-white">{project.title}</p>
-          {saveState === "error" ? (
-            <button type="button" onClick={retryProjectSave} className="text-xs text-red-300 underline underline-offset-2">
-              Project save failed — retry
-            </button>
-          ) : (
-            <p className="text-xs text-zinc-500">
-              {saveState === "saving"
-                ? "Saving project…"
-                : projectDirty
-                  ? "Unsaved changes · saving shortly"
-                  : "Project saved · recoverable on any device"}
-            </p>
-          )}
+          <p className="text-xs text-zinc-500">
+            {saveState === "saving"
+              ? "Saving project…"
+              : saveState === "error"
+                ? "Project changes need attention"
+              : projectDirty
+                ? "Unsaved changes · saving shortly"
+                : "Project saved · recoverable on any device"}
+          </p>
         </div>
       </div>
+      {operationFailure && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4" role="alert">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-red-200">{operationFailure.title}</p>
+              <p className="mt-1 text-sm leading-5 text-zinc-300">{operationFailure.message}</p>
+              <p className="mt-2 text-xs text-zinc-500">
+                Your project, brief and selected sources remain saved.
+                {operationFailure.code ? ` Reference: ${operationFailure.code}.` : ""}
+              </p>
+              {!!project.last_generation_warnings?.length && (
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-red-100/80">
+                  {project.last_generation_warnings.slice(0, 6).map((warning) => (
+                    <li key={warning}>• {warning}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {retryOperation && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy || isGenerating}
+                onClick={retryProjectSave}
+              >
+                {(busy || isGenerating) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {retryOperation.kind === "patch" ? "Retry saving" : "Retry generation"}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
       <ProjectProgress project={project} />
+      {!!project.current_piece && !!project.last_generation_warnings?.length && (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4">
+          <p className="text-sm font-semibold text-amber-200">
+            Draft created with editorial checks
+          </p>
+          <p className="mt-1 text-xs text-zinc-400">
+            These checks did not block your draft. Review them before approval.
+          </p>
+          <ul className="mt-2 space-y-1 text-xs leading-5 text-amber-100/80">
+            {project.last_generation_warnings.slice(0, 6).map((warning) => (
+              <li key={warning}>• {warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {project.current_step === "idea" && (
         <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">

@@ -60,6 +60,9 @@ interface ContentPage<T> {
 }
 
 function projectProgress(project: ContentProject): string {
+  if (project.last_error_message && project.last_operation === "generate") {
+    return "Generation failed — ready to retry";
+  }
   if (project.status === "saved") return "Saved idea";
   if (project.current_step === "complete") {
     return `${project.status.charAt(0).toUpperCase()}${project.status.slice(1)}`;
@@ -282,7 +285,10 @@ function ContentStudioInner({
       handleContentGenerated(result.piece);
       setQuickTitle("");
       setQuickGuidance("");
-      toast.success("Draft ready. You can edit it now.");
+      const warningCount = result.warnings?.length ?? 0;
+      toast.success(warningCount
+        ? `Draft ready with ${warningCount} editorial check${warningCount === 1 ? "" : "s"} to review.`
+        : "Draft ready. You can edit it now.");
     } catch (error) {
       toast.error(error instanceof Error
         ? error.message

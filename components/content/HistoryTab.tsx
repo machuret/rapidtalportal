@@ -781,7 +781,7 @@ export const HistoryTab = memo(function HistoryTab({
     return (
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-12 text-center">
         <Clock className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
-        <p className="text-zinc-400">No content created yet. Switch to Create tab to get started.</p>
+        <p className="text-zinc-400">No content created yet. Return to Ideas or use Quick Create to generate a draft.</p>
       </div>
     );
   }

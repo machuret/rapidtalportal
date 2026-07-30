@@ -75,7 +75,7 @@ test("renders the real resolved channel voice and hard-rule provenance", () => {
   expect(screen.getByRole("region", { name: "Applied voice and style" })).toHaveTextContent(
     "linkedin style: Use short paragraphs and a reflective closing question.",
   );
-  expect(screen.getByText("1 hard rule")).toBeInTheDocument();
+  expect(screen.getByText("1 structured hard rule")).toBeInTheDocument();
 });
 
 test("submits pilot feedback for the artifact selected by the reviewer", async () => {

@@ -16,6 +16,8 @@ import { z } from "zod";
 import {
   contentBriefSchema as structuredBriefSchema,
 } from "@/lib/content/project-schema";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { captureError } from "@/lib/error-tracking";
 
 const toneSchema = z.enum([
   "professional",
@@ -80,5 +82,59 @@ export async function POST(req: NextRequest) {
         }
       : parsed.data.brief,
   };
-  return proxyToEdgeFunction("content-generate", body);
+  const response = await proxyToEdgeFunction("content-generate", body);
+
+  // The Edge Function owns generation and draft persistence, but the Next
+  // boundary records the outcome even when the Edge runtime or provider is
+  // unreachable. This lets the project explain and retry its last operation
+  // after a refresh instead of falling back to a misleading empty state.
+  if (parsed.data.projectId) {
+    const projectId = parsed.data.projectId;
+    const responseBody = await response.clone().json().catch(() => ({})) as {
+      error?: unknown;
+      code?: unknown;
+      warnings?: unknown;
+    };
+    const admin = createAdminClient();
+    const operationState = response.ok
+      ? {
+          last_operation: null,
+          last_error_code: null,
+          last_error_message: null,
+          last_error_at: null,
+          last_generation_warnings: Array.isArray(responseBody.warnings)
+            ? responseBody.warnings.filter((warning): warning is string =>
+                typeof warning === "string").slice(0, 20)
+            : [],
+        }
+      : {
+          last_operation: "generate",
+          last_error_code: typeof responseBody.code === "string"
+            ? responseBody.code.slice(0, 120)
+            : `HTTP_${response.status}`,
+          last_error_message: typeof responseBody.error === "string"
+            ? responseBody.error.slice(0, 2000)
+            : "The draft could not be generated.",
+          last_error_at: new Date().toISOString(),
+          last_generation_warnings: Array.isArray(responseBody.warnings)
+            ? responseBody.warnings.filter((warning): warning is string =>
+                typeof warning === "string").slice(0, 20)
+            : [],
+        };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: operationError } = await (admin as any)
+      .from("content_projects")
+      .update(operationState)
+      .eq("id", projectId)
+      .eq("client_id", parsed.data.clientId);
+    if (operationError) {
+      captureError("api", operationError, {
+        userId: auth.user.id,
+        clientId: parsed.data.clientId,
+        url: "/api/content/generate",
+      });
+    }
+  }
+
+  return response;
 }

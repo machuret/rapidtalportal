@@ -268,9 +268,15 @@ function postDb(options: {
   dnaError?: { code: string; message: string } | null;
 } = {}) {
   const competitorQuery = chain({
-    data: [{ id: COMPETITOR_ID, name: "Market Co", description: null }],
+    data: [{
+      id: COMPETITOR_ID,
+      name: "Market Co",
+      description: null,
+      website_url: "https://market.example",
+    }],
     error: null,
   });
+  const sourceInventoryQuery = chain({ data: [], error: null });
   const dnaQuery = chain({
     data: { company_name: "Client Co", services: "Advisory" },
     error: options.dnaError ?? null,
@@ -301,7 +307,19 @@ function postDb(options: {
   const rpc = jest.fn((name: string) => {
     if (name === "competitor_intelligence_readiness") {
       return Promise.resolve({
-        data: [{ competitor_id: COMPETITOR_ID, ready: options.ready ?? true }],
+        data: [{
+          competitor_id: COMPETITOR_ID,
+          source_count: 1,
+          collectable_source_count: 1,
+          captured_items: 5,
+          article_count: 5,
+          social_post_count: 0,
+          distinct_platforms: 1,
+          content_characters: 6000,
+          latest_capture: "2026-07-28T00:00:00.000Z",
+          readiness_score: 80,
+          ready: options.ready ?? true,
+        }],
         error: null,
       });
     }
@@ -332,6 +350,7 @@ function postDb(options: {
   });
   const from = jest.fn((table: string) => {
     if (table === "competitors") return competitorQuery;
+    if (table === "competitor_sources") return sourceInventoryQuery;
     if (table === "company_dna") return dnaQuery;
     if (table === "content_topics") return topicQuery;
     if (table === "content_pieces") return contentQuery;
@@ -463,7 +482,7 @@ test("uses publication-window evidence, exact quotes, company material and an at
   expect(modelBody.messages[1].content).toContain(`capture_version_id="${CAPTURE_IDS[0]}"`);
 });
 
-test("rejects a model insight whose quote is not an exact source excerpt and fails the lease", async () => {
+test("drops a model insight whose quote is not exact while preserving the verified report", async () => {
   const invalid = structuredClone(analysis);
   invalid.recommended_ideas[0].evidence_quotes[0].quote =
     "This quote was invented and is not present in the immutable source.";
@@ -475,14 +494,17 @@ test("rejects a model insight whose quote is not an exact source excerpt and fai
     window_days: 180,
   }), routeCtx);
 
-  expect(response.status).toBe(502);
+  expect(response.status).toBe(201);
+  await expect(response.json()).resolves.toMatchObject({
+    run: {
+      analysis: {
+        recommended_ideas: [],
+      },
+    },
+  });
   expect(rpc).toHaveBeenCalledWith(
-    "fail_competitor_intelligence_job",
-    expect.objectContaining({ p_job_id: JOB_ID, p_lease_token: LEASE_TOKEN }),
-  );
-  expect(rpc).not.toHaveBeenCalledWith(
     "complete_competitor_intelligence_job",
-    expect.anything(),
+    expect.objectContaining({ p_job_id: JOB_ID, p_lease_token: LEASE_TOKEN }),
   );
 });
 
@@ -511,7 +533,7 @@ test("repairs one incomplete model report and still applies deterministic eviden
   ));
   expect(repairBody.temperature).toBe(0);
   expect(repairBody.messages[1].content).toContain("VALIDATION ERRORS");
-  expect(repairBody.messages[1].content).toContain("positioning_profiles");
+  expect(repairBody.messages[1].content).toContain("did not contain any insight sections");
   expect(rpc).toHaveBeenCalledWith(
     "complete_competitor_intelligence_job",
     expect.objectContaining({
