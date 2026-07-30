@@ -598,7 +598,7 @@ export const POST = withAuth(async (request, { user }) => {
       readyCompetitorCount: competitors.length,
     });
     return NextResponse.json({
-      error: "Every selected competitor needs at least 5 recent items and 3,000 characters before reliable analysis.",
+      error: "Every selected competitor needs at least 5 recent items and 2,500 characters before analysis.",
       code: "COMPETITOR_EVIDENCE_NOT_READY",
       readiness: readinessRows ?? [],
     }, { status: 422 });
@@ -632,7 +632,7 @@ export const POST = withAuth(async (request, { user }) => {
       sourceCharacterCount: rendered.characterCount,
     });
     return NextResponse.json({
-      error: "The selected publication window does not contain enough usable competitor content.",
+      error: "The selected publication window needs at least 5 usable items and 2,500 characters. Try a longer window or collect more content.",
       code: "COMPETITOR_WINDOW_NOT_READY",
       source_count: rendered.rows.length,
       source_character_count: rendered.characterCount,

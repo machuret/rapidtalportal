@@ -67,6 +67,11 @@ export function CompetitorIntelligencePanel({
       competitor.status === "active" && competitor.readiness.ready),
     [competitors],
   );
+  const buildingCompetitors = useMemo(
+    () => competitors.filter((competitor) =>
+      competitor.status === "active" && !competitor.readiness.ready),
+    [competitors],
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const loadReport = useCallback(async (showLoading = false, silent = false) => {
@@ -277,6 +282,22 @@ export function CompetitorIntelligencePanel({
             </div>
           </div>
         )}
+        {canManage && buildingCompetitors.length > 0 && (
+          <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+            <p className="text-xs font-medium text-zinc-400">Still collecting enough evidence</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {buildingCompetitors.map((competitor) => (
+                <div key={competitor.id} className="rounded-md border border-zinc-800 px-3 py-2 text-xs text-zinc-500">
+                  <p className="font-medium text-zinc-300">{competitor.name}</p>
+                  <p className="mt-1">
+                    {competitor.readiness.captured_items}/5 items · {competitor.readiness.content_characters.toLocaleString()}/2,500 characters
+                  </p>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-zinc-600">Captured content remains analysable even if its original source is later paused.</p>
+          </div>
+        )}
       </div>
 
       {activeJob && (
@@ -293,7 +314,7 @@ export function CompetitorIntelligencePanel({
           <p className="mx-auto mt-1 max-w-xl text-sm text-zinc-500">
             {readyCompetitors.length > 0
               ? "Analyse the evidence-ready competitor mini-vaults to find repeatable market signals and content opportunities."
-              : "Collect at least 5 recent items and 3,000 characters for a competitor before running analysis."}
+              : "Collect at least 5 recent items and 2,500 characters for a competitor before running analysis."}
           </p>
         </div>
       ) : (

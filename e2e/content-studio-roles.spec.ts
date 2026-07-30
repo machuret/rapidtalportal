@@ -381,7 +381,7 @@ test.describe("signed-in Content Studio roles", () => {
       "Lead with a useful question and answer it in plain language.",
     );
 
-    await page.getByRole("button", { name: "Review evidence" }).click();
+    await page.getByRole("button", { name: "Choose evidence" }).click();
     await expect(page.getByText("Facts from the company Vault")).toBeVisible();
     await page.getByRole("button", { name: /Continue with \d+ factual sources?/u }).click();
     await expect(page.getByText("Ready to generate")).toBeVisible();

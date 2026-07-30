@@ -17,6 +17,7 @@ interface TopicsTabProps {
   initialTopics: ContentTopic[];
   regenerateRequest?: number;
   onTopicSelected: (topic: ContentTopic) => void;
+  onTopicApproved?: (topic: ContentTopic) => void | Promise<void>;
   onOpenIntelligence: () => void;
 }
 
@@ -26,6 +27,7 @@ export const TopicsTab = memo(function TopicsTab({
   initialTopics,
   regenerateRequest = 0,
   onTopicSelected,
+  onTopicApproved,
   onOpenIntelligence,
 }: TopicsTabProps) {
   const [showForm, setShowForm] = useState(false);
@@ -61,9 +63,10 @@ export const TopicsTab = memo(function TopicsTab({
 
   const handleApprove = useCallback(
     async (id: string) => {
-      await updateStatus({ client_id: clientId, id, status: "approved" });
+      const approved = await updateStatus({ client_id: clientId, id, status: "approved" });
+      await onTopicApproved?.(approved);
     },
-    [updateStatus, clientId]
+    [updateStatus, clientId, onTopicApproved]
   );
 
   const handleReject = useCallback(

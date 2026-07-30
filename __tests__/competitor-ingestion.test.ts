@@ -79,10 +79,12 @@ beforeEach(() => {
   jest.restoreAllMocks();
   jest.clearAllMocks();
   process.env.FIRECRAWL_API_KEY = "test-key";
+  delete process.env.APIFY_API_TOKEN;
 });
 
 afterAll(() => {
   delete process.env.FIRECRAWL_API_KEY;
+  delete process.env.APIFY_API_TOKEN;
 });
 
 describe("competitor source ingestion", () => {
@@ -170,6 +172,89 @@ describe("competitor source ingestion", () => {
     });
     expect(rpc).toHaveBeenCalledWith("create_competitor_crawl_job", expect.objectContaining({
       p_pages_requested: 11,
+    }));
+  });
+
+  test("uses the configured Apify LinkedIn actor and stages only company-attributed posts", async () => {
+    process.env.APIFY_API_TOKEN = "apify-test-token";
+    const linkedinSource = source({
+      source_type: "social_profile",
+      platform: "linkedin",
+      url: "https://www.linkedin.com/company/equity-access",
+      normalized_url: "https://www.linkedin.com/company/equity-access",
+      crawl_scope: "profile",
+      path_prefix: null,
+      max_pages: 10,
+      competitor_name: "Equity Access",
+    });
+    const queued = { ...claimed(), status: "queued", provider_job_id: null };
+    const started = {
+      ...queued,
+      status: "ingesting",
+      provider: "apify_linkedin",
+      provider_job_id: "linkedin-search-1",
+      provider_complete: true,
+      pages_discovered: 1,
+    };
+    const leased = { ...started, lease_token: LEASE };
+    const checkpointed = { ...leased, lease_token: null };
+    const stage = jest.fn();
+    const rpc = jest.fn((name: string, args?: Record<string, unknown>) => {
+      if (name === "create_competitor_crawl_job") {
+        return { single: jest.fn().mockResolvedValue({ data: queued, error: null }) };
+      }
+      if (name === "claim_competitor_crawl_job") {
+        return { single: jest.fn().mockResolvedValue({ data: leased, error: null }) };
+      }
+      if (name === "stage_competitor_crawl_pages") {
+        stage(args);
+        return Promise.resolve({ data: 1, error: null });
+      }
+      if (name === "checkpoint_competitor_crawl_job") {
+        return { single: jest.fn().mockResolvedValue({ data: checkpointed, error: null }) };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    });
+    const from = jest.fn((table: string) =>
+      chainWith(table === "competitor_crawl_jobs"
+        ? { data: started, error: null }
+        : { data: null, error: null }));
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([
+        {
+          linkedinUrl: "https://www.linkedin.com/posts/equity-access_equityaccess-activity-7467025568966836224-HoVn",
+          content: "A sufficiently detailed Equity Access company post about private credit and property investing.",
+          author: { name: "Equity Access" },
+          postedAt: "2026-07-20T02:00:00.000Z",
+        },
+        {
+          linkedinUrl: "https://www.linkedin.com/posts/unrelated-company_activity-999",
+          content: "This unrelated company post must never enter the competitor mini-vault.",
+        },
+      ]), { status: 201, headers: { "content-type": "application/json" } }),
+    );
+
+    const result = await startCompetitorRefresh({ from, rpc }, linkedinSource, "actor-id");
+
+    expect(result).toMatchObject({
+      status: "ingesting",
+      provider: "apify_linkedin",
+      provider_complete: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      "/acts/harvestapi~linkedin-company-posts/run-sync-get-dataset-items",
+    );
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({
+      Authorization: "Bearer apify-test-token",
+    });
+    expect(stage).toHaveBeenCalledWith(expect.objectContaining({
+      p_pages: [expect.objectContaining({
+        markdown: expect.stringContaining("private credit"),
+        metadata: expect.objectContaining({
+          sourceURL: expect.stringContaining("/posts/equity-access_"),
+        }),
+      })],
     }));
   });
 

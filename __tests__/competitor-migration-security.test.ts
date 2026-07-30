@@ -35,6 +35,10 @@ const retireUnleasedMigration = readFileSync(
   path.resolve(__dirname, "..", "db", "migrations", "104_retire_unleased_competitor_intelligence.sql"),
   "utf8",
 );
+const usabilityMigration = readFileSync(
+  path.resolve(__dirname, "..", "db", "migrations", "111_competitor_analysis_usability.sql"),
+  "utf8",
+);
 
 describe("competitor source foundation migration", () => {
   test.each([
@@ -122,6 +126,29 @@ describe("competitor intelligence readiness migration", () => {
     expect(readinessMigration).toContain("m.captured_items >= 5");
     expect(readinessMigration).toContain("m.content_characters >= 3000");
     expect(readinessMigration).toContain("m.latest_capture >= now() - interval '180 days'");
+  });
+});
+
+describe("competitor analysis usability migration", () => {
+  test("analyses durable captured evidence even when its collection source is later paused", () => {
+    expect(usabilityMigration).toContain("m.captured_items >= 5");
+    expect(usabilityMigration).toContain("m.content_characters >= 2500");
+    expect(usabilityMigration).toContain("m.latest_capture >= now() - interval '365 days'");
+    expect(usabilityMigration).toContain(
+      "pausing/removing the connector must not disable analysis",
+    );
+    expect(usabilityMigration).toMatch(
+      /m\.captured_items >= 5\s+AND m\.content_characters >= 2500\s+AND m\.latest_capture >= now\(\) - interval '365 days'\s+\) AS ready/u,
+    );
+  });
+
+  test("keeps readiness private to the service role", () => {
+    expect(usabilityMigration).toMatch(
+      /REVOKE ALL ON FUNCTION competitor_intelligence_readiness\(UUID\)[\s\S]+FROM PUBLIC, anon, authenticated/u,
+    );
+    expect(usabilityMigration).toMatch(
+      /GRANT EXECUTE ON FUNCTION competitor_intelligence_readiness\(UUID\)[\s\S]+TO service_role/u,
+    );
   });
 });
 

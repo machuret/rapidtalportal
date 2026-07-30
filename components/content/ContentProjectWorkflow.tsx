@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -15,6 +15,7 @@ import {
   Save,
   ShieldCheck,
   Sparkles,
+  Zap,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +37,7 @@ import {
   type ContentProjectStep,
 } from "@/types/content";
 import { HistoryTab } from "./HistoryTab";
+import { errorMessage } from "@/lib/error-message";
 
 const STEPS: Array<{ id: ContentProjectStep; label: string }> = [
   { id: "idea", label: "Idea" },
@@ -139,6 +141,7 @@ export function ContentProjectWorkflow({
   const [evidence, setEvidence] = useState<ContentEvidenceOption[]>([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const autosaveTimer = useRef<number | null>(null);
   const [history, setHistory] = useState<ContentPiece[]>(
     project.pieces?.length
       ? project.pieces
@@ -149,12 +152,23 @@ export function ContentProjectWorkflow({
   const { generate, isGenerating } = useGenerateContent();
 
   const initialBrief = isBrief(project.content_brief) ? project.content_brief : null;
-  const [objective, setObjective] = useState(initialBrief?.objective ?? project.idea_snapshot.title);
-  const [audience, setAudience] = useState(initialBrief?.audience ?? "");
-  const [angle, setAngle] = useState(initialBrief?.angle ?? "");
-  const [desiredFormat, setDesiredFormat] = useState(initialBrief?.desiredFormat ?? "");
+  const suggested = project.idea_snapshot.explainability;
+  const [objective, setObjective] = useState(
+    initialBrief?.objective ?? suggested?.strategicObjective ?? project.idea_snapshot.title,
+  );
+  const [audience, setAudience] = useState(
+    initialBrief?.audience ?? suggested?.intendedAudience ?? "",
+  );
+  const [angle, setAngle] = useState(
+    initialBrief?.angle ?? suggested?.hook ?? "",
+  );
+  const [desiredFormat, setDesiredFormat] = useState(
+    initialBrief?.desiredFormat ?? suggested?.recommendedFormat ?? "",
+  );
   const [keyPoints, setKeyPoints] = useState((initialBrief?.keyPoints ?? []).join("\n"));
-  const [callToAction, setCallToAction] = useState(initialBrief?.callToAction ?? "");
+  const [callToAction, setCallToAction] = useState(
+    initialBrief?.callToAction ?? suggested?.recommendedCta ?? "",
+  );
   const [tone, setTone] = useState(initialBrief?.tone ?? "professional");
   const [length, setLength] = useState<"short" | "medium" | "long">(initialBrief?.length ?? "medium");
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(
@@ -287,10 +301,13 @@ export function ContentProjectWorkflow({
       saveState === "error"
     ) return;
     if (canonicalJson(project.content_brief) === canonicalJson(brief)) return;
-    const timer = window.setTimeout(() => {
+    autosaveTimer.current = window.setTimeout(() => {
       void patchProject({ content_brief: brief, status: "active" });
     }, 800);
-    return () => window.clearTimeout(timer);
+    return () => {
+      if (autosaveTimer.current !== null) window.clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = null;
+    };
   }, [brief, busy, patchProject, project.content_brief, project.current_step, saveState]);
 
   useEffect(() => {
@@ -316,12 +333,111 @@ export function ContentProjectWorkflow({
   }, [brief, patchProject, project.current_step, selectedSourceIds]);
 
   const handleSaveBrief = useCallback(async () => {
-    if (brief.objective.length < 3 || !brief.audience || !brief.angle || !brief.callToAction || !brief.desiredFormat) {
-      toast.error("Complete the audience, objective, angle, format and CTA.");
+    if (brief.objective.length < 3) {
+      toast.error("Add a short objective. The other fields are optional.");
       return;
     }
+    if (autosaveTimer.current !== null) window.clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = null;
     await patchProject({ content_brief: brief, current_step: "evidence", status: "active" });
   }, [brief, patchProject]);
+
+  const handleQuickDraft = useCallback(async () => {
+    if (brief.objective.length < 3 || busy || isGenerating) {
+      if (brief.objective.length < 3) toast.error("Add a short objective first.");
+      return;
+    }
+    setBusy(true);
+    setSaveState("saving");
+    try {
+      if (autosaveTimer.current !== null) window.clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = null;
+      const briefed = await api.patch<ContentProject>(
+        ROUTES.content.projects(),
+        {
+          client_id: clientId,
+          id: project.id,
+          expected_updated_at: project.updated_at,
+          content_brief: brief,
+          current_step: "evidence",
+          status: "active",
+        },
+        { showErrorToast: false },
+      );
+      const available = await api.get<ContentEvidenceOption[]>(
+        ROUTES.content.projectEvidence(clientId, project.id),
+        { showErrorToast: false },
+      );
+      // Quick mode keeps the workflow grounded without asking the editor to
+      // manually inspect every source. The evidence screen remains available
+      // later if they want to replace this automatic shortlist.
+      const automaticSourceIds = available.slice(0, 6).map((source) => source.id);
+      const ready = await api.patch<ContentProject>(
+        ROUTES.content.projects(),
+        {
+          client_id: clientId,
+          id: project.id,
+          expected_updated_at: briefed.updated_at,
+          vault_source_ids: automaticSourceIds,
+          current_step: "generate",
+          status: "active",
+        },
+        { showErrorToast: false },
+      );
+      onProjectChange(ready);
+      const data = await api.post<{
+        id: string;
+        body: string;
+        sources?: ContentPiece["source_references"];
+        styleSnapshot?: ContentPiece["style_snapshot"];
+      }>(
+        ROUTES.content.generate(),
+        {
+          clientId,
+          projectId: project.id,
+          vaultSourceIds: automaticSourceIds,
+          contentType: project.idea_snapshot.channel,
+          title: project.title,
+          brief,
+        },
+        { showErrorToast: false },
+      );
+      const piece: ContentPiece = {
+        id: data.id,
+        project_id: project.id,
+        content_type: project.idea_snapshot.channel,
+        title: project.title,
+        body: data.body,
+        content_brief: brief,
+        source_references: data.sources ?? [],
+        style_snapshot: data.styleSnapshot ?? ready.style_snapshot,
+        status: "draft",
+        created_at: new Date().toISOString(),
+      };
+      setHistory([piece]);
+      onContentGenerated(piece);
+      const loaded = await api.get<ContentProject>(
+        ROUTES.content.project(clientId, project.id),
+        { showErrorToast: false },
+      );
+      onProjectChange(loaded);
+      setSaveState("saved");
+      toast.success("Draft generated with an automatic Vault shortlist.");
+    } catch (error) {
+      setSaveState("error");
+      toast.error(errorMessage(error, "The quick draft could not be generated."));
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    brief,
+    busy,
+    clientId,
+    isGenerating,
+    onContentGenerated,
+    onProjectChange,
+    project,
+  ]);
 
   const handleSaveEvidence = useCallback(async () => {
     await patchProject({
@@ -501,6 +617,10 @@ export function ContentProjectWorkflow({
           </section>
           <aside className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
             <p className="text-sm font-medium text-white">What next?</p>
+            <Button className="w-full justify-start bg-purple-600 hover:bg-purple-500" disabled={busy || isGenerating} onClick={() => void handleQuickDraft()}>
+              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
+              Generate a quick draft
+            </Button>
             <Button className="w-full justify-start" disabled={busy} onClick={() => patchProject({ current_step: "brief", status: "active" })}>
               <ArrowRight className="mr-2 h-4 w-4" /> Promote into a brief
             </Button>
@@ -527,22 +647,28 @@ export function ContentProjectWorkflow({
         <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
           <div className="mb-5">
             <p className="text-xs font-medium uppercase tracking-wide text-purple-300">Build the brief</p>
-            <h2 className="mt-1 text-lg font-semibold">Turn the idea into one precise assignment</h2>
+            <h2 className="mt-1 text-lg font-semibold">Add as much direction as you want</h2>
+            <p className="mt-1 text-sm text-zinc-500">Only the objective is required. Leave anything else blank and the engine will use the idea, Company DNA and channel style.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div><Label htmlFor="project-audience">Audience</Label><Input id="project-audience" className="mt-1.5 bg-zinc-950" value={audience} onChange={(event) => setAudience(event.target.value)} placeholder="Who should care?" /></div>
+            <div><Label htmlFor="project-audience">Audience <span className="text-zinc-600">(optional)</span></Label><Input id="project-audience" className="mt-1.5 bg-zinc-950" value={audience} onChange={(event) => setAudience(event.target.value)} placeholder="Let the engine choose" /></div>
             <div><Label>Channel</Label><div className="mt-1.5 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm capitalize text-zinc-300">{project.idea_snapshot.channel}</div></div>
             <div className="sm:col-span-2"><Label htmlFor="project-objective">Objective</Label><Textarea id="project-objective" className="mt-1.5 bg-zinc-950" value={objective} onChange={(event) => setObjective(event.target.value)} rows={3} /></div>
-            <div className="sm:col-span-2"><Label htmlFor="project-angle">Angle</Label><Textarea id="project-angle" className="mt-1.5 bg-zinc-950" value={angle} onChange={(event) => setAngle(event.target.value)} rows={3} placeholder="The specific point of view or story angle" /></div>
-            <div><Label htmlFor="project-format">Desired format</Label><Input id="project-format" className="mt-1.5 bg-zinc-950" value={desiredFormat} onChange={(event) => setDesiredFormat(event.target.value)} placeholder="e.g. founder-led insight post" /></div>
-            <div><Label htmlFor="project-cta">Call to action</Label><Input id="project-cta" className="mt-1.5 bg-zinc-950" value={callToAction} onChange={(event) => setCallToAction(event.target.value)} placeholder="What should the reader do?" /></div>
-            <div className="sm:col-span-2"><Label htmlFor="project-points">Key points</Label><Textarea id="project-points" className="mt-1.5 bg-zinc-950" value={keyPoints} onChange={(event) => setKeyPoints(event.target.value)} rows={4} placeholder="One required point per line" /></div>
+            <div className="sm:col-span-2"><Label htmlFor="project-angle">Angle <span className="text-zinc-600">(optional)</span></Label><Textarea id="project-angle" className="mt-1.5 bg-zinc-950" value={angle} onChange={(event) => setAngle(event.target.value)} rows={3} placeholder="Let the engine choose a useful angle" /></div>
+            <div><Label htmlFor="project-format">Desired format <span className="text-zinc-600">(optional)</span></Label><Input id="project-format" className="mt-1.5 bg-zinc-950" value={desiredFormat} onChange={(event) => setDesiredFormat(event.target.value)} placeholder="Use the channel default" /></div>
+            <div><Label htmlFor="project-cta">Call to action <span className="text-zinc-600">(optional)</span></Label><Input id="project-cta" className="mt-1.5 bg-zinc-950" value={callToAction} onChange={(event) => setCallToAction(event.target.value)} placeholder="No CTA, or let the engine choose" /></div>
+            <div className="sm:col-span-2"><Label htmlFor="project-points">Key points <span className="text-zinc-600">(optional)</span></Label><Textarea id="project-points" className="mt-1.5 bg-zinc-950" value={keyPoints} onChange={(event) => setKeyPoints(event.target.value)} rows={4} placeholder="Add only points that must be included" /></div>
             <div><Label htmlFor="project-tone">Requested tone</Label><select id="project-tone" value={tone} onChange={(event) => setTone(event.target.value as ContentBrief["tone"])} className="mt-1.5 h-9 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm">{TONES.map((item) => <option key={item} value={item.toLowerCase()}>{item}</option>)}</select></div>
             <div><Label>Length</Label><div className="mt-1.5 flex gap-2">{LENGTHS.map((item) => <button key={item.id} type="button" onClick={() => setLength(item.id)} className={`flex-1 rounded-md border px-2 py-2 text-xs ${length === item.id ? "border-purple-500 bg-purple-500/10 text-white" : "border-zinc-700 text-zinc-400"}`}>{item.label}</button>)}</div></div>
           </div>
           <div className="mt-6 flex justify-between">
             <Button variant="ghost" onClick={() => patchProject({ current_step: "idea" })}><ArrowLeft className="mr-2 h-4 w-4" /> Idea</Button>
-            <Button disabled={busy} onClick={handleSaveBrief}>{busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />} Review evidence</Button>
+            <div className="flex gap-2">
+              <Button variant="outline" disabled={busy || isGenerating} onClick={() => void handleQuickDraft()}>
+                <Zap className="mr-2 h-4 w-4" /> Generate now
+              </Button>
+              <Button disabled={busy} onClick={handleSaveBrief}>{busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />} Choose evidence</Button>
+            </div>
           </div>
         </section>
       )}

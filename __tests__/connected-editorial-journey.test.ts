@@ -22,6 +22,7 @@ describe("connected editorial journey", () => {
   const retrieval = read("supabase/functions/_shared/content-vault-retrieval.ts");
   const studio = read("components/content/ContentStudio.tsx");
   const workflow = read("components/content/ContentProjectWorkflow.tsx");
+  const topics = read("components/content/TopicsTab.tsx");
   const revisions = read("db/migrations/092_unified_content_workspace.sql");
 
   test("one durable tenant-scoped project connects the complete journey", () => {
@@ -64,6 +65,9 @@ describe("connected editorial journey", () => {
 
   test("the primary Studio navigation supports discovery and recovery", () => {
     expect(studio).toContain("Continue working");
+    expect(studio).toContain("Approved ideas ready to create");
+    expect(studio).toContain("onTopicApproved");
+    expect(topics).toContain("await onTopicApproved?.(approved)");
     expect(studio).toContain("Company priorities &amp; Vault gaps");
     expect(studio).toContain("Competitor opportunities");
     expect(studio).toContain("Drafts &amp; approved library");
@@ -72,6 +76,19 @@ describe("connected editorial journey", () => {
     for (const step of ["Idea", "Brief", "Evidence", "Generate", "Edit", "Validate", "Approve"]) {
       expect(workflow).toContain(`label: "${step}"`);
     }
+  });
+
+  test("fast generation requires only an objective and can select evidence automatically", () => {
+    expect(projectsRoute).toContain("return !!brief?.objective.trim()");
+    expect(projectsRoute).toContain(
+      "Add a short objective before continuing. Every other brief field is optional.",
+    );
+    expect(workflow).toContain("Generate a quick draft");
+    expect(workflow).toContain("Generate now");
+    expect(workflow).toContain("Only the objective is required");
+    expect(workflow).toContain("available.slice(0, 6)");
+    expect(workflow).toContain("vault_source_ids: automaticSourceIds");
+    expect(workflow).not.toContain("Complete the audience, objective, angle, format and CTA");
   });
 
   test("ideas support every declared decision before promotion", () => {

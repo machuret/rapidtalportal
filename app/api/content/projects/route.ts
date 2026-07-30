@@ -25,13 +25,10 @@ type MarketIntelligence = z.infer<typeof contentMarketIntelligenceSchema>;
 function completeEditorialBrief(
   brief: z.infer<typeof contentBriefSchema> | undefined,
 ): boolean {
-  return !!(
-    brief &&
-    brief.audience?.trim() &&
-    brief.angle?.trim() &&
-    brief.desiredFormat?.trim() &&
-    brief.callToAction?.trim()
-  );
+  // The objective is the only information generation genuinely needs.
+  // Audience, angle, format and CTA are useful steering controls, not gates:
+  // the engine can resolve them from the idea, Company DNA and channel rules.
+  return !!brief?.objective.trim();
 }
 
 function sameSet(left: string[], right: string[]): boolean {
@@ -358,7 +355,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     !completeEditorialBrief(resolvedBrief)
   ) {
     return NextResponse.json({
-      error: "Complete the audience, objective, angle, format and CTA before continuing.",
+      error: "Add a short objective before continuing. Every other brief field is optional.",
     }, { status: 422 });
   }
   if (

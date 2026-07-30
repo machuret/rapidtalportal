@@ -66,6 +66,7 @@ function ContentStudioInner({
 }: ContentStudioProps) {
   const [view, setView] = useState<DiscoverView>("ideas");
   const [history, setHistory] = useState<ContentPiece[]>(initialHistory);
+  const [topics, setTopics] = useState<ContentTopic[]>(initialTopics);
   const [projects, setProjects] = useState<ContentProject[]>(initialProjects);
   const [activeProject, setActiveProject] = useState<ContentProject | null>(null);
   const [openingProject, setOpeningProject] = useState<string | null>(null);
@@ -79,6 +80,15 @@ function ContentStudioInner({
     () => projects.filter((project) => ["active", "saved"].includes(project.status)),
     [projects],
   );
+  const readyTopics = useMemo(() => {
+    const promotedTopicIds = new Set(
+      projects.flatMap((project) =>
+        project.idea_snapshot.topicId ? [project.idea_snapshot.topicId] : []),
+    );
+    return topics.filter(
+      (topic) => topic.status === "approved" && !promotedTopicIds.has(topic.id),
+    );
+  }, [projects, topics]);
 
   const updateProject = useCallback((project: ContentProject) => {
     setActiveProject(project);
@@ -118,6 +128,13 @@ function ContentStudioInner({
   }, [clientId, updateProject]);
 
   const handleTopicSelected = useCallback(async (topic: ContentTopic) => {
+    const existing = projects.find((project) =>
+      project.idea_snapshot.topicId === topic.id &&
+      ["active", "saved"].includes(project.status));
+    if (existing) {
+      await openProject(existing.id);
+      return;
+    }
     const explainability = topic.why?.explainability ?? null;
     await createProject({
       version: 1,
@@ -133,7 +150,13 @@ function ContentStudioInner({
       marketIntelligence: null,
       explainability,
     });
-  }, [createProject]);
+  }, [createProject, openProject, projects]);
+
+  const handleTopicApproved = useCallback(async (topic: ContentTopic) => {
+    setTopics((current) =>
+      current.map((item) => item.id === topic.id ? topic : item));
+    await handleTopicSelected(topic);
+  }, [handleTopicSelected]);
 
   const handleCompetitorIdeaSelected = useCallback(async (
     idea: CompetitorIntelligenceIdea,
@@ -239,6 +262,26 @@ function ContentStudioInner({
           </div>
         )}
 
+        {readyTopics.length > 0 && (
+          <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+            <p className="text-sm font-medium text-emerald-200">Approved ideas ready to create</p>
+            <p className="mt-1 text-xs text-zinc-500">Approval now feeds this pipeline directly. Start a guided brief or generate a quick draft.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {readyTopics.slice(0, 9).map((topic) => (
+                <button
+                  key={topic.id}
+                  type="button"
+                  onClick={() => void handleTopicSelected(topic)}
+                  className="rounded-lg border border-emerald-500/20 bg-zinc-950 p-3 text-left hover:border-emerald-400/50"
+                >
+                  <span className="block text-xs capitalize text-emerald-300">{topic.content_type} · Start draft</span>
+                  <span className="mt-1 block text-sm text-zinc-200">{topic.title}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {unfinished.length > 0 ? (
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
             {(showAllProjects ? unfinished : unfinished.slice(0, 6)).map((project) => (
@@ -314,9 +357,10 @@ function ContentStudioInner({
             <TopicsTab
               clientId={clientId}
               canApprove={canApprove}
-              initialTopics={initialTopics}
+              initialTopics={topics}
               regenerateRequest={ideaGenerationRequest}
               onTopicSelected={handleTopicSelected}
+              onTopicApproved={handleTopicApproved}
               onOpenIntelligence={() => setView("competitors")}
             />
           </div>

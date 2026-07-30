@@ -10,6 +10,7 @@ import type {
   CompetitorRefreshCadence,
   CompetitorSource,
 } from "@/types/competitors";
+import { errorMessage } from "@/lib/error-message";
 
 const FIRECRAWL_API = "https://api.firecrawl.dev/v2";
 const FIRECRAWL_ORIGIN = new URL(FIRECRAWL_API).origin;
@@ -61,7 +62,7 @@ interface FirecrawlResultPage {
 
 interface ProviderStart {
   id: string;
-  provider: "firecrawl_crawl" | "firecrawl_batch" | "firecrawl_search";
+  provider: "firecrawl_crawl" | "firecrawl_batch" | "firecrawl_search" | "apify_linkedin";
   pages?: FirecrawlPage[];
 }
 
@@ -253,6 +254,78 @@ function linkedinPostBelongsToCompany(raw: string, source: IngestionSource): boo
 interface LinkedinDiscovery {
   urls: string[];
   pages: FirecrawlPage[];
+  provider?: "apify_linkedin" | "firecrawl_search";
+}
+
+async function discoverLinkedinPostsWithApify(
+  source: IngestionSource,
+): Promise<FirecrawlPage[]> {
+  const token = process.env.APIFY_API_TOKEN;
+  if (!token) return [];
+  const actorId = process.env.APIFY_LINKEDIN_ACTOR_ID
+    || "harvestapi~linkedin-company-posts";
+  const actorUrl = new URL(
+    `https://api.apify.com/v2/acts/${encodeURIComponent(actorId)}/run-sync-get-dataset-items`,
+  );
+  actorUrl.searchParams.set("format", "json");
+  actorUrl.searchParams.set("clean", "true");
+  actorUrl.searchParams.set("timeout", "90");
+  actorUrl.searchParams.set("maxItems", String(source.max_pages));
+  actorUrl.searchParams.set("maxTotalChargeUsd", "0.25");
+  const response = await fetch(actorUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      targetUrls: [source.normalized_url],
+      maxPosts: source.max_pages,
+      scrapeComments: false,
+      scrapeReactions: false,
+      includeQuotePosts: false,
+      includeReposts: false,
+    }),
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new CompetitorIngestionError(
+      errorMessage(json, `LinkedIn collection returned ${response.status}.`),
+      response.status === 429 ? 429 : 502,
+    );
+  }
+  if (!Array.isArray(json)) return [];
+  return json.flatMap((value): FirecrawlPage[] => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const row = value as Record<string, unknown>;
+    const rawUrl = row.linkedinUrl ?? row.postUrl ?? row.url;
+    if (typeof rawUrl !== "string" || !linkedinPostBelongsToCompany(rawUrl, source)) return [];
+    const content = [row.content, row.text, row.postText, row.description]
+      .find((entry) => typeof entry === "string" && entry.trim().length >= 40);
+    if (typeof content !== "string") return [];
+    const author = row.author && typeof row.author === "object" && !Array.isArray(row.author)
+      ? row.author as Record<string, unknown>
+      : {};
+    const document = row.document && typeof row.document === "object" && !Array.isArray(row.document)
+      ? row.document as Record<string, unknown>
+      : {};
+    const published = [row.publishedAt, row.postedAt, row.postedDate, row.date]
+      .find((entry) => typeof entry === "string");
+    return [{
+      markdown: content.trim(),
+      metadata: {
+        sourceURL: rawUrl,
+        title: typeof document.title === "string"
+          ? document.title
+          : typeof row.title === "string"
+            ? row.title
+            : `${source.competitor_name ?? "Competitor"} — LinkedIn post`,
+        author: typeof author.name === "string" ? author.name : undefined,
+        publishedTime: typeof published === "string" ? published : undefined,
+        provider: "apify",
+      },
+    }];
+  }).slice(0, source.max_pages);
 }
 
 function linkedinSearchPage(
@@ -299,6 +372,22 @@ async function discoverLinkedinPosts(source: IngestionSource): Promise<LinkedinD
   const found = new Set<string>();
   const pages = new Map<string, FirecrawlPage>();
   let feedPage: FirecrawlPage | null = null;
+
+  // Use the configured LinkedIn Actor first. Firecrawl remains an independent
+  // fallback for deployments without Apify and for transient Actor failures.
+  try {
+    const apifyPages = await discoverLinkedinPostsWithApify(source);
+    if (apifyPages.length > 0) {
+      return {
+        urls: apifyPages.flatMap((page) =>
+          typeof page.metadata?.sourceURL === "string" ? [page.metadata.sourceURL] : []),
+        pages: apifyPages,
+        provider: "apify_linkedin",
+      };
+    }
+  } catch {
+    // Continue to public feed and Firecrawl search discovery.
+  }
 
   // LinkedIn's public company page exposes update links even when a search
   // provider has not indexed the latest post yet.
@@ -366,9 +455,19 @@ async function discoverLinkedinPosts(source: IngestionSource): Promise<LinkedinD
   }
 
   if (pages.size > 0) {
-    return { urls: [...found].slice(0, source.max_pages), pages: [...pages.values()] };
+    return {
+      urls: [...found].slice(0, source.max_pages),
+      pages: [...pages.values()],
+      provider: "firecrawl_search",
+    };
   }
-  if (feedPage) return { urls: [...found].slice(0, source.max_pages), pages: [feedPage] };
+  if (feedPage) {
+    return {
+      urls: [...found].slice(0, source.max_pages),
+      pages: [feedPage],
+      provider: "firecrawl_search",
+    };
+  }
 
   // Last-resort capture: ask the batch provider for attributed URLs, including
   // the public Updates feed when discovery returned no individual post links.
@@ -392,7 +491,7 @@ async function startFirecrawl(source: IngestionSource): Promise<ProviderStart> {
     if (discovery.pages.length > 0) {
       return {
         id: `linkedin-search-${Date.now()}`,
-        provider: "firecrawl_search",
+        provider: discovery.provider ?? "firecrawl_search",
         pages: discovery.pages.slice(0, source.max_pages),
       };
     }
@@ -533,6 +632,7 @@ async function commitPage(
   source: IngestionSource,
   jobId: string,
   leaseToken: string,
+  provider: string | null | undefined,
   row: { id: string; payload: FirecrawlPage },
 ): Promise<boolean> {
   const page = row.payload;
@@ -570,7 +670,7 @@ async function commitPage(
     p_content_hash: contentHash,
     p_metadata: {
       sourceType: source.source_type,
-      capturedBy: "firecrawl-v2",
+      capturedBy: provider === "apify_linkedin" ? "apify-linkedin" : "firecrawl-v2",
       statusCode: page.metadata?.statusCode ?? null,
     },
   });
@@ -604,6 +704,7 @@ async function markSourceFailure(
 
 async function cancelProvider(job: CompetitorCrawlJob): Promise<void> {
   if (!job.provider_job_id) return;
+  if (job.provider === "apify_linkedin" || job.provider === "firecrawl_search") return;
   const path = job.provider === "firecrawl_batch"
     ? "batch/scrape"
     : "crawl";
@@ -847,7 +948,7 @@ export async function advanceCompetitorCrawl(
 
     let captured = 0;
     for (const row of (pending ?? []) as { id: string; payload: FirecrawlPage }[]) {
-      if (await commitPage(admin, source, claimed.id, leaseToken, row)) captured++;
+      if (await commitPage(admin, source, claimed.id, leaseToken, claimed.provider, row)) captured++;
     }
 
     const { count: remaining, error: remainingError } = await admin
