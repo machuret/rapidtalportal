@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { format, subDays } from "date-fns";
+import { format, parseISO, subDays } from "date-fns";
 import { DailyLogStudio } from "@/components/daily-log/DailyLogStudio";
 import { ClientAdminLogViewer } from "@/components/daily-log/ClientAdminLogViewer";
 import { PageIntro } from "@/components/layout/PageIntro";
 import type { DailyLog, DailyLogNote, Mood } from "@/types/daily-log";
+import { todayInTimezone } from "@/lib/date-tz";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function DailyLogPage({
   // Compute 'today' once on the server and pass it down — the client components
   // must NOT derive it from new Date() at render (server UTC vs browser tz =
   // hydration mismatch near the day boundary).
-  const today = format(new Date(), "yyyy-MM-dd");
+  const today = todayInTimezone(user.timezone);
   // Only super_admin reaches the manager view now (client_admin is redirected
   // above; clients read VA logs via My Team).
   const isClientAdmin = user.role === "super_admin";
@@ -51,7 +52,7 @@ export default async function DailyLogPage({
     let selectedHistory: { log_date: string; mood: Mood | null }[] = [];
 
     if (selectedId) {
-      const since = format(subDays(new Date(), 29), "yyyy-MM-dd");
+      const since = format(subDays(parseISO(today), 29), "yyyy-MM-dd");
 
       const [logRes, histRes] = await Promise.all([
         admin.from("daily_logs").select("*").eq("user_id", selectedId).eq("log_date", today).maybeSingle(),
@@ -81,7 +82,7 @@ export default async function DailyLogPage({
   }
 
   // ── VA: see their own log ──
-  const since = format(subDays(new Date(), 29), "yyyy-MM-dd");
+  const since = format(subDays(parseISO(today), 29), "yyyy-MM-dd");
 
   const [todayResult, historyResult] = await Promise.all([
     admin.from("daily_logs").select("*").eq("user_id", user.id).eq("log_date", today).maybeSingle(),

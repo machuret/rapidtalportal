@@ -105,7 +105,10 @@ export function BrainHome({ clientName, score, events, trend, lift }: BrainHomeP
               <GraduationCap className="w-3.5 h-3.5" /> {score.level}
             </span>
             <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
-              Brain Score blends what it knows, what it&apos;s learned, how accurate it is, and how fresh it stays.
+              Brain learning score blends knowledge, feedback lessons, accuracy history and freshness.
+            </p>
+            <p className="text-xs text-zinc-600 mt-1">
+              This is different from Vault knowledge readiness and Company DNA completion.
             </p>
             {score.provisional && <p className="text-xs text-amber-400/90 mt-1.5">Still learning — accuracy firms up as you use it.</p>}
             {trend.length >= 2 && <div className="mt-3"><Sparkline points={trend.map((t) => t.score)} /></div>}

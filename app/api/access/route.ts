@@ -47,7 +47,7 @@ const deleteSchema = z.object({ id: z.string().uuid() });
 
 function encryptionNotConfigured() {
   return NextResponse.json(
-    { error: "Credential encryption is not configured. Set CREDENTIALS_ENCRYPTION_KEY (openssl rand -base64 32) and redeploy." },
+    { error: "Secure credential storage is temporarily unavailable. Please contact RapidTal support." },
     { status: 503 },
   );
 }

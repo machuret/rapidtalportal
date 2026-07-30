@@ -16,6 +16,7 @@ import { formatDate } from "@/lib/utils";
 interface TopicListProps {
   topics: ContentTopic[];
   canApprove: boolean;
+  viewerUserId: string;
   isLoading: boolean;
   onApprove: (id: string) => Promise<void>;
   onReject: (id: string) => Promise<void>;
@@ -27,6 +28,7 @@ interface TopicListProps {
 const TopicCard = memo(function TopicCard({
   topic,
   canApprove,
+  viewerUserId,
   isLoading,
   onApprove,
   onReject,
@@ -35,6 +37,7 @@ const TopicCard = memo(function TopicCard({
 }: {
   topic: ContentTopic;
   canApprove: boolean;
+  viewerUserId: string;
   isLoading: boolean;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
@@ -44,6 +47,9 @@ const TopicCard = memo(function TopicCard({
   const TypeIcon = TYPE_ICONS[topic.content_type] || BookText;
   const iconColor = TYPE_ICON_COLORS[topic.content_type] || "text-zinc-400";
   const statusStyle = STATUS_STYLES[topic.status];
+  const canRemove =
+    canApprove ||
+    (topic.status === "pending" && topic.created_by === viewerUserId);
 
   const handleApprove = useCallback(() => {
     onApprove(topic.id);
@@ -121,13 +127,12 @@ const TopicCard = memo(function TopicCard({
           </button>
         )}
 
-        {/* Delete - admins only */}
-        {canApprove && (
+        {canRemove && (
           <button
             onClick={handleDelete}
             disabled={isLoading}
-            aria-label="Delete topic"
-            title="Delete topic"
+            aria-label={canApprove ? "Delete topic" : "Withdraw pending idea"}
+            title={canApprove ? "Delete topic" : "Withdraw pending idea"}
             className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
           >
             <Trash2 className="w-4 h-4" />
@@ -142,6 +147,7 @@ const TopicCard = memo(function TopicCard({
 export const TopicList = memo(function TopicList({
   topics,
   canApprove,
+  viewerUserId,
   isLoading,
   onApprove,
   onReject,
@@ -167,6 +173,7 @@ export const TopicList = memo(function TopicList({
           key={topic.id}
           topic={topic}
           canApprove={canApprove}
+          viewerUserId={viewerUserId}
           isLoading={isLoading}
           onApprove={onApprove}
           onReject={onReject}

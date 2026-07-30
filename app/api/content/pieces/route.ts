@@ -43,7 +43,7 @@ const updateSchema = z.object({
   status: z.enum(["draft", "approved", "archived"]).optional(),
   title: z.string().min(1).max(300).optional(),
   body: z.string().max(50000).optional().nullable(),
-  expected_updated_at: z.string().datetime().optional(),
+  expected_updated_at: z.string().datetime({ offset: true }).optional(),
 });
 
 const createSchema = z.object({
@@ -237,7 +237,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     ] = await Promise.all([
       db
         .from("company_dna")
-        .select("company_name,services,location,team,tools_used,extra,updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules")
+        .select("company_name,company_description,values,services,target_demographic,location,address,website,social_links,business_goals,marketing_goals,team,tools_used,extra,updated_at,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules")
         .eq("client_id", parsed.data.client_id)
         .maybeSingle(),
       approvedStyleProfile(db, parsed.data.client_id, current.content_type),

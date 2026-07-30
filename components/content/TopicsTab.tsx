@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 interface TopicsTabProps {
   clientId: string;
+  viewerUserId: string;
   canApprove: boolean;
   initialTopics: ContentTopic[];
   regenerateRequest?: number;
@@ -37,6 +38,7 @@ function isStoredSuggestion(value: unknown): value is AiSuggestion {
 
 export const TopicsTab = memo(function TopicsTab({
   clientId,
+  viewerUserId,
   canApprove,
   initialTopics,
   regenerateRequest = 0,
@@ -353,6 +355,7 @@ export const TopicsTab = memo(function TopicsTab({
             )
           : topics}
         canApprove={canApprove}
+        viewerUserId={viewerUserId}
         isLoading={isUpdating || isDeleting}
         onApprove={handleApprove}
         onReject={handleReject}

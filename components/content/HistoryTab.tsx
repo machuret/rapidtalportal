@@ -23,7 +23,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
-import { formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LocalTime } from "@/components/ui/LocalTime";
@@ -80,7 +79,7 @@ const HistoryItem = memo(function HistoryItem({
       <div className="flex-1 min-w-0">
         <p className="font-medium text-sm truncate">{piece.title}</p>
         <p className="text-xs text-zinc-500 mt-0.5">
-          {piece.content_type} · {formatDate(piece.created_at)}
+          {piece.content_type} · <LocalTime value={piece.created_at} opts={{ day: "numeric", month: "short", year: "numeric" }} />
         </p>
       </div>
 
@@ -345,6 +344,7 @@ function PieceDetail({
       <div className="flex items-center gap-3">
         <button
           type="button"
+          aria-label="Back to content history"
           onClick={() => {
             if (!dirty || window.confirm("Discard your unsaved draft changes?")) onBack();
           }}
@@ -377,7 +377,7 @@ function PieceDetail({
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-semibold text-white truncate">{piece.title}</h2>
           <p className="text-xs text-zinc-500 mt-0.5">
-            {piece.content_type} · {formatDate(piece.created_at)}
+            {piece.content_type} · <LocalTime value={piece.created_at} opts={{ day: "numeric", month: "short", year: "numeric" }} />
           </p>
         </div>
         <span className={`text-xs px-2 py-0.5 rounded-full border font-medium shrink-0 ${statusStyle}`}>
@@ -417,6 +417,7 @@ function PieceDetail({
         </button>
         <div className="flex items-center rounded-lg border border-zinc-700 overflow-hidden">
           <select
+            aria-label="Channel to adapt this draft to"
             value={adaptType}
             onChange={(event) => setAdaptType(event.target.value as ContentType)}
             disabled={derivedAction !== null}

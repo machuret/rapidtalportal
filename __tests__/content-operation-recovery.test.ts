@@ -18,7 +18,7 @@ describe("durable content operation recovery", () => {
     expect(generateRoute).toContain("last_error_code");
     expect(generateRoute).toContain("last_generation_warnings");
     expect(workflow).toContain("Retry generation");
-    expect(workflow).toContain("Your project, brief and selected sources remain saved.");
+    expect(workflow).toContain("Your project, brief and selected Vault knowledge remain saved.");
   });
 
   test("persists competitor failure codes and returns the latest job", () => {

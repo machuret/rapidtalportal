@@ -286,6 +286,25 @@ Would you like to learn more?`,
     }));
   });
 
+  test("accepts Supabase timestamps with a numeric UTC offset", async () => {
+    const admin = makeAdmin();
+    (createAdminClient as jest.Mock).mockReturnValue(admin);
+    const editorVersion = "2026-07-31T08:14:12.123456+00:00";
+
+    const response = await PATCH(jsonReq({
+      client_id: CLIENT_A,
+      id: PIECE_ID,
+      body: "Edited body",
+      expected_updated_at: editorVersion,
+    }), routeCtx);
+
+    expect(response.status).toBe(200);
+    expect(admin.rpc).toHaveBeenCalledWith(
+      "update_content_piece_atomic",
+      expect.objectContaining({ p_expected_piece_updated_at: editorVersion }),
+    );
+  });
+
   test("accepts X drafts and records a style snapshot", async () => {
     const admin = makeAdmin({
       piece: {

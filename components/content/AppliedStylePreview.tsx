@@ -24,6 +24,30 @@ const PLATFORM_STRUCTURE: Partial<Record<ContentType, string>> = {
   social: "One LinkedIn-style artifact; no bundled platform variants.",
 };
 
+function hasConfiguredBrandStyle(brandStyle: Record<string, unknown>): boolean {
+  const styleFields = [
+    "brand_voice",
+    "content_style",
+    "internal_rules",
+    "sign_off",
+    "preferred_terms",
+    "prohibited_terms",
+    "emoji_policy",
+    "humour_policy",
+    "default_cta_style",
+    "approved_claims",
+    "prohibited_claims",
+    "channel_styles",
+    "hard_rules",
+  ];
+  return styleFields.some((field) => {
+    const value = brandStyle[field];
+    if (typeof value === "string") return value.trim().length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    return Boolean(value && typeof value === "object" && Object.keys(value).length > 0);
+  });
+}
+
 export function AppliedStylePreview({
   brandStyle,
   channel,
@@ -46,6 +70,10 @@ export function AppliedStylePreview({
     ),
     [brandStyle, channel, length, tone],
   );
+  const hasConfiguredStyle = useMemo(
+    () => hasConfiguredBrandStyle(brandStyle),
+    [brandStyle],
+  );
 
   return (
     <section
@@ -56,8 +84,8 @@ export function AppliedStylePreview({
         <ShieldCheck className="h-4 w-4" /> Applied voice and style
       </p>
       <p className="mt-1 text-xs text-zinc-500">
-        Preview for <span className="capitalize text-zinc-300">{channel}</span>. Company rules
-        override the requested tone.
+        Preview for <span className="capitalize text-zinc-300">{channel}</span>. Configured
+        company rules override the requested tone.
       </p>
       {PLATFORM_STRUCTURE[channel] && (
         <p className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-xs leading-5 text-zinc-300">
@@ -78,7 +106,9 @@ export function AppliedStylePreview({
       )}
       <div className="mt-3 flex flex-wrap gap-2 text-2xs">
         <span className="rounded-full bg-zinc-900 px-2 py-1 text-zinc-400">
-          {style.hardRules.length} structured hard rule{style.hardRules.length === 1 ? "" : "s"}
+          {style.hardRules.length
+            ? `${style.hardRules.length} additional hard rule${style.hardRules.length === 1 ? "" : "s"}`
+            : "No additional hard rules"}
         </span>
         {style.disallowEmoji && (
           <span className="rounded-full bg-zinc-900 px-2 py-1 text-zinc-400">
@@ -86,7 +116,11 @@ export function AppliedStylePreview({
           </span>
         )}
         <span className="rounded-full bg-zinc-900 px-2 py-1 text-zinc-400">
-          {style.styleAnalysis ? "Approved style analysis applied" : "Company DNA style"}
+          {style.styleAnalysis
+            ? "Approved style analysis applied"
+            : hasConfiguredStyle
+              ? "Company DNA style"
+              : "Generic professional style using Company DNA context"}
         </span>
       </div>
     </section>

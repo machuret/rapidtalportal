@@ -15,8 +15,11 @@ export default async function CompanyReportPage() {
   if (!ctx) redirect("/login");
   const { user, client } = ctx;
   if (!user.client_id) redirect("/dashboard");
+  // Client admins use the unified Company Brain, which already contains this
+  // coverage report. Keep the standalone route only for the VA navigation.
+  if (user.role === "client_admin" || user.role === "super_admin") redirect("/brain");
 
-  const canCurate = user.role === "client_admin" || user.role === "super_admin";
+  const canCurate = false;
 
   return (
     <div>

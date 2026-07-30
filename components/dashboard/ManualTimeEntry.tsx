@@ -15,6 +15,7 @@ interface ManualTimeEntryProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  defaultDate: string;
 }
 
 const CATEGORIES = [
@@ -28,8 +29,8 @@ const CATEGORIES = [
   "Other"
 ];
 
-export function ManualTimeEntry({ open, onOpenChange, onSuccess }: ManualTimeEntryProps) {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+export function ManualTimeEntry({ open, onOpenChange, onSuccess, defaultDate }: ManualTimeEntryProps) {
+  const [date, setDate] = useState(defaultDate);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [phase, setPhase] = useState<"work" | "break">("work");

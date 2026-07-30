@@ -11,7 +11,7 @@ const display = Bebas_Neue({ subsets: ["latin"], variable: "--font-display", wei
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400", "500", "600"] });
 
 export const metadata: Metadata = {
-  title: "Rapid Tile Portal",
+  title: "RapidTal Portal",
   description: "Multi-tenant SaaS portal for managing client knowledge bases.",
 };
 

@@ -24,6 +24,7 @@ const readiness: VaultReadiness = {
     total: 8,
     ready: 7,
     processing: 1,
+    stuckProcessing: 0,
     failed: 0,
     searchable: 6,
     stale: 2,
@@ -107,7 +108,7 @@ describe("Vault readiness dashboard", () => {
       />,
     );
 
-    expect(await screen.findByText("Vault readiness")).toBeInTheDocument();
+    expect(await screen.findByText("Knowledge readiness")).toBeInTheDocument();
     expect(screen.getByText("72")).toBeInTheDocument();
     expect(screen.getByText("Policy: 0 · missing")).toBeInTheDocument();
 

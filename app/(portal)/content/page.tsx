@@ -96,6 +96,7 @@ export default async function ContentPage() {
       <PageIntro id="content" />
       <ContentStudio
         clientId={user.client_id}
+        viewerUserId={user.id}
         canApprove={canApprove}
         canManageCompetitors={hasContentCapability(user.role, "manage_competitors")}
         brandStyle={{

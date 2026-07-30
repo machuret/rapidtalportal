@@ -33,7 +33,7 @@ export default async function CompanyDnaPage() {
 
   return (
     <div className="page-prose">
-      <h1 className="text-2xl font-bold mb-1">Company Brain</h1>
+      <h1 className="text-2xl font-bold mb-1">Company DNA</h1>
       <p className="text-zinc-400 text-sm mb-8">
         The core profile of {client?.name ?? "your client"} — goals, audience, tools, voice and rules.
         The AI reads this in every answer, topic and draft it produces, so the more you fill in, the smarter and more on-brand everything becomes.

@@ -42,7 +42,18 @@ export function VaultItemRow({
   onToggleExpand, onToggleSelect, onEdit, onDelete, onReprocess,
 }: VaultItemRowProps) {
   const src = SOURCE_META[item.source_type as keyof typeof SOURCE_META];
-  const sta = STATUS_META[item.status];
+  const processingTimestamp = new Date(item.updated_at ?? item.created_at).getTime();
+  const isStuck =
+    ["pending", "processing"].includes(item.status) &&
+    Number.isFinite(processingTimestamp) &&
+    Date.now() - processingTimestamp > 20 * 60 * 1000;
+  const sta = isStuck
+    ? {
+        label: "Preparation stalled",
+        cls: "bg-red-500/15 text-red-400 border-red-500/25",
+        icon: AlertCircle,
+      }
+    : STATUS_META[item.status];
   const SrcIcon = src?.icon ?? FileText;
   const StaIcon = sta?.icon ?? Clock;
 
@@ -54,7 +65,12 @@ export function VaultItemRow({
       {/* Main row */}
       <div className="flex items-center gap-3 px-4 py-3">
         {canWrite && (
-          <button onClick={onToggleSelect} className="shrink-0 text-zinc-500 hover:text-zinc-300 transition-colors">
+          <button
+            onClick={onToggleSelect}
+            aria-label={isSelected ? `Deselect ${item.title}` : `Select ${item.title}`}
+            title={isSelected ? "Deselect item" : "Select item"}
+            className="shrink-0 text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
             {isSelected ? <CheckSquare className="w-4 h-4 text-blue-400" /> : <Square className="w-4 h-4" />}
           </button>
         )}
@@ -119,11 +135,11 @@ export function VaultItemRow({
         </div>
 
         <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border font-medium shrink-0", sta?.cls)}>
-          <StaIcon className={cn("w-3 h-3", item.status === "processing" ? "animate-spin" : "")} />
+          <StaIcon className={cn("w-3 h-3", item.status === "processing" && !isStuck ? "animate-spin" : "")} />
           {sta?.label}
         </span>
 
-        {canWrite && item.status === "error" && (
+        {canWrite && (item.status === "error" || isStuck) && (
           <button onClick={onReprocess} disabled={reprocessing} title="Try preparing this source again" aria-label="Try preparing this source again"
             className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-blue-400 transition-colors disabled:opacity-40">
             {reprocessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
@@ -138,7 +154,7 @@ export function VaultItemRow({
         )}
 
         {(item.raw_content || item.source_url || item.ai_summary) && (
-          <button onClick={onToggleExpand} aria-label={isExpanded ? "Collapse" : "Expand"} aria-expanded={isExpanded}
+          <button onClick={onToggleExpand} aria-label={isExpanded ? `Collapse ${item.title}` : `Preview ${item.title}`} aria-expanded={isExpanded}
             className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>

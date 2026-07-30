@@ -78,6 +78,9 @@ const labelOf = (key: string) =>
 export function recentMonths(n = 6): { key: string; label: string }[] {
   const out: { key: string; label: string }[] = [];
   const d = new Date();
+  // Anchor month arithmetic to the first. Subtracting from dates such as
+  // 30/31 can roll through short months and produce duplicate options.
+  d.setUTCDate(1);
   for (let i = 0; i < n; i++) {
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
     out.push({ key, label: labelOf(key) });

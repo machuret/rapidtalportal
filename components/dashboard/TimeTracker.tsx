@@ -55,7 +55,7 @@ function phaseFromEntries(segs: Segment[]): Phase {
   return "done";
 }
 
-export function TimeTracker({ userId }: { userId: string }) {
+export function TimeTracker({ userId, today }: { userId: string; today: string }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [entries, setEntries] = useState<Segment[]>([]);
   const [elapsed, setElapsed] = useState(0);
@@ -63,8 +63,6 @@ export function TimeTracker({ userId }: { userId: string }) {
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastSegmentStartRef = useRef<string | null>(null);
-  const today = new Date().toISOString().slice(0, 10);
-
   const entriesQuery = useTimeEntriesQuery(today);
   const upsertMutation = useUpsertTimeEntry();
   const deleteMutation = useDeleteTimeEntry();
@@ -371,6 +369,7 @@ export function TimeTracker({ userId }: { userId: string }) {
       open={manualEntryOpen}
       onOpenChange={setManualEntryOpen}
       onSuccess={refreshEntries}
+      defaultDate={today}
     />
     </>
   );

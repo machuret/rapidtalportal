@@ -67,6 +67,7 @@ export interface VaultReadiness {
     total: number;
     ready: number;
     processing: number;
+    stuckProcessing: number;
     failed: number;
     searchable: number;
     stale: number;
@@ -93,6 +94,7 @@ export interface VaultReadiness {
 const ALL_CATEGORIES: VaultCategory[] = [
   "service", "contact", "process", "policy", "reference", "general",
 ];
+const PROCESSING_STALE_MS = 20 * 60 * 1000;
 
 function ratio(value: number, total: number): number {
   return total > 0 ? value / total : 0;
@@ -125,9 +127,14 @@ export function evaluateVaultReadiness(args: {
       && (!item.valid_until || item.valid_until >= today)
       && (!item.review_due_at || item.review_due_at.slice(0, 10) > today),
   );
-  const processing = currentItems.filter(
+  const processingItems = currentItems.filter(
     (item) => ["pending", "processing"].includes(item.status),
-  ).length;
+  );
+  const stuckProcessing = processingItems.filter((item) => {
+    const timestamp = new Date(item.updated_at ?? item.created_at).getTime();
+    return Number.isFinite(timestamp) && now.getTime() - timestamp > PROCESSING_STALE_MS;
+  }).length;
+  const processing = Math.max(0, processingItems.length - stuckProcessing);
   const failed = currentItems.filter((item) => item.status === "error").length;
   const searchable = readyItems.filter((item) => item.indexed_at !== null).length;
   const stale = readyItems.filter((item) => {
@@ -244,6 +251,7 @@ export function evaluateVaultReadiness(args: {
   if (total === 0) status = "setup";
   else if (
     failed > 0
+    || stuckProcessing > 0
     || readyItems.length === 0
     || searchable < readyItems.length * 0.7
     || expired > 0
@@ -286,6 +294,15 @@ export function evaluateVaultReadiness(args: {
       id: "failed",
       title: `Repair ${failed} failed item${failed === 1 ? "" : "s"}`,
       detail: "Re-run processing so failed sources cannot create silent knowledge gaps.",
+      action: "index",
+      priority: "high",
+    });
+  }
+  if (stuckProcessing > 0) {
+    recommendations.push({
+      id: "stuck-processing",
+      title: `Restart ${stuckProcessing} stuck source${stuckProcessing === 1 ? "" : "s"}`,
+      detail: "Preparation stopped before completion. Restarting is safe and keeps the saved source.",
       action: "index",
       priority: "high",
     });
@@ -380,6 +397,7 @@ export function evaluateVaultReadiness(args: {
       total,
       ready: readyItems.length,
       processing,
+      stuckProcessing,
       failed,
       searchable,
       stale,

@@ -195,17 +195,19 @@ export const CLIENT_GUIDE: GuideGroup[] = [
         tip: "Revisit it whenever your services, pricing, or positioning change — the AI will instantly reflect it.",
       },
       {
-        title: "Company Report",
-        what: "A health-check of your company brain — what the AI knows well, and where the gaps are.",
-        why: "The goal is to take the guesswork out of “what should I add next?”. It shows your blind spots clearly, so the time you spend improving the Vault goes exactly where it'll make the biggest difference.",
+        title: "Company Brain",
+        what: "One place to see what the AI knows, how much feedback it has learned from, and which knowledge areas still need work.",
+        why: "The goal is to make the different health indicators understandable. The Brain learning score is separate from Vault knowledge readiness and Company DNA completion, and the page explains each part.",
         can: [
-          "See how complete your company knowledge is.",
-          "Spot the gaps worth filling first.",
+          "See the Brain's learning score and its component breakdown.",
+          "Review Vault coverage and knowledge gaps on the same page.",
+          "Open Brain Analytics for detailed usage and feedback.",
         ],
         how: [
-          "Open Company Report from the menu and review the breakdown.",
+          "Open Company Brain from the menu.",
+          "Review the score breakdown, then scroll to knowledge coverage for the next recommended improvement.",
         ],
-        tip: "Treat a low area as a quick win — fill it and watch the related answers improve.",
+        tip: "Use the component breakdown rather than comparing the Brain score directly with Vault readiness or Company DNA completion.",
       },
       {
         title: "Brain Analytics",
@@ -227,6 +229,22 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     heading: "Business tools",
     blurb: "Practical, everyday helpers that keep the wheels turning.",
     items: [
+      {
+        title: "Content",
+        what: "A guided Content Studio for moving from an idea or competitor opportunity to a channel-specific draft, review and approval.",
+        why: "The goal is to keep ideas, briefs, Vault evidence, competitor inspiration, voice settings, drafts and approvals connected in one recoverable workflow.",
+        can: [
+          "Quick-create a draft from only a topic and channel.",
+          "Save ideas and continue unfinished projects.",
+          "Review competitor opportunities, edit drafts, validate, approve, archive, adapt and export.",
+        ],
+        how: [
+          "Open Content from the menu.",
+          "Use Quick Create for speed, or choose an approved idea or competitor opportunity.",
+          "Open any unfinished project to continue where you left off.",
+        ],
+        tip: "Start with Quick Create when speed matters; use the guided workflow when you want tighter control over evidence and direction.",
+      },
       {
         title: "CRM",
         what: "A simple way to track contacts and leads as they move from first contact to closed — with notes and a full history.",

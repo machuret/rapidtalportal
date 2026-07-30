@@ -1,6 +1,7 @@
 /** @jest-environment node */
 
 import {
+  competitorSourceMatchesIdentity,
   competitorSourceIdentityWarnings,
   evaluateCompetitorReadiness,
 } from "@/lib/competitors/readiness";
@@ -64,5 +65,20 @@ describe("competitor readiness dimensions", () => {
     )).toEqual([
       expect.stringContaining("assetline.com.au"),
     ]);
+  });
+
+  test("enforces owned-domain identity while allowing platform profiles", () => {
+    expect(competitorSourceMatchesIdentity(
+      "https://securelending.com.au",
+      { url: "https://blog.securelending.com.au/articles", platform: "web" },
+    )).toBe(true);
+    expect(competitorSourceMatchesIdentity(
+      "https://securelending.com.au",
+      { url: "https://assetline.com.au", platform: "web" },
+    )).toBe(false);
+    expect(competitorSourceMatchesIdentity(
+      "https://securelending.com.au",
+      { url: "https://linkedin.com/company/secure-lending", platform: "linkedin" },
+    )).toBe(true);
   });
 });

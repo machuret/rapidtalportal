@@ -104,7 +104,7 @@ export function placementTemplates(): TemplatePage[] {
             heading(3, "Tools used"),
             bullets(["Tool / platform 1", "Tool / platform 2"]),
             para(strong("Owner — "), text("who is responsible.")),
-            para(strong("Last reviewed — "), text("YYYY-MM-DD")),
+            para(strong("Last reviewed — "), text("Add the review date")),
           ),
         },
       ],
@@ -168,16 +168,15 @@ export function placementTemplates(): TemplatePage[] {
       ),
       children: [
         {
-          title: "Meeting — <date>",
+          title: "Meeting notes template",
           content: doc(
-            heading(1, "Meeting — YYYY-MM-DD"),
-            para(strong("Attendees: "), text("…")),
+            heading(1, "Meeting notes"),
+            para(strong("Attendees: "), text("Add attendees")),
             heading(3, "Decisions"),
-            bullets(["…"]),
+            bullets(["Record the key decisions"]),
             heading(3, "Action items"),
             taskList([
-              { text: "Action — owner — due date" },
-              { text: "Action — owner — due date" },
+              { text: "Add an action, owner and due date" },
             ]),
           ),
         },

@@ -195,7 +195,7 @@ export function ProfileForm({ user }: Props) {
           <p className="text-xs text-zinc-500">Email changes are handled by your administrator.</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className={user.role === "va" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : ""}>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="phone">Phone Number</Label>
             <Input
@@ -207,16 +207,21 @@ export function ProfileForm({ user }: Props) {
               className="bg-zinc-800 border-zinc-700"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="birthday">Date of Birth</Label>
-            <Input
-              id="birthday"
-              type="date"
-              value={birthday}
-              onChange={e => setBirthday(e.target.value)}
-              className="bg-zinc-800 border-zinc-700"
-            />
-          </div>
+          {user.role === "va" && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="birthday">Birthday</Label>
+              <Input
+                id="birthday"
+                type="date"
+                value={birthday}
+                onChange={e => setBirthday(e.target.value)}
+                className="bg-zinc-800 border-zinc-700"
+              />
+              <p className="text-xs text-zinc-500">
+                Optional. Shown on your team profile so your assigned client can recognise your birthday.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end pt-1">

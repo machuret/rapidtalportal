@@ -4,6 +4,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { serverError } from "@/lib/api/errors";
 import { isCollectableLinkedinCompanyUrl, resolveCompetitorUrl } from "@/lib/competitors/urls";
+import { competitorSourceMatchesIdentity } from "@/lib/competitors/readiness";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rolesWithContentCapability } from "@/lib/auth/content-capabilities";
 
@@ -57,12 +58,24 @@ export const POST = withAuth(async (req, { user }) => {
   const db = admin as any;
   const { data: competitor, error: competitorError } = await db
     .from("competitors")
-    .select("id, refresh_cadence")
+    .select("id, refresh_cadence, website_url")
     .eq("id", parsed.data.competitor_id)
     .eq("client_id", parsed.data.client_id)
     .single();
   if (competitorError || !competitor) {
     return NextResponse.json({ error: "Competitor not found." }, { status: 404 });
+  }
+  if (
+    resolved.crawlScope !== "exact"
+    && !competitorSourceMatchesIdentity(competitor.website_url, {
+      url: resolved.normalizedUrl,
+      platform: resolved.platform,
+    })
+  ) {
+    return NextResponse.json({
+      error: "This website belongs to a different company. Add it as a separate competitor, or choose “This page only” for an external article about this competitor.",
+      code: "COMPETITOR_IDENTITY_MISMATCH",
+    }, { status: 422 });
   }
 
   const { data, error } = await db

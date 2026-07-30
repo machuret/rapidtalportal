@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Archive,
+  ArchiveX,
   ArrowRight,
   Clock3,
   FileText,
@@ -42,6 +43,7 @@ type DiscoverView = "ideas" | "competitors" | "library";
 
 interface ContentStudioProps {
   clientId: string;
+  viewerUserId: string;
   canApprove: boolean;
   canManageCompetitors: boolean;
   brandStyle: Record<string, unknown>;
@@ -76,6 +78,7 @@ function projectProgress(project: ContentProject): string {
 
 function ContentStudioInner({
   clientId,
+  viewerUserId,
   canApprove,
   canManageCompetitors,
   brandStyle,
@@ -96,6 +99,7 @@ function ContentStudioInner({
   const [loadingMoreProjects, setLoadingMoreProjects] = useState(false);
   const [activeProject, setActiveProject] = useState<ContentProject | null>(null);
   const [openingProject, setOpeningProject] = useState<string | null>(null);
+  const [archivingProject, setArchivingProject] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState("");
   const [manualType, setManualType] = useState<ContentType>("linkedin");
   const [quickTitle, setQuickTitle] = useState("");
@@ -153,6 +157,28 @@ function ContentStudioInner({
       setOpeningProject(null);
     }
   }, [clientId, updateProject]);
+
+  const archiveUnfinishedProject = useCallback(async (project: ContentProject) => {
+    if (!window.confirm(`Remove “${project.title}” from unfinished projects? Any drafts already created will remain available.`)) {
+      return;
+    }
+    setArchivingProject(project.id);
+    try {
+      const archived = await api.patch<ContentProject>(ROUTES.content.projects(), {
+        client_id: clientId,
+        id: project.id,
+        expected_updated_at: project.updated_at,
+        status: "rejected",
+        current_step: "complete",
+      });
+      setProjects((previous) => previous.map((item) => item.id === archived.id ? archived : item));
+      toast.success("Project removed from unfinished work.");
+    } catch {
+      // API client presents the actionable error.
+    } finally {
+      setArchivingProject(null);
+    }
+  }, [clientId]);
 
   const handleTopicSelected = useCallback(async (topic: ContentTopic) => {
     const existing = projects.find((project) =>
@@ -508,7 +534,7 @@ function ContentStudioInner({
             </div>
           ) : (
             <p className="mt-3 rounded-lg border border-dashed border-zinc-800 p-3 text-sm text-zinc-500">
-              No approved ideas yet. Generate ideas below, then click “Save idea”.
+              No approved ideas yet. Generate ideas below, then click “{canApprove ? "Save idea" : "Save for approval"}”.
             </p>
           )}
         </div>
@@ -516,14 +542,28 @@ function ContentStudioInner({
         {unfinished.length > 0 ? (
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
             {(showAllProjects ? unfinished : unfinished.slice(0, 6)).map((project) => (
-              <button key={project.id} type="button" onClick={() => openProject(project.id)} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-purple-500/40 hover:bg-zinc-800/70">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="rounded-full bg-purple-500/10 px-2 py-1 text-2xs font-medium uppercase text-purple-300">{projectProgress(project)}</span>
-                  {openingProject === project.id ? <Clock3 className="h-4 w-4 animate-spin text-zinc-500" /> : <ArrowRight className="h-4 w-4 text-zinc-600" />}
-                </div>
-                <p className="mt-3 line-clamp-2 text-sm font-medium text-white">{project.title}</p>
-                <p className="mt-2 text-xs capitalize text-zinc-500">{project.idea_snapshot.channel} · {project.idea_snapshot.origin.replaceAll("_", " ")}</p>
-              </button>
+              <div key={project.id} className="group relative rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-purple-500/40 hover:bg-zinc-800/70">
+                <button type="button" onClick={() => openProject(project.id)} className="w-full p-4 pr-11 text-left">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="rounded-full bg-purple-500/10 px-2 py-1 text-2xs font-medium uppercase text-purple-300">{projectProgress(project)}</span>
+                    {openingProject === project.id ? <Clock3 className="h-4 w-4 animate-spin text-zinc-500" /> : <ArrowRight className="h-4 w-4 text-zinc-600" />}
+                  </div>
+                  <p className="mt-3 line-clamp-2 text-sm font-medium text-white">{project.title}</p>
+                  <p className="mt-2 text-xs capitalize text-zinc-500">{project.idea_snapshot.channel} · {project.idea_snapshot.origin.replaceAll("_", " ")}</p>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Remove ${project.title} from unfinished projects`}
+                  title="Remove from unfinished projects"
+                  disabled={archivingProject === project.id}
+                  onClick={() => void archiveUnfinishedProject(project)}
+                  className="absolute right-2 top-2 rounded-md p-1.5 text-zinc-600 opacity-60 transition hover:bg-zinc-900 hover:text-red-300 group-hover:opacity-100 disabled:opacity-40"
+                >
+                  {archivingProject === project.id
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <ArchiveX className="h-3.5 w-3.5" />}
+                </button>
+              </div>
             ))}
             {unfinished.length > 6 && (
               <Button
@@ -612,6 +652,7 @@ function ContentStudioInner({
             </section>
             <TopicsTab
               clientId={clientId}
+              viewerUserId={viewerUserId}
               canApprove={canApprove}
               initialTopics={topics}
               regenerateRequest={ideaGenerationRequest}

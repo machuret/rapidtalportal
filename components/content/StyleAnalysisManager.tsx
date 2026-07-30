@@ -496,23 +496,14 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
               <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-zinc-200">Analysis confidence</p>
-                    <p className="text-xs text-zinc-500">Based on evidence quantity and consistency—not writing quality.</p>
+                    <p className="text-sm font-medium text-zinc-200">Analyzer evidence rating</p>
+                    <p className="text-xs text-zinc-500">
+                      The analyzer&apos;s estimate from the owned examples it inspected. Overall calibration is shown above and also considers approved goldens.
+                    </p>
                   </div>
-                  <select
-                    value={form.confidence}
-                    disabled={!canEdit}
-                    onChange={(event) => setForm((current) => ({
-                      ...current,
-                      confidence: event.target.value as StyleAnalysisProfile["confidence"],
-                    }))}
-                    onInput={() => setDirty(true)}
-                    className="h-8 rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 text-sm text-zinc-200"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
+                  <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs font-medium capitalize text-zinc-300">
+                    {form.confidence}
+                  </span>
                 </div>
               </div>
 
@@ -562,6 +553,11 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
                     {working === "approve" ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
                     Approve for content engine
                   </Button>
+                  {calibration?.confidence === "low" && (
+                    <p className="basis-full text-right text-xs text-amber-300">
+                      Approval activates this profile, but calibration will remain low until representative goldens are approved.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

@@ -11,7 +11,7 @@ const schema = z.object({
   id: z.string().uuid(),
   scope: z.enum(["full", "section"]),
   instruction: z.string().trim().min(2).max(2000),
-  expected_updated_at: z.string().datetime(),
+  expected_updated_at: z.string().datetime({ offset: true }),
   selectedText: z.string().min(1).max(20000).optional(),
   selectionStart: z.number().int().min(0).optional(),
   selectionEnd: z.number().int().positive().optional(),

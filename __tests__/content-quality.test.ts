@@ -7,6 +7,7 @@ import {
   CONTENT_TYPE_INSTRUCTIONS,
   contentQualityWarnings,
   contentStructureWarnings,
+  normalizeContentForPlatform,
   unsupportedClaimWarnings,
 } from "@/supabase/functions/_shared/content-quality";
 import {
@@ -142,6 +143,18 @@ describe("hard style authority", () => {
 });
 
 describe("platform structure contracts", () => {
+  test("removes Markdown decoration from ready-to-paste LinkedIn content", () => {
+    expect(normalizeContentForPlatform(
+      "**Three questions to ask**\n\n1. **Track record** matters.\n\nWhat would you ask?",
+      "linkedin",
+    )).toBe(
+      "Three questions to ask\n\n1. Track record matters.\n\nWhat would you ask?",
+    );
+    expect(normalizeContentForPlatform("# Blog title\n\n## Section", "blog")).toBe(
+      "# Blog title\n\n## Section",
+    );
+  });
+
   test("keeps editorial structure warnings editable while safety violations remain blocking", () => {
     const style = resolveContentStyle(
       { hard_rules: [], brand_voice: "Clear and practical." },
@@ -158,6 +171,17 @@ describe("platform structure contracts", () => {
     }).length).toBeGreaterThan(0);
     expect(contentBlockingWarnings({
       body: incompleteStructure,
+      style,
+      claimSupportText: "",
+    })).toEqual([]);
+    expect(contentQualityWarnings({
+      body: "Save 30% in 7 days.\n\nA useful explanation.\n\nWhat would you ask?",
+      contentType: "linkedin",
+      style,
+      claimSupportText: "",
+    })).toContain("Unsupported factual claim: “Save 30% in 7 days.”");
+    expect(contentBlockingWarnings({
+      body: "Save 30% in 7 days.\n\nA useful explanation.\n\nWhat would you ask?",
       style,
       claimSupportText: "",
     })).toEqual([]);
@@ -216,6 +240,13 @@ describe("platform structure contracts", () => {
   test("recognizes an invitation to share followed by a booking option as one CTA unit", () => {
     expect(contentStructureWarnings(
       "Timing can determine whether an investor secures an opportunity.\n\nFast access to bridging finance can create flexibility when a purchase is time-sensitive.\n\nWhat challenges have you encountered? We invite you to share your experience or book a call with our team.",
+      "linkedin",
+    )).toEqual([]);
+  });
+
+  test("recognizes a final discussion question followed by Let's discuss as one CTA", () => {
+    expect(contentStructureWarnings(
+      "Private credit can give property investors another way to assess time-sensitive opportunities.\n\nThe right structure depends on the asset, timeline and exit plan.\n\nWhat factors matter most in your next funding decision? Let’s discuss!",
       "linkedin",
     )).toEqual([]);
   });
@@ -367,6 +398,22 @@ describe("unsupported factual claims", () => {
     });
     expect(support).toContain("RapidTal is based in Sydney.");
     expect(unsupportedClaimWarnings("RapidTal is based in Sydney.", support)).toEqual([]);
+  });
+
+  test("treats the complete marketing Company DNA as approved support", () => {
+    const support = claimSupportFromDna({
+      company_name: "Equity Access",
+      company_description: "Equity Access provides private property finance.",
+      target_demographic: "Australian property professionals and investors",
+      business_goals: "Help property professionals move quickly on time-sensitive opportunities.",
+      social_links: { linkedin: "https://www.linkedin.com/company/equity-access" },
+    });
+
+    expect(support).toContain("Equity Access provides private property finance.");
+    expect(unsupportedClaimWarnings(
+      "Equity Access provides private property finance.",
+      support,
+    )).toEqual([]);
   });
 
   test("requires the same polarity for ordinary negative company assertions", () => {

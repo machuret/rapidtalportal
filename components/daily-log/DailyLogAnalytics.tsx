@@ -88,7 +88,7 @@ export function DailyLogAnalytics({ entries, userName }: { entries: AnalyticsEnt
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <Link href="/daily-log" className="text-zinc-500 hover:text-white transition-colors">
+            <Link href="/daily-log" aria-label="Back to Daily Log" className="text-zinc-500 hover:text-white transition-colors">
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>

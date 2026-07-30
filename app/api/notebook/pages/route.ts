@@ -83,7 +83,7 @@ export const POST = withAuth(async (req, { user }) => {
     .insert({
       placement_id: parsed.data.placementId,
       parent_page_id: parsed.data.parentPageId ?? null,
-      title: parsed.data.title?.trim() || "Untitled",
+      title: parsed.data.title?.trim() || "New page",
       content: { type: "doc", content: [{ type: "paragraph" }] } as Json,
       sort_order: sortOrder,
       created_by: user.id,
@@ -123,7 +123,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "expectedUpdatedAt is required for content saves." }, { status: 422 });
   }
   const updates: Database["public"]["Tables"]["notebook_pages"]["Update"] = { last_edited_by: user.id, updated_at: now };
-  if (parsed.data.title !== undefined) updates.title = parsed.data.title.trim() || "Untitled";
+  if (parsed.data.title !== undefined) updates.title = parsed.data.title.trim() || "New page";
   if (parsed.data.content !== undefined) updates.content = parsed.data.content as Json;
 
   const { data, error } = await sb

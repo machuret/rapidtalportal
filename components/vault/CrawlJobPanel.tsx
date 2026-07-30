@@ -130,7 +130,12 @@ export function CrawlJobPanel({ clientId, startedJob }: { clientId: string; star
           <span className="text-xs text-zinc-400">{job.pages_done}/{job.pages_total} pages</span>
         )}
         {!isActive && (
-          <button onClick={() => setDismissed(true)} className="ml-auto p-1 text-zinc-500 hover:text-white rounded">
+          <button
+            onClick={() => setDismissed(true)}
+            aria-label="Dismiss crawl status"
+            title="Dismiss"
+            className="ml-auto p-1 text-zinc-500 hover:text-white rounded"
+          >
             <X className="w-3.5 h-3.5" />
           </button>
         )}

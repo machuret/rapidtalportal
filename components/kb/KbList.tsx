@@ -195,6 +195,8 @@ export function KbList({ entries: initialEntries, lastRun, canRegenerate, client
                 variant="outline"
                 size="sm"
                 onClick={() => setShowCategoryConfig(o => !o)}
+                aria-label="Configure Q&A categories"
+                title="Configure Q&A categories"
                 className="border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
                 disabled={generating}
               >

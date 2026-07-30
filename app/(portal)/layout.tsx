@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileSidebarTrigger } from "@/components/layout/MobileSidebarTrigger";
@@ -9,6 +10,7 @@ import { ErrorReporter } from "@/components/layout/ErrorReporter";
 import { HelpFab } from "@/components/layout/HelpFab";
 import { FeatureVideosProvider } from "@/components/layout/FeatureVideosProvider";
 import { getFeatureVideos } from "@/lib/tutorials/server";
+import PortalLoading from "./loading";
 
 export default async function PortalLayout({
   children,
@@ -78,7 +80,9 @@ export default async function PortalLayout({
         )}
         <div className="max-w-6xl mx-auto px-4 py-6 md:p-8 print:p-0 print:max-w-none">
           <FeatureVideosProvider value={featureVideos}>
-            <QueryProvider>{children}</QueryProvider>
+            <Suspense fallback={<PortalLoading />}>
+              <QueryProvider>{children}</QueryProvider>
+            </Suspense>
           </FeatureVideosProvider>
         </div>
       </main>

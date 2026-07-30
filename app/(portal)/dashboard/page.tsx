@@ -5,6 +5,7 @@ import { VaDashboard } from "@/components/dashboard/VaDashboard";
 import { ClientDashboard } from "@/components/dashboard/ClientDashboard";
 import { renderClientDashboard } from "./client-dashboard";
 import { workHours } from "@/lib/tasks/metrics";
+import { DEFAULT_PORTAL_TIMEZONE, todayInTimezone } from "@/lib/date-tz";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard — RapidTal" };
@@ -37,9 +38,16 @@ export default async function DashboardPage() {
 
   const supabase = createAdminClient();
   const clientId = user.client_id;
-  const today = new Date().toISOString().slice(0, 10);
-  // Monday of the current week (UTC).
-  const wkStart = (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); })();
+  const timezone = user.timezone ?? DEFAULT_PORTAL_TIMEZONE;
+  const now = new Date();
+  const today = todayInTimezone(timezone, now);
+  // Work from the already-resolved local calendar date so Sunday/Monday
+  // boundaries cannot be shifted by the server's UTC clock.
+  const wkStart = (() => {
+    const d = new Date(`${today}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d.toISOString().slice(0, 10);
+  })();
 
   const [
     { data: taskRows }, { data: myLog }, { data: timeWeek }, { data: contract },
@@ -86,7 +94,13 @@ export default async function DashboardPage() {
       createdAt: e.created_at,
     }));
 
-  const dateLabel = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  const dateLabel = now.toLocaleDateString("en-AU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: timezone,
+  });
 
   return (
     <VaDashboard

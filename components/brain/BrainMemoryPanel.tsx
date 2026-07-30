@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
@@ -33,10 +33,22 @@ const KIND_META: Record<BrainMemoryItem["kind"], { label: string; icon: typeof T
  * into every generation, so this panel makes the learning transparent and
  * correctable.
  */
-export function BrainMemoryPanel({ clientId, initial }: { clientId: string; initial: BrainMemoryItem[] }) {
+export function BrainMemoryPanel({
+  clientId,
+  initial,
+  pendingSignals = 0,
+}: {
+  clientId: string;
+  initial: BrainMemoryItem[];
+  pendingSignals?: number;
+}) {
   const router = useRouter();
   const [items, setItems] = useState<BrainMemoryItem[]>(initial);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setItems(initial);
+  }, [initial]);
 
   async function distill() {
     if (busy) return;
@@ -142,8 +154,13 @@ export function BrainMemoryPanel({ clientId, initial }: { clientId: string; init
         </Button>
       </div>
       <p className="text-xs text-zinc-500 mb-4">
-        Lessons distilled from your 👍/👎 feedback. Active lessons steer every topic, answer and draft — pin the important ones, mute or delete anything off.
+        Lessons distilled from your 👍/👎 feedback. Each lesson shows where it applies — pin the important ones, mute or delete anything off.
       </p>
+      {pendingSignals > 0 && (
+        <p className="mb-4 rounded-lg border border-blue-500/25 bg-blue-500/5 px-3 py-2 text-xs text-blue-200">
+          {pendingSignals} feedback signal{pendingSignals === 1 ? " is" : "s are"} waiting to be distilled into a proposed lesson.
+        </p>
+      )}
 
       {/* Proposed — needs your OK before the Brain applies them */}
       {proposed.length > 0 && (
@@ -157,7 +174,9 @@ export function BrainMemoryPanel({ clientId, initial }: { clientId: string; init
 
       {settled.length === 0 && proposed.length === 0 ? (
         <p className="text-sm text-zinc-500">
-          Nothing learned yet. As you thumb things up or flag ones that don&apos;t make sense, then run “Distill now”, the Brain&apos;s lessons appear here.
+          {pendingSignals > 0
+            ? "No lessons have been created yet. Run “Distill now” to process the waiting feedback."
+            : "No feedback lessons yet. Give feedback on an answer or idea, then run “Distill now” to create reviewable lessons."}
         </p>
       ) : (
         <ul className="flex flex-col gap-2">

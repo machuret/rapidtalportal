@@ -67,7 +67,7 @@ export function RevisionDrawer({ open, onClose, pageId, nameFor, onRestored }: P
                 className={cn("w-full text-left px-3 py-2 border-b border-zinc-800/60 transition-colors",
                   selected?.id === r.id ? "bg-zinc-800" : "hover:bg-zinc-900")}>
                 <p className="text-sm text-zinc-200"><LocalTime value={r.created_at} opts={{ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }} /></p>
-                <p className="text-xs text-zinc-500">{(nameFor(r.edited_by) ?? "Someone").split(" ")[0]}</p>
+                <p className="text-xs text-zinc-500">{(nameFor(r.edited_by) ?? "Team member").split(" ")[0]}</p>
               </button>
             ))}
           </div>
@@ -77,7 +77,7 @@ export function RevisionDrawer({ open, onClose, pageId, nameFor, onRestored }: P
             {selected ? (
               <>
                 <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800">
-                  <p className="text-sm text-zinc-400 truncate">{selected.title || "Untitled"}</p>
+                  <p className="text-sm text-zinc-400 truncate">{selected.title || "New page"}</p>
                   <Button size="sm" onClick={restore} disabled={restoring} className="gap-1.5 shrink-0">
                     {restoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />} Restore
                   </Button>

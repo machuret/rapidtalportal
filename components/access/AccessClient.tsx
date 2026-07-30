@@ -114,11 +114,10 @@ export function AccessClient({ initialItems, clientId, isAdmin, members, encrypt
         <div className="flex items-start gap-3 mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
           <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="text-sm text-amber-200">
-            <p className="font-medium">Password encryption isn&apos;t configured yet.</p>
+            <p className="font-medium">Secure Access is temporarily unavailable.</p>
             <p className="text-amber-200/80 mt-0.5">
-              Set <code className="bg-amber-500/15 rounded px-1 py-0.5 text-xs">CREDENTIALS_ENCRYPTION_KEY</code> in
-              your deployment&apos;s environment variables (generate with <code className="bg-amber-500/15 rounded px-1 py-0.5 text-xs">openssl rand -base64 32</code>),
-              then redeploy. Until then, new logins can&apos;t be saved.
+              New logins cannot be saved right now. RapidTal administrators can see this configuration issue in system health;
+              existing records have not been changed.
             </p>
           </div>
         </div>
@@ -139,7 +138,7 @@ export function AccessClient({ initialItems, clientId, isAdmin, members, encrypt
             size="sm"
             onClick={() => setCreating(true)}
             disabled={!encryptionReady}
-            title={encryptionReady ? undefined : "Set CREDENTIALS_ENCRYPTION_KEY to enable saving logins"}
+            title={encryptionReady ? undefined : "Secure Access is temporarily unavailable"}
             className="gap-1.5"
           >
             <Plus className="w-4 h-4" /> Add login

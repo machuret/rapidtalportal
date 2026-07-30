@@ -16,7 +16,7 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
   },
   ask: {
     title: "What is Ask the Vault?",
-    body: "Ask questions in plain English and get answers built only from your company's own documents, with a link to where each fact came from. It's the fastest way to find a policy, a product detail, or anything else in the Vault — no digging through files.",
+    body: "Ask questions in plain English and get answers from your Vault and Company DNA, with links showing which company sources were used. It's the fastest way to find a policy, product detail, or company fact without digging through files.",
     guide: "Ask the Vault",
   },
   compose: {
@@ -51,7 +51,7 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
   },
   "knowledge-base": {
     title: "What is the Knowledge Base?",
-    body: "The Knowledge Base is a set of ready-made Q&A answers generated from your Vault for the questions that come up most. Search it for instant answers; admins can regenerate it as the Vault grows.",
+    body: "The Knowledge Base contains AI-generated Q&A drafts built from your Vault and Company DNA. Admins can review, edit or remove entries, and regenerate them as the Vault grows.",
   },
   "company-dna": {
     title: "What is Company DNA?",

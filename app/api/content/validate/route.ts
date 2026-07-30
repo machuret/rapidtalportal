@@ -50,7 +50,7 @@ export const POST = withAuth(async (req, { user }) => {
       .maybeSingle(),
     db
       .from("company_dna")
-      .select("company_name,services,location,team,tools_used,extra,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules")
+      .select("company_name,company_description,values,services,target_demographic,location,address,website,social_links,business_goals,marketing_goals,team,tools_used,extra,internal_rules,brand_voice,content_style,sign_off,preferred_terms,prohibited_terms,emoji_policy,humour_policy,spelling_locale,default_cta_style,approved_claims,prohibited_claims,channel_styles,hard_rules")
       .eq("client_id", parsed.data.client_id)
       .maybeSingle(),
   ]);
@@ -89,7 +89,7 @@ export const POST = withAuth(async (req, { user }) => {
   );
   const platform = contentStructureWarnings(bodyText, piece.content_type);
   const checks = [
-    { id: "claims", label: "Factual claims", warnings: claims },
+    { id: "claims", label: "Company facts from DNA and Vault", warnings: claims },
     { id: "style", label: "Company voice and style", warnings: styleOnly },
     { id: "platform", label: "Platform structure", warnings: platform },
     { id: "hard_rules", label: "Enforced hard rules", warnings: hardRules },

@@ -28,8 +28,36 @@ export const CONTENT_TYPE_INSTRUCTIONS: Record<QualityContentType, string> = {
   blog: "Write one blog post with a `#` SEO-friendly title, engaging introduction, at least three `##` sections, practical examples, and a concluding CTA. Aim for 600-900 words.",
 };
 
+const PLAIN_TEXT_CONTENT_TYPES = new Set([
+  "email",
+  "x",
+  "linkedin",
+  "facebook",
+  "instagram",
+  "message",
+  "other",
+]);
+
+/**
+ * Social networks and email composers do not reliably render Markdown. Keep
+ * Markdown headings for blog/newsletter contracts, but turn common emphasis
+ * markers into ready-to-paste plain text everywhere else.
+ */
+export function normalizeContentForPlatform(body: string, contentType: string): string {
+  const normalized = body.replace(/\r\n?/gu, "\n").trim();
+  if (!PLAIN_TEXT_CONTENT_TYPES.has(contentType)) return normalized;
+  return normalized
+    .replace(/^#{1,6}\s+/gmu, "")
+    .replace(/\*\*([^*\n]+)\*\*/gu, "$1")
+    .replace(/__([^_\n]+)__/gu, "$1")
+    .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/gu, "$1")
+    .replace(/(?<!_)_([^_\n]+)_(?!_)/gu, "$1")
+    .replace(/`([^`\n]+)`/gu, "$1")
+    .trim();
+}
+
 const CTA_ACTION =
-  "(?:book|call|contact|discover|download|email|join|learn more|let us know|read(?: more)?|register|reply|schedule|share|shop|subscribe|tell us|visit)";
+  "(?:book|call|contact|discover|download|email|explore|join|learn more|let us know|read(?: more)?|register|reply|schedule|share|shop|subscribe|tell us|visit)";
 const CTA_START_PATTERN = new RegExp(
   `^(?:(?:please|to get started|to learn more|when you're ready),?\\s+)?${CTA_ACTION}\\b`,
   "iu",
@@ -40,6 +68,8 @@ const CTA_INVITATION_PATTERN = new RegExp(
 );
 const CTA_CLAUSE_PATTERN = new RegExp(`,\\s*(?:please\\s+)?${CTA_ACTION}\\b`, "iu");
 const SHARE_CTA_PATTERN = /^share\s+(?:this|your|with|below|in)\b/iu;
+const DISCUSSION_FOLLOWUP_PATTERN =
+  /^(?:let['’]?s discuss|join the conversation|share your thoughts|tell us what you think)\b/iu;
 const GREETING_PATTERN = /^(hi|hello|dear|good (morning|afternoon|evening))\b/imu;
 const SIGN_OFF_PATTERN =
   /^(kind regards|regards|best regards|best|thanks|thank you|warm regards|sincerely|yours sincerely|yours faithfully|with appreciation|all the best|respectfully|cheers)[,!]?\s*$/imu;
@@ -63,15 +93,28 @@ function ctaUnits(body: string): string[] {
     .map((unit) => unit.trim())
     .filter(Boolean);
   return units.filter((unit, index) => {
+    const nextUnit = units[index + 1] ?? "";
+    const isFinalDiscussionFollowup =
+      index === units.length - 1 &&
+      DISCUSSION_FOLLOWUP_PATTERN.test(unit);
+    const questionWithDiscussionFollowup =
+      unit.endsWith("?") &&
+      index === units.length - 2 &&
+      DISCUSSION_FOLLOWUP_PATTERN.test(nextUnit);
+    const discussionFollowupAlreadyJoinedToQuestion =
+      isFinalDiscussionFollowup &&
+      Boolean(units[index - 1]?.endsWith("?"));
     const questionBeforeEmailSignOff =
       unit.endsWith("?") &&
       units.length - index <= 3 &&
-      SIGN_OFF_PATTERN.test(units[index + 1] ?? "");
+      SIGN_OFF_PATTERN.test(nextUnit);
     return (
     CTA_START_PATTERN.test(unit) ||
     CTA_INVITATION_PATTERN.test(unit) ||
     CTA_CLAUSE_PATTERN.test(unit) ||
     SHARE_CTA_PATTERN.test(unit) ||
+    questionWithDiscussionFollowup ||
+    (isFinalDiscussionFollowup && !discussionFollowupAlreadyJoinedToQuestion) ||
     (index === units.length - 1 && unit.endsWith("?")) ||
     questionBeforeEmailSignOff
     );
@@ -410,19 +453,18 @@ export function contentQualityWarnings(args: {
 }
 
 /**
- * Only safety and enforceable Company DNA failures block persistence.
- * Platform structure and editorial length are returned as visible warnings so
- * an editor can work with the draft instead of losing a paid generation.
+ * Only explicit Company DNA style rules block persistence. Claim matching,
+ * platform structure and editorial length remain visible, editable checks so
+ * a paid marketing draft is never discarded over a lexical false positive.
+ * Approval still runs the complete quality suite against the persisted
+ * Company DNA and Vault references.
  */
 export function contentBlockingWarnings(args: {
   body: string;
   style: ResolvedContentStyle;
   claimSupportText: string;
 }): string[] {
-  return Array.from(new Set([
-    ...contentStyleWarnings(args.body, args.style),
-    ...unsupportedClaimWarnings(args.body, args.claimSupportText),
-  ])).slice(0, 20);
+  return Array.from(new Set(contentStyleWarnings(args.body, args.style))).slice(0, 20);
 }
 
 export function claimSupportFromDna(
@@ -431,15 +473,28 @@ export function claimSupportFromDna(
 ): string {
   const supportedFields = [
     "company_name",
+    "company_description",
+    "values",
     "services",
+    "target_demographic",
     "location",
+    "address",
+    "website",
+    "social_links",
+    "business_goals",
+    "marketing_goals",
     "team",
     "tools_used",
     "approved_claims",
   ];
   const values = supportedFields
     .map((field) => dna?.[field])
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+    .flatMap((value) => {
+      if (typeof value === "string" && value.trim()) return [value.trim()];
+      if (Array.isArray(value) && value.length) return [JSON.stringify(value)];
+      if (value && typeof value === "object") return [JSON.stringify(value)];
+      return [];
+    });
   const companyName = typeof dna?.company_name === "string" ? dna.company_name.trim() : "";
   const location = typeof dna?.location === "string" ? dna.location.trim() : "";
   if (companyName && location) {

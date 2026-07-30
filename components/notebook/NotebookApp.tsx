@@ -69,7 +69,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
   const nameFor = useCallback((uid: string | null) => {
     if (uid === participants.vaUserId) return participants.vaName;
     if (uid === participants.clientUserId) return participants.clientName;
-    return "Someone";
+    return "RapidTal template";
   }, [participants]);
 
   // ---- selection ----
@@ -146,7 +146,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
   // ---- mutations ----
   async function newPage(parentPageId: string | null) {
     try {
-      const page = await api.post<NotebookPage>(ROUTES.notebook.pages(), { placementId: activePlacementId, parentPageId, title: "Untitled" });
+      const page = await api.post<NotebookPage>(ROUTES.notebook.pages(), { placementId: activePlacementId, parentPageId, title: "New page" });
       setPages((p) => [...p, page]);
       if (parentPageId) setExpanded((e) => ({ ...e, [parentPageId]: true }));
       void selectPage(page.id);
@@ -249,7 +249,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
           ) : <span className="w-3.5 shrink-0" />}
           <GripVertical className="w-3 h-3 text-zinc-600 opacity-0 group-hover:opacity-100 shrink-0" />
           <FileText className="w-3.5 h-3.5 shrink-0" />
-          <span className="truncate flex-1">{page.title || "Untitled"}</span>
+          <span className="truncate flex-1">{page.title || "New page"}</span>
           {depth === 0 && (
             <button title="Add sub-page" aria-label="Add sub-page" onClick={(e) => { e.stopPropagation(); void newPage(page.id); }}
               className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-white shrink-0">
@@ -305,8 +305,8 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
               {showArchived && archived.map((p) => (
                 <div key={p.id} className="group flex items-center gap-1.5 pl-6 pr-1.5 py-1.5 text-sm text-zinc-500">
                   <FileText className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate flex-1 line-through">{p.title || "Untitled"}</span>
-                  <button title="Restore" aria-label={`Restore ${p.title || "Untitled"}`} onClick={() => void setArchived(p.id, false)}
+                  <span className="truncate flex-1 line-through">{p.title || "New page"}</span>
+                  <button title="Restore" aria-label={`Restore ${p.title || "New page"}`} onClick={() => void setArchived(p.id, false)}
                     className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-green-400 shrink-0">
                     <ArchiveRestore className="w-3.5 h-3.5" />
                   </button>
@@ -330,7 +330,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
                   setPages((p) => p.map((x) => (x.id === selected.id ? { ...x, title: v } : x)));
                   scheduleSave();
                 }}
-                placeholder="Untitled"
+                placeholder="New page"
                 aria-label="Page title"
                 className="flex-1 bg-transparent text-2xl font-bold text-white outline-none placeholder:text-zinc-600"
               />
@@ -368,7 +368,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
             </div>
 
             <div className="border-t border-zinc-800 px-5 py-2 text-xs text-zinc-500">
-              Last edited by {(nameFor(selected.last_edited_by) ?? "Someone").split(" ")[0]} · {relTime(selected.updated_at)}
+              Last edited by {nameFor(selected.last_edited_by)} · {relTime(selected.updated_at)}
             </div>
           </>
         ) : (

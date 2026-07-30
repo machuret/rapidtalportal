@@ -24,6 +24,7 @@ import {
   type CompetitorIntelligenceSource,
 } from "@/lib/competitors/intelligence";
 import {
+  competitorSourceMatchesIdentity,
   competitorSourceIdentityWarnings,
   evaluateCompetitorReadiness,
 } from "@/lib/competitors/readiness";
@@ -1180,9 +1181,19 @@ export const POST = withAuth(async (request, { user }) => {
   for (const row of (evidenceRows ?? []) as EvidenceRow[]) {
     grouped.set(row.competitor_id, [...(grouped.get(row.competitor_id) ?? []), row]);
   }
-  const candidates = interleave(
+  const unfilteredCandidates = interleave(
     competitors.map((competitor) => grouped.get(competitor.id) ?? []),
   );
+  const competitorById = new Map(competitors.map((competitor) => [competitor.id, competitor]));
+  // Legacy collections may predate identity enforcement. Never allow captured
+  // web evidence from another company's domain into a new report.
+  const candidates = unfilteredCandidates.filter((row) => {
+    const competitor = competitorById.get(row.competitor_id);
+    return !!competitor && competitorSourceMatchesIdentity(competitor.website_url, {
+      url: row.canonical_url,
+      platform: row.platform as CompetitorSourceRow["platform"],
+    });
+  });
   const names = new Map(competitors.map((competitor) => [competitor.id, competitor.name]));
   const rendered = renderEvidence(candidates, names);
   if (rendered.rows.length < 5 || rendered.characterCount < 2500) {

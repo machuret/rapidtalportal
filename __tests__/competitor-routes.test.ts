@@ -132,4 +132,32 @@ describe("competitor configuration routes", () => {
       status: "active",
     }));
   });
+
+  test("rejects a broad crawl belonging to a different competitor", async () => {
+    const competitorQuery = fluent({
+      data: {
+        id: COMPETITOR_ID,
+        refresh_cadence: "weekly",
+        website_url: "https://securelending.com.au/",
+      },
+      error: null,
+    });
+    const sourceQuery = fluent({ data: null, error: null });
+    const from = jest.fn((table: string) =>
+      table === "competitors" ? competitorQuery : sourceQuery);
+    (createAdminClient as jest.Mock).mockReturnValue({ from });
+
+    const response = await createSource(request("https://portal.test/api/content/competitors/sources", {
+      client_id: CLIENT_ID,
+      competitor_id: COMPETITOR_ID,
+      url: "https://assetline.com.au/",
+      crawl_scope: "domain",
+    }), routeCtx);
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "COMPETITOR_IDENTITY_MISMATCH",
+    });
+    expect(sourceQuery.insert).not.toHaveBeenCalled();
+  });
 });

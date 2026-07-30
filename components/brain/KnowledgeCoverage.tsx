@@ -20,6 +20,12 @@ type VaultItem = {
   source_type: string;
   updated_at: string | null;
   content_hash: string | null;
+  status: string;
+  knowledge_status: string | null;
+  has_conflict: boolean | null;
+  valid_from: string | null;
+  valid_until: string | null;
+  review_due_at: string | null;
 };
 
 /**
@@ -34,19 +40,13 @@ export async function KnowledgeCoverage({
   const admin = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
 
-  const [{ data: dnaData }, { data: items }, { count: kbCount }, queriesRes] = await Promise.all([
+  const [dnaResult, itemsResult, kbResult, queriesRes] = await Promise.all([
     admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
     admin
       .from("vault_items")
-      .select("id, title, category, ai_summary, tags, source_type, updated_at, content_hash")
+      .select("id, title, category, ai_summary, tags, source_type, updated_at, content_hash, status, knowledge_status, has_conflict, valid_from, valid_until, review_due_at")
       .eq("client_id", clientId)
-      .eq("status", "ready")
       .eq("evidence_role", "factual")
-      .eq("knowledge_status", "active")
-      .eq("has_conflict", false)
-      .or(`valid_from.is.null,valid_from.lte.${today}`)
-      .or(`valid_until.is.null,valid_until.gte.${today}`)
-      .or(`review_due_at.is.null,review_due_at.gt.${today}`)
       .order("updated_at", { ascending: false }),
     admin.from("kb_entries").select("*", { count: "exact", head: true }).eq("client_id", clientId),
     admin
@@ -57,11 +57,27 @@ export async function KnowledgeCoverage({
       .limit(300),
   ]);
 
-  const dna = (dnaData ?? null) as DbCompanyDna | null;
-  const vaultItems = (items ?? []) as VaultItem[];
+  const loadError =
+    dnaResult.error ?? itemsResult.error ?? kbResult.error ?? queriesRes.error;
+  if (loadError) {
+    console.error("[KnowledgeCoverage] report load failed", loadError);
+    throw new Error("Company Report could not load the latest Vault totals.");
+  }
+
+  const dna = (dnaResult.data ?? null) as DbCompanyDna | null;
+  const allVaultItems = (itemsResult.data ?? []) as VaultItem[];
+  const vaultItems = allVaultItems.filter((item) =>
+    item.status === "ready" &&
+    (item.knowledge_status ?? "active") === "active" &&
+    item.has_conflict !== true &&
+    (!item.valid_from || item.valid_from <= today) &&
+    (!item.valid_until || item.valid_until >= today) &&
+    (!item.review_due_at || item.review_due_at.slice(0, 10) > today)
+  );
+  const kbCount = kbResult.count;
 
   // ── Knowledge gaps — questions the brain couldn't answer (from vault_queries) ──
-  const queries = (queriesRes.error ? [] : (queriesRes.data ?? [])) as { question: string; answered: boolean; dismissed?: boolean }[];
+  const queries = (queriesRes.data ?? []) as { question: string; answered: boolean; dismissed?: boolean }[];
   const askedTotal = queries.length;
   const answeredTotal = queries.filter((q) => q.answered).length;
   const knowledgeGaps: string[] = [];
@@ -81,8 +97,6 @@ export async function KnowledgeCoverage({
     const c = isVaultCategory(it.category) ? it.category : "general";
     (byCat[c] ??= []).push(it);
   }
-  const indexedCount = vaultItems.filter((i) => i.ai_summary).length;
-
   // ── Vault health — items worth reviewing so the brain stays accurate ──
   const byHash: Record<string, VaultItem[]> = {};
   for (const it of vaultItems) if (it.content_hash) (byHash[it.content_hash] ??= []).push(it);
@@ -151,11 +165,18 @@ export async function KnowledgeCoverage({
     <div>
       {/* Stats strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        <StatCard icon={Archive} tint="text-blue-400" label="Vault items" value={String(vaultItems.length)} />
-        <StatCard icon={Sparkles} tint="text-purple-400" label="AI-indexed" value={`${indexedCount}/${vaultItems.length}`} />
+        <StatCard icon={Archive} tint="text-blue-400" label="Vault sources" value={String(allVaultItems.length)} />
+        <StatCard icon={Sparkles} tint="text-purple-400" label="Usable by AI" value={`${vaultItems.length}/${allVaultItems.length}`} />
         <StatCard icon={BookOpen} tint="text-green-400" label="KB answers" value={String(kbCount ?? 0)} />
         <StatCard icon={Brain} tint="text-amber-400" label="Coverage" value={`${pct}%`} />
       </div>
+
+      {allVaultItems.length > 0 && vaultItems.length === 0 && (
+        <div className="mb-8 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+          {allVaultItems.length} Vault source{allVaultItems.length === 1 ? " is" : "s are"} saved,
+          but none are ready yet. Open the Vault to restart stalled preparation.
+        </div>
+      )}
 
       {/* Coverage meter */}
       <section className="surface-card p-6 mb-8">
@@ -281,7 +302,7 @@ export async function KnowledgeCoverage({
         );
       })}
 
-      {vaultItems.length === 0 && (
+      {allVaultItems.length === 0 && (
         <EmptyHint text={`The Vault is empty${clientName ? ` for ${clientName}` : ""}. Add documents, paste text, or import a URL — each item makes this report richer.`} />
       )}
     </div>

@@ -695,8 +695,7 @@ export function ContentProjectWorkflow({
               <p className="text-sm font-semibold text-red-200">{operationFailure.title}</p>
               <p className="mt-1 text-sm leading-5 text-zinc-300">{operationFailure.message}</p>
               <p className="mt-2 text-xs text-zinc-500">
-                Your project, brief and selected sources remain saved.
-                {operationFailure.code ? ` Reference: ${operationFailure.code}.` : ""}
+                Your project, brief and selected Vault knowledge remain saved.
               </p>
               {!!project.last_generation_warnings?.length && (
                 <ul className="mt-2 space-y-1 text-xs leading-5 text-red-100/80">
@@ -852,7 +851,9 @@ export function ContentProjectWorkflow({
           <div className="grid gap-4 lg:grid-cols-3">
             <section className="rounded-xl border border-blue-500/25 bg-blue-500/5 p-5 lg:col-span-2">
               <p className="flex items-center gap-2 font-medium text-blue-200"><BookOpenCheck className="h-4 w-4" /> Facts from the company Vault</p>
-              <p className="mt-1 text-xs text-zinc-400">Only these sources may support factual claims in the draft.</p>
+              <p className="mt-1 text-xs text-zinc-400">
+                Selected Vault material is treated as approved company knowledge. Company DNA is always applied.
+              </p>
               <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
                 {evidenceLoading && <p className="py-8 text-center text-sm text-zinc-500">Loading factual Vault sources…</p>}
                 {!evidenceLoading && evidenceError && (
@@ -863,7 +864,7 @@ export function ContentProjectWorkflow({
                     </Button>
                   </div>
                 )}
-                {!evidenceLoading && !evidenceError && evidence.length === 0 && <p className="py-8 text-center text-sm text-zinc-500">No ready factual sources are available. You can continue, but claims will be limited to Company DNA.</p>}
+                {!evidenceLoading && !evidenceError && evidence.length === 0 && <p className="py-8 text-center text-sm text-zinc-500">No additional Vault material is available. Company DNA will still guide the draft.</p>}
                 {evidence.map((source) => {
                   const selected = selectedSourceIds.has(source.id);
                   return (
@@ -907,12 +908,12 @@ export function ContentProjectWorkflow({
           <h2 className="mt-2 text-xl font-semibold">One {project.idea_snapshot.channel} artifact</h2>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <div className="rounded-lg bg-zinc-950 p-4"><p className="text-xs text-zinc-600">Brief</p><p className="mt-1 text-sm text-zinc-300">{isBrief(project.content_brief) ? project.content_brief.objective : "Missing"}</p></div>
-            <div className="rounded-lg bg-blue-500/5 p-4"><p className="text-xs text-blue-300">Factual evidence</p><p className="mt-1 text-sm text-zinc-300">{project.vault_source_ids.length} selected Vault source{project.vault_source_ids.length === 1 ? "" : "s"}</p></div>
+            <div className="rounded-lg bg-blue-500/5 p-4"><p className="text-xs text-blue-300">Vault knowledge</p><p className="mt-1 text-sm text-zinc-300">{project.vault_source_ids.length} selected source{project.vault_source_ids.length === 1 ? "" : "s"} plus Company DNA</p></div>
             <div className="rounded-lg bg-orange-500/5 p-4"><p className="text-xs text-orange-300">Market inspiration</p><p className="mt-1 text-sm text-zinc-300">{project.competitor_signals.length} competitor signal{project.competitor_signals.length === 1 ? "" : "s"}</p></div>
           </div>
           <div className="mt-6 flex justify-between">
             <Button variant="ghost" onClick={() => patchProject({ current_step: "evidence" })}><ArrowLeft className="mr-2 h-4 w-4" /> Evidence</Button>
-            <Button size="lg" disabled={isGenerating} onClick={handleGenerate}>{isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}{isGenerating ? "Writing and validating…" : "Generate draft"}</Button>
+            <Button size="lg" disabled={isGenerating} onClick={handleGenerate}>{isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}{isGenerating ? "Writing your draft…" : "Generate draft"}</Button>
           </div>
         </section>
       )}
@@ -945,11 +946,11 @@ export function ContentProjectWorkflow({
       {project.current_step === "validate" && (
         <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
           <div className="flex items-center justify-between">
-            <div><p className="text-xs font-medium uppercase tracking-wide text-purple-300">Validation</p><h2 className="mt-1 text-lg font-semibold">Claims, voice, structure and hard rules</h2></div>
+            <div><p className="text-xs font-medium uppercase tracking-wide text-purple-300">Marketing checks</p><h2 className="mt-1 text-lg font-semibold">Company knowledge, voice and channel fit</h2></div>
             <Button variant="outline" disabled={busy} onClick={runValidation}>{busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />} Run again</Button>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {(validation?.checks ?? []).map((check) => <div key={check.id} className={`rounded-lg border p-4 ${check.passed ? "border-green-500/20 bg-green-500/5" : "border-red-500/25 bg-red-500/5"}`}><p className={`flex items-center gap-2 text-sm font-medium ${check.passed ? "text-green-300" : "text-red-300"}`}>{check.passed ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}{check.label}</p>{check.warnings.map((warning) => <p key={warning} className="mt-2 text-xs leading-5 text-zinc-400">{warning}</p>)}</div>)}
+            {(validation?.checks ?? []).map((check) => <div key={check.id} className={`rounded-lg border p-4 ${check.passed ? "border-green-500/20 bg-green-500/5" : "border-red-500/25 bg-red-500/5"}`}><div className="flex items-center justify-between gap-3"><p className={`flex items-center gap-2 text-sm font-medium ${check.passed ? "text-green-300" : "text-red-300"}`}>{check.passed ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}{check.label}</p><span className={`text-xs font-medium ${check.passed ? "text-green-300" : "text-red-300"}`}>{check.passed ? "Passed" : "Needs changes"}</span></div>{check.warnings.map((warning) => <p key={warning} className="mt-2 text-xs leading-5 text-zinc-400">{warning}</p>)}</div>)}
             {!validation && <p className="col-span-2 py-8 text-center text-sm text-zinc-500">{busy ? "Checking the current saved draft…" : "Validation could not be loaded."}</p>}
           </div>
           <div className="mt-6 flex justify-between">

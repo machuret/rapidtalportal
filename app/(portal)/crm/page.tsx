@@ -3,7 +3,8 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CrmBoard } from "@/components/crm/CrmBoard";
 import { PageIntro } from "@/components/layout/PageIntro";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 
@@ -36,11 +37,12 @@ export default async function CrmPage() {
             Contacts for {client?.name ?? "your client"}
           </p>
         </div>
-        <Link href="/crm/add-contact">
-          <Button className="bg-zinc-800 hover:bg-zinc-700 border-zinc-700">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Contact
-          </Button>
+        <Link
+          href="/crm/add-contact"
+          className={cn(buttonVariants(), "bg-zinc-800 hover:bg-zinc-700 border-zinc-700")}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add Contact
         </Link>
       </div>
       <PageIntro id="crm" />

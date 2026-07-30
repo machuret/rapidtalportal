@@ -8,8 +8,11 @@
  * instead.
  *
  * Uses Intl (full-ICU, available on Node 18+) — no extra dependency. The en-CA
- * locale renders as yyyy-MM-dd. Falls back to UTC for a null/invalid zone.
+ * locale renders as yyyy-MM-dd. Accounts without an explicit preference use
+ * the product's Australian business timezone.
  */
+export const DEFAULT_PORTAL_TIMEZONE = "Australia/Sydney";
+
 export function todayInTimezone(tz: string | null | undefined, now: Date = new Date()): string {
   const fmt = (zone: string) =>
     new Intl.DateTimeFormat("en-CA", {
@@ -20,9 +23,8 @@ export function todayInTimezone(tz: string | null | undefined, now: Date = new D
     }).format(now);
 
   try {
-    return fmt(tz || "UTC");
+    return fmt(tz || DEFAULT_PORTAL_TIMEZONE);
   } catch {
-    // Invalid/unknown IANA zone → safe UTC fallback.
-    return fmt("UTC");
+    return fmt(DEFAULT_PORTAL_TIMEZONE);
   }
 }

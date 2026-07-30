@@ -92,6 +92,7 @@ describe("Content Studio Quick Create", () => {
     render(
       <ContentStudio
         clientId={CLIENT_ID}
+        viewerUserId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         canApprove
         canManageCompetitors
         brandStyle={{}}
@@ -121,5 +122,51 @@ describe("Content Studio Quick Create", () => {
       }),
     ));
     expect(screen.getByText("Draft editor")).toBeInTheDocument();
+  });
+
+  test("removes an abandoned project from unfinished work without deleting its drafts", async () => {
+    const user = userEvent.setup();
+    const unfinished = project("brief");
+    const archived = {
+      ...unfinished,
+      status: "rejected" as const,
+      current_step: "complete" as const,
+      updated_at: "2026-07-30T00:01:00.000Z",
+    };
+    jest.spyOn(window, "confirm").mockReturnValue(true);
+    (api.patch as jest.Mock).mockResolvedValue(archived);
+
+    render(
+      <ContentStudio
+        clientId={CLIENT_ID}
+        viewerUserId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        canApprove
+        canManageCompetitors
+        brandStyle={{}}
+        history={[]}
+        historyHasMore={false}
+        topics={[]}
+        projects={[unfinished]}
+        projectsHasMore={false}
+        vaultGaps={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", {
+      name: "Remove A useful company topic from unfinished projects",
+    }));
+
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        client_id: CLIENT_ID,
+        id: PROJECT_ID,
+        status: "rejected",
+        current_step: "complete",
+      }),
+    ));
+    expect(screen.queryByRole("button", {
+      name: "Remove A useful company topic from unfinished projects",
+    })).not.toBeInTheDocument();
   });
 });

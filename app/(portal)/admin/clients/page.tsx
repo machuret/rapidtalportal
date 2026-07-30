@@ -30,7 +30,7 @@ export default async function AdminClientsPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-1">Clients</h1>
-      <p className="text-zinc-400 text-sm mb-8">All tenants on the Rapid Tile Portal.</p>
+      <p className="text-zinc-400 text-sm mb-8">All clients on the RapidTal Portal.</p>
       <ClientsTable
         clients={(clients ?? []) as { id: string; name: string; slug: string; created_at: string; archived_at: string | null }[]}
         userCounts={countMap}

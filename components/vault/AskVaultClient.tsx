@@ -179,7 +179,7 @@ export function AskVaultClient({
             <Sparkles className="w-7 h-7 text-purple-400 mx-auto mb-3" />
             <p className="text-zinc-300 font-medium mb-1">What would you like to know?</p>
             <p className="text-zinc-500 text-sm mb-5">
-              I answer only from documents in your Vault, and cite where each fact came from.
+              I answer from your Vault and Company DNA, and show which company sources were used.
             </p>
             <div className="flex flex-wrap gap-2 justify-center">
               {SUGGESTIONS.map((s) => (
@@ -429,6 +429,7 @@ function ChatTurn({
               onClick={() => rate(1)}
               disabled={rated !== null}
               title="Good answer"
+              aria-label="Rate this as a good answer"
               className={cn("p-1 rounded transition-colors disabled:cursor-default",
                 rated === 1 ? "text-green-400" : "text-zinc-500 hover:text-green-400 disabled:hover:text-zinc-500")}
             >
@@ -438,6 +439,7 @@ function ChatTurn({
               onClick={() => rate(-1)}
               disabled={rated !== null}
               title="Needs work"
+              aria-label="Rate this answer as needing work"
               className={cn("p-1 rounded transition-colors disabled:cursor-default",
                 rated === -1 ? "text-red-400" : "text-zinc-500 hover:text-red-400 disabled:hover:text-zinc-500")}
             >

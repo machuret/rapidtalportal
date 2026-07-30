@@ -22,7 +22,6 @@ import {
   MessageSquare,
   Brain,
   Sparkles,
-  Wand2,
   BarChart3,
   Eye,
   KanbanSquare,
@@ -56,21 +55,24 @@ interface SidebarProps {
 
 const vaLinks: NavItem[] = [
   { href: "/dashboard",      label: "Dashboard",      icon: LayoutDashboard },
-  { href: "/company-report", label: "Company Report", icon: Brain },
-  { href: "/ask",            label: "Ask the Vault",  icon: Sparkles },
-  { href: "/compose",        label: "Compose",        icon: Wand2 },
+  { section: "Team & work" },
   { href: "/tasks",          label: "Tasks",          icon: KanbanSquare },
+  { href: "/messages",       label: "Messages",       icon: MessageSquare },
   { href: "/notebook",       label: "Notebook",       icon: Notebook },
-  { href: "/tools",          label: "Tools",          icon: Wrench },
-  { href: "/my-job",         label: "My Job",         icon: Briefcase },
   { href: "/access",         label: "Access",         icon: KeyRound },
   { href: "/daily-log",      label: "Daily Log",      icon: NotebookPen },
-  { href: "/messages",       label: "Messages",       icon: MessageSquare },
   { href: "/crm",            label: "CRM",            icon: ContactRound },
-  { href: "/content",        label: "Content",        icon: PenLine },
-  { href: "/sops",           label: "SOPs",           icon: ListChecks },
-  { href: "/company-dna",    label: "Company DNA",    icon: Dna },
+  { section: "Knowledge & content" },
+  { href: "/content",        label: "Content Studio", icon: PenLine },
+  { href: "/ask",            label: "Ask the Vault",  icon: Sparkles },
   { href: "/vault",          label: "Vault",          icon: Archive },
+  { href: "/company-dna",    label: "Company DNA",    icon: Dna },
+  { href: "/company-report", label: "Company Report", icon: Brain },
+  { section: "Tools" },
+  { href: "/tools",          label: "Tools",           icon: Wrench },
+  { href: "/sops",           label: "SOPs",           icon: ListChecks },
+  { href: "/my-job",         label: "My Job",         icon: Briefcase },
+  { section: "Account" },
   { href: "/guide",          label: "Guide",          icon: BookOpen },
   { href: "/profile",        label: "My Profile",     icon: UserCircle },
 ];
@@ -100,7 +102,7 @@ const clientAdminLinks: NavItem[] = [
   { href: "/brain-analytics",label: "Brain Analytics", icon: BarChart3 },
   { section: "Tools" },
   { href: "/crm",            label: "CRM",             icon: ContactRound },
-  { href: "/content",        label: "Content",         icon: PenLine },
+  { href: "/content",        label: "Content Studio",  icon: PenLine },
   { href: "/access",         label: "Access",          icon: KeyRound },
   { section: "Account" },
   { href: "/guide",          label: "Guide",           icon: BookOpen },
@@ -212,6 +214,7 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
           <button
             onClick={() => setConfirmLogout(true)}
             title="Sign out"
+            aria-label="Sign out"
             className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors"
           >
             <LogOut className="w-4 h-4" />
@@ -230,7 +233,7 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
           >
             <div className="flex items-center justify-between mb-3">
               <h2 id="logout-title" className="font-semibold text-base">Sign out?</h2>
-              <button onClick={() => setConfirmLogout(false)} className="text-zinc-500 hover:text-white">
+              <button onClick={() => setConfirmLogout(false)} aria-label="Close sign-out dialog" className="text-zinc-500 hover:text-white">
                 <X className="w-4 h-4" />
               </button>
             </div>

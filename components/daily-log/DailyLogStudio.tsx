@@ -240,6 +240,7 @@ export function DailyLogStudio({ initialLog, initialNotes, initialHistory, today
           </Link>
           <Button
             variant="outline" size="sm"
+            aria-label="Previous day"
             className="border-zinc-700 text-xs"
             onClick={() => loadDate(format(subDays(parseISO(activeDate), 1), "yyyy-MM-dd"))}
           >
@@ -247,6 +248,7 @@ export function DailyLogStudio({ initialLog, initialNotes, initialHistory, today
           </Button>
           <Button
             variant="outline" size="sm"
+            aria-label="Next day"
             className="border-zinc-700 text-xs"
             onClick={() => loadDate(today)}
             disabled={isActiveToday}
@@ -340,6 +342,7 @@ export function DailyLogStudio({ initialLog, initialNotes, initialHistory, today
               />
               <Button
                 onClick={addNote}
+                aria-label="Add quick note"
                 disabled={!noteText.trim() || !log?.id || addingNote}
                 size="sm"
                 className="self-end h-8"
@@ -365,6 +368,7 @@ export function DailyLogStudio({ initialLog, initialNotes, initialHistory, today
                 {!isReadOnly && (
                   <button
                     onClick={() => deleteNote(n.id)}
+                    aria-label="Delete quick note"
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-600 hover:text-red-400 shrink-0 mt-0.5"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

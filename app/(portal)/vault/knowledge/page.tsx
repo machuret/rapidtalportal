@@ -4,13 +4,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { KbList } from "@/components/kb/KbList";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { VaultTabs } from "@/components/vault/VaultTabs";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { Brain, BookOpen, Zap, TrendingUp } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Q&A Knowledge — RapidTal" };
 
 /**
- * The curated Q&A layer of the Business Brain — generated from Vault docs +
+ * The generated Q&A layer of the Business Brain — generated from Vault docs +
  * Company DNA, hand-editable, and retrieved by Ask the Vault at answer time.
  * Lives under /vault as a tab (formerly the standalone Knowledge Base page).
  */
@@ -63,7 +64,7 @@ export default async function VaultKnowledgePage() {
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Q&A Knowledge</h1>
           <p className="text-zinc-400 text-sm mt-1">
-            Curated Q&A generated from the Vault and Company DNA — Ask the Vault draws on these answers.
+            Generated Q&A drafts from the Vault and Company DNA. Admins can review and edit them before the team relies on them.
           </p>
         </div>
       </div>
@@ -85,9 +86,13 @@ export default async function VaultKnowledgePage() {
         <div className="surface-card px-5 py-4">
           <div className="flex items-center gap-2 mb-2">
             <Zap className="w-4 h-4 text-yellow-400 shrink-0" />
-            <span className="label-section">Last Generation</span>
+            <span className="label-section">Last generated</span>
           </div>
-          <p className="stat-value text-white">{lastRun?.entries_generated ?? 0}</p>
+          <p className="text-sm font-semibold text-white">
+            {lastRun?.completed_at
+              ? <LocalTime value={lastRun.completed_at} opts={{ day: "numeric", month: "short", year: "numeric" }} />
+              : "Never"}
+          </p>
         </div>
 
         <div className="surface-card px-5 py-4">

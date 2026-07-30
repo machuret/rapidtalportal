@@ -924,6 +924,7 @@ export async function handleContentGenerateRequest(
       verifiedSources,
       qualityWarnings,
       blockingWarnings,
+      topicWarnings,
     } = orchestration;
     const styleSnapshot = {
       ...createContentStyleSnapshot(
@@ -935,12 +936,24 @@ export async function handleContentGenerateRequest(
       ),
       exampleSources: retrieval.styleSources,
     };
+    if (topicWarnings.length && !evaluationStyleMode) {
+      await releaseGenerationLease();
+      return new Response(JSON.stringify({
+        error: "The generated draft did not follow the requested topic. No draft was saved; try again or make the topic more specific.",
+        code: "content_topic_drift",
+        warnings: topicWarnings,
+        critique,
+      }), {
+        status: 422,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     if (blockingWarnings.length && !evaluationStyleMode) {
       await releaseGenerationLease();
       return new Response(JSON.stringify({
-        error: "The generated draft contained an unsupported claim or broke a mandatory Company DNA rule. No draft was created.",
-        code: "content_safety_blocked",
-        warnings: qualityWarnings,
+        error: "The draft could not satisfy a required Company DNA rule after the automatic rewrite. Review the listed issue or try again; your project is saved.",
+        code: "content_rules_blocked",
+        warnings: blockingWarnings,
         blockingWarnings,
         critique,
       }), {
@@ -1044,7 +1057,7 @@ export async function handleContentGenerateRequest(
       contextSources: retrieval.sources,
       styleSources: retrieval.styleSources,
       contentType,
-      warnings: qualityWarnings,
+      warnings: [...topicWarnings, ...qualityWarnings],
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

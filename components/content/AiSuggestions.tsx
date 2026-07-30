@@ -105,7 +105,7 @@ const SuggestionCard = memo(function SuggestionCard({
             <p className="text-sm font-semibold text-white leading-snug mb-1">{suggestion.title}</p>
             <p className="text-xs text-zinc-500 leading-relaxed line-clamp-2">{suggestion.description}</p>
             {suggestion.rationale && (
-              <p className="text-xs text-zinc-600 mt-1.5 italic line-clamp-1">💡 {suggestion.rationale}</p>
+              <p className="text-xs text-zinc-600 mt-1.5 italic line-clamp-1">Why: {suggestion.rationale}</p>
             )}
             {suggestion.opportunity_type && (
               <p className="mt-1.5 text-xs font-medium capitalize text-orange-300">
@@ -130,25 +130,29 @@ const SuggestionCard = memo(function SuggestionCard({
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div><p className="text-2xs uppercase text-zinc-600">Proposed hook</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.hook}</p></div>
                   <div><p className="text-2xs uppercase text-zinc-600">Audience</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.intendedAudience}</p></div>
-                  <div><p className="text-2xs uppercase text-zinc-600">Why valuable</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.whyValuable}</p></div>
-                  <div><p className="text-2xs uppercase text-zinc-600">Company DNA fit</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.companyDnaFit}</p></div>
-                  <div><p className="text-2xs uppercase text-zinc-600">Format</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.recommendedFormat}</p></div>
-                  <div><p className="text-2xs uppercase text-zinc-600">CTA</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.recommendedCta}</p></div>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
-                  {Object.entries(suggestion.explainability.scores).map(([key, score]) => (
-                    <div key={key} title={score.explanation} className="rounded border border-zinc-800 p-2">
-                      <p className="text-2xs capitalize text-zinc-500">{key.replace(/([A-Z])/gu, " $1")}</p>
-                      <p className="mt-0.5 text-sm font-semibold text-zinc-200">{score.score}/100</p>
-                    </div>
-                  ))}
-                </div>
+                <p className="mt-2 text-xs text-zinc-400">
+                  <span className="text-zinc-600">Why valuable:</span>{" "}
+                  {suggestion.explainability.whyValuable}
+                </p>
                 <details
                   className="mt-3 text-xs text-zinc-400"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <summary className="cursor-pointer text-purple-300">Evidence and differentiation</summary>
-                  <div className="mt-2 space-y-2">
+                  <summary className="cursor-pointer text-purple-300">Why this idea</summary>
+                  <div className="mt-2 space-y-3">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div><p className="text-zinc-600">Company DNA fit</p><p>{suggestion.explainability.companyDnaFit}</p></div>
+                      <div><p className="text-zinc-600">Format and CTA</p><p>{suggestion.explainability.recommendedFormat} · {suggestion.explainability.recommendedCta}</p></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                      {Object.entries(suggestion.explainability.scores).map(([key, score]) => (
+                        <div key={key} title={score.explanation} className="rounded border border-zinc-800 p-2">
+                          <p className="text-2xs capitalize text-zinc-500">{key.replace(/([A-Z])/gu, " $1")}</p>
+                          <p className="mt-0.5 text-sm font-semibold text-zinc-200">{score.score}/100</p>
+                        </div>
+                      ))}
+                    </div>
                     <p><span className="text-zinc-600">Existing content difference:</span> {suggestion.explainability.differenceFromExisting}</p>
                     <p><span className="text-zinc-600">Competitor difference:</span> {suggestion.explainability.differenceFromCompetitors}</p>
                     <p>
@@ -218,7 +222,21 @@ export const AiSuggestions = memo(function AiSuggestions({
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const [saved, setSaved] = useState<Set<number>>(new Set());
+  const [generationSeconds, setGenerationSeconds] = useState(0);
   const { sendSignal, isSending } = useBrainSignal();
+
+  useEffect(() => {
+    if (!isGenerating) {
+      setGenerationSeconds(0);
+      return;
+    }
+    const startedAt = Date.now();
+    setGenerationSeconds(0);
+    const timer = window.setInterval(() => {
+      setGenerationSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isGenerating]);
 
   useEffect(() => {
     setSelectedIndices(new Set());
@@ -314,13 +332,18 @@ export const AiSuggestions = memo(function AiSuggestions({
 
       {/* Content */}
       {isGenerating ? (
-        <div className="flex items-center justify-center gap-3 py-12">
+        <div className="flex items-center justify-center gap-3 py-12" role="status">
           <RefreshCw className="w-5 h-5 text-purple-400 animate-spin" />
-          <p className="text-zinc-400 text-sm">
-            {mode === "competitor_gap"
-              ? "Comparing your company with verified competitor evidence…"
-              : "Analyzing your Brain and generating ideas…"}
-          </p>
+          <div>
+            <p className="text-zinc-300 text-sm">
+              {mode === "competitor_gap"
+                ? "Comparing your company with competitor content…"
+                : "Creating four ideas from your Company DNA and Vault…"}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Usually 20–45 seconds · {generationSeconds}s elapsed
+            </p>
+          </div>
         </div>
       ) : error ? (
         <div className="flex flex-col items-center justify-center gap-3 px-5 py-10 text-center">

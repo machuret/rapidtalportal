@@ -78,6 +78,31 @@ describe("Vault readiness scoring", () => {
     ]));
   });
 
+  test("turns long-running preparation into a visible recovery action", () => {
+    const result = evaluateVaultReadiness({
+      items: [
+        item("service", {
+          status: "processing",
+          updated_at: "2026-07-29T12:00:00.000Z",
+          indexed_at: null,
+        }),
+      ],
+      gaps: [],
+      now: NOW,
+    });
+
+    expect(result.metrics).toMatchObject({
+      processing: 0,
+      stuckProcessing: 1,
+    });
+    expect(result.status).toBe("needs_attention");
+    expect(result.recommendations).toContainEqual(expect.objectContaining({
+      id: "stuck-processing",
+      action: "index",
+      priority: "high",
+    }));
+  });
+
   test("does not treat an untested Vault as proven ready", () => {
     const result = evaluateVaultReadiness({
       items: [

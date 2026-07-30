@@ -227,11 +227,28 @@ export const DELETE = withAuth(async (req, { user }) => {
 
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
-  if (!hasContentCapability(user.role, "approve_content")) {
-    return NextResponse.json({ error: "Not allowed to delete content topics." }, { status: 403 });
-  }
 
   const admin = createAdminClient();
+  const canApprove = hasContentCapability(user.role, "approve_content");
+  if (!canApprove) {
+    // A VA may withdraw only an idea they personally submitted while it is
+    // still pending. Approved/rejected ideas remain client-admin decisions.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: topic, error: topicError } = await (admin as any)
+      .from("content_topics")
+      .select("id,status,created_by")
+      .eq("id", parsed.data.id)
+      .eq("client_id", parsed.data.client_id)
+      .maybeSingle();
+    if (topicError) return serverError(topicError);
+    if (!topic) {
+      return NextResponse.json({ error: "Content topic not found." }, { status: 404 });
+    }
+    if (topic.status !== "pending" || topic.created_by !== user.id) {
+      return NextResponse.json({ error: "You can only withdraw your own pending ideas." }, { status: 403 });
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (admin as any)
     .from("content_topics")

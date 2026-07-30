@@ -61,16 +61,68 @@ test("a VA cannot approve or reject a topic in their own tenant", async () => {
   expect(createAdminClient).not.toHaveBeenCalled();
 });
 
-test("a VA cannot delete a topic in their own tenant", async () => {
+test("a VA cannot delete another user's pending topic", async () => {
+  (createAdminClient as jest.Mock).mockReturnValue({
+    from: jest.fn(() => ({
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn().mockResolvedValue({
+              data: {
+                id: TOPIC_ID,
+                status: "pending",
+                created_by: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              },
+              error: null,
+            }),
+          })),
+        })),
+      })),
+    })),
+  });
   const response = await DELETE(request("DELETE", {
     client_id: CLIENT_ID,
     id: TOPIC_ID,
   }), routeCtx);
   expect(response.status).toBe(403);
   await expect(response.json()).resolves.toEqual({
-    error: "Not allowed to delete content topics.",
+    error: "You can only withdraw your own pending ideas.",
   });
-  expect(createAdminClient).not.toHaveBeenCalled();
+});
+
+test("a VA can withdraw their own pending topic", async () => {
+  const deleteResult = jest.fn().mockResolvedValue({ error: null });
+  (createAdminClient as jest.Mock).mockReturnValue({
+    from: jest.fn(() => ({
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn().mockResolvedValue({
+              data: {
+                id: TOPIC_ID,
+                status: "pending",
+                created_by: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              },
+              error: null,
+            }),
+          })),
+        })),
+      })),
+      delete: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          eq: deleteResult,
+        })),
+      })),
+    })),
+  });
+
+  const response = await DELETE(request("DELETE", {
+    client_id: CLIENT_ID,
+    id: TOPIC_ID,
+  }), routeCtx);
+
+  expect(response.status).toBe(200);
+  await expect(response.json()).resolves.toEqual({ success: true });
 });
 
 test("a VA cannot create an already-approved idea", async () => {

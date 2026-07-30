@@ -9,6 +9,7 @@ import { buildBrainContext } from "@/lib/brain/context";
 import { cosine, embeddingFit, embedTexts } from "@/lib/brain/embed";
 import { logBrainEvent } from "@/lib/brain/events";
 import { chatProvider, chatModel } from "@/lib/brain/llm";
+import { contentTypeFromGeneratedFormat } from "@/lib/content/idea-channel";
 
 const bodySchema = z.object({
   client_id: z.string().uuid(),
@@ -170,9 +171,19 @@ function normalizeGeneratedTopic(candidate: unknown): GeneratedTopic | null {
   const requestedType = typeof value.content_type === "string"
     ? value.content_type.toLocaleLowerCase()
     : "";
-  const contentType = VALID_TYPES.has(requestedType)
+  const requestedContentType = VALID_TYPES.has(requestedType)
     ? requestedType as GeneratedTopic["content_type"]
     : "linkedin";
+  const recommendedFormat = generatedText(
+    value,
+    "recommended_format",
+    `${requestedContentType} post`,
+    500,
+  );
+  const contentType = contentTypeFromGeneratedFormat(
+    requestedContentType,
+    recommendedFormat,
+  );
   const rawFit = Number(value.fit);
   const fit = Number.isFinite(rawFit) ? Math.max(0, Math.min(100, Math.round(rawFit))) : 60;
   const requestedOpportunity = typeof value.opportunity_type === "string"
@@ -226,7 +237,7 @@ function normalizeGeneratedTopic(candidate: unknown): GeneratedTopic | null {
       "No source-grounded comparison with existing company content was supplied.",
       1_600,
     ),
-    recommended_format: generatedText(value, "recommended_format", `${contentType} post`, 500),
+    recommended_format: recommendedFormat,
     recommended_cta: generatedText(
       value,
       "recommended_cta",
@@ -677,6 +688,7 @@ export const POST = withAuth(async (req, { user }) => {
     `- Cite only supplied Vault, competitor and existing-company-content IDs. Do not invent IDs.\n` +
     `- Explain why the idea differs from existing company content. For competitor mode, also explain how it differs from competitor coverage.\n` +
     `- Recommend one channel-specific format and one specific CTA.\n\n` +
+    `- recommended_format must be a format within content_type and must never name a different channel. For example, an email is not a newsletter.\n\n` +
     `- Be concise: keep each explanation to one or two short sentences. Do not repeat the same rationale across fields.\n\n` +
     `Return JSON exactly as: ${outputShape}`;
 

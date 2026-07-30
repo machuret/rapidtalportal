@@ -17,8 +17,8 @@ describe("todayInTimezone", () => {
     expect(todayInTimezone("America/Los_Angeles", new Date("2026-06-16T03:00:00Z"))).toBe("2026-06-15");
   });
 
-  it("falls back to UTC for a null or invalid zone", () => {
-    expect(todayInTimezone(null, lateUtc)).toBe("2026-06-16");
-    expect(todayInTimezone("Not/AZone", lateUtc)).toBe("2026-06-16");
+  it("falls back to the Australian product timezone for a null or invalid zone", () => {
+    expect(todayInTimezone(null, lateUtc)).toBe("2026-06-17");
+    expect(todayInTimezone("Not/AZone", lateUtc)).toBe("2026-06-17");
   });
 });

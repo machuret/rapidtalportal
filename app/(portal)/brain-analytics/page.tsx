@@ -41,7 +41,7 @@ export default async function BrainAnalyticsPage() {
       .eq("client_id", clientId).order("updated_at", { ascending: false }).limit(1000),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (admin as any).from("brain_signals")
-      .select("rating, surface, created_at").eq("client_id", clientId)
+      .select("rating, surface, created_at, distilled_at").eq("client_id", clientId)
       .gte("created_at", since).limit(3000),
   ]);
 
@@ -50,7 +50,11 @@ export default async function BrainAnalyticsPage() {
   // ── Content Brain measurement (Phase 4) ──────────────────────────────────
   type TopicRow = { status: string; ai_flagged: boolean | null; updated_at: string };
   const topics = (topicsRes.error ? [] : (topicsRes.data ?? [])) as TopicRow[];
-  const signals = (signalsRes.error ? [] : (signalsRes.data ?? [])) as { rating: number; surface: string }[];
+  const signals = (signalsRes.error ? [] : (signalsRes.data ?? [])) as {
+    rating: number;
+    surface: string;
+    distilled_at: string | null;
+  }[];
 
   const isDecided = (t: TopicRow) => t.status === "approved" || t.status === "rejected";
   const decided = topics.filter(isDecided);
@@ -83,6 +87,8 @@ export default async function BrainAnalyticsPage() {
   const contentSignals = signals.filter((s) => s.surface === "content_topic");
   const contentUp = contentSignals.filter((s) => s.rating === 1).length;
   const contentDown = contentSignals.filter((s) => s.rating === -1).length;
+  const contentProcessed = contentSignals.filter((s) => !!s.distilled_at).length;
+  const pendingSignals = signals.filter((s) => !s.distilled_at).length;
   const overallAccept = decided.length ? Math.round((decided.filter((t) => t.status === "approved").length / decided.length) * 100) : null;
   const hasContentBrain = topics.length > 0 || contentSignals.length > 0;
 
@@ -222,9 +228,11 @@ export default async function BrainAnalyticsPage() {
               <p className="text-xs text-zinc-500 mt-0.5">{flaggedDecided.length} warned</p>
             </div>
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
-              <p className="label-section mb-1">Feedback</p>
+              <p className="label-section mb-1">Feedback received</p>
               <p className="stat-value text-white">{contentUp + contentDown}</p>
-              <p className="text-xs text-zinc-500 mt-0.5">{contentUp}👍 {contentDown}👎</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {contentUp}👍 {contentDown}👎 · {contentProcessed} distilled
+              </p>
             </div>
           </div>
 
@@ -249,7 +257,7 @@ export default async function BrainAnalyticsPage() {
       )}
 
       {/* Brain memory — learned lessons, independent of Ask-the-Vault usage */}
-      <BrainMemoryPanel clientId={clientId} initial={memory} />
+      <BrainMemoryPanel clientId={clientId} initial={memory} pendingSignals={pendingSignals} />
     </div>
   );
 }

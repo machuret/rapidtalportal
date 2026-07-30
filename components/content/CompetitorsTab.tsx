@@ -568,7 +568,11 @@ export function CompetitorsTab({
         <div className="rounded-xl border border-dashed border-zinc-700 px-6 py-12 text-center">
           <Globe2 className="mx-auto h-8 w-8 text-zinc-600" />
           <p className="mt-3 font-medium text-zinc-300">No competitors added yet</p>
-          <p className="mt-1 text-sm text-zinc-500">Add a website, blog, sitemap, feed or individual public URL to begin.</p>
+          <p className="mt-1 text-sm text-zinc-500">
+            {canManage
+              ? "Add a website, blog, sitemap, feed or individual public URL to begin."
+              : "Ask your client admin to add competitor websites and public channels."}
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -750,7 +754,13 @@ export function CompetitorsTab({
                               Refresh
                             </Button>
                             {source.status !== "connector_required" && (
-                              <Button type="button" size="icon-sm" variant="ghost" onClick={() => void toggleSource(source)}>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                aria-label={source.status === "paused" ? "Resume source" : "Pause source"}
+                                onClick={() => void toggleSource(source)}
+                              >
                                 {source.status === "paused" ? <Play /> : <Pause />}
                               </Button>
                             )}
@@ -767,6 +777,7 @@ export function CompetitorsTab({
                               type="button"
                               size="icon-sm"
                               variant="ghost"
+                              aria-label="Delete source"
                               onClick={() => void removeSource(source)}
                               className="text-zinc-500 hover:text-red-400"
                             >
@@ -879,7 +890,8 @@ export function CompetitorsTab({
                     </div>
                     <p className="text-xs text-zinc-500">
                       Supported now: websites, blog sections, RSS/Atom feeds, sitemaps, exact article URLs,
-                      and public LinkedIn company pages such as linkedin.com/company/company-name.
+                      and public LinkedIn company pages such as linkedin.com/company/company-name. Whole-site
+                      and section crawls must match this competitor&apos;s website; use “This page only” for an external article.
                     </p>
                     <div className="flex justify-end gap-2">
                       <Button type="button" size="sm" variant="ghost" onClick={() => setAddingSourceTo(null)}>Cancel</Button>
@@ -955,7 +967,7 @@ export function CompetitorsTab({
                         <h4 className="font-medium text-zinc-200">Captured content</h4>
                         <p className="text-xs text-zinc-500">{captureBrowser.total} captured items tracked</p>
                       </div>
-                      <Button type="button" size="icon-sm" variant="ghost" onClick={() => setCaptureBrowser(null)}>
+                      <Button type="button" size="icon-sm" variant="ghost" aria-label="Close captured content" onClick={() => setCaptureBrowser(null)}>
                         <X />
                       </Button>
                     </div>

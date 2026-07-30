@@ -64,7 +64,7 @@ export function ClientDashboard(props: ClientDashboardProps) {
   const [changesFor, setChangesFor] = useState<AwaitingTask | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const vaNames = vas.map((v) => v.name.split(" ")[0]).join(", ");
+  const vaNames = vas.map((v) => v.name.trim()).filter(Boolean).join(", ");
 
   async function decide(task: AwaitingTask, decision: "approve" | "changes", note?: string) {
     setBusy(task.id);
@@ -125,7 +125,7 @@ export function ClientDashboard(props: ClientDashboardProps) {
         <div className="surface-card p-4 mb-6">
           <div className="flex flex-wrap items-end justify-between gap-2 mb-1">
             <p className="label-section flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> Get the most from RapidTal</p>
-            <span className="text-xs text-zinc-400">Setup <span className="text-zinc-100 font-semibold tabular-nums">{overallPct}%</span></span>
+            <span className="text-xs text-zinc-400">Account setup <span className="text-zinc-100 font-semibold tabular-nums">{overallPct}%</span></span>
           </div>
           <p className="text-xs text-zinc-500 mb-2">A complete setup makes your VA — and every AI feature — noticeably sharper. Finish these and you&apos;re away.</p>
           <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden mb-4">

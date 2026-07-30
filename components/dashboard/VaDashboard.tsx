@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Clock, ClipboardCheck, MessageSquare, NotebookPen, Wand2, ArrowRight, Activity } from "lucide-react";
+import { CheckCircle2, Clock, ClipboardCheck, MessageSquare, NotebookPen, PenLine, ArrowRight, Activity } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { RelativeTime } from "@/components/ui/RelativeTime";
 import { TimeTracker } from "@/components/dashboard/TimeTracker";
@@ -69,8 +69,8 @@ export function VaDashboard({ firstName, dateLabel, todayIso, clientName, userId
           <Link href="/daily-log" className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-50 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2.5 hover:border-zinc-600 transition-colors">
             <NotebookPen className="w-4 h-4" /> {loggedToday ? "Daily Log ✓" : "Daily Log"}
           </Link>
-          <Link href="/compose" className="inline-flex items-center gap-2 text-xs font-bold text-white bg-orange-500 border border-orange-500 rounded-lg px-5 py-2.5 shadow-[0_6px_18px_rgb(var(--orange-500)/0.28)] hover:bg-orange-400 transition-colors">
-            <Wand2 className="w-4 h-4" /> Compose
+          <Link href="/content" className="inline-flex items-center gap-2 text-xs font-bold text-white bg-orange-500 border border-orange-500 rounded-lg px-5 py-2.5 shadow-[0_6px_18px_rgb(var(--orange-500)/0.28)] hover:bg-orange-400 transition-colors">
+            <PenLine className="w-4 h-4" /> Content Studio
           </Link>
         </div>
       </div>
@@ -162,7 +162,7 @@ export function VaDashboard({ firstName, dateLabel, todayIso, clientName, userId
           <Activity className="w-4 h-4 text-zinc-400" />
           <h2 className="text-base font-bold text-zinc-50">Time tracker</h2>
         </div>
-        <TimeTracker userId={userId} />
+        <TimeTracker userId={userId} today={todayIso} />
       </section>
     </div>
   );

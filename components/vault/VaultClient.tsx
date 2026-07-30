@@ -367,7 +367,12 @@ function VaultClientInner({
       {canWrite && selected.size > 0 && (
         <div className="flex items-center gap-3 mb-3 px-4 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700">
           <span className="text-sm text-zinc-200 font-medium">{selected.size} selected</span>
-          <button onClick={() => setSelected(new Set())} className="text-xs text-zinc-400 hover:text-zinc-200">
+          <button
+            onClick={() => setSelected(new Set())}
+            aria-label="Clear selected Vault items"
+            title="Clear selection"
+            className="text-xs text-zinc-400 hover:text-zinc-200"
+          >
             <X className="w-3.5 h-3.5" />
           </button>
           <div className="flex-1" />
@@ -382,7 +387,12 @@ function VaultClientInner({
       {!isEmptyVault && items.length > 0 && (
         <div className="flex items-center gap-3 mb-2">
           {canWrite && (
-            <button onClick={toggleSelectAll} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+            <button
+              onClick={toggleSelectAll}
+              aria-label={selected.size === items.length ? "Deselect all Vault items" : "Select all Vault items"}
+              title={selected.size === items.length ? "Deselect all" : "Select all"}
+              className="text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
               {selected.size === items.length ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
             </button>
           )}

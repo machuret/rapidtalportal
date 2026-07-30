@@ -139,14 +139,19 @@ export function VaultReadinessDashboard({
       value: `${readiness.metrics.ready}/${readiness.metrics.total}`,
       detail: readiness.metrics.processing
         ? `${readiness.metrics.processing} processing`
-        : "Processing complete",
+        : readiness.metrics.stuckProcessing
+          ? `${readiness.metrics.stuckProcessing} stuck — restart required`
+          : "Processing complete",
       icon: BookOpenCheck,
     },
     {
       label: "Available to AI",
       value: `${readiness.metrics.searchable}/${readiness.metrics.ready}`,
-      detail: readiness.metrics.failed
-        ? `${readiness.metrics.failed} failed`
+      detail: readiness.metrics.failed || readiness.metrics.stuckProcessing
+        ? [
+            readiness.metrics.failed ? `${readiness.metrics.failed} failed` : "",
+            readiness.metrics.stuckProcessing ? `${readiness.metrics.stuckProcessing} stuck` : "",
+          ].filter(Boolean).join(" · ")
         : "No failed sources",
       icon: SearchCheck,
     },
@@ -176,10 +181,13 @@ export function VaultReadinessDashboard({
           </div>
           <div>
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              <Gauge className="h-3.5 w-3.5" /> Vault readiness
+              <Gauge className="h-3.5 w-3.5" /> Knowledge readiness
             </p>
             <h2 className="mt-1 text-xl font-semibold text-white">{readiness.label}</h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-400">{readiness.summary}</p>
+            <p className="mt-1 text-xs text-zinc-600">
+              Measures usable Vault knowledge. It is separate from account setup, Company DNA completion and Brain learning.
+            </p>
           </div>
         </div>
         <Button

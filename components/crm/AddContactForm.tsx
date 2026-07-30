@@ -145,9 +145,11 @@ export function AddContactForm({ clientId }: AddContactFormProps) {
               </Label>
               <Input
                 id="phone"
+                type="tel"
                 value={formData.phone}
                 onChange={(e) => handleInputChange("phone", e.target.value)}
-                placeholder="+1 (555) 123-4567"
+                placeholder="+61 400 000 000"
+                autoComplete="tel"
                 className="bg-zinc-800 border-zinc-700 focus:border-zinc-600"
               />
             </div>
@@ -190,7 +192,7 @@ export function AddContactForm({ clientId }: AddContactFormProps) {
                 id="job_title"
                 value={formData.job_title}
                 onChange={(e) => handleInputChange("job_title", e.target.value)}
-                placeholder="Software Engineer"
+                placeholder="Finance broker"
                 className="bg-zinc-800 border-zinc-700 focus:border-zinc-600"
               />
             </div>
@@ -202,7 +204,7 @@ export function AddContactForm({ clientId }: AddContactFormProps) {
                 Status
               </Label>
               <Select value={formData.status} onValueChange={handleStatusChange}>
-                <SelectTrigger className="bg-zinc-800 border-zinc-700 focus:border-zinc-600">
+                <SelectTrigger id="status" aria-label="Contact status" className="bg-zinc-800 border-zinc-700 focus:border-zinc-600">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-800 border-zinc-700">

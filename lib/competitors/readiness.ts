@@ -83,17 +83,28 @@ function registrableDomain(host: string): string {
     : suffix;
 }
 
+export function competitorSourceMatchesIdentity(
+  competitorWebsite: string | null,
+  source: Pick<CompetitorSource, "url" | "platform">,
+): boolean {
+  const websiteHost = competitorWebsite ? normalizedHost(competitorWebsite) : null;
+  // Social and video profiles legitimately live on a platform domain rather
+  // than the competitor's own website.
+  if (!websiteHost || !["web", "rss"].includes(source.platform)) return true;
+  const sourceHost = normalizedHost(source.url);
+  return !!sourceHost && registrableDomain(sourceHost) === registrableDomain(websiteHost);
+}
+
 export function competitorSourceIdentityWarnings(
   competitorWebsite: string | null,
   sources: Array<Pick<CompetitorSource, "url" | "platform">>,
 ): string[] {
   const websiteHost = competitorWebsite ? normalizedHost(competitorWebsite) : null;
   if (!websiteHost) return [];
-  const websiteDomain = registrableDomain(websiteHost);
   const mismatched = sources
     .filter((source) => ["web", "rss"].includes(source.platform))
     .map((source) => ({ source, host: normalizedHost(source.url) }))
-    .filter(({ host }) => host && registrableDomain(host) !== websiteDomain)
+    .filter(({ source, host }) => host && !competitorSourceMatchesIdentity(competitorWebsite, source))
     .map(({ host }) => host as string);
   return [...new Set(mismatched)].map((host) =>
     `${host} does not appear to belong to ${websiteHost}. Move it to its own competitor before relying on comparative analysis.`
