@@ -8,6 +8,7 @@
  * the app down a second time by flooding the database.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { errorMessage } from "@/lib/error-message";
 
 const MAX_CAPTURES_PER_MINUTE = 30;
 let windowStart = 0;
@@ -23,7 +24,7 @@ export function captureError(
     if (now - windowStart > 60_000) { windowStart = now; captured = 0; }
     if (++captured > MAX_CAPTURES_PER_MINUTE) return;
 
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err, "Unknown application error.");
     const stack = err instanceof Error ? err.stack ?? null : null;
     console.error(`[${source}]`, ctx.url ?? "", message);
 

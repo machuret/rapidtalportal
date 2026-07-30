@@ -26,12 +26,14 @@ jest.mock("@/lib/content/pilot-observability", () => ({
   finishAnalysisAttempt: jest.fn().mockResolvedValue(undefined),
   recordWorkflowEvent: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock("@/lib/error-tracking", () => ({ captureError: jest.fn() }));
 
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireApiAuth } from "@/lib/api-auth";
 import { chatProvider } from "@/lib/brain/llm";
 import { aiGenerateLimiter } from "@/lib/rate-limit";
+import { captureError } from "@/lib/error-tracking";
 import {
   GET,
   POST,
@@ -262,6 +264,7 @@ function postDb(options: {
   ready?: boolean;
   modelAnalysis?: CompetitorIntelligence;
   claimError?: { code: string; message: string } | null;
+  dnaError?: { code: string; message: string } | null;
 } = {}) {
   const competitorQuery = chain({
     data: [{ id: COMPETITOR_ID, name: "Market Co", description: null }],
@@ -269,7 +272,7 @@ function postDb(options: {
   });
   const dnaQuery = chain({
     data: { company_name: "Client Co", services: "Advisory" },
-    error: null,
+    error: options.dnaError ?? null,
   });
   const topicQuery = chain({ data: [], error: null });
   const contentQuery = chain({
@@ -490,6 +493,36 @@ test("requires evidence-ready selected competitors before loading immutable evid
   });
   expect(rpc).not.toHaveBeenCalledWith("competitor_intelligence_evidence", expect.anything());
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("returns a useful service error and records the real database message when company context fails", async () => {
+  postDb({
+    dnaError: {
+      code: "42703",
+      message: "column company_dna.brand_voice does not exist",
+    },
+  });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(503);
+  await expect(response.json()).resolves.toMatchObject({
+    code: "COMPETITOR_CONTEXT_LOAD_FAILED",
+    error: expect.stringContaining("required company context"),
+  });
+  expect(captureError).toHaveBeenCalledWith(
+    "api",
+    expect.objectContaining({ message: expect.stringContaining("brand_voice") }),
+    expect.objectContaining({
+      clientId: CLIENT_ID,
+      url: "/api/content/competitors/intelligence",
+    }),
+  );
+  expect(global.fetch).not.toHaveBeenCalled();
 });
 
 test("returns a conflict without a model call when another durable lease is active", async () => {

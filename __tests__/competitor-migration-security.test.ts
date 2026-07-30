@@ -39,6 +39,10 @@ const usabilityMigration = readFileSync(
   path.resolve(__dirname, "..", "db", "migrations", "111_competitor_analysis_usability.sql"),
   "utf8",
 );
+const brandVoiceCompatibilityMigration = readFileSync(
+  path.resolve(__dirname, "..", "db", "migrations", "112_company_dna_brand_voice_compatibility.sql"),
+  "utf8",
+);
 
 describe("competitor source foundation migration", () => {
   test.each([
@@ -148,6 +152,20 @@ describe("competitor analysis usability migration", () => {
     );
     expect(usabilityMigration).toMatch(
       /GRANT EXECUTE ON FUNCTION competitor_intelligence_readiness\(UUID\)[\s\S]+TO service_role/u,
+    );
+  });
+});
+
+describe("Company DNA compatibility migration", () => {
+  test("repairs the brand voice fields required by competitor intelligence", () => {
+    expect(brandVoiceCompatibilityMigration).toContain(
+      "ADD COLUMN IF NOT EXISTS brand_voice TEXT",
+    );
+    expect(brandVoiceCompatibilityMigration).toContain(
+      "ADD COLUMN IF NOT EXISTS sign_off TEXT",
+    );
+    expect(brandVoiceCompatibilityMigration).toContain(
+      "NOTIFY pgrst, 'reload schema'",
     );
   });
 });

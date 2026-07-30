@@ -577,7 +577,17 @@ export const POST = withAuth(async (request, { user }) => {
   ]);
   const initialError = competitorError ?? readinessError ?? dnaError ?? topicsError ??
     companyContentError ?? vaultError;
-  if (initialError) return serverError(initialError);
+  if (initialError) {
+    captureError("api", initialError, {
+      userId: user.id,
+      clientId: parsed.data.client_id,
+      url: "/api/content/competitors/intelligence",
+    });
+    return NextResponse.json({
+      error: "Competitor analysis could not load the required company context. Please try again.",
+      code: "COMPETITOR_CONTEXT_LOAD_FAILED",
+    }, { status: 503 });
+  }
 
   const requested = parsed.data.competitor_ids
     ? new Set(parsed.data.competitor_ids)
