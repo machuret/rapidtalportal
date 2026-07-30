@@ -162,7 +162,14 @@ function hashText(value: string): string {
 
 function normalizeAnalysisEnvelope(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const record = value as Record<string, unknown>;
+  const outer = value as Record<string, unknown>;
+  const nested = ["analysis", "report", "result", "data"]
+    .map((key) => outer[key])
+    .find((candidate) =>
+      candidate &&
+      typeof candidate === "object" &&
+      !Array.isArray(candidate));
+  const record = (nested ?? outer) as Record<string, unknown>;
   const array = (key: string) => Array.isArray(record[key]) ? record[key] : [];
   return {
     ...record,
@@ -178,6 +185,49 @@ function normalizeAnalysisEnvelope(value: unknown): unknown {
     positioning_gaps: array("positioning_gaps"),
     recommended_ideas: array("recommended_ideas"),
   };
+}
+
+function salvageAnalysisEnvelope(value: unknown): CompetitorIntelligence | null {
+  const normalized = normalizeAnalysisEnvelope(value);
+  if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) return null;
+  const record = normalized as Record<string, unknown>;
+  const shape = competitorIntelligenceSchema.shape;
+  const parseItems = <T>(
+    key: string,
+    parser: z.ZodType<T>,
+    maximum: number,
+  ): T[] => {
+    const candidates = Array.isArray(record[key]) ? record[key].slice(0, maximum) : [];
+    return candidates.flatMap((candidate) => {
+      const result = parser.safeParse(candidate);
+      return result.success ? [result.data] : [];
+    });
+  };
+  const executiveSummary =
+    typeof record.executive_summary === "string" && record.executive_summary.trim()
+      ? record.executive_summary.trim().slice(0, 1200)
+      : "This verified partial report reflects only the insights directly supported by the captured evidence.";
+  const salvaged = competitorIntelligenceSchema.safeParse({
+    schema_version: 2,
+    executive_summary: executiveSummary,
+    topic_clusters: parseItems("topic_clusters", shape.topic_clusters.element, 6),
+    format_patterns: parseItems("format_patterns", shape.format_patterns.element, 5),
+    positioning_profiles: parseItems(
+      "positioning_profiles",
+      shape.positioning_profiles.element,
+      10,
+    ),
+    comparisons: parseItems("comparisons", shape.comparisons.element, 5),
+    positioning_gaps: parseItems("positioning_gaps", shape.positioning_gaps.element, 6),
+    recommended_ideas: parseItems(
+      "recommended_ideas",
+      shape.recommended_ideas.element,
+      6,
+    ),
+  });
+  return salvaged.success && analysisHasAnyInsight(salvaged.data)
+    ? salvaged.data
+    : null;
 }
 
 function analysisHasAnyInsight(analysis: CompetitorIntelligence): boolean {
@@ -913,6 +963,12 @@ ${rendered.text}`,
   let parsedAnalysis = competitorIntelligenceSchema.safeParse(
     normalizeAnalysisEnvelope(rawAnalysis),
   );
+  if (!parsedAnalysis.success) {
+    const salvaged = salvageAnalysisEnvelope(rawAnalysis);
+    if (salvaged) {
+      parsedAnalysis = { success: true, data: salvaged };
+    }
+  }
   if (!parsedAnalysis.success || !analysisHasAnyInsight(parsedAnalysis.data)) {
     const validationIssues = parsedAnalysis.success
       ? [{ path: "(report)", message: "The report did not contain any insight sections." }]
@@ -1022,6 +1078,12 @@ ${rendered.text}`,
     parsedAnalysis = competitorIntelligenceSchema.safeParse(
       normalizeAnalysisEnvelope(repairedRaw),
     );
+    if (!parsedAnalysis.success) {
+      const salvaged = salvageAnalysisEnvelope(repairedRaw);
+      if (salvaged) {
+        parsedAnalysis = { success: true, data: salvaged };
+      }
+    }
     if (!parsedAnalysis.success) {
       const repairedIssues = parsedAnalysis.error.issues.slice(0, 20)
         .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)

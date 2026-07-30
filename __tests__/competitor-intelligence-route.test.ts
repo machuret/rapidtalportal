@@ -543,6 +543,40 @@ test("repairs one incomplete model report and still applies deterministic eviden
   );
 });
 
+test("preserves valid verified sections when another model section is malformed", async () => {
+  const mixedReport = structuredClone(analysis) as unknown as Record<string, unknown>;
+  mixedReport.topic_clusters = [
+    ...(mixedReport.topic_clusters as unknown[]),
+    {
+      id: "malformed",
+      label: "Malformed section",
+      description: "This item is missing evidence and must be discarded.",
+    },
+  ];
+  const { rpc } = postDb({
+    modelResponses: [{ report: mixedReport }],
+  });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(201);
+  expect(global.fetch).toHaveBeenCalledTimes(1);
+  expect(rpc).toHaveBeenCalledWith(
+    "complete_competitor_intelligence_job",
+    expect.objectContaining({
+      p_job_id: JOB_ID,
+      p_lease_token: LEASE_TOKEN,
+      p_analysis: expect.objectContaining({
+        topic_clusters: [expect.objectContaining({ id: "practical-education" })],
+      }),
+    }),
+  );
+});
+
 test("requires evidence-ready selected competitors before loading immutable evidence", async () => {
   const { rpc } = postDb({ ready: false });
   const fetchMock = global.fetch as jest.Mock;
