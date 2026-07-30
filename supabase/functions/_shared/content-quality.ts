@@ -28,8 +28,18 @@ export const CONTENT_TYPE_INSTRUCTIONS: Record<QualityContentType, string> = {
   blog: "Write one blog post with a `#` SEO-friendly title, engaging introduction, at least three `##` sections, practical examples, and a concluding CTA. Aim for 600-900 words.",
 };
 
-const CTA_ACTION_PATTERN =
-  /\b(book|call|contact|discover|download|email|join|learn more|let us know|read more|register|reply|schedule|share|shop|subscribe|tell us|visit)\b/iu;
+const CTA_ACTION =
+  "(?:book|call|contact|discover|download|email|join|learn more|let us know|read(?: more)?|register|reply|schedule|shop|subscribe|tell us|visit)";
+const CTA_START_PATTERN = new RegExp(
+  `^(?:(?:please|to get started|to learn more|when you're ready),?\\s+)?${CTA_ACTION}\\b`,
+  "iu",
+);
+const CTA_INVITATION_PATTERN = new RegExp(
+  `\\b(?:you can|we invite you to|ready to|want to|the next step is to)\\s+${CTA_ACTION}\\b`,
+  "iu",
+);
+const CTA_CLAUSE_PATTERN = new RegExp(`,\\s*(?:please\\s+)?${CTA_ACTION}\\b`, "iu");
+const SHARE_CTA_PATTERN = /^share\s+(?:this|your|with|below|in)\b/iu;
 const GREETING_PATTERN = /^(hi|hello|dear|good (morning|afternoon|evening))\b/imu;
 const SIGN_OFF_PATTERN =
   /^(kind regards|regards|best regards|best|thanks|thank you|warm regards|sincerely|yours sincerely|yours faithfully|with appreciation|all the best|respectfully|cheers)[,!]?\s*$/imu;
@@ -48,11 +58,24 @@ function words(body: string): number {
 }
 
 function ctaUnits(body: string): string[] {
-  return body
+  const units = body
     .split(/(?<=[.!?])\s+|\n+/u)
     .map((unit) => unit.trim())
-    .filter(Boolean)
-    .filter((unit) => unit.includes("?") || CTA_ACTION_PATTERN.test(unit));
+    .filter(Boolean);
+  return units.filter((unit, index) => {
+    const questionBeforeEmailSignOff =
+      unit.endsWith("?") &&
+      units.length - index <= 3 &&
+      SIGN_OFF_PATTERN.test(units[index + 1] ?? "");
+    return (
+    CTA_START_PATTERN.test(unit) ||
+    CTA_INVITATION_PATTERN.test(unit) ||
+    CTA_CLAUSE_PATTERN.test(unit) ||
+    SHARE_CTA_PATTERN.test(unit) ||
+    (index === units.length - 1 && unit.endsWith("?")) ||
+    questionBeforeEmailSignOff
+    );
+  });
 }
 
 function requireExactCtaCount(warnings: string[], body: string, label: string, expected = 1): void {
@@ -153,6 +176,7 @@ interface ClaimAnchor {
   key: string;
   display: string;
   pattern: RegExp;
+  negated: boolean;
 }
 
 const ABSOLUTE_CLAIMS: { key: string; pattern: RegExp }[] = [
@@ -177,6 +201,7 @@ function claimAnchors(sentence: string): ClaimAnchor[] {
       key: claim.key,
       display: match[0].toLocaleLowerCase(),
       pattern: claim.pattern,
+      negated: false,
     });
   }
   for (const match of sentence.matchAll(NUMERIC_CLAIM_PATTERN)) {
@@ -185,9 +210,13 @@ function claimAnchors(sentence: string): ClaimAnchor[] {
       key: `numeric:${normalized}`,
       display: normalized,
       pattern: new RegExp(escapeRegExp(normalized).replace(/\\ /g, "\\s*"), "iu"),
+      negated: false,
     });
   }
-  return anchors;
+  return anchors.map((anchor) => ({
+    ...anchor,
+    negated: anchorIsNegated(sentence, anchor),
+  }));
 }
 
 function escapeRegExp(value: string): string {
@@ -200,9 +229,24 @@ const CLAIM_STOP_WORDS = new Set([
   "about", "after", "also", "and", "are", "been", "being", "can", "could",
   "for", "from", "have", "into", "its", "our", "that", "the", "their", "them",
   "they", "this", "those", "was", "were", "will", "with", "would", "your",
+  "business", "charge", "charges", "company", "deliver", "delivers", "has", "integrate", "integrates",
+  "offer", "offers", "operate", "operates", "platform", "provide", "provides",
+  "serve", "serves", "service", "services", "support", "supports", "team", "use",
+  "uses", "we",
   "guarantee", "guaranteed", "award", "winning", "certified", "accredited",
   "number", "one", "industry", "market", "leading", "largest", "fastest",
 ]);
+
+const DIRECT_COMPANY_FACT_PATTERN =
+  /\b(?:we|our company|our business|our team|our platform|our (?:product|service)s?|the company|the business)\s+(?:(?:do|does)\s+not\s+)?(?:has|have|provides?|offers?|operates?|serves?|supports?|integrates?|uses?|charges?|employs?|maintains?|speciali[sz]es?|delivers?|includes?|covers?|accepts?|complies?|partners?)\b/iu;
+const OUR_NOUN_FACT_PATTERN =
+  /\bour\s+[\p{L}\p{N}'’-]+(?:\s+[\p{L}\p{N}'’-]+)?\s+(?:(?:is|are|was|were)|(?:(?:do|does)\s+not\s+)?(?:has|provides?|offers?|operates?|serves?|supports?|integrates?|uses?|charges?|employs?|maintains?|speciali[sz]es?|delivers?|includes?|covers?|accepts?|complies?|partners?))\b/iu;
+const WE_COPULA_FACT_PATTERN =
+  /\bwe\s+(?:are|were)\s+(?:(?:not|fully|currently|independently|locally|an?)\s+){0,3}(?:accredited|authori[sz]ed|based|certified|headquartered|licensed|located|members?|owned|partners?|providers?|registered|regulated)\b/iu;
+const PROPER_NAME_FACT_PATTERN =
+  /^[\p{Lu}][\p{L}\p{N}&'’-]*\s+[\p{Lu}][\p{L}\p{N}&'’-]*(?:\s+[\p{Lu}][\p{L}\p{N}&'’-]*){0,4}\s+(?:is|are|has|provides?|offers?|operates?|serves?|supports?|integrates?|uses?|charges?|speciali[sz]es?|delivers?)\b/u;
+const SUBJECTIVE_COMPANY_PATTERN =
+  /\bwe\s+(?:believe|think|hope|aim|want|invite|encourage|recommend)\b/iu;
 
 function stripPlaceholders(sentence: string): string {
   return sentence.replace(/\[[^\]\r\n]{1,160}\]/gu, " ");
@@ -229,26 +273,59 @@ function meaningfulClaimTerms(sentence: string): string[] {
   ));
 }
 
+function isNaturalCompanyClaim(sentence: string): boolean {
+  const trimmed = sentence.trim();
+  if (
+    trimmed.endsWith("?") ||
+    trimmed.split(/\s+/u).length < 4 ||
+    SUBJECTIVE_COMPANY_PATTERN.test(trimmed)
+  ) {
+    return false;
+  }
+  return (
+    DIRECT_COMPANY_FACT_PATTERN.test(trimmed) ||
+    OUR_NOUN_FACT_PATTERN.test(trimmed) ||
+    WE_COPULA_FACT_PATTERN.test(trimmed) ||
+    PROPER_NAME_FACT_PATTERN.test(trimmed)
+  );
+}
+
+function sentenceIsNegated(sentence: string): boolean {
+  return NEGATION_PATTERN.test(sentence);
+}
+
 function sentenceSupportsClaim(
   claimSentence: string,
   anchors: ClaimAnchor[],
   supportSentence: string,
+  naturalClaim: boolean,
 ): boolean {
-  if (!anchors.every((anchor) => anchor.pattern.test(supportSentence) && !anchorIsNegated(supportSentence, anchor))) {
+  if (!anchors.every((anchor) =>
+    anchor.pattern.test(supportSentence) &&
+    anchorIsNegated(supportSentence, anchor) === anchor.negated
+  )) {
+    return false;
+  }
+  if (
+    naturalClaim &&
+    sentenceIsNegated(claimSentence) !== sentenceIsNegated(supportSentence)
+  ) {
     return false;
   }
   const claimTerms = meaningfulClaimTerms(claimSentence);
   if (!claimTerms.length) return true;
   const supportTerms = new Set(meaningfulClaimTerms(supportSentence));
   const overlap = claimTerms.filter((term) => supportTerms.has(term)).length;
-  const requiredOverlap = Math.max(1, Math.ceil(Math.min(claimTerms.length, 4) * 0.4));
+  const requiredOverlap = naturalClaim
+    ? Math.max(Math.min(2, claimTerms.length), Math.ceil(Math.min(claimTerms.length, 8) * 0.5))
+    : Math.max(1, Math.ceil(Math.min(claimTerms.length, 4) * 0.4));
   return overlap >= requiredOverlap;
 }
 
 /**
- * Flags objective high-risk claims unless their exact anchor exists in approved
- * Company DNA or a cited Vault excerpt. Natural-language claims remain part of
- * the model critique; this gate handles numbers and absolute assertions.
+ * Flags high-risk and ordinary company assertions unless a sentence with the
+ * same claim polarity and enough material terms exists in approved Company DNA
+ * or a cited Vault excerpt.
  */
 export function unsupportedClaimWarnings(
   body: string,
@@ -266,11 +343,11 @@ export function unsupportedClaimWarnings(
 
   for (const sentence of sentences) {
     const claimText = stripPlaceholders(sentence);
-    const anchors = claimAnchors(claimText)
-      .filter((anchor) => !anchorIsNegated(claimText, anchor));
-    if (!anchors.length) continue;
+    const anchors = claimAnchors(claimText);
+    const naturalClaim = isNaturalCompanyClaim(claimText);
+    if (!anchors.length && !naturalClaim) continue;
     const supported = supportSentences.some((supportSentence) =>
-      sentenceSupportsClaim(claimText, anchors, supportSentence)
+      sentenceSupportsClaim(claimText, anchors, supportSentence, naturalClaim)
     );
     if (!supported) {
       warnings.push(`Unsupported factual claim: “${compact(sentence)}”`);

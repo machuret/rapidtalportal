@@ -23,7 +23,7 @@ import {
 async function approvedStyleProfile(db: any, clientId: string, channel: string) {
   return db
     .from("content_style_analyses")
-    .select("id,channel,analysis,source_item_ids,analysed_at,approved_at")
+    .select("id,channel,analysis,source_item_ids,source_evidence,analysed_at,approved_at")
     .eq("client_id", clientId)
     .eq("channel", channel)
     .eq("status", "approved")
@@ -207,7 +207,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (currentError) return serverError(currentError);
 
   let dnaUpdatedAt: string | null = null;
-  let styleSnapshot: ReturnType<typeof createContentStyleSnapshot> | null = null;
+  let styleSnapshot: Record<string, unknown> | null = null;
 
   // Prohibited terms, claims and explicit no-emoji policies are deterministic
   // approval gates. Natural-language style guidance remains visibly model-enforced.
@@ -262,32 +262,20 @@ export const PATCH = withAuth(async (req, { user }) => {
       }, { status: 422 });
     }
     dnaUpdatedAt = dna.updated_at;
-    styleSnapshot = {
-      ...createContentStyleSnapshot(style, current.content_type, dnaUpdatedAt),
-      ...(current.style_snapshot &&
+    const generationSnapshot =
+      current.style_snapshot &&
       typeof current.style_snapshot === "object" &&
-      !Array.isArray(current.style_snapshot) &&
-      Array.isArray((current.style_snapshot as Record<string, unknown>).exampleSources)
-        ? {
-            exampleSources: (
-              (current.style_snapshot as Record<string, unknown>).exampleSources as unknown[]
-            ).flatMap((source) => {
-              if (!source || typeof source !== "object" || Array.isArray(source)) return [];
-              const value = source as Record<string, unknown>;
-              return (
-                typeof value.itemId === "string" &&
-                typeof value.title === "string" &&
-                (typeof value.sourceUrl === "string" || value.sourceUrl === null)
-              )
-                ? [{
-                    itemId: value.itemId,
-                    title: value.title,
-                    sourceUrl: value.sourceUrl,
-                  }]
-                : [];
-            }),
-          }
-        : {}),
+      !Array.isArray(current.style_snapshot)
+        ? current.style_snapshot as Record<string, unknown>
+        : createContentStyleSnapshot(style, current.content_type, dnaUpdatedAt);
+    styleSnapshot = {
+      ...generationSnapshot,
+      approvalValidation: {
+        validatedAt: new Date().toISOString(),
+        companyDnaUpdatedAt: dnaUpdatedAt,
+        styleAnalysis: style.styleAnalysis,
+        hardRules: style.hardRules,
+      },
     };
   }
 

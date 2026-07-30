@@ -188,7 +188,7 @@ async function loadProjectStyleSnapshot(
       .maybeSingle(),
     db
       .from("content_style_analyses")
-      .select("id,channel,analysis,source_item_ids,analysed_at,approved_at")
+      .select("id,channel,analysis,source_item_ids,source_evidence,analysed_at,approved_at")
       .eq("client_id", clientId)
       .eq("channel", channel)
       .eq("status", "approved")

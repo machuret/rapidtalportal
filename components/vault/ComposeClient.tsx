@@ -58,6 +58,7 @@ interface Variant {
   id: string | null;
   updatedAt: string | null;
   text: string;
+  savedText: string;
   loading: boolean;
   sources: ContentSourceReference[];
   appliedStyle: string[];
@@ -97,6 +98,7 @@ export function ComposeClient({
   const [active, setActive] = useState(0);
   const [refine, setRefine] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
 
   // Fact-safety check (per active variant index → result)
   const [checking, setChecking] = useState(false);
@@ -117,7 +119,7 @@ export function ComposeClient({
     if (busy || !canCompose) return;
     setActive(0);
     setRefine("");
-    setVariants([{ id: null, updatedAt: null, text: "", loading: true, sources: [], appliedStyle: [] }]);
+    setVariants([{ id: null, updatedAt: null, text: "", savedText: "", loading: true, sources: [], appliedStyle: [] }]);
 
     const contentType = resolvedContentType();
     const objective = mode === "reply"
@@ -157,6 +159,7 @@ export function ComposeClient({
         id: result.id,
         updatedAt: result.updatedAt ?? null,
         text: result.body,
+        savedText: result.body,
         loading: false,
         sources: result.sources ?? [],
         appliedStyle: result.appliedStyle ?? [],
@@ -189,6 +192,7 @@ export function ComposeClient({
           ? {
               ...variant,
               text: result.body,
+              savedText: result.body,
               updatedAt: result.updated_at ?? variant.updatedAt,
               loading: false,
               sources: result.sources ?? variant.sources,
@@ -206,6 +210,35 @@ export function ComposeClient({
     setCopied(key);
     toast.success("Copied to clipboard.");
     setTimeout(() => setCopied((c) => (c === key ? null : c)), 1800);
+  }
+
+  async function saveDraft() {
+    const current = variants[active];
+    if (!current?.id || current.loading || current.text === current.savedText || savingDraft) return;
+    setSavingDraft(true);
+    try {
+      const result = await api.patch<{ body: string | null; updated_at: string }>(
+        "/content/pieces",
+        {
+          client_id: clientId,
+          id: current.id,
+          body: current.text,
+          expected_updated_at: current.updatedAt,
+        },
+      );
+      setVariants((previous) => previous.map((variant, index) =>
+        index === active
+          ? {
+              ...variant,
+              text: result.body ?? variant.text,
+              savedText: result.body ?? variant.text,
+              updatedAt: result.updated_at,
+            }
+          : variant));
+      toast.success("Draft changes saved.");
+    } finally {
+      setSavingDraft(false);
+    }
   }
 
   async function checkDraft() {
@@ -409,9 +442,25 @@ export function ComposeClient({
                     <button onClick={checkDraft} disabled={checking} className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
                       {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />} Check facts
                     </button>
-                    <span className="inline-flex items-center gap-1.5 text-xs text-green-400">
-                      <Save className="w-3.5 h-3.5" /> Saved to Content
-                    </span>
+                    {current.text === current.savedText ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-green-400">
+                        <Save className="w-3.5 h-3.5" /> Saved to Content
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={saveDraft}
+                        disabled={savingDraft}
+                        className="h-7 border-amber-500/40 text-amber-200"
+                      >
+                        {savingDraft
+                          ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          : <Save className="mr-1.5 h-3.5 w-3.5" />}
+                        Save changes
+                      </Button>
+                    )}
                   </>
                 )}
                 {current && !current.loading && (
@@ -428,21 +477,23 @@ export function ComposeClient({
               </div>
             </div>
 
-            {/* Email subject */}
-            {email?.subject && (
-              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-zinc-800">
-                <span className="text-2xs uppercase tracking-wide text-zinc-500 shrink-0">Subject</span>
-                <span className="text-sm text-zinc-100 font-medium flex-1">{email.subject}</span>
-                <button onClick={() => copyText("subj", email.subject!)} className="text-zinc-500 hover:text-white">
-                  {copied === "subj" ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-              </div>
+            {current?.loading ? (
+              <p className="min-h-[1.5rem] whitespace-pre-wrap text-sm leading-relaxed text-zinc-100">
+                {current.text}<span className="ml-0.5 animate-pulse">▍</span>
+              </p>
+            ) : (
+              <Textarea
+                aria-label="Editable draft"
+                value={current?.text ?? ""}
+                onChange={(event) => {
+                  setVariants((previous) => previous.map((variant, index) =>
+                    index === active ? { ...variant, text: event.target.value } : variant));
+                  setCheckResult(null);
+                }}
+                rows={Math.min(24, Math.max(8, (current?.text.match(/\n/g)?.length ?? 0) + 3))}
+                className="resize-y border-zinc-700 bg-zinc-950 text-sm leading-relaxed text-zinc-100"
+              />
             )}
-
-            <p className="text-sm text-zinc-100 leading-relaxed whitespace-pre-wrap min-h-[1.5rem]">
-              {email ? email.body : current?.text}
-              {current?.loading && <span className="ml-0.5 animate-pulse">▍</span>}
-            </p>
 
             {/* Char count for social/message */}
             {current && !current.loading && (channel === "social" || channel === "message") && (

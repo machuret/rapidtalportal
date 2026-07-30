@@ -18,6 +18,14 @@ jest.mock("@/lib/rate-limit", () => {
     },
   };
 });
+jest.mock("@/lib/content/pilot-observability", () => ({
+  startAnalysisAttempt: jest.fn().mockResolvedValue({
+    id: "99999999-9999-4999-8999-999999999999",
+    lease_token: "88888888-8888-4888-8888-888888888888",
+  }),
+  finishAnalysisAttempt: jest.fn().mockResolvedValue(undefined),
+  recordWorkflowEvent: jest.fn().mockResolvedValue(undefined),
+}));
 
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -99,6 +107,7 @@ function analysisRow(status: "draft" | "approved" = "draft") {
     status,
     analysis: profile,
     source_item_ids: SOURCE_IDS,
+    source_evidence: [],
     source_count: 3,
     source_character_count: 2400,
     model: "openai/gpt-4o-mini",
@@ -362,8 +371,8 @@ test("records only examples actually included in the bounded model prompt", asyn
 
   expect(response.status).toBe(200);
   const insertedValues = inserted.insert.mock.calls
-    .map(([values]) => values)
-    .find((values) => Array.isArray(values?.source_item_ids));
+    .map((call: unknown[]) => call[0] as Record<string, unknown>)
+    .find((values: Record<string, unknown>) => Array.isArray(values.source_item_ids));
   expect(insertedValues).toBeDefined();
   expect(insertedValues.source_item_ids.length).toBeGreaterThanOrEqual(3);
   expect(insertedValues.source_item_ids.length).toBeLessThan(20);

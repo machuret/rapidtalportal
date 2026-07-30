@@ -133,7 +133,12 @@ function renderExistingContent(items: ExistingCompanyContent[]): string {
 
 function tokenSet(value: string): Set<string> {
   return new Set(
-    value.toLocaleLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'-]{2,}/gu) ?? [],
+    (value.toLocaleLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'-]{2,}/gu) ?? [])
+      .filter((token) => ![
+        "about", "after", "also", "and", "are", "but", "company", "content",
+        "for", "from", "have", "into", "our", "that", "the", "their", "this",
+        "through", "with", "your",
+      ].includes(token)),
   );
 }
 
@@ -143,6 +148,14 @@ function similarity(left: string, right: string): number {
   if (!a.size || !b.size) return 0;
   const overlap = [...a].filter((token) => b.has(token)).length;
   return overlap / new Set([...a, ...b]).size;
+}
+
+function evidenceRelevance(idea: string, evidence: string): number {
+  const ideaTerms = tokenSet(idea);
+  const evidenceTerms = tokenSet(evidence);
+  if (!ideaTerms.size || !evidenceTerms.size) return 0;
+  const overlap = [...ideaTerms].filter((token) => evidenceTerms.has(token)).length;
+  return overlap / Math.min(ideaTerms.size, 12);
 }
 
 function dimension(score: number, explanation: string) {
@@ -504,15 +517,36 @@ export const POST = withAuth(async (req, { user }) => {
         `${t.title} ${t.description}`,
         `${existing.title} ${existing.body?.slice(0, 1000) ?? ""}`,
       )), 0);
-    const vaultStrength = t.vaultEvidenceIds.length >= 3
+    const ideaText = [
+      t.title,
+      t.topic,
+      t.description,
+      t.whyValuable,
+      t.companyDnaFit,
+    ].join(" ");
+    const relevantVaultIds = t.vaultEvidenceIds.filter((id) => {
+      const evidence = vaultById.get(id)!;
+      return evidenceRelevance(
+        ideaText,
+        `${evidence.title} ${evidence.ai_summary ?? ""} ${evidence.raw_content?.slice(0, 2500) ?? ""}`,
+      ) >= 0.12;
+    });
+    const relevantMarketIds = t.evidenceIds.filter((id) => {
+      const evidence = evidenceById.get(id)!;
+      return evidenceRelevance(
+        ideaText,
+        `${evidence.title} ${evidence.raw_content.slice(0, 2500)}`,
+      ) >= 0.12;
+    });
+    const vaultStrength = relevantVaultIds.length >= 3
       ? 90
-      : t.vaultEvidenceIds.length === 2
+      : relevantVaultIds.length === 2
         ? 78
-        : t.vaultEvidenceIds.length === 1
+        : relevantVaultIds.length === 1
           ? 58
           : 20;
     const marketStrength = parsed.data.mode === "competitor_gap"
-      ? Math.min(95, 45 + t.evidenceIds.length * 15)
+      ? Math.min(95, 30 + relevantMarketIds.length * 18)
       : 50;
     const differentiationStrength = Math.min(
       95,
@@ -535,9 +569,9 @@ export const POST = withAuth(async (req, { user }) => {
       Math.round((1 - maxExistingSimilarity) * 100) +
       Math.min(100, channelFit)
     ) / 6;
-    const evidenceStrength = t.vaultEvidenceIds.length >= 2
+    const evidenceStrength = relevantVaultIds.length >= 2
       ? "high"
-      : t.vaultEvidenceIds.length === 1
+      : relevantVaultIds.length === 1
         ? "medium"
         : "low";
     const confidence = confidenceScore >= 76 && evidenceStrength !== "low"
@@ -595,12 +629,12 @@ export const POST = withAuth(async (req, { user }) => {
           audienceRelevance: dimension(t.intendedAudience ? Math.min(95, 60 + (fit ?? 40) * 0.3) : 30,
             t.intendedAudience || "The model did not identify a specific audience."),
           vaultEvidenceStrength: dimension(vaultStrength,
-            t.vaultEvidenceIds.length
-              ? `References ${t.vaultEvidenceIds.length} verified factual Vault item${t.vaultEvidenceIds.length === 1 ? "" : "s"}.`
+            relevantVaultIds.length
+              ? `${relevantVaultIds.length} of ${t.vaultEvidenceIds.length} cited factual Vault item${t.vaultEvidenceIds.length === 1 ? "" : "s"} have deterministic topic overlap.`
               : "No factual Vault material directly supports this idea yet."),
           marketOpportunity: dimension(marketStrength,
             parsed.data.mode === "competitor_gap"
-              ? `Grounded in ${t.evidenceIds.length} verified competitor signal${t.evidenceIds.length === 1 ? "" : "s"}.`
+              ? `${relevantMarketIds.length} of ${t.evidenceIds.length} cited competitor signal${t.evidenceIds.length === 1 ? "" : "s"} have deterministic topic overlap.`
               : "Company-led idea; no competitor opportunity analysis was requested."),
           differentiation: dimension(differentiationStrength,
             t.differenceFromExisting || "Differentiation requires editor review."),

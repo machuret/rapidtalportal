@@ -68,6 +68,7 @@ const profile: StyleAnalysisRecord = {
     ],
   },
   source_item_ids: [],
+  source_evidence: [],
   source_count: 8,
   source_character_count: 8000,
   model: "test",

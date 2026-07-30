@@ -114,6 +114,7 @@ describe("content brand style", () => {
       channel: "linkedin",
       summary: "Direct, evidence-led and conversational.",
       sourceItemIds: ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
+      sourceEvidence: [],
       analysedAt: "2026-07-29T01:00:00.000Z",
       approvedAt: "2026-07-29T02:00:00.000Z",
     });

@@ -673,18 +673,30 @@ export const POST = withAuth(async (request, { user }) => {
     return serverError(claimError ?? new Error("The analysis job could not be started."));
   }
   const job = claimed as JobRow;
-  const attempt = await startAnalysisAttempt(db, {
-    clientId: parsed.data.client_id,
-    actorId: user.id,
-    kind: "competitor_intelligence",
-    relatedId: job.id,
-    inputSummary: {
-      competitorCount: competitors.length,
-      sourceCount: rendered.rows.length,
-      sourceCharacterCount: rendered.characterCount,
-      windowDays: parsed.data.window_days,
-    },
-  });
+  let attempt;
+  try {
+    attempt = await startAnalysisAttempt(db, {
+      clientId: parsed.data.client_id,
+      actorId: user.id,
+      kind: "competitor_intelligence",
+      relatedId: job.id,
+      inputSummary: {
+        competitorCount: competitors.length,
+        sourceCount: rendered.rows.length,
+        sourceCharacterCount: rendered.characterCount,
+        windowDays: parsed.data.window_days,
+      },
+    });
+  } catch {
+    await db.rpc("fail_competitor_intelligence_job", {
+      p_job_id: job.id,
+      p_lease_token: job.lease_token,
+      p_error_message: "Analysis observability could not be initialized.",
+    });
+    return NextResponse.json({
+      error: "The analysis could not be safely recorded. Try again shortly.",
+    }, { status: 503 });
+  }
   const model = chatModel("COMPETITOR_INTELLIGENCE_MODEL");
   let providerUsage = { input: 0, output: 0 };
   const failJob = async (message: string, code = "PROVIDER_OR_ANALYSIS_FAILURE") => {

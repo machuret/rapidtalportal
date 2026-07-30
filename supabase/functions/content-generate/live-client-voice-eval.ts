@@ -10,6 +10,7 @@ const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const apiKey = Deno.env.get("OPENROUTER_API_KEY");
 const model = Deno.env.get("CONTENT_EVAL_MODEL") ?? "openai/gpt-4o-mini";
 const requirePilot = Deno.env.get("CONTENT_EVAL_REQUIRE_PILOT") === "1";
+const minimumHumanReviews = Number(Deno.env.get("CONTENT_EVAL_MIN_REVIEWS") ?? "20");
 if (!supabaseUrl || !serviceKey || !apiKey) {
   throw new Error("SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and OPENROUTER_API_KEY are required.");
 }
@@ -132,7 +133,7 @@ for (const [clientId] of pilotClients) {
     const [{ data: dna, error: dnaError }, { data: style, error: styleError }, { data: competitors }] = await Promise.all([
       admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
       admin.from("content_style_analyses")
-        .select("id,channel,analysis,source_item_ids,analysed_at,approved_at")
+        .select("id,channel,analysis,source_item_ids,source_evidence,analysed_at,approved_at")
         .eq("client_id", clientId)
         .eq("channel", candidate.channel)
         .eq("status", "approved")
@@ -145,6 +146,7 @@ for (const [clientId] of pilotClients) {
     ]);
     if (dnaError || styleError || !dna || !style) {
       console.log(JSON.stringify({ clientId, channel: candidate.channel, skipped: "missing-dna-or-approved-style" }));
+      failures += 1;
       continue;
     }
 
@@ -233,3 +235,47 @@ for (const [clientId] of pilotClients) {
   }
 }
 if (failures) throw new Error(`${failures} scheduled real-client voice evaluation(s) failed safety checks.`);
+
+if (requirePilot) {
+  const pilotClientIds = pilotClients.map(([clientId]) => clientId);
+  const reviewWindow = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: reviews, error: reviewError } = await admin
+    .from("content_voice_evaluations")
+    .select("assignment,preferred_variant,reviewed_at")
+    .in("client_id", pilotClientIds)
+    .eq("status", "reviewed")
+    .not("preferred_variant", "is", null)
+    .gte("reviewed_at", reviewWindow);
+  if (reviewError) throw reviewError;
+
+  const decided = (reviews ?? []).filter((review) =>
+    review.preferred_variant === "a" || review.preferred_variant === "b"
+  );
+  const conditionedWins = decided.filter((review) => {
+    const assignment = review.assignment as Record<string, unknown>;
+    return assignment[review.preferred_variant as "a" | "b"] === "conditioned";
+  }).length;
+  const preferenceRate = decided.length ? conditionedWins / decided.length : 0;
+  console.log(JSON.stringify({
+    event: "real-client-human-preference-gate",
+    reviewWindowDays: 90,
+    decidedReviews: decided.length,
+    minimumHumanReviews,
+    conditionedWins,
+    preferenceRate,
+    threshold: 0.8,
+  }));
+  if (!Number.isInteger(minimumHumanReviews) || minimumHumanReviews < 1) {
+    throw new Error("CONTENT_EVAL_MIN_REVIEWS must be a positive integer.");
+  }
+  if (decided.length < minimumHumanReviews) {
+    throw new Error(
+      `Real-client voice pilot needs ${minimumHumanReviews} decided blind reviews; only ${decided.length} exist in the last 90 days.`,
+    );
+  }
+  if (preferenceRate < 0.8) {
+    throw new Error(
+      `Style-conditioned drafts won ${(preferenceRate * 100).toFixed(1)}% of decided blind reviews; 80% is required.`,
+    );
+  }
+}

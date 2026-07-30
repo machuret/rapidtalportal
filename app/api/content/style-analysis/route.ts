@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { assertClientAccess } from "@/lib/api-auth";
@@ -50,6 +51,13 @@ interface AnalysisRow {
   status: "draft" | "approved" | "archived";
   analysis: unknown;
   source_item_ids: string[];
+  source_evidence: Array<{
+    itemId: string;
+    title: string;
+    sourceUrl: string | null;
+    contentHash: string;
+    capturedAt: string;
+  }>;
   source_count: number;
   source_character_count: number;
   model: string | null;
@@ -137,6 +145,16 @@ function renderExamples(rows: SourceRow[]): {
   return { text: rendered, includedRows, characterCount };
 }
 
+function immutableSourceEvidence(rows: SourceRow[]) {
+  return rows.map((row) => ({
+    itemId: row.id,
+    title: row.title,
+    sourceUrl: row.source_url,
+    contentHash: createHash("sha256").update(row.raw_content ?? "").digest("hex"),
+    capturedAt: row.created_at,
+  }));
+}
+
 function conflict(message = "This style profile changed while you were working. Reload it and try again.") {
   return NextResponse.json({ error: message, code: "STYLE_ANALYSIS_CONFLICT" }, { status: 409 });
 }
@@ -165,7 +183,7 @@ async function loadStyleAnalysis(clientId: string): Promise<StyleAnalysisRespons
     await Promise.all([
       db
         .from("content_style_analyses")
-        .select("id,client_id,channel,status,analysis,source_item_ids,source_count,source_character_count,model,analysed_at,approved_at,created_at,updated_at")
+        .select("id,client_id,channel,status,analysis,source_item_ids,source_evidence,source_count,source_character_count,model,analysed_at,approved_at,created_at,updated_at")
         .eq("client_id", clientId)
         .in("status", ["draft", "approved"])
         .order("updated_at", { ascending: false }),
@@ -341,17 +359,24 @@ export const POST = withAuth(async (request, { user }) => {
   }
 
   const model = chatModel("CONTENT_STYLE_ANALYSIS_MODEL");
-  const attempt = await startAnalysisAttempt(db, {
-    clientId: parsed.data.client_id,
-    actorId: user.id,
-    kind: "style_analysis",
-    relatedId: currentDraft?.id ?? null,
-    inputSummary: {
-      channel: parsed.data.channel,
-      sourceCount: sources.length,
-      sourceCharacterCount,
-    },
-  });
+  let attempt;
+  try {
+    attempt = await startAnalysisAttempt(db, {
+      clientId: parsed.data.client_id,
+      actorId: user.id,
+      kind: "style_analysis",
+      relatedId: currentDraft?.id ?? null,
+      inputSummary: {
+        channel: parsed.data.channel,
+        sourceCount: sources.length,
+        sourceCharacterCount,
+      },
+    });
+  } catch {
+    return NextResponse.json({
+      error: "The analysis could not be safely recorded. Try again shortly.",
+    }, { status: 503 });
+  }
   let response: Response;
   try {
     response = await fetch(provider.url, {
@@ -469,6 +494,7 @@ Every conclusion must be concise and evidence-based. Evidence IDs must exactly m
   const values = {
     analysis,
     source_item_ids: sourceItemIds,
+    source_evidence: immutableSourceEvidence(sources),
     source_count: sources.length,
     source_character_count: sourceCharacterCount,
     model,
@@ -590,6 +616,7 @@ export const PATCH = withAuth(async (request, { user }) => {
           status: "draft",
           analysis: parsed.data.analysis,
           source_item_ids: current.source_item_ids,
+          source_evidence: current.source_evidence,
           source_count: current.source_count,
           source_character_count: current.source_character_count,
           model: current.model,

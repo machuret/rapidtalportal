@@ -163,11 +163,18 @@ describe("platform structure contracts", () => {
     expect(contentStructureWarnings(
       "A useful hook?\n\nWhat is next?\n\nWhat do you think?",
       "linkedin",
-    )).toContain("LinkedIn requires exactly 1 call-to-action or discussion question; found 3.");
+    )).toEqual([]);
     expect(contentStructureWarnings(
       "# Title\n\nIntro?\n\n## One\n\nText.\n\n## Two\n\nText.\n\n## Three\n\nContact us.",
       "blog",
     )).toContain("Blog requires 600-900 words; found 13.");
+  });
+
+  test("does not treat educational questions or ordinary action words as extra CTAs", () => {
+    expect(contentStructureWarnings(
+      "What makes a useful planning process?\n\nTeams often visit the same assumptions and share evidence during review.\n\nWhat would you change?",
+      "linkedin",
+    )).toEqual([]);
   });
 
   test.each([
@@ -248,6 +255,38 @@ describe("unsupported factual claims", () => {
       "Clients can save 30% on administration.",
       "30% of clients asked about a different service.",
     )).toEqual(["Unsupported factual claim: “Clients can save 30% on administration.”"]);
+  });
+
+  test("checks ordinary company assertions, not only numbers and superlatives", () => {
+    expect(unsupportedClaimWarnings(
+      "Our platform integrates with Salesforce and HubSpot.",
+      "The company provides practical workflow support.",
+    )).toEqual([
+      "Unsupported factual claim: “Our platform integrates with Salesforce and HubSpot.”",
+    ]);
+    expect(unsupportedClaimWarnings(
+      "Our platform integrates with Salesforce and HubSpot.",
+      "Our platform integrates with Salesforce and HubSpot.",
+    )).toEqual([]);
+    expect(unsupportedClaimWarnings(
+      "We are a licensed lender.",
+      "The company provides practical workflow support.",
+    )).toEqual([
+      "Unsupported factual claim: “We are a licensed lender.”",
+    ]);
+  });
+
+  test("requires the same polarity for ordinary negative company assertions", () => {
+    expect(unsupportedClaimWarnings(
+      "Our service does not charge establishment fees.",
+      "Our service charges establishment fees.",
+    )).toEqual([
+      "Unsupported factual claim: “Our service does not charge establishment fees.”",
+    ]);
+    expect(unsupportedClaimWarnings(
+      "Our service does not charge establishment fees.",
+      "Our service does not charge establishment fees.",
+    )).toEqual([]);
   });
 
   test("removes only placeholders and still checks factual claims in the same sentence", () => {

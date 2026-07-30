@@ -18,6 +18,14 @@ jest.mock("@/lib/rate-limit", () => {
     },
   };
 });
+jest.mock("@/lib/content/pilot-observability", () => ({
+  startAnalysisAttempt: jest.fn().mockResolvedValue({
+    id: "77777777-7777-4777-8777-777777777777",
+    lease_token: "66666666-6666-4666-8666-666666666666",
+  }),
+  finishAnalysisAttempt: jest.fn().mockResolvedValue(undefined),
+  recordWorkflowEvent: jest.fn().mockResolvedValue(undefined),
+}));
 
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";

@@ -39,6 +39,13 @@ export interface ContentStyleAnalysisProvenance {
   channel: string;
   summary: string;
   sourceItemIds: string[];
+  sourceEvidence: Array<{
+    itemId: string;
+    title: string;
+    sourceUrl: string | null;
+    contentHash: string;
+    capturedAt: string;
+  }>;
   analysedAt: string | null;
   approvedAt: string | null;
 }
@@ -213,6 +220,25 @@ function approvedChannelAnalysis(
       summary,
       sourceItemIds: Array.isArray(row.source_item_ids)
         ? row.source_item_ids.filter((item): item is string => typeof item === "string").slice(0, 50)
+        : [],
+      sourceEvidence: Array.isArray(row.source_evidence)
+        ? row.source_evidence.flatMap((item) => {
+            if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+            const evidence = item as Record<string, unknown>;
+            return (
+              typeof evidence.itemId === "string" &&
+              typeof evidence.title === "string" &&
+              (typeof evidence.sourceUrl === "string" || evidence.sourceUrl === null) &&
+              typeof evidence.contentHash === "string" &&
+              typeof evidence.capturedAt === "string"
+            ) ? [{
+                itemId: evidence.itemId,
+                title: evidence.title,
+                sourceUrl: evidence.sourceUrl,
+                contentHash: evidence.contentHash,
+                capturedAt: evidence.capturedAt,
+              }] : [];
+          }).slice(0, 50)
         : [],
       analysedAt: typeof row.analysed_at === "string" ? row.analysed_at : null,
       approvedAt: typeof row.approved_at === "string" ? row.approved_at : null,

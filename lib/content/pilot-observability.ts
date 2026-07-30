@@ -39,8 +39,13 @@ export async function startAnalysisAttempt(
     relatedId?: string | null;
     inputSummary?: Record<string, unknown>;
   },
-): Promise<AnalysisAttempt | null> {
+): Promise<AnalysisAttempt> {
   try {
+    const { error: recoveryError } = await db.rpc(
+      "expire_stale_content_analysis_attempts",
+      {},
+    );
+    if (recoveryError) throw recoveryError;
     const { data, error } = await db
       .from("content_analysis_attempts")
       .insert({
@@ -67,7 +72,7 @@ export async function startAnalysisAttempt(
       clientId: input.clientId,
       url: `/content-analysis/${input.kind}`,
     });
-    return null;
+    throw error;
   }
 }
 

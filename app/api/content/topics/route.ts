@@ -4,6 +4,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasContentCapability } from "@/lib/auth/content-capabilities";
 
 const createSchema = z.object({
   client_id:    z.string().uuid(),
@@ -110,12 +111,6 @@ export const POST = withAuth(async (req, { user }) => {
 });
 
 export const PATCH = withAuth(async (req, { user }) => {
-  // VAs run the Content workflow end-to-end for their assigned client. Tenant
-  // access is still enforced below, while client/super admins retain authority.
-  if (!["va", "client_admin", "super_admin"].includes(user.role)) {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-  }
-
   let body: unknown;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
@@ -125,6 +120,12 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
+  if (
+    parsed.data.status !== undefined &&
+    !hasContentCapability(user.role, "approve_content")
+  ) {
+    return NextResponse.json({ error: "Not allowed to decide content topics." }, { status: 403 });
+  }
 
   const admin = createAdminClient();
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -182,10 +183,6 @@ export const PATCH = withAuth(async (req, { user }) => {
 });
 
 export const DELETE = withAuth(async (req, { user }) => {
-  if (!["va", "client_admin", "super_admin"].includes(user.role)) {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-  }
-
   let body: unknown;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
@@ -195,6 +192,9 @@ export const DELETE = withAuth(async (req, { user }) => {
 
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
+  if (!hasContentCapability(user.role, "approve_content")) {
+    return NextResponse.json({ error: "Not allowed to delete content topics." }, { status: 403 });
+  }
 
   const admin = createAdminClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

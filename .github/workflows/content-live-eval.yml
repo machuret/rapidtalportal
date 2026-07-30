@@ -49,9 +49,10 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CONTENT_EVAL_MODEL: openai/gpt-4o-mini
-          CONTENT_EVAL_REQUIRE_PILOT: "0"
+          CONTENT_EVAL_REQUIRE_PILOT: "1"
+          CONTENT_EVAL_MIN_REVIEWS: "20"
         run: |
           deno run \
-            --allow-env=OPENROUTER_API_KEY,SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY,CONTENT_EVAL_MODEL,CONTENT_EVAL_REQUIRE_PILOT \
+            --allow-env=OPENROUTER_API_KEY,SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY,CONTENT_EVAL_MODEL,CONTENT_EVAL_REQUIRE_PILOT,CONTENT_EVAL_MIN_REVIEWS \
             --allow-net=openrouter.ai,${SUPABASE_URL#https://} \
             supabase/functions/content-generate/live-client-voice-eval.ts

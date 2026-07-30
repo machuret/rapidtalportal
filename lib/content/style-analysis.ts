@@ -16,6 +16,14 @@ export const VOICE_GOLDENS_UPDATED_EVENT = "rapidtal:voice-goldens-updated";
 export type StyleAnalysisChannel = typeof STYLE_ANALYSIS_CHANNELS[number];
 export type StyleAnalysisStatus = "draft" | "approved" | "archived";
 
+export interface StyleAnalysisSourceEvidence {
+  itemId: string;
+  title: string;
+  sourceUrl: string | null;
+  contentHash: string;
+  capturedAt: string;
+}
+
 const shortText = z.string().trim().max(1200);
 const patternList = z.array(z.string().trim().min(1).max(300)).max(10);
 
@@ -52,6 +60,7 @@ export interface StyleAnalysisRecord {
   status: StyleAnalysisStatus;
   analysis: StyleAnalysisProfile;
   source_item_ids: string[];
+  source_evidence: StyleAnalysisSourceEvidence[];
   source_count: number;
   source_character_count: number;
   model: string | null;

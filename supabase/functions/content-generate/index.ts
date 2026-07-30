@@ -599,7 +599,7 @@ export async function handleContentGenerateRequest(
     }
     const { data: approvedStyleAnalysis, error: styleAnalysisError } = await admin
       .from("content_style_analyses")
-      .select("id,channel,analysis,source_item_ids,analysed_at,approved_at")
+      .select("id,channel,analysis,source_item_ids,source_evidence,analysed_at,approved_at")
       .eq("client_id", clientId)
       .eq("channel", contentType)
       .eq("status", "approved")
@@ -676,20 +676,20 @@ export async function handleContentGenerateRequest(
     }
 
     // ── OpenAI generation ─────────────────────────────────────────────────────
-    const style = connectedRewrite
-      ? resolvedStyleFromSnapshot(projectStyleSnapshot, contentType) ??
+    // A connected project's resolved style is part of its editorial provenance.
+    // Keep using that frozen authority from brief -> first draft -> rewrites.
+    // An adaptation intentionally resolves the target channel's current style.
+    const frozenProjectStyle =
+      projectId && !connectedAdaptation
+        ? resolvedStyleFromSnapshot(projectStyleSnapshot, contentType)
+        : null;
+    const style = frozenProjectStyle ??
         resolveContentStyle(
           resolvedDna,
           contentType,
           tone,
           CONTENT_LENGTH_HINTS[length] ?? "",
-        )
-      : resolveContentStyle(
-        resolvedDna,
-        contentType,
-        tone,
-        CONTENT_LENGTH_HINTS[length] ?? "",
-      );
+        );
     const baseTemplate = await promptOverride(admin, "content.generate", DEFAULT_SYSTEM);
     const complete = async (request: ContentModelRequest): Promise<string> => {
       const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {

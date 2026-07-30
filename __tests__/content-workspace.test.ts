@@ -58,6 +58,13 @@ describe("unified content engine", () => {
     expect(orchestration).toContain("sourceItemIds");
   });
 
+  test("Compose supports persisted inline edits instead of a read-only generated result", () => {
+    expect(compose).toContain('aria-label="Editable draft"');
+    expect(compose).toContain('api.patch<{ body: string | null; updated_at: string }>');
+    expect(compose).toContain("expected_updated_at: current.updatedAt");
+    expect(compose).toContain("savedText");
+  });
+
   test("market intelligence is tenant-verified, hidden from factual context, and persisted with the brief", () => {
     expect(contentBriefSchema.safeParse({
       objective: "Missing a valid controlled tone and length",
@@ -84,6 +91,7 @@ describe("editorial workspace integrity", () => {
   const migration = read("db/migrations/092_unified_content_workspace.sql");
   const atomicRewrite = read("db/migrations/093_atomic_content_rewrites.sql");
   const connectedDerivations = read("db/migrations/106_connected_rewrite_provenance.sql");
+  const productionRepairs = read("db/migrations/109_content_phase_repairs.sql");
   const rewrite = read("app/api/content/rewrite/route.ts");
   const revisions = read("app/api/content/revisions/route.ts");
   const duplicate = read("app/api/content/duplicate/route.ts");
@@ -117,6 +125,14 @@ describe("editorial workspace integrity", () => {
     expect(connectedDerivations).toContain("UPDATE content_projects");
     expect(connectedDerivations).toContain("v_piece.project_id");
     expect(connectedDerivations).toContain("v_project.vault_source_ids");
+    const repairedRewrite = productionRepairs.slice(
+      productionRepairs.indexOf("CREATE OR REPLACE FUNCTION commit_content_piece_rewrite"),
+      productionRepairs.indexOf("REVOKE ALL ON FUNCTION commit_content_piece_rewrite"),
+    );
+    expect(repairedRewrite).not.toContain("p_generation_kind");
+    expect(repairedRewrite).toContain("length(btrim(p_body)) = 0");
+    expect(productionRepairs).toContain("expire_stale_content_analysis_attempts");
+    expect(productionRepairs).toContain("error_code = 'LEASE_EXPIRED'");
   });
 
   test("duplicate and adaptation retain lineage and always create a draft artifact", () => {

@@ -44,6 +44,8 @@ test.describe("signed-in Content Studio roles", () => {
   });
 
   test("client admin can manage competitors and start intelligence", async ({ page }) => {
+    const clientId = process.env.E2E_CLIENT_ADMIN_CLIENT_ID;
+    if (!clientId) throw new Error("Missing E2E_CLIENT_ADMIN_CLIENT_ID.");
     await signIn(page, "CLIENT_ADMIN");
     await page.goto("/content");
     await expect(page.getByRole("heading", { name: "Content Studio" })).toBeVisible();
@@ -52,6 +54,34 @@ test.describe("signed-in Content Studio roles", () => {
     await expect(page.getByTestId("competitor-add-button")).toBeVisible();
 
     await expect(page.getByTestId("competitor-analyse-button")).toBeVisible();
+
+    const created = await page.request.post("/api/content/competitors", {
+      data: {
+        client_id: clientId,
+        name: `E2E URL competitor ${Date.now()}`,
+        website_url: "https://example.com/articles",
+        refresh_cadence: "manual",
+      },
+    });
+    expect(created.status()).toBe(201);
+    const competitor = await created.json() as { id: string };
+    try {
+      const state = await page.request.get(`/api/content/competitors?client_id=${clientId}`);
+      expect(state.status()).toBe(200);
+      const payload = await state.json() as {
+        competitors: Array<{ id: string; website_url: string; sources: Array<{ normalized_url: string }> }>;
+      };
+      const saved = payload.competitors.find((entry) => entry.id === competitor.id);
+      expect(saved?.website_url).toBe("https://example.com/articles");
+      expect(saved?.sources.some((source) =>
+        source.normalized_url.startsWith("https://example.com/articles")
+      )).toBe(true);
+    } finally {
+      const removed = await page.request.delete("/api/content/competitors", {
+        data: { client_id: clientId, id: competitor.id },
+      });
+      expect(removed.status()).toBe(204);
+    }
   });
 
   test("client admin collects seeded LinkedIn and article sources, analyses them, inspects evidence and promotes an idea", async ({ page }) => {
@@ -196,6 +226,18 @@ test.describe("signed-in Content Studio roles", () => {
       data: { client_id: clientId, id: piece.id, status: "approved" },
     });
     expect(approval.status()).toBe(403);
+
+    const topicDecision = await page.request.patch("/api/content/topics", {
+      data: {
+        client_id: clientId,
+        id: crypto.randomUUID(),
+        status: "approved",
+      },
+    });
+    expect(topicDecision.status()).toBe(403);
+    expect(await topicDecision.json()).toEqual({
+      error: "Not allowed to decide content topics.",
+    });
   });
 
   test("client admin session cannot read another tenant's intelligence API", async ({ page }) => {
@@ -225,6 +267,43 @@ test.describe("signed-in Content Studio roles", () => {
     for (const path of protectedReads) {
       const response = await page.request.get(path);
       expect(response.status(), path).toBe(403);
+    }
+
+    const protectedWrites = [
+      page.request.post("/api/content/generate", {
+        data: {
+          clientId: otherClientId,
+          contentType: "linkedin",
+          title: "Cross-tenant generation must stop before model access",
+          brief: {
+            version: 1,
+            objective: "Attempt to access another client.",
+            audience: null,
+            keyPoints: [],
+            callToAction: null,
+            language: null,
+            tone: "professional",
+            length: "short",
+            mode: "new",
+            inboundContext: null,
+            additionalGuidance: null,
+            recipient: null,
+          },
+        },
+      }),
+      page.request.post("/api/content/competitors", {
+        data: { client_id: otherClientId, name: "Forbidden cross-tenant competitor" },
+      }),
+      page.request.post("/api/content/style-analysis", {
+        data: {
+          client_id: otherClientId,
+          channel: "linkedin",
+          expected_updated_at: null,
+        },
+      }),
+    ];
+    for (const response of await Promise.all(protectedWrites)) {
+      expect(response.status()).toBe(403);
     }
   });
 
