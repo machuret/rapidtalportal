@@ -62,7 +62,7 @@ export const GET = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("content_topics")
-    .select("id, title, description, content_type, status, created_at, created_by")
+    .select("id, title, description, content_type, status, created_at, created_by, approved_by, approved_at, why, ai_fit_score, ai_flagged")
     .eq("client_id", parsed.data.client_id)
     .order("created_at", { ascending: false });
 

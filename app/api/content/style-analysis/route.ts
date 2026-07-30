@@ -15,6 +15,10 @@ import {
   type StyleAnalysisResponse,
   type StyleAnalysisSource,
 } from "@/lib/content/style-analysis";
+import {
+  calibrateStyleProfile,
+  type ContentGoldenExample,
+} from "@/lib/content/voice-calibration";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -75,7 +79,17 @@ function sourceChannels(tags: string[]): StyleAnalysisChannel[] {
 }
 
 function emptyChannelState(): StyleAnalysisChannelState {
-  return { approved: null, draft: null, sources: [] };
+  return {
+    approved: null,
+    draft: null,
+    sources: [],
+    calibration: {
+      confidence: "low",
+      approvedGoldenCount: 0,
+      representativeGoldenCount: 0,
+      diagnostics: [],
+    },
+  };
 }
 
 function evidenceBelongsToSources(
@@ -136,7 +150,12 @@ async function loadStyleAnalysis(clientId: string): Promise<StyleAnalysisRespons
   // tenant boundary is enforced before this loader is called.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any;
-  const [{ data: rows, error: analysisError }, { data: sourceRows, error: sourceError }] =
+  const [
+    { data: rows, error: analysisError },
+    { data: sourceRows, error: sourceError },
+    { data: goldenRows, error: goldenError },
+    { data: competitorRows, error: competitorError },
+  ] =
     await Promise.all([
       db
         .from("content_style_analyses")
@@ -151,10 +170,26 @@ async function loadStyleAnalysis(clientId: string): Promise<StyleAnalysisRespons
         .eq("evidence_role", "style_example")
         .order("created_at", { ascending: false })
         .limit(100),
+      db
+        .from("content_golden_examples")
+        .select("id,client_id,channel,title,body,source_url,published_at,content_type,represents_brand_strongly,voice_traits,structural_traits,vocabulary_preferences,admin_notes,evaluation_permission,status,content_hash,approved_at,created_at,updated_at")
+        .eq("client_id", clientId)
+        .neq("status", "archived")
+        .order("created_at", { ascending: false })
+        .limit(500),
+      db
+        .from("competitor_content_items")
+        .select("title,raw_content")
+        .eq("client_id", clientId)
+        .eq("is_removed", false)
+        .order("captured_at", { ascending: false })
+        .limit(30),
     ]);
 
   if (analysisError) throw new Error(`Style analysis query failed: ${analysisError.message}`);
   if (sourceError) throw new Error(`Style source query failed: ${sourceError.message}`);
+  if (goldenError) throw new Error(`Golden example query failed: ${goldenError.message}`);
+  if (competitorError) throw new Error(`Competitor style query failed: ${competitorError.message}`);
 
   const channels = Object.fromEntries(
     STYLE_ANALYSIS_CHANNELS.map((channel) => [channel, emptyChannelState()]),
@@ -182,6 +217,25 @@ async function loadStyleAnalysis(clientId: string): Promise<StyleAnalysisRespons
       created_at: row.created_at,
     };
     for (const channel of source.channels) channels[channel].sources.push(source);
+  }
+
+  const goldens = (goldenRows ?? []) as ContentGoldenExample[];
+  const competitorVocabulary = (competitorRows ?? []).flatMap(
+    (row: { title?: string | null; raw_content?: string | null }) => [
+      row.title ?? "",
+      row.raw_content?.slice(0, 600) ?? "",
+    ],
+  );
+  const approvedProfiles = Object.values(channels)
+    .flatMap((state) => state.approved ? [state.approved] : []);
+  for (const channel of STYLE_ANALYSIS_CHANNELS) {
+    channels[channel].calibration = calibrateStyleProfile({
+      profile: channels[channel].approved,
+      sources: channels[channel].sources.filter((source) => source.status === "ready"),
+      goldens: goldens.filter((golden) => golden.channel === channel),
+      competitorVocabulary,
+      otherApprovedProfiles: approvedProfiles.filter((profile) => profile.channel !== channel),
+    });
   }
 
   return { channels };

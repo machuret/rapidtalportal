@@ -5,6 +5,7 @@ import path from "path";
 import {
   contentBriefSchema,
   contentMarketIntelligenceSchema,
+  contentProjectIdeaSchema,
   contentProjectStatusSchema,
   contentProjectStepSchema,
 } from "@/lib/content/project-schema";
@@ -82,6 +83,40 @@ describe("connected editorial journey", () => {
     expect(contentProjectStatusSchema.parse("rejected")).toBe("rejected");
     expect(contentProjectStepSchema.parse("brief")).toBe("brief");
     expect(contentProjectStepSchema.safeParse("unknown").success).toBe(false);
+    const explainableIdea = contentProjectIdeaSchema.parse({
+      version: 1,
+      origin: "company_topic",
+      title: "A fully explainable idea",
+      channel: "linkedin",
+      rationale: "Useful to the audience.",
+      differentiation: "A new company angle.",
+      evidenceSummary: "One Vault source.",
+      explainability: {
+        hook: "A concrete hook",
+        topic: "A practical topic",
+        intendedAudience: "Business owners",
+        strategicObjective: "Build informed consideration",
+        whyValuable: "It answers a recurring audience question.",
+        companyDnaFit: "It reflects the company’s evidence-led positioning.",
+        supportingVaultMaterial: [{
+          itemId: "77777777-7777-4777-8777-777777777777",
+          title: "Approved company guide",
+        }],
+        supportingMarketSignals: [],
+        differenceFromCompetitors: "No competitor comparison requested.",
+        existingCompanyContent: [],
+        differenceFromExisting: "No equivalent company artifact exists.",
+        recommendedFormat: "LinkedIn point-of-view post",
+        recommendedCta: "Read the company guide",
+        confidence: "high",
+        evidenceStrength: "medium",
+        scores: Object.fromEntries([
+          "companyRelevance", "audienceRelevance", "vaultEvidenceStrength",
+          "marketOpportunity", "differentiation", "novelty", "channelFit",
+        ].map((key) => [key, { score: 80, explanation: `${key} is supported.` }])),
+      },
+    });
+    expect(explainableIdea.explainability?.scores.novelty.score).toBe(80);
   });
 
   test("brief and market provenance schemas reject ambiguous inputs", () => {

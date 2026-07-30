@@ -16,6 +16,10 @@ jobs:
         with:
           deno-version: v2.x
 
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
       - name: Require evaluation credentials
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -26,3 +30,28 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CONTENT_EVAL_MODEL: openai/gpt-4o-mini
         run: deno run --allow-env=OPENROUTER_API_KEY,CONTENT_EVAL_MODEL --allow-net=openrouter.ai supabase/functions/content-generate/live-golden-eval.ts
+
+      - name: Prepare private real-client evaluation access
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_PROJECT_REF"
+          SERVICE_KEY="$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" --output json | jq -r '.[] | select(.name == "service_role") | .api_key')"
+          test -n "$SERVICE_KEY"
+          test "$SERVICE_KEY" != "null"
+          echo "::add-mask::$SERVICE_KEY"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_KEY" >> "$GITHUB_ENV"
+          echo "SUPABASE_URL=https://$SUPABASE_PROJECT_REF.supabase.co" >> "$GITHUB_ENV"
+
+      - name: Run real-client blind voice calibration
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CONTENT_EVAL_MODEL: openai/gpt-4o-mini
+          CONTENT_EVAL_REQUIRE_PILOT: "0"
+        run: |
+          deno run \
+            --allow-env=OPENROUTER_API_KEY,SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY,CONTENT_EVAL_MODEL,CONTENT_EVAL_REQUIRE_PILOT \
+            --allow-net=openrouter.ai,${SUPABASE_URL#https://} \
+            supabase/functions/content-generate/live-client-voice-eval.ts

@@ -475,6 +475,29 @@ export function ContentProjectWorkflow({
               <div><dt className="text-zinc-500">How it is differentiated</dt><dd className="mt-1 text-zinc-300">{project.idea_snapshot.differentiation || "The final angle will be made specific during briefing."}</dd></div>
               <div><dt className="text-zinc-500">Evidence behind the idea</dt><dd className="mt-1 text-zinc-300">{project.idea_snapshot.evidenceSummary || "Company context and Vault signals informed this idea."}</dd></div>
             </dl>
+            {project.idea_snapshot.explainability && (
+              <div className="mt-5 space-y-4 border-t border-zinc-800 pt-5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div><p className="text-xs text-zinc-500">Proposed hook</p><p className="mt-1 text-sm text-zinc-300">{project.idea_snapshot.explainability.hook}</p></div>
+                  <div><p className="text-xs text-zinc-500">Intended audience</p><p className="mt-1 text-sm text-zinc-300">{project.idea_snapshot.explainability.intendedAudience}</p></div>
+                  <div><p className="text-xs text-zinc-500">Strategic objective</p><p className="mt-1 text-sm text-zinc-300">{project.idea_snapshot.explainability.strategicObjective}</p></div>
+                  <div><p className="text-xs text-zinc-500">Recommended format and CTA</p><p className="mt-1 text-sm text-zinc-300">{project.idea_snapshot.explainability.recommendedFormat} · {project.idea_snapshot.explainability.recommendedCta}</p></div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+                  {Object.entries(project.idea_snapshot.explainability.scores).map(([name, dimension]) => (
+                    <div key={name} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3" title={dimension.explanation}>
+                      <p className="text-2xs capitalize text-zinc-500">{name.replace(/([A-Z])/gu, " $1")}</p>
+                      <p className="mt-1 text-base font-semibold text-zinc-100">{dimension.score}/100</p>
+                      <p className="mt-1 line-clamp-2 text-2xs leading-4 text-zinc-500">{dimension.explanation}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Confidence: <span className="capitalize text-zinc-300">{project.idea_snapshot.explainability.confidence}</span>
+                  {" · "}Evidence strength: <span className="capitalize text-zinc-300">{project.idea_snapshot.explainability.evidenceStrength}</span>
+                </p>
+              </div>
+            )}
           </section>
           <aside className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
             <p className="text-sm font-medium text-white">What next?</p>

@@ -44,6 +44,12 @@ import {
 import { POST as duplicate } from "@/app/api/content/duplicate/route";
 import { POST as generate } from "@/app/api/content/generate/route";
 import {
+  DELETE as deleteGolden,
+  GET as getGoldens,
+  PATCH as patchGolden,
+  POST as createGolden,
+} from "@/app/api/content/goldens/route";
+import {
   GET as getPieces,
   PATCH as patchPiece,
   POST as createPiece,
@@ -61,6 +67,11 @@ import {
   PATCH as patchStyleAnalysis,
   POST as createStyleAnalysis,
 } from "@/app/api/content/style-analysis/route";
+import {
+  GET as getVoiceEvaluations,
+  PATCH as patchVoiceEvaluation,
+  POST as createVoiceEvaluation,
+} from "@/app/api/content/voice-evaluations/route";
 import { POST as generateTopics } from "@/app/api/content/topics/generate/route";
 import {
   DELETE as deleteTopic,
@@ -80,6 +91,8 @@ const CRAWL_ID = "99999999-9999-4999-8999-999999999999";
 const UPDATED_AT = "2026-07-28T01:00:00.000Z";
 const STYLE_ANALYSIS_ID = "abababab-abab-4bab-8bab-abababababab";
 const PROJECT_ID = "12121212-1212-4212-8212-121212121212";
+const GOLDEN_ID = "13131313-1313-4313-8313-131313131313";
+const EVALUATION_ID = "14141414-1414-4414-8414-141414141414";
 const routeCtx = { params: Promise.resolve({}) };
 const user: ApiUser = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -220,6 +233,41 @@ const cases: { endpoint: string; call: () => Promise<Response> }[] = [
         length: "short",
       },
     })),
+  },
+  {
+    endpoint: "goldens:GET",
+    call: () => getGoldens(
+      new NextRequest(`https://portal.test/api/content/goldens?client_id=${CLIENT_B}`),
+      routeCtx,
+    ),
+  },
+  {
+    endpoint: "goldens:POST",
+    call: () => createGolden(jsonRequest("https://portal.test/api/content/goldens", {
+      client_id: CLIENT_B,
+      channel: "linkedin",
+      title: "Published example",
+      body: "A sufficiently detailed published example for another tenant’s private voice library.",
+      content_type: "educational",
+      evaluation_permission: true,
+    }), routeCtx),
+  },
+  {
+    endpoint: "goldens:PATCH",
+    call: () => patchGolden(jsonRequest("https://portal.test/api/content/goldens", {
+      client_id: CLIENT_B,
+      id: GOLDEN_ID,
+      title: "Changed",
+      expected_updated_at: UPDATED_AT,
+    }), routeCtx),
+  },
+  {
+    endpoint: "goldens:DELETE",
+    call: () => deleteGolden(jsonRequest("https://portal.test/api/content/goldens", {
+      client_id: CLIENT_B,
+      id: GOLDEN_ID,
+      expected_updated_at: UPDATED_AT,
+    }), routeCtx),
   },
   {
     endpoint: "pieces:GET",
@@ -399,6 +447,32 @@ const cases: { endpoint: string; call: () => Promise<Response> }[] = [
       client_id: CLIENT_B,
       project_id: PROJECT_ID,
       piece_id: PIECE_ID,
+    }), routeCtx),
+  },
+  {
+    endpoint: "voice-evaluations:GET",
+    call: () => getVoiceEvaluations(
+      new NextRequest(`https://portal.test/api/content/voice-evaluations?client_id=${CLIENT_B}`),
+      routeCtx,
+    ),
+  },
+  {
+    endpoint: "voice-evaluations:POST",
+    call: () => createVoiceEvaluation(jsonRequest("https://portal.test/api/content/voice-evaluations", {
+      client_id: CLIENT_B,
+      channel: "linkedin",
+      title: "Cross-tenant evaluation",
+      objective: "Create a private voice comparison for another tenant.",
+      audience: "Business owners",
+    }), routeCtx),
+  },
+  {
+    endpoint: "voice-evaluations:PATCH",
+    call: () => patchVoiceEvaluation(jsonRequest("https://portal.test/api/content/voice-evaluations", {
+      client_id: CLIENT_B,
+      id: EVALUATION_ID,
+      preferred_variant: "a",
+      reviewer_notes: "",
     }), routeCtx),
   },
 ];

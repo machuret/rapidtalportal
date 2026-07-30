@@ -117,16 +117,20 @@ function ContentStudioInner({
   }, [clientId, updateProject]);
 
   const handleTopicSelected = useCallback(async (topic: ContentTopic) => {
+    const explainability = topic.why?.explainability ?? null;
     await createProject({
       version: 1,
       origin: "company_topic",
       title: topic.title,
       channel: topic.content_type === "social" ? "linkedin" : topic.content_type,
-      rationale: topic.description || "Selected from the company’s approved content priorities and Vault-informed ideas.",
-      differentiation: "The final brief will define a company-specific angle before generation.",
-      evidenceSummary: "Company DNA, Vault material and approved content priorities informed this idea.",
+      rationale: explainability?.whyValuable || topic.description || "Selected from the company’s approved content priorities and Vault-informed ideas.",
+      differentiation: explainability?.differenceFromExisting || "The final brief will define a company-specific angle before generation.",
+      evidenceSummary: explainability
+        ? `${explainability.supportingVaultMaterial.length} Vault source${explainability.supportingVaultMaterial.length === 1 ? "" : "s"} and ${explainability.supportingMarketSignals.length} market signal${explainability.supportingMarketSignals.length === 1 ? "" : "s"} informed this idea.`
+        : "Company DNA, Vault material and approved content priorities informed this idea.",
       topicId: topic.id,
       marketIntelligence: null,
+      explainability,
     });
   }, [createProject]);
 

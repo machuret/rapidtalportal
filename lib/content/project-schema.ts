@@ -107,6 +107,44 @@ export const contentProjectIdeaSchema = z.object({
   evidenceSummary: z.string().trim().max(2000).default(""),
   topicId: z.uuid().optional().nullable(),
   marketIntelligence: contentMarketIntelligenceSchema.optional().nullable(),
+  explainability: z.object({
+    hook: z.string().trim().min(1).max(1000),
+    topic: z.string().trim().min(1).max(500),
+    intendedAudience: z.string().trim().min(1).max(1000),
+    strategicObjective: z.string().trim().min(1).max(1000),
+    whyValuable: z.string().trim().min(1).max(2000),
+    companyDnaFit: z.string().trim().min(1).max(2000),
+    supportingVaultMaterial: z.array(z.object({
+      itemId: z.uuid(),
+      title: z.string().trim().min(1).max(500),
+    })).max(20),
+    supportingMarketSignals: z.array(z.object({
+      itemId: z.uuid(),
+      competitorName: z.string().trim().min(1).max(300),
+      title: z.string().trim().min(1).max(500),
+      url: z.url(),
+    })).max(20),
+    differenceFromCompetitors: z.string().trim().min(1).max(2000),
+    existingCompanyContent: z.array(z.object({
+      id: z.uuid(),
+      title: z.string().trim().min(1).max(500),
+      contentType: z.string().trim().min(1).max(100),
+    })).max(20),
+    differenceFromExisting: z.string().trim().min(1).max(2000),
+    recommendedFormat: z.string().trim().min(1).max(1000),
+    recommendedCta: z.string().trim().min(1).max(1000),
+    confidence: z.enum(["low", "medium", "high"]),
+    evidenceStrength: z.enum(["low", "medium", "high"]),
+    scores: z.object({
+      companyRelevance: z.object({ score: z.number().int().min(0).max(100), explanation: z.string().trim().min(1).max(1000) }),
+      audienceRelevance: z.object({ score: z.number().int().min(0).max(100), explanation: z.string().trim().min(1).max(1000) }),
+      vaultEvidenceStrength: z.object({ score: z.number().int().min(0).max(100), explanation: z.string().trim().min(1).max(1000) }),
+      marketOpportunity: z.object({ score: z.number().int().min(0).max(100), explanation: z.string().trim().min(1).max(1000) }),
+      differentiation: z.object({ score: z.number().int().min(0).max(100), explanation: z.string().trim().min(1).max(1000) }),
+      novelty: z.object({ score: z.number().int().min(0).max(100), explanation: z.string().trim().min(1).max(1000) }),
+      channelFit: z.object({ score: z.number().int().min(0).max(100), explanation: z.string().trim().min(1).max(1000) }),
+    }),
+  }).optional().nullable(),
 });
 
 export const contentProjectStepSchema = z.enum([

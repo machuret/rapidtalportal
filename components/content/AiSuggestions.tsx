@@ -20,7 +20,6 @@ function whySentence(why: BrainWhy | null | undefined): string | null {
   if (parts.length === 0) return null;
   let s = `Built from ${parts.join(", ")}`;
   if (why.grounded) s += " · matched to your acceptance history";
-  if (typeof why.fit === "number") s += ` · fit ${why.fit}/100`;
   return s + ".";
 }
 
@@ -68,7 +67,19 @@ const SuggestionCard = memo(function SuggestionCard({
             : "border-zinc-700 bg-zinc-800/40"
       }`}
     >
-      <button type="button" onClick={() => onToggle(index)} className="w-full text-left p-4">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-pressed={isSelected}
+        onClick={() => onToggle(index)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onToggle(index);
+          }
+        }}
+        className="w-full cursor-pointer p-4 text-left"
+      >
         <div className="flex items-start gap-3">
           <div className="mt-0.5 shrink-0">
             {isSelected ? <SquareCheckBig className="w-4 h-4 text-purple-400" /> : <Square className="w-4 h-4 text-zinc-600" />}
@@ -79,7 +90,7 @@ const SuggestionCard = memo(function SuggestionCard({
               <span className="text-xs text-zinc-500 capitalize">{suggestion.content_type}</span>
               {suggestion.ai_flagged && (
                 <span className="inline-flex items-center gap-1 text-2xs font-medium text-amber-400">
-                  <AlertTriangle className="w-3 h-3" /> AI: low fit{typeof suggestion.fit === "number" ? ` (${suggestion.fit})` : ""}
+                  <AlertTriangle className="w-3 h-3" /> Low company relevance — review
                 </span>
               )}
             </div>
@@ -106,9 +117,54 @@ const SuggestionCard = memo(function SuggestionCard({
                 <Info className="w-3 h-3 shrink-0 mt-0.5" /> <span>{whySentence(suggestion.why)}</span>
               </p>
             )}
+            {suggestion.explainability && (
+              <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-950/60 p-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div><p className="text-2xs uppercase text-zinc-600">Proposed hook</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.hook}</p></div>
+                  <div><p className="text-2xs uppercase text-zinc-600">Audience</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.intendedAudience}</p></div>
+                  <div><p className="text-2xs uppercase text-zinc-600">Why valuable</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.whyValuable}</p></div>
+                  <div><p className="text-2xs uppercase text-zinc-600">Company DNA fit</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.companyDnaFit}</p></div>
+                  <div><p className="text-2xs uppercase text-zinc-600">Format</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.recommendedFormat}</p></div>
+                  <div><p className="text-2xs uppercase text-zinc-600">CTA</p><p className="mt-0.5 text-xs text-zinc-300">{suggestion.explainability.recommendedCta}</p></div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                  {Object.entries(suggestion.explainability.scores).map(([key, score]) => (
+                    <div key={key} title={score.explanation} className="rounded border border-zinc-800 p-2">
+                      <p className="text-2xs capitalize text-zinc-500">{key.replace(/([A-Z])/gu, " $1")}</p>
+                      <p className="mt-0.5 text-sm font-semibold text-zinc-200">{score.score}/100</p>
+                    </div>
+                  ))}
+                </div>
+                <details
+                  className="mt-3 text-xs text-zinc-400"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <summary className="cursor-pointer text-purple-300">Evidence and differentiation</summary>
+                  <div className="mt-2 space-y-2">
+                    <p><span className="text-zinc-600">Existing content difference:</span> {suggestion.explainability.differenceFromExisting}</p>
+                    <p><span className="text-zinc-600">Competitor difference:</span> {suggestion.explainability.differenceFromCompetitors}</p>
+                    <p>
+                      <span className="text-zinc-600">Vault support:</span>{" "}
+                      {suggestion.explainability.supportingVaultMaterial.length
+                        ? suggestion.explainability.supportingVaultMaterial.map((source) => source.title).join(", ")
+                        : "No direct factual support yet"}
+                    </p>
+                    <p>
+                      <span className="text-zinc-600">Market signals:</span>{" "}
+                      {suggestion.explainability.supportingMarketSignals.length
+                        ? suggestion.explainability.supportingMarketSignals.map((source) => source.competitorName).join(", ")
+                        : "None attached"}
+                    </p>
+                    <p className="text-zinc-500">
+                      Confidence: {suggestion.explainability.confidence} · Evidence strength: {suggestion.explainability.evidenceStrength}
+                    </p>
+                  </div>
+                </details>
+              </div>
+            )}
           </div>
         </div>
-      </button>
+      </div>
       {/* Teach the Brain */}
       <div className="flex items-center justify-end gap-1 px-4 pb-2.5 -mt-1">
         <button

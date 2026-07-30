@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { StyleCalibration } from "@/lib/content/voice-calibration";
 
 export const STYLE_ANALYSIS_CHANNELS = [
   "linkedin",
@@ -10,6 +11,7 @@ export const STYLE_ANALYSIS_CHANNELS = [
   "newsletter",
 ] as const;
 export const STYLE_SOURCES_UPDATED_EVENT = "rapidtal:style-sources-updated";
+export const VOICE_GOLDENS_UPDATED_EVENT = "rapidtal:voice-goldens-updated";
 
 export type StyleAnalysisChannel = typeof STYLE_ANALYSIS_CHANNELS[number];
 export type StyleAnalysisStatus = "draft" | "approved" | "archived";
@@ -73,6 +75,7 @@ export interface StyleAnalysisChannelState {
   approved: StyleAnalysisRecord | null;
   draft: StyleAnalysisRecord | null;
   sources: StyleAnalysisSource[];
+  calibration: StyleCalibration;
 }
 
 export interface StyleAnalysisResponse {

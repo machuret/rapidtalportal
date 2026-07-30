@@ -7,6 +7,7 @@ import { Archive } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { LinkedInVaultSourcePanel } from "@/components/vault/LinkedInVaultSourcePanel";
 import { StyleAnalysisManager } from "@/components/content/StyleAnalysisManager";
+import { VoiceGoldenLibrary } from "@/components/content/VoiceGoldenLibrary";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Client Vaults — RapidTal" };
@@ -87,6 +88,7 @@ export default async function AdminVaultPage({ searchParams: searchParamsPromise
             clientName={clientName}
             canEdit
           />
+          <VoiceGoldenLibrary key={`goldens-${clientId}`} clientId={clientId} canEdit />
           <VaultClient
             key={clientId}
             clientId={clientId}

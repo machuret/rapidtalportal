@@ -319,6 +319,10 @@ export async function handleContentGenerateRequest(
     // an explicit platform.
     const contentType = requestedContentType === "social" ? "linkedin" : requestedContentType;
     const persist = body.persist !== false;
+    const evaluationStyleMode =
+      body.evaluationStyleMode === "conditioned" || body.evaluationStyleMode === "baseline"
+        ? body.evaluationStyleMode as "conditioned" | "baseline"
+        : null;
     const sourceContext = typeof body.sourceContext === "string" ? body.sourceContext : "";
     const projectId = typeof body.projectId === "string" ? body.projectId : null;
     const selectedVaultSourceIds: string[] | undefined = Array.isArray(body.vaultSourceIds)
@@ -415,6 +419,17 @@ export async function handleContentGenerateRequest(
     const userClientId = (userRow as { client_id: string | null }).client_id;
     if (role !== "super_admin" && userClientId !== clientId) {
       return new Response(JSON.stringify({ error: "Forbidden." }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (
+      evaluationStyleMode &&
+      (persist || !["client_admin", "super_admin"].includes(role))
+    ) {
+      return new Response(JSON.stringify({
+        error: "Voice evaluation is available only to client administrators and cannot persist a draft.",
+      }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -598,7 +613,7 @@ export async function handleContentGenerateRequest(
     }
     const resolvedDna: Record<string, unknown> = {
       ...(dna as Record<string, unknown>),
-      style_analysis_profiles: approvedStyleAnalysis
+      style_analysis_profiles: approvedStyleAnalysis && evaluationStyleMode !== "baseline"
         ? { [contentType]: approvedStyleAnalysis }
         : {},
     };
@@ -747,7 +762,7 @@ export async function handleContentGenerateRequest(
       ),
       exampleSources: retrieval.styleSources,
     };
-    if (qualityWarnings.length) {
+    if (qualityWarnings.length && !evaluationStyleMode) {
       return new Response(JSON.stringify({
         error: "The generated draft did not pass the content quality gate. No draft was created.",
         warnings: qualityWarnings,

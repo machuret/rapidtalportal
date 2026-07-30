@@ -82,6 +82,10 @@ export const ROUTES = {
     generate: () => "/api/content/generate",
     styleAnalysis: () => "/api/content/style-analysis",
     styleAnalysisForClient: (clientId: string) => `/api/content/style-analysis?client_id=${clientId}`,
+    goldens: () => "/api/content/goldens",
+    goldensForClient: (clientId: string) => `/api/content/goldens?client_id=${clientId}`,
+    voiceEvaluations: () => "/api/content/voice-evaluations",
+    voiceEvaluationsForClient: (clientId: string) => `/api/content/voice-evaluations?client_id=${clientId}`,
     competitorIntelligence: () => "/api/content/competitors/intelligence",
     competitorIntelligenceForClient: (clientId: string) =>
       `/api/content/competitors/intelligence?client_id=${clientId}`,

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { DnaForm } from "@/components/dna/DnaForm";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { StyleAnalysisManager } from "@/components/content/StyleAnalysisManager";
+import { VoiceGoldenLibrary } from "@/components/content/VoiceGoldenLibrary";
 import { LinkedInVaultSourcePanel } from "@/components/vault/LinkedInVaultSourcePanel";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,7 @@ export default async function CompanyDnaPage() {
         clientName={client?.name}
         canEdit={canEdit}
       />
+      <VoiceGoldenLibrary clientId={user.client_id} canEdit={canEdit} />
     </div>
   );
 }

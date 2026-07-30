@@ -115,6 +115,9 @@ export interface ContentTopic {
   created_by: string | null;
   approved_by?: string | null;
   approved_at?: string | null;
+  why?: (BrainWhy & { explainability?: ContentIdeaExplainability }) | null;
+  ai_fit_score?: number | null;
+  ai_flagged?: boolean;
 }
 
 export interface ContentPiece {
@@ -181,6 +184,7 @@ export interface ContentProjectIdea {
   evidenceSummary: string;
   topicId?: string | null;
   marketIntelligence?: ContentMarketIntelligenceProvenance | null;
+  explainability?: ContentIdeaExplainability | null;
 }
 
 export interface ContentProject {
@@ -230,6 +234,51 @@ export interface AiSuggestion {
     title: string;
     url: string;
   }>;
+  explainability?: ContentIdeaExplainability;
+}
+
+export interface ContentIdeaDimensionScore {
+  score: number;
+  explanation: string;
+}
+
+export interface ContentIdeaExplainability {
+  hook: string;
+  topic: string;
+  intendedAudience: string;
+  strategicObjective: string;
+  whyValuable: string;
+  companyDnaFit: string;
+  supportingVaultMaterial: Array<{
+    itemId: string;
+    title: string;
+  }>;
+  supportingMarketSignals: Array<{
+    itemId: string;
+    competitorName: string;
+    title: string;
+    url: string;
+  }>;
+  differenceFromCompetitors: string;
+  existingCompanyContent: Array<{
+    id: string;
+    title: string;
+    contentType: string;
+  }>;
+  differenceFromExisting: string;
+  recommendedFormat: string;
+  recommendedCta: string;
+  confidence: "low" | "medium" | "high";
+  evidenceStrength: "low" | "medium" | "high";
+  scores: {
+    companyRelevance: ContentIdeaDimensionScore;
+    audienceRelevance: ContentIdeaDimensionScore;
+    vaultEvidenceStrength: ContentIdeaDimensionScore;
+    marketOpportunity: ContentIdeaDimensionScore;
+    differentiation: ContentIdeaDimensionScore;
+    novelty: ContentIdeaDimensionScore;
+    channelFit: ContentIdeaDimensionScore;
+  };
 }
 
 /** What the Brain used to produce a suggestion (powers "Why this?"). */

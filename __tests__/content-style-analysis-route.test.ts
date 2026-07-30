@@ -70,7 +70,7 @@ function chain(result: { data?: unknown; error: unknown }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const builder: Record<string, any> = {};
   for (const method of [
-    "select", "eq", "in", "contains", "order", "limit", "insert", "update",
+    "select", "eq", "neq", "in", "contains", "order", "limit", "insert", "update",
   ]) {
     builder[method] = jest.fn(() => builder);
   }

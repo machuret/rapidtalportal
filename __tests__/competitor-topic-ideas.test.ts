@@ -41,7 +41,7 @@ import { POST } from "@/app/api/content/topics/generate/route";
 
 function fluent(result: { data: unknown; error: unknown }) {
   const chain: Record<string, jest.Mock | ((resolve: (value: unknown) => unknown) => Promise<unknown>)> = {};
-  for (const method of ["select", "eq", "order", "limit"]) {
+  for (const method of ["select", "eq", "in", "order", "limit"]) {
     chain[method] = jest.fn(() => chain);
   }
   chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve(resolve(result));
@@ -73,6 +73,9 @@ beforeEach(() => {
 describe("competitor-gap topic generation", () => {
   test("keeps only ideas citing verified tenant-scoped evidence and returns provenance", async () => {
     const from = jest.fn((table: string) => {
+      if (table === "vault_items" || table === "content_pieces") {
+        return fluent({ data: [], error: null });
+      }
       if (table === "competitors") {
         return fluent({ data: [{ id: COMPETITOR_ID, name: "Market Co" }], error: null });
       }
@@ -111,13 +114,25 @@ describe("competitor-gap topic generation", () => {
             topics: [
               {
                 title: "A defensible gap",
+                hook: "A practical gap the market keeps missing",
+                topic: "Practical market gap",
                 description: "An original company angle.",
                 content_type: "linkedin",
+                intended_audience: "Business decision makers",
+                strategic_objective: "Demonstrate a useful company point of view",
+                why_valuable: "It answers a repeated market question with a practical angle.",
+                company_dna_fit: "It uses the company’s evidence-led positioning.",
+                vault_evidence_ids: [],
                 rationale: "The market discusses the problem but not this practical angle.",
                 fit: 88,
                 opportunity_type: "gap",
                 evidence_summary: "The competitor repeatedly frames the industry problem.",
                 evidence_ids: [ITEM_ID],
+                difference_from_competitors: "It explains the practical next step competitors omit.",
+                existing_content_ids: [],
+                difference_from_existing: "No equivalent company content was found.",
+                recommended_format: "A concise LinkedIn point-of-view post",
+                recommended_cta: "Ask readers which constraint they see most often",
               },
               {
                 title: "Spoofed evidence",
@@ -158,6 +173,24 @@ describe("competitor-gap topic generation", () => {
         competitors: ["Market Co"],
         competitor_sources: [{ item_id: ITEM_ID }],
       },
+      explainability: {
+        hook: "A practical gap the market keeps missing",
+        intendedAudience: "Business decision makers",
+        supportingMarketSignals: [{ itemId: ITEM_ID, competitorName: "Market Co" }],
+        differenceFromCompetitors: "It explains the practical next step competitors omit.",
+        differenceFromExisting: "No equivalent company content was found.",
+        recommendedFormat: "A concise LinkedIn point-of-view post",
+        confidence: expect.stringMatching(/low|medium|high/u),
+        scores: {
+          companyRelevance: { score: expect.any(Number), explanation: expect.any(String) },
+          audienceRelevance: { score: expect.any(Number), explanation: expect.any(String) },
+          vaultEvidenceStrength: { score: expect.any(Number), explanation: expect.any(String) },
+          marketOpportunity: { score: expect.any(Number), explanation: expect.any(String) },
+          differentiation: { score: expect.any(Number), explanation: expect.any(String) },
+          novelty: { score: expect.any(Number), explanation: expect.any(String) },
+          channelFit: { score: expect.any(Number), explanation: expect.any(String) },
+        },
+      },
     });
     expect(json.warning).toContain("removed");
     const modelBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
@@ -167,8 +200,10 @@ describe("competitor-gap topic generation", () => {
   });
 
   test("does not allow a requested competitor outside the tenant boundary", async () => {
-    const from = jest.fn(() => fluent({
-      data: [{ id: COMPETITOR_ID, name: "Tenant competitor" }],
+    const from = jest.fn((table: string) => fluent({
+      data: table === "vault_items" || table === "content_pieces"
+        ? []
+        : [{ id: COMPETITOR_ID, name: "Tenant competitor" }],
       error: null,
     }));
     const rpc = jest.fn().mockResolvedValue({

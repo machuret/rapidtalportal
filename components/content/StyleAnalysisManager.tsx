@@ -18,6 +18,7 @@ import { ROUTES } from "@/lib/api/routes";
 import {
   STYLE_ANALYSIS_CHANNELS,
   STYLE_SOURCES_UPDATED_EVENT,
+  VOICE_GOLDENS_UPDATED_EVENT,
   emptyStyleAnalysisProfile,
   type StyleAnalysisChannel,
   type StyleAnalysisProfile,
@@ -130,7 +131,11 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
       if (collectedClientId === clientId) void load(true);
     }
     window.addEventListener(STYLE_SOURCES_UPDATED_EVENT, refreshAfterCollection);
-    return () => window.removeEventListener(STYLE_SOURCES_UPDATED_EVENT, refreshAfterCollection);
+    window.addEventListener(VOICE_GOLDENS_UPDATED_EVENT, refreshAfterCollection);
+    return () => {
+      window.removeEventListener(STYLE_SOURCES_UPDATED_EVENT, refreshAfterCollection);
+      window.removeEventListener(VOICE_GOLDENS_UPDATED_EVENT, refreshAfterCollection);
+    };
     // load intentionally uses the current clientId.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
@@ -147,6 +152,7 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
   const channelState = data?.channels[selectedChannel] ?? null;
   const activeRecord = channelState?.draft ?? channelState?.approved ?? null;
   const approvedRecord = channelState?.approved ?? null;
+  const calibration = channelState?.calibration ?? null;
   const readySources = useMemo(
     () => channelState?.sources.filter((source) =>
       source.status === "ready" && source.character_count >= 40
@@ -323,6 +329,59 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
               </p>
             </div>
           </div>
+
+          {calibration && (
+            <div className="mt-4 rounded-lg border border-purple-500/20 bg-zinc-950/40 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-zinc-200">Style-profile calibration</p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Deterministic confidence from approved goldens, source depth, recency and consistency.
+                  </p>
+                </div>
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
+                  calibration.confidence === "high"
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                    : calibration.confidence === "medium"
+                      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                      : "border-red-500/30 bg-red-500/10 text-red-200"
+                }`}>
+                  {calibration.confidence} confidence
+                </span>
+              </div>
+              <p className="mt-3 text-xs text-zinc-400">
+                {calibration.approvedGoldenCount} approved golden example{calibration.approvedGoldenCount === 1 ? "" : "s"}
+                {" · "}{calibration.representativeGoldenCount} marked strongly representative
+              </p>
+              {calibration.diagnostics.length ? (
+                <div className="mt-3 space-y-2">
+                  {calibration.diagnostics.map((diagnostic) => (
+                    <div
+                      key={`${diagnostic.code}:${diagnostic.message}`}
+                      className={`rounded-lg border px-3 py-2 ${
+                        diagnostic.severity === "blocking"
+                          ? "border-red-500/25 bg-red-500/5"
+                          : diagnostic.severity === "warning"
+                            ? "border-amber-500/25 bg-amber-500/5"
+                            : "border-zinc-800 bg-zinc-950/50"
+                      }`}
+                    >
+                      <p className="flex items-center gap-1.5 text-xs font-medium text-zinc-200">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        {diagnostic.message}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">{diagnostic.recommendation}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-300">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  No calibration concerns detected for this channel.
+                </p>
+              )}
+            </div>
+          )}
 
           {(channelState?.sources.length ?? 0) > 0 && (
             <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">

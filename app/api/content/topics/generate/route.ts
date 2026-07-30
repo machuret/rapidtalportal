@@ -86,6 +86,20 @@ interface CompetitorEvidence {
   captured_at: string;
 }
 
+interface IdeaVaultEvidence {
+  id: string;
+  title: string;
+  ai_summary: string | null;
+  raw_content: string | null;
+}
+
+interface ExistingCompanyContent {
+  id: string;
+  title: string;
+  content_type: string;
+  body: string | null;
+}
+
 function escapePromptXml(value: string): string {
   return value
     .replace(/&/gu, "&amp;")
@@ -101,6 +115,41 @@ function renderCompetitorEvidence(items: CompetitorEvidence[]): string {
     `url="${escapePromptXml(item.canonical_url)}">\n` +
     `${escapePromptXml(item.raw_content.trim().slice(0, 2500))}\n</competitor_evidence>`
   ).join("\n\n").slice(0, 30_000);
+}
+
+function renderIdeaEvidence(items: IdeaVaultEvidence[]): string {
+  return items.map((item) =>
+    `<vault_material id="${item.id}" title="${escapePromptXml(item.title.slice(0, 200))}">\n` +
+    `${escapePromptXml((item.ai_summary || item.raw_content || "").trim().slice(0, 1400))}\n</vault_material>`
+  ).join("\n\n").slice(0, 24_000);
+}
+
+function renderExistingContent(items: ExistingCompanyContent[]): string {
+  return items.map((item) =>
+    `<company_content id="${item.id}" channel="${escapePromptXml(item.content_type)}" title="${escapePromptXml(item.title.slice(0, 200))}">\n` +
+    `${escapePromptXml((item.body || "").trim().slice(0, 900))}\n</company_content>`
+  ).join("\n\n").slice(0, 20_000);
+}
+
+function tokenSet(value: string): Set<string> {
+  return new Set(
+    value.toLocaleLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'-]{2,}/gu) ?? [],
+  );
+}
+
+function similarity(left: string, right: string): number {
+  const a = tokenSet(left);
+  const b = tokenSet(right);
+  if (!a.size || !b.size) return 0;
+  const overlap = [...a].filter((token) => b.has(token)).length;
+  return overlap / new Set([...a, ...b]).size;
+}
+
+function dimension(score: number, explanation: string) {
+  return {
+    score: Math.max(0, Math.min(100, Math.round(score))),
+    explanation,
+  };
 }
 
 export const POST = withAuth(async (req, { user }) => {
@@ -144,6 +193,9 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   const admin = createAdminClient();
+  // These are service-role reads behind the authenticated tenant boundary.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = admin as any;
   // The Brain assembles the profile + Vault highlights + learned positives/negatives.
   // Topic generation spans every content channel, so inject content + all
   // channel-scoped lessons (plus global). Ask/Compose-only lessons are excluded.
@@ -158,14 +210,40 @@ export const POST = withAuth(async (req, { user }) => {
     );
   }
 
+  const [
+    { data: vaultRows, error: vaultError },
+    { data: companyContentRows, error: companyContentError },
+  ] = await Promise.all([
+    db
+      .from("vault_items")
+      .select("id,title,ai_summary,raw_content")
+      .eq("client_id", parsed.data.client_id)
+      .eq("status", "ready")
+      .eq("evidence_role", "factual")
+      .order("updated_at", { ascending: false })
+      .limit(30),
+    db
+      .from("content_pieces")
+      .select("id,title,content_type,body")
+      .eq("client_id", parsed.data.client_id)
+      .in("status", ["approved", "archived"])
+      .order("created_at", { ascending: false })
+      .limit(80),
+  ]);
+  if (vaultError || companyContentError) {
+    return NextResponse.json({
+      error: "The evidence needed to explain content ideas is temporarily unavailable.",
+    }, { status: 503 });
+  }
+  const ideaVaultEvidence = (vaultRows ?? []) as IdeaVaultEvidence[];
+  const existingCompanyContent = (companyContentRows ?? []) as ExistingCompanyContent[];
+
   let competitorEvidence: CompetitorEvidence[] = [];
   let includedCompetitors: Array<{ id: string; name: string }> = [];
   let readiness: unknown[] = [];
   if (parsed.data.mode === "competitor_gap") {
     // These tables are intentionally service-role only at this boundary. Every
     // query remains explicitly tenant-qualified before any content reaches the model.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = admin as any;
     const [
       { data: competitorRows, error: competitorError },
       { data: readinessRows, error: readinessError },
@@ -249,17 +327,42 @@ export const POST = withAuth(async (req, { user }) => {
       `Never copy its wording or voice. Never treat a competitor claim as a fact about this company. ` +
       `Each idea must cite 1–5 exact evidence IDs from the blocks above.\n`
     : "";
-  const outputShape = parsed.data.mode === "competitor_gap"
-    ? `{ "topics": [ { "title": string, "description": string, "content_type": "email"|"x"|"linkedin"|"facebook"|"instagram"|"newsletter"|"blog", "rationale": string, "fit": number, "opportunity_type": "gap"|"differentiation"|"counter_position"|"market_pattern", "evidence_summary": string, "evidence_ids": string[] } ] }`
-    : `{ "topics": [ { "title": string, "description": string, "content_type": "email"|"x"|"linkedin"|"facebook"|"instagram"|"newsletter"|"blog", "rationale": string, "fit": number } ] }`;
+  const companyEvidencePrompt =
+    `\n\nVERIFIED COMPANY VAULT MATERIAL — FACTUAL SUPPORT:\n${renderIdeaEvidence(ideaVaultEvidence)}\n\n` +
+    `EXISTING COMPANY CONTENT — NOVELTY COMPARISON ONLY:\n${renderExistingContent(existingCompanyContent)}\n`;
+  const outputShape = `{ "topics": [ {
+    "title": string,
+    "hook": string,
+    "topic": string,
+    "description": string,
+    "content_type": "email"|"x"|"linkedin"|"facebook"|"instagram"|"newsletter"|"blog",
+    "intended_audience": string,
+    "strategic_objective": string,
+    "why_valuable": string,
+    "company_dna_fit": string,
+    "vault_evidence_ids": string[],
+    "rationale": string,
+    "fit": number,
+    "opportunity_type": "gap"|"differentiation"|"counter_position"|"market_pattern"|null,
+    "evidence_summary": string,
+    "evidence_ids": string[],
+    "difference_from_competitors": string,
+    "existing_content_ids": string[],
+    "difference_from_existing": string,
+    "recommended_format": string,
+    "recommended_cta": string
+  } ] }`;
   const userPrompt =
-    `${brain.text}${competitorPrompt}\n` +
+    `${brain.text}${companyEvidencePrompt}${competitorPrompt}\n` +
     `Based on the company information above${parsed.data.mode === "competitor_gap" ? " and the bounded competitor evidence" : ""}, generate exactly ${count} content topic ideas.\n\n` +
     `RULES (follow strictly):\n` +
     `- Honour the company's goals, audience, brand voice and internal rules.\n` +
     `- Do NOT repeat, paraphrase, or resemble anything listed under "WHAT TO AVOID".\n` +
     `- Favour the angles/style listed under "WHAT WORKS HERE".\n` +
     `- For EACH topic, include "fit": an integer 0-100 for how well it fits THIS specific company (not generic), where below ${FIT_THRESHOLD} means weak, generic, or off-brand.\n\n` +
+    `- Cite only supplied Vault, competitor and existing-company-content IDs. Do not invent IDs.\n` +
+    `- Explain why the idea differs from existing company content. For competitor mode, also explain how it differs from competitor coverage.\n` +
+    `- Recommend one channel-specific format and one specific CTA.\n\n` +
     `Return JSON exactly as: ${outputShape}`;
 
   let openaiRes: Response;
@@ -306,6 +409,10 @@ export const POST = withAuth(async (req, { user }) => {
   const rawTopics = Array.isArray(parsed2.topics) ? parsed2.topics : [];
   const allowedEvidenceIds = new Set(competitorEvidence.map((item) => item.id));
   const evidenceById = new Map(competitorEvidence.map((item) => [item.id, item]));
+  const allowedVaultIds = new Set(ideaVaultEvidence.map((item) => item.id));
+  const vaultById = new Map(ideaVaultEvidence.map((item) => [item.id, item]));
+  const allowedCompanyContentIds = new Set(existingCompanyContent.map((item) => item.id));
+  const companyContentById = new Map(existingCompanyContent.map((item) => [item.id, item]));
 
   // Normalise + capture the model's self-assessed fit.
   const base = rawTopics
@@ -320,6 +427,16 @@ export const POST = withAuth(async (req, { user }) => {
         ? [...new Set(o.evidence_ids.filter((id): id is string =>
             typeof id === "string" && allowedEvidenceIds.has(id)))]
           .slice(0, 5)
+        : [];
+      const vaultEvidenceIds = Array.isArray(o.vault_evidence_ids)
+        ? [...new Set(o.vault_evidence_ids.filter((id): id is string =>
+            typeof id === "string" && allowedVaultIds.has(id)))]
+          .slice(0, 8)
+        : [];
+      const existingContentIds = Array.isArray(o.existing_content_ids)
+        ? [...new Set(o.existing_content_ids.filter((id): id is string =>
+            typeof id === "string" && allowedCompanyContentIds.has(id)))]
+          .slice(0, 8)
         : [];
       if (parsed.data.mode === "competitor_gap" && evidenceIds.length === 0) return null;
       const opportunityType = typeof o.opportunity_type === "string"
@@ -337,6 +454,18 @@ export const POST = withAuth(async (req, { user }) => {
           ? o.evidence_summary.trim().slice(0, 1000)
           : "",
         evidenceIds,
+        vaultEvidenceIds,
+        existingContentIds,
+        hook: typeof o.hook === "string" ? o.hook.trim().slice(0, 500) : title,
+        topic: typeof o.topic === "string" ? o.topic.trim().slice(0, 300) : title,
+        intendedAudience: typeof o.intended_audience === "string" ? o.intended_audience.trim().slice(0, 1000) : "",
+        strategicObjective: typeof o.strategic_objective === "string" ? o.strategic_objective.trim().slice(0, 1200) : "",
+        whyValuable: typeof o.why_valuable === "string" ? o.why_valuable.trim().slice(0, 1600) : "",
+        companyDnaFit: typeof o.company_dna_fit === "string" ? o.company_dna_fit.trim().slice(0, 1600) : "",
+        differenceFromCompetitors: typeof o.difference_from_competitors === "string" ? o.difference_from_competitors.trim().slice(0, 1600) : "",
+        differenceFromExisting: typeof o.difference_from_existing === "string" ? o.difference_from_existing.trim().slice(0, 1600) : "",
+        recommendedFormat: typeof o.recommended_format === "string" ? o.recommended_format.trim().slice(0, 500) : "",
+        recommendedCta: typeof o.recommended_cta === "string" ? o.recommended_cta.trim().slice(0, 800) : "",
       };
     })
     .filter((t): t is NonNullable<typeof t> => t !== null);
@@ -370,6 +499,61 @@ export const POST = withAuth(async (req, { user }) => {
       t.llmFit !== null && emb !== null ? Math.round(t.llmFit * 0.5 + emb * 0.5)
       : emb !== null ? emb
       : t.llmFit;
+    const maxExistingSimilarity = existingCompanyContent.reduce((maximum, existing) =>
+      Math.max(maximum, similarity(
+        `${t.title} ${t.description}`,
+        `${existing.title} ${existing.body?.slice(0, 1000) ?? ""}`,
+      )), 0);
+    const vaultStrength = t.vaultEvidenceIds.length >= 3
+      ? 90
+      : t.vaultEvidenceIds.length === 2
+        ? 78
+        : t.vaultEvidenceIds.length === 1
+          ? 58
+          : 20;
+    const marketStrength = parsed.data.mode === "competitor_gap"
+      ? Math.min(95, 45 + t.evidenceIds.length * 15)
+      : 50;
+    const differentiationStrength = Math.min(
+      95,
+      35 +
+      (t.differenceFromExisting.length >= 40 ? 20 : 0) +
+      (t.existingContentIds.length ? 15 : 0) +
+      (parsed.data.mode === "competitor_gap" && t.differenceFromCompetitors.length >= 40 ? 20 : 0),
+    );
+    const channelFit = [
+      t.intendedAudience,
+      t.strategicObjective,
+      t.recommendedFormat,
+      t.recommendedCta,
+    ].filter((value) => value.length >= 3).length * 22;
+    const confidenceScore = (
+      (fit ?? 45) +
+      vaultStrength +
+      marketStrength +
+      differentiationStrength +
+      Math.round((1 - maxExistingSimilarity) * 100) +
+      Math.min(100, channelFit)
+    ) / 6;
+    const evidenceStrength = t.vaultEvidenceIds.length >= 2
+      ? "high"
+      : t.vaultEvidenceIds.length === 1
+        ? "medium"
+        : "low";
+    const confidence = confidenceScore >= 76 && evidenceStrength !== "low"
+      ? "high"
+      : confidenceScore >= 55
+        ? "medium"
+        : "low";
+    const supportingMarketSignals = t.evidenceIds.map((id) => {
+      const evidence = evidenceById.get(id)!;
+      return {
+        itemId: evidence.id,
+        competitorName: evidence.competitor_name,
+        title: evidence.title,
+        url: evidence.canonical_url,
+      };
+    });
     return {
       title: t.title,
       description: t.description,
@@ -378,6 +562,54 @@ export const POST = withAuth(async (req, { user }) => {
       fit,
       ai_flagged: fit !== null && fit < FIT_THRESHOLD,
       why: { ...whyBase, fit },
+      explainability: {
+        hook: t.hook,
+        topic: t.topic,
+        intendedAudience: t.intendedAudience || "Audience requires editor confirmation.",
+        strategicObjective: t.strategicObjective || "Objective requires editor confirmation.",
+        whyValuable: t.whyValuable || t.rationale,
+        companyDnaFit: t.companyDnaFit || "Aligned using the available Company Brain context.",
+        supportingVaultMaterial: t.vaultEvidenceIds.map((id) => ({
+          itemId: id,
+          title: vaultById.get(id)!.title,
+        })),
+        supportingMarketSignals,
+        differenceFromCompetitors: t.differenceFromCompetitors || (
+          parsed.data.mode === "competitor_gap"
+            ? "No verified differentiation explanation was returned."
+            : "No competitor comparison was requested."
+        ),
+        existingCompanyContent: t.existingContentIds.map((id) => {
+          const existing = companyContentById.get(id)!;
+          return { id, title: existing.title, contentType: existing.content_type };
+        }),
+        differenceFromExisting: t.differenceFromExisting || "No verified novelty explanation was returned.",
+        recommendedFormat: t.recommendedFormat || `${t.content_type} post`,
+        recommendedCta: t.recommendedCta || "Invite the audience to take one relevant next step.",
+        confidence,
+        evidenceStrength,
+        scores: {
+          companyRelevance: dimension(fit ?? 40, fit === null
+            ? "Insufficient acceptance history; editor confirmation is required."
+            : "Blends Company Brain fit with the client’s approved and rejected idea history."),
+          audienceRelevance: dimension(t.intendedAudience ? Math.min(95, 60 + (fit ?? 40) * 0.3) : 30,
+            t.intendedAudience || "The model did not identify a specific audience."),
+          vaultEvidenceStrength: dimension(vaultStrength,
+            t.vaultEvidenceIds.length
+              ? `References ${t.vaultEvidenceIds.length} verified factual Vault item${t.vaultEvidenceIds.length === 1 ? "" : "s"}.`
+              : "No factual Vault material directly supports this idea yet."),
+          marketOpportunity: dimension(marketStrength,
+            parsed.data.mode === "competitor_gap"
+              ? `Grounded in ${t.evidenceIds.length} verified competitor signal${t.evidenceIds.length === 1 ? "" : "s"}.`
+              : "Company-led idea; no competitor opportunity analysis was requested."),
+          differentiation: dimension(differentiationStrength,
+            t.differenceFromExisting || "Differentiation requires editor review."),
+          novelty: dimension((1 - maxExistingSimilarity) * 100,
+            `Maximum lexical overlap with ${existingCompanyContent.length} existing company artifact${existingCompanyContent.length === 1 ? "" : "s"} is ${Math.round(maxExistingSimilarity * 100)}%.`),
+          channelFit: dimension(channelFit,
+            `Audience, objective, ${t.recommendedFormat || "format"} and CTA were assessed for ${t.content_type}.`),
+        },
+      },
       ...(parsed.data.mode === "competitor_gap" ? {
         opportunity_type: t.opportunityType,
         evidence_summary: t.evidenceSummary,
