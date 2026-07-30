@@ -72,7 +72,7 @@ export function AddVaultItem({ clientId, onAdded, onCrawlStarted }: AddVaultItem
     }
     setBusy(false);
     setProgress(null);
-    if (ok) toast.success(`${ok} file${ok !== 1 ? "s" : ""} added — AI is processing.`);
+    if (ok) toast.success(`${ok} file${ok !== 1 ? "s" : ""} added. We’re preparing the knowledge now.`);
     for (const err of errors.slice(0, 3)) toast.error(err);
     done();
   }
@@ -94,11 +94,11 @@ export function AddVaultItem({ clientId, onAdded, onCrawlStarted }: AddVaultItem
           onCrawlStarted?.(job);
         } else {
           await api.post(ROUTES.vault.url(), { url: value, clientId }, { showErrorToast: false });
-          toast.success("URL added — fetching and processing.");
+          toast.success("URL added. We’re preparing it for Ask and content generation.");
         }
       } else {
         await api.post(ROUTES.vault.text(), { content: value, clientId }, { showErrorToast: false });
-        toast.success("Added to Vault — AI is processing.");
+        toast.success("Knowledge added. We’re preparing it for Ask and content generation.");
       }
       setText("");
       done();

@@ -46,10 +46,22 @@ export function levelFor(score: number): string {
 }
 
 export async function computeBrainScore(admin: Admin, clientId: string): Promise<BrainScore> {
+  const today = new Date().toISOString().slice(0, 10);
+  const governedReadyItems = () => admin
+    .from("vault_items")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", clientId)
+    .eq("status", "ready")
+    .eq("evidence_role", "factual")
+    .eq("knowledge_status", "active")
+    .eq("has_conflict", false)
+    .or(`valid_from.is.null,valid_from.lte.${today}`)
+    .or(`valid_until.is.null,valid_until.gte.${today}`)
+    .or(`review_due_at.is.null,review_due_at.gt.${today}`);
   const [dnaRes, docsReadyRes, docsIdxRes, lessonsRes, signalsRes, topicsRes, lastEventRes] = await Promise.all([
     admin.from("company_dna").select(PROFILE_FIELDS.join(", ")).eq("client_id", clientId).maybeSingle(),
-    admin.from("vault_items").select("id", { count: "exact", head: true }).eq("client_id", clientId).eq("status", "ready"),
-    admin.from("vault_items").select("id", { count: "exact", head: true }).eq("client_id", clientId).eq("status", "ready").not("indexed_at", "is", null),
+    governedReadyItems(),
+    governedReadyItems().not("indexed_at", "is", null),
     admin.from("brain_memory").select("id", { count: "exact", head: true }).eq("client_id", clientId).eq("active", true),
     admin.from("brain_signals").select("id", { count: "exact", head: true }).eq("client_id", clientId).not("distilled_at", "is", null),
     admin.from("content_topics").select("status, ai_flagged, updated_at").eq("client_id", clientId).in("status", ["approved", "rejected"]).limit(1000),

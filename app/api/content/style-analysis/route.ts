@@ -192,6 +192,8 @@ async function loadStyleAnalysis(clientId: string): Promise<StyleAnalysisRespons
         .select("id,title,source_url,raw_content,status,tags,created_at")
         .eq("client_id", clientId)
         .eq("evidence_role", "style_example")
+        .eq("knowledge_status", "active")
+        .or(`review_due_at.is.null,review_due_at.gt.${new Date().toISOString().slice(0, 10)}`)
         .order("created_at", { ascending: false })
         .limit(100),
       db
@@ -306,6 +308,8 @@ export const POST = withAuth(async (request, { user }) => {
     .eq("client_id", parsed.data.client_id)
     .eq("evidence_role", "style_example")
     .eq("status", "ready")
+    .eq("knowledge_status", "active")
+    .or(`review_due_at.is.null,review_due_at.gt.${new Date().toISOString().slice(0, 10)}`)
     .contains("tags", [parsed.data.channel])
     .order("created_at", { ascending: false })
     .limit(20);

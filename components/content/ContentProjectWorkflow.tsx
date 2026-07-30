@@ -39,6 +39,7 @@ import {
 import { HistoryTab } from "./HistoryTab";
 import { errorMessage } from "@/lib/error-message";
 import { AppliedStylePreview } from "./AppliedStylePreview";
+import { generateQuickDraft } from "@/lib/content/quick-draft";
 
 const STEPS: Array<{ id: ContentProjectStep; label: string }> = [
   { id: "idea", label: "Idea" },
@@ -378,75 +379,11 @@ export function ContentProjectWorkflow({
     try {
       if (autosaveTimer.current !== null) window.clearTimeout(autosaveTimer.current);
       autosaveTimer.current = null;
-      const briefed = await api.patch<ContentProject>(
-        ROUTES.content.projects(),
-        {
-          client_id: clientId,
-          id: project.id,
-          expected_updated_at: project.updated_at,
-          content_brief: brief,
-          current_step: "evidence",
-          status: "active",
-        },
-        { showErrorToast: false },
-      );
-      const available = await api.get<ContentEvidenceOption[]>(
-        ROUTES.content.projectEvidence(clientId, project.id),
-        { showErrorToast: false },
-      );
-      // Quick mode keeps the workflow grounded without asking the editor to
-      // manually inspect every source. The evidence screen remains available
-      // later if they want to replace this automatic shortlist.
-      const automaticSourceIds = available.slice(0, 6).map((source) => source.id);
-      const ready = await api.patch<ContentProject>(
-        ROUTES.content.projects(),
-        {
-          client_id: clientId,
-          id: project.id,
-          expected_updated_at: briefed.updated_at,
-          vault_source_ids: automaticSourceIds,
-          current_step: "generate",
-          status: "active",
-        },
-        { showErrorToast: false },
-      );
-      onProjectChange(ready);
-      const data = await api.post<{
-        id: string;
-        body: string;
-        sources?: ContentPiece["source_references"];
-        styleSnapshot?: ContentPiece["style_snapshot"];
-      }>(
-        ROUTES.content.generate(),
-        {
-          clientId,
-          projectId: project.id,
-          vaultSourceIds: automaticSourceIds,
-          contentType: project.idea_snapshot.channel,
-          title: project.title,
-          brief,
-        },
-        { showErrorToast: false },
-      );
-      const piece: ContentPiece = {
-        id: data.id,
-        project_id: project.id,
-        content_type: project.idea_snapshot.channel,
-        title: project.title,
-        body: data.body,
-        content_brief: brief,
-        source_references: data.sources ?? [],
-        style_snapshot: data.styleSnapshot ?? ready.style_snapshot,
-        status: "draft",
-        created_at: new Date().toISOString(),
-      };
+      const result = await generateQuickDraft({ clientId, project, brief });
+      const piece = result.piece;
       setHistory([piece]);
       onContentGenerated(piece);
-      const loaded = await api.get<ContentProject>(
-        ROUTES.content.project(clientId, project.id),
-        { showErrorToast: false },
-      );
-      onProjectChange(loaded);
+      onProjectChange(result.project);
       setRetryOperation(null);
       setSaveState("saved");
       toast.success("Draft generated with an automatic Vault shortlist.");

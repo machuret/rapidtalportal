@@ -4,6 +4,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { rankEvidenceCandidates } from "@/lib/content/evidence-ranking";
 
 const querySchema = z.object({
   client_id: z.string().uuid(),
@@ -23,9 +24,10 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const db = createAdminClient();
+  const today = new Date().toISOString().slice(0, 10);
   const { data: project, error: projectError } = await db
     .from("content_projects")
-    .select("id,vault_source_ids")
+    .select("id,title,content_brief,vault_source_ids")
     .eq("id", parsed.data.project_id)
     .eq("client_id", parsed.data.client_id)
     .maybeSingle();
@@ -38,6 +40,11 @@ export const GET = withAuth(async (req, { user }) => {
     .eq("client_id", parsed.data.client_id)
     .eq("status", "ready")
     .eq("evidence_role", "factual")
+    .eq("knowledge_status", "active")
+    .eq("has_conflict", false)
+    .or(`valid_from.is.null,valid_from.lte.${today}`)
+    .or(`valid_until.is.null,valid_until.gte.${today}`)
+    .or(`review_due_at.is.null,review_due_at.gt.${today}`)
     .order("updated_at", { ascending: false })
     .limit(60);
   if (error) return serverError(error);
@@ -53,12 +60,30 @@ export const GET = withAuth(async (req, { user }) => {
       .eq("client_id", parsed.data.client_id)
       .eq("status", "ready")
       .eq("evidence_role", "factual")
+      .eq("knowledge_status", "active")
+      .eq("has_conflict", false)
+      .or(`valid_from.is.null,valid_from.lte.${today}`)
+      .or(`valid_until.is.null,valid_until.gte.${today}`)
+      .or(`review_due_at.is.null,review_due_at.gt.${today}`)
       .in("id", missingSelected);
     if (selectedError) return serverError(selectedError);
     rows.unshift(...(selected ?? []));
   }
 
-  return NextResponse.json(rows.map((item) => ({
+  const brief = project.content_brief && typeof project.content_brief === "object"
+    ? project.content_brief as Record<string, unknown>
+    : {};
+  const evidenceQuery = [
+    project.title,
+    brief.objective,
+    brief.audience,
+    brief.angle,
+    brief.additionalGuidance,
+    ...(Array.isArray(brief.keyPoints) ? brief.keyPoints : []),
+  ].filter((value): value is string => typeof value === "string").join(" ");
+  const ranked = rankEvidenceCandidates(evidenceQuery, rows);
+
+  return NextResponse.json(ranked.map((item) => ({
     id: item.id,
     title: item.title,
     category: item.category ?? "general",

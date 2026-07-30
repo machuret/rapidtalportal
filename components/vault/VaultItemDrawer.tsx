@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { DbVaultItem, VaultCategory } from "@/types/database";
-import { X, Save, Loader2, Tag, FolderOpen } from "lucide-react";
+import type {
+  DbVaultItem,
+  VaultAuthorityLevel,
+  VaultCategory,
+  VaultKnowledgeStatus,
+} from "@/types/database";
+import { AlertTriangle, History, X, Save, Loader2, Tag, FolderOpen, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +18,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { vaultListKeys } from "@/hooks/useVaultList";
 import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
-import { cn, formatNumber } from "@/lib/utils";
+import { cn, formatDate, formatNumber } from "@/lib/utils";
 
 const CATEGORIES: { value: VaultCategory; label: string; color: string }[] =
   VAULT_CATEGORY_KEYS.map((value) => ({
@@ -29,12 +34,58 @@ interface VaultItemDrawerProps {
   onSaved: (updated: DbVaultItem) => void;
 }
 
+interface VaultItemVersionSummary {
+  id: string;
+  version_number: number;
+  title: string;
+  authority_level: VaultAuthorityLevel;
+  knowledge_status: VaultKnowledgeStatus;
+  has_conflict: boolean;
+  captured_at: string;
+}
+
 export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemDrawerProps) {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState(item.title);
   const [content, setContent] = useState(item.raw_content ?? "");
   const [category, setCategory] = useState<VaultCategory>(item.category ?? "general");
   const [tagInput, setTagInput] = useState(item.tags?.join(", ") ?? "");
+  const [authorityLevel, setAuthorityLevel] = useState<VaultAuthorityLevel>(
+    item.authority_level ?? "supporting",
+  );
+  const [knowledgeStatus, setKnowledgeStatus] = useState<VaultKnowledgeStatus>(
+    item.knowledge_status ?? "active",
+  );
+  const [timeSensitive, setTimeSensitive] = useState(item.time_sensitive ?? false);
+  const [validFrom, setValidFrom] = useState(item.valid_from ?? "");
+  const [validUntil, setValidUntil] = useState(item.valid_until ?? "");
+  const [reviewDueAt, setReviewDueAt] = useState(item.review_due_at?.slice(0, 10) ?? "");
+  const [supersedesItemId, setSupersedesItemId] = useState(item.supersedes_item_id ?? "");
+  const [hasConflict, setHasConflict] = useState(item.has_conflict ?? false);
+  const [conflictNote, setConflictNote] = useState(item.conflict_note ?? "");
+  const [sourceOptions, setSourceOptions] = useState<Array<{ id: string; title: string }>>([]);
+  const [versions, setVersions] = useState<VaultItemVersionSummary[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void api.get<{ items: Array<{ id: string; title: string }> }>(
+      `${ROUTES.vault.items()}?clientId=${clientId}&evidenceRole=factual&limit=50`,
+      { showErrorToast: false },
+    ).then((result) => {
+      if (active) setSourceOptions(result.items.filter((source) => source.id !== item.id));
+    }).catch(() => {
+      // Supersession remains optional; a source-list failure must not block editing.
+    });
+    void api.get<{ versions: VaultItemVersionSummary[] }>(
+      `${ROUTES.vault.itemVersions(item.id)}?clientId=${clientId}`,
+      { showErrorToast: false },
+    ).then((result) => {
+      if (active) setVersions(result.versions);
+    }).catch(() => {
+      // History is supplementary; governance editing remains available.
+    });
+    return () => { active = false; };
+  }, [clientId, item.id]);
 
   function parseTags(raw: string): string[] {
     return raw.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
@@ -47,14 +98,40 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
       api.patch(ROUTES.vault.item(item.id), {
         clientId,
         title: title.trim(),
-        raw_content: content.trim() || undefined,
+        raw_content: content.trim() !== (item.raw_content ?? "").trim()
+          ? content.trim() || undefined
+          : undefined,
         category,
         tags: parseTags(tagInput),
+        authority_level: authorityLevel,
+        knowledge_status: knowledgeStatus,
+        time_sensitive: timeSensitive,
+        valid_from: validFrom || null,
+        valid_until: validUntil || null,
+        review_due_at: reviewDueAt || null,
+        supersedes_item_id: supersedesItemId || null,
+        has_conflict: hasConflict,
+        conflict_note: hasConflict ? conflictNote.trim() : null,
       }, { showErrorToast: false }),
     onSuccess: () => {
-      toast.success("Saved. AI is re-processing…");
+      toast.success("Source saved. Knowledge safeguards are active.");
       // Return updated item to parent optimistically
-      onSaved({ ...item, title: title.trim(), raw_content: content.trim(), category, tags: parseTags(tagInput) });
+      onSaved({
+        ...item,
+        title: title.trim(),
+        raw_content: content.trim(),
+        category,
+        tags: parseTags(tagInput),
+        authority_level: authorityLevel,
+        knowledge_status: knowledgeStatus,
+        time_sensitive: timeSensitive,
+        valid_from: validFrom || null,
+        valid_until: validUntil || null,
+        review_due_at: reviewDueAt || null,
+        supersedes_item_id: supersedesItemId || null,
+        has_conflict: hasConflict,
+        conflict_note: hasConflict ? conflictNote.trim() : null,
+      });
       onClose();
     },
     onError: (e) => {
@@ -69,6 +146,14 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
 
   function handleSave() {
     if (!title.trim()) { toast.error("Title is required."); return; }
+    if (validFrom && validUntil && validUntil < validFrom) {
+      toast.error("The valid-until date cannot be before the valid-from date.");
+      return;
+    }
+    if (hasConflict && !conflictNote.trim()) {
+      toast.error("Describe the conflicting information before saving.");
+      return;
+    }
     if (saveMutation.isPending) return; // Prevent double-submit
     saveMutation.mutate();
   }
@@ -153,6 +238,102 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
             )}
           </div>
 
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+            <div className="mb-4 flex items-start gap-2">
+              <ShieldCheck className="mt-0.5 h-4 w-4 text-blue-300" />
+              <div>
+                <p className="text-sm font-medium text-zinc-200">Source authority and lifecycle</p>
+                <p className="mt-0.5 text-xs leading-5 text-zinc-500">
+                  These safeguards decide whether AI may use this source as company fact.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-xs font-medium text-zinc-400">Authority</span>
+                <select
+                  value={authorityLevel}
+                  onChange={(event) => setAuthorityLevel(event.target.value as VaultAuthorityLevel)}
+                  className="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-200"
+                >
+                  <option value="authoritative">Authoritative company source</option>
+                  <option value="supporting">Supporting source</option>
+                </select>
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-medium text-zinc-400">Lifecycle</span>
+                <select
+                  value={knowledgeStatus}
+                  onChange={(event) => setKnowledgeStatus(event.target.value as VaultKnowledgeStatus)}
+                  className="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-200"
+                >
+                  <option value="active">Active and usable</option>
+                  <option value="review_required">Requires review</option>
+                  <option value="superseded">Superseded — never use</option>
+                </select>
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-medium text-zinc-400">Valid from</span>
+                <Input type="date" value={validFrom} onChange={(event) => setValidFrom(event.target.value)} className="border-zinc-700 bg-zinc-950" />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-medium text-zinc-400">Valid until</span>
+                <Input type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} className="border-zinc-700 bg-zinc-950" />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-medium text-zinc-400">Review by</span>
+                <Input type="date" value={reviewDueAt} onChange={(event) => setReviewDueAt(event.target.value)} className="border-zinc-700 bg-zinc-950" />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-xs font-medium text-zinc-400">Replaces an older source</span>
+                <select
+                  value={supersedesItemId}
+                  onChange={(event) => setSupersedesItemId(event.target.value)}
+                  className="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-200"
+                >
+                  <option value="">Does not replace another source</option>
+                  {sourceOptions.map((source) => (
+                    <option key={source.id} value={source.id}>{source.title}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label className="mt-4 flex items-center gap-2 text-sm text-zinc-300">
+              <input
+                type="checkbox"
+                checked={timeSensitive}
+                onChange={(event) => setTimeSensitive(event.target.checked)}
+                className="h-4 w-4 rounded border-zinc-600 bg-zinc-950"
+              />
+              This information changes over time
+            </label>
+            <label className="mt-3 flex items-center gap-2 text-sm text-zinc-300">
+              <input
+                type="checkbox"
+                checked={hasConflict}
+                onChange={(event) => setHasConflict(event.target.checked)}
+                className="h-4 w-4 rounded border-zinc-600 bg-zinc-950"
+              />
+              This source conflicts with other company information
+            </label>
+            {hasConflict && (
+              <div className="mt-3">
+                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-red-300">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Explain the conflict
+                </div>
+                <Textarea
+                  value={conflictNote}
+                  onChange={(event) => setConflictNote(event.target.value)}
+                  rows={3}
+                  placeholder="Describe what conflicts and which source should be checked."
+                  className="border-red-500/30 bg-zinc-950 text-sm"
+                />
+              </div>
+            )}
+          </div>
+
           {/* Content */}
           <div className="flex flex-col gap-2 flex-1">
             <Label className="label-section">Content</Label>
@@ -168,10 +349,32 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
           {/* AI summary preview */}
           {item.ai_summary && (
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
-              <p className="text-xs text-zinc-500 font-medium mb-1">Current AI Summary</p>
+              <p className="text-xs text-zinc-500 font-medium mb-1">Knowledge summary</p>
               <p className="text-xs text-zinc-400 leading-relaxed">{item.ai_summary}</p>
-              <p className="text-xs text-zinc-600 mt-1">Will be regenerated after saving.</p>
+              <p className="text-xs text-zinc-600 mt-1">Updates automatically when the source content changes.</p>
             </div>
+          )}
+
+          {versions.length > 0 && (
+            <details className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-zinc-300">
+                <History className="h-4 w-4 text-zinc-500" />
+                Source history · {versions.length} captured version{versions.length === 1 ? "" : "s"}
+              </summary>
+              <div className="mt-3 space-y-2">
+                {versions.slice(0, 8).map((version) => (
+                  <div key={version.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs">
+                    <span className="font-medium text-zinc-300">Version {version.version_number}</span>
+                    <span className="text-zinc-600">
+                      {formatDate(version.captured_at, { day: "numeric", month: "short", year: "numeric" })}
+                    </span>
+                    <span className="text-zinc-500">{version.authority_level}</span>
+                    <span className="text-zinc-500">{version.knowledge_status.replace("_", " ")}</span>
+                    {version.has_conflict && <span className="text-red-300">conflict flagged</span>}
+                  </div>
+                ))}
+              </div>
+            </details>
           )}
         </div>
 
@@ -183,7 +386,7 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
             className="flex-1 gap-2 bg-orange-500 hover:bg-orange-400"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {saving ? "Saving & Processing…" : "Save & Re-process AI"}
+            {saving ? "Saving…" : "Save source"}
           </Button>
           <Button variant="outline" onClick={onClose} className="border-zinc-700 text-zinc-400 hover:text-zinc-200">
             Cancel

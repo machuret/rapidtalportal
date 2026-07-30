@@ -14,9 +14,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { isVaultCategory } from "@/lib/taxonomy/vault-categories";
+import type {
+  VaultKnowledgeStatus,
+} from "@/types/database";
 
 const COLS =
-  "id, client_id, source_type, title, source_url, storage_path, status, error_message, created_at, created_by, category, tags, ai_summary, updated_at, updated_by";
+  "id, client_id, source_type, title, source_url, storage_path, status, error_message, created_at, created_by, category, tags, ai_summary, updated_at, updated_by, content_hash, origin_key, evidence_role, authority_level, knowledge_status, time_sensitive, valid_from, valid_until, review_due_at, supersedes_item_id, has_conflict, conflict_note";
 
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 50;
@@ -33,6 +36,21 @@ export const GET = withAuth(async (req, { user }) => {
   const category = url.searchParams.get("category");
   const type = url.searchParams.get("type"); // source_type
   const status = url.searchParams.get("status");
+  const evidenceRole = url.searchParams.get("evidenceRole");
+  const knowledgeStatus = url.searchParams.get("knowledgeStatus");
+  const validEvidenceRoles = ["factual", "style_example", "market_context"] as const;
+  type EvidenceRole = typeof validEvidenceRoles[number];
+  const selectedEvidenceRole = validEvidenceRoles.includes(evidenceRole as EvidenceRole)
+    ? evidenceRole as EvidenceRole
+    : null;
+  const validKnowledgeStatuses: VaultKnowledgeStatus[] = [
+    "active", "review_required", "superseded",
+  ];
+  const selectedKnowledgeStatus = validKnowledgeStatuses.includes(
+    knowledgeStatus as VaultKnowledgeStatus,
+  )
+    ? knowledgeStatus as VaultKnowledgeStatus
+    : null;
   const page = Math.max(0, Number(url.searchParams.get("page")) || 0);
   const limit = Math.min(MAX_LIMIT, Math.max(1, Number(url.searchParams.get("limit")) || DEFAULT_LIMIT));
 
@@ -42,6 +60,12 @@ export const GET = withAuth(async (req, { user }) => {
   if (category && isVaultCategory(category)) query = query.eq("category", category);
   if (type) query = query.eq("source_type", type);
   if (status) query = query.eq("status", status);
+  if (selectedEvidenceRole) {
+    query = query.eq("evidence_role", selectedEvidenceRole);
+  }
+  if (selectedKnowledgeStatus) {
+    query = query.eq("knowledge_status", selectedKnowledgeStatus);
+  }
   if (q) query = query.textSearch("fts", q, { type: "websearch", config: "english" });
 
   const { data, error } = await query
@@ -81,6 +105,12 @@ export const GET = withAuth(async (req, { user }) => {
     const countFor = async (s?: string) => {
       let cq = admin.from("vault_items").select("id", { count: "exact", head: true }).eq("client_id", clientId);
       if (s) cq = cq.eq("status", s);
+      if (selectedEvidenceRole) {
+        cq = cq.eq("evidence_role", selectedEvidenceRole);
+      }
+      if (selectedKnowledgeStatus) {
+        cq = cq.eq("knowledge_status", selectedKnowledgeStatus);
+      }
       const { count, error: countError } = await cq;
       if (countError) throw countError;
       return count ?? 0;

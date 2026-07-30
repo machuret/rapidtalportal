@@ -25,6 +25,30 @@ const patchSchema = z.object({
   raw_content: z.string().min(1).max(500000).optional(),
   category: z.enum(VAULT_CATEGORY_KEYS).optional(),
   tags: z.array(z.string().max(50)).max(10).optional(),
+  authority_level: z.enum(["authoritative", "supporting"]).optional(),
+  knowledge_status: z.enum(["active", "review_required", "superseded"]).optional(),
+  time_sensitive: z.boolean().optional(),
+  valid_from: z.string().date().nullable().optional(),
+  valid_until: z.string().date().nullable().optional(),
+  review_due_at: z.string().date().nullable().optional(),
+  supersedes_item_id: z.string().uuid().nullable().optional(),
+  has_conflict: z.boolean().optional(),
+  conflict_note: z.string().trim().max(2000).nullable().optional(),
+}).superRefine((value, ctx) => {
+  if (value.valid_from && value.valid_until && value.valid_until < value.valid_from) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["valid_until"],
+      message: "The valid-until date cannot be before the valid-from date.",
+    });
+  }
+  if (value.has_conflict && !value.conflict_note?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["conflict_note"],
+      message: "Describe the conflict so another editor can resolve it.",
+    });
+  }
 });
 
 export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
@@ -57,6 +81,25 @@ export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
   const isCreator = (existing as { created_by: string | null }).created_by === user.id;
   if (user.role !== "client_admin" && user.role !== "super_admin" && !isCreator) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
+  const governanceFields = [
+    "authority_level",
+    "knowledge_status",
+    "time_sensitive",
+    "valid_from",
+    "valid_until",
+    "review_due_at",
+    "supersedes_item_id",
+    "has_conflict",
+    "conflict_note",
+  ] as const;
+  const governing = governanceFields.some((field) => updates[field] !== undefined);
+  if (governing && user.role !== "client_admin" && user.role !== "super_admin") {
+    return NextResponse.json(
+      { error: "Only client administrators can govern source authority and lifecycle." },
+      { status: 403 },
+    );
   }
 
   // A human choosing category/tags is curation — mark it so vault-process

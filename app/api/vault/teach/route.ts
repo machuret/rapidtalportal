@@ -15,6 +15,7 @@ import { withAuth } from "@/lib/api/with-auth";
 
 const schema = z.object({
   clientId: z.string().uuid(),
+  gapId: z.string().uuid().optional(),
   question: z.string().min(3).max(2000),
   answer: z.string().min(3).max(20000),
 });
@@ -31,29 +32,38 @@ export const POST = withAuth(async (req, { user }) => {
   if (access) return access;
 
   const admin = createAdminClient();
+  // vault_queries is introduced after the checked-in generated schema snapshot.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any).from("kb_entries").insert({
-    client_id: parsed.data.clientId,
-    question: parsed.data.question.trim(),
-    answer: parsed.data.answer.trim(),
-    category: "Taught",
-    is_pinned: true, // human knowledge — regeneration must not wipe it
+  const db = admin as any;
+  let gapId = parsed.data.gapId;
+  if (!gapId) {
+    const { data: gap, error: gapError } = await db
+      .from("vault_queries")
+      .select("id")
+      .eq("client_id", parsed.data.clientId)
+      .in("gap_status", ["open", "in_review"])
+      .ilike("question", parsed.data.question.trim())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (gapError) return serverError(gapError);
+    gapId = gap?.id;
+  }
+  if (!gapId) {
+    return NextResponse.json({ error: "This knowledge gap is no longer open." }, { status: 409 });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: kbEntryId, error } = await db.rpc("resolve_vault_gap_with_answer", {
+    p_gap_id: gapId,
+    p_client_id: parsed.data.clientId,
+    p_actor_id: user.id,
+    p_answer: parsed.data.answer.trim(),
   });
   if (error) {
     console.error("[vault/teach]", error.message);
     return serverError(error);
   }
 
-  // Close matching gaps in the query log (best-effort).
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (admin as any)
-      .from("vault_queries")
-      .update({ answered: true })
-      .eq("client_id", parsed.data.clientId)
-      .eq("answered", false)
-      .ilike("question", parsed.data.question.trim());
-  } catch { /* table may not exist yet */ }
-
-  return NextResponse.json({ success: true });
-});
+  return NextResponse.json({ success: true, kbEntryId });
+}, { roles: ["client_admin", "super_admin"] });

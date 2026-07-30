@@ -92,6 +92,7 @@ export async function buildBrainContext(
   const taskSurfaces = normalizeBrainScopes(opts.surfaces ?? ["content"]);
   const effectiveSurfaces = taskSurfaces.length ? taskSurfaces : normalizeBrainScopes(["content"]);
   const scopedSignalSurfaces = signalSurfacesFor(effectiveSurfaces);
+  const today = new Date().toISOString().slice(0, 10);
   const [dnaRes, vaultRes, posTopicsRes, negTopicsRes, signalsRes, memoryRes] = await Promise.all([
     admin.from("company_dna").select(PROFILE_SELECT).eq("client_id", clientId).maybeSingle(),
     admin
@@ -99,6 +100,12 @@ export async function buildBrainContext(
       .select("title, raw_content, category, ai_summary")
       .eq("client_id", clientId)
       .eq("status", "ready")
+      .eq("evidence_role", "factual")
+      .eq("knowledge_status", "active")
+      .eq("has_conflict", false)
+      .or(`valid_from.is.null,valid_from.lte.${today}`)
+      .or(`valid_until.is.null,valid_until.gte.${today}`)
+      .or(`review_due_at.is.null,review_due_at.gt.${today}`)
       .order("created_at", { ascending: false })
       .limit(30),
     // Positives: topics the client approved — what "good" looks like here.

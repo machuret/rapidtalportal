@@ -284,6 +284,7 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   const admin = createAdminClient();
+  const today = new Date().toISOString().slice(0, 10);
   // These are service-role reads behind the authenticated tenant boundary.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any;
@@ -311,6 +312,11 @@ export const POST = withAuth(async (req, { user }) => {
       .eq("client_id", parsed.data.client_id)
       .eq("status", "ready")
       .eq("evidence_role", "factual")
+      .eq("knowledge_status", "active")
+      .eq("has_conflict", false)
+      .or(`valid_from.is.null,valid_from.lte.${today}`)
+      .or(`valid_until.is.null,valid_until.gte.${today}`)
+      .or(`review_due_at.is.null,review_due_at.gt.${today}`)
       .order("updated_at", { ascending: false })
       .limit(30),
     db

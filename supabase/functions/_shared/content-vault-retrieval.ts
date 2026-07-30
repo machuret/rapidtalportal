@@ -28,6 +28,7 @@ interface VaultItem {
  */
 export async function retrieveContentVault(args: {
   // deno-lint-ignore no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any;
   clientId: string;
   query: string;
@@ -42,6 +43,7 @@ export async function retrieveContentVault(args: {
   groundedCount: number;
 }> {
   const { admin, clientId, query, relevantCategories, styleChannel, selectedSourceIds } = args;
+  const today = new Date().toISOString().slice(0, 10);
   let rawRows: VaultItem[] = [];
   let vaultError: { message: string } | null = null;
   if (!selectedSourceIds || selectedSourceIds.length > 0) {
@@ -50,7 +52,12 @@ export async function retrieveContentVault(args: {
       .select("id,title,raw_content,category,ai_summary")
       .eq("client_id", clientId)
       .eq("status", "ready")
-      .eq("evidence_role", "factual");
+      .eq("evidence_role", "factual")
+      .eq("knowledge_status", "active")
+      .eq("has_conflict", false)
+      .or(`valid_from.is.null,valid_from.lte.${today}`)
+      .or(`valid_until.is.null,valid_until.gte.${today}`)
+      .or(`review_due_at.is.null,review_due_at.gt.${today}`);
     factualQuery = selectedSourceIds
       ? factualQuery.in("id", selectedSourceIds)
       : factualQuery.order("created_at", { ascending: false }).limit(100);
@@ -77,6 +84,7 @@ export async function retrieveContentVault(args: {
 
   try {
     // deno-lint-ignore no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const session = new (globalThis as any).Supabase.ai.Session("gte-small");
     const embedding = await session.run(query.slice(0, 1500), {
       mean_pool: true,
@@ -143,6 +151,8 @@ export async function retrieveContentVault(args: {
       .eq("client_id", clientId)
       .eq("status", "ready")
       .eq("evidence_role", "style_example")
+      .eq("knowledge_status", "active")
+      .or(`review_due_at.is.null,review_due_at.gt.${today}`)
       .contains("tags", [styleChannel])
       .order("created_at", { ascending: false })
       .limit(8);

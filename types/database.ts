@@ -5,6 +5,8 @@ export type UserRole = "super_admin" | "client_admin" | "va";
 export type DailyLogMood = "great" | "good" | "neutral" | "difficult" | "overwhelmed";
 export type VaultSourceType = "pdf" | "docx" | "text" | "url";
 export type VaultStatus = "pending" | "processing" | "ready" | "error";
+export type VaultAuthorityLevel = "authoritative" | "supporting";
+export type VaultKnowledgeStatus = "active" | "review_required" | "superseded";
 export type KbRunStatus = "running" | "completed" | "failed";
 export type TimeEntryPhase = "work" | "break";
 
@@ -113,6 +115,15 @@ export interface DbVaultItem {
   content_hash: string | null;
   origin_key?: string | null;
   evidence_role?: "factual" | "style_example" | "market_context";
+  authority_level: VaultAuthorityLevel;
+  knowledge_status: VaultKnowledgeStatus;
+  time_sensitive: boolean;
+  valid_from: string | null;
+  valid_until: string | null;
+  review_due_at: string | null;
+  supersedes_item_id: string | null;
+  has_conflict: boolean;
+  conflict_note: string | null;
 }
 
 export interface DbKbEntry {
@@ -171,9 +182,15 @@ export interface Database {
         Relationships: NoRelationships;
       };
       vault_items: {
-        Row: { id: string; client_id: string; source_type: string; title: string; source_url: string | null; storage_path: string | null; raw_content: string | null; status: string; error_message: string | null; created_at: string; created_by: string | null; category: string | null; tags: string[]; ai_summary: string | null; updated_at: string | null; updated_by: string | null; content_hash: string | null; meta_curated: boolean; indexed_at: string | null; index_error: string | null; origin_key: string | null; evidence_role: "factual" | "style_example" | "market_context" };
-        Insert: { id?: string; client_id: string; source_type: string; title: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null; meta_curated?: boolean; indexed_at?: string | null; index_error?: string | null; origin_key?: string | null; evidence_role?: "factual" | "style_example" | "market_context" };
-        Update: { id?: string; client_id?: string; source_type?: string; title?: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null; meta_curated?: boolean; indexed_at?: string | null; index_error?: string | null; origin_key?: string | null; evidence_role?: "factual" | "style_example" | "market_context" };
+        Row: { id: string; client_id: string; source_type: string; title: string; source_url: string | null; storage_path: string | null; raw_content: string | null; status: string; error_message: string | null; created_at: string; created_by: string | null; category: string | null; tags: string[]; ai_summary: string | null; updated_at: string | null; updated_by: string | null; content_hash: string | null; meta_curated: boolean; indexed_at: string | null; index_error: string | null; origin_key: string | null; evidence_role: "factual" | "style_example" | "market_context"; authority_level: VaultAuthorityLevel; knowledge_status: VaultKnowledgeStatus; time_sensitive: boolean; valid_from: string | null; valid_until: string | null; review_due_at: string | null; supersedes_item_id: string | null; has_conflict: boolean; conflict_note: string | null };
+        Insert: { id?: string; client_id: string; source_type: string; title: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null; meta_curated?: boolean; indexed_at?: string | null; index_error?: string | null; origin_key?: string | null; evidence_role?: "factual" | "style_example" | "market_context"; authority_level?: VaultAuthorityLevel; knowledge_status?: VaultKnowledgeStatus; time_sensitive?: boolean; valid_from?: string | null; valid_until?: string | null; review_due_at?: string | null; supersedes_item_id?: string | null; has_conflict?: boolean; conflict_note?: string | null };
+        Update: { id?: string; client_id?: string; source_type?: string; title?: string; source_url?: string | null; storage_path?: string | null; raw_content?: string | null; status?: string; error_message?: string | null; created_at?: string; created_by?: string | null; category?: string | null; tags?: string[]; ai_summary?: string | null; updated_at?: string | null; updated_by?: string | null; content_hash?: string | null; meta_curated?: boolean; indexed_at?: string | null; index_error?: string | null; origin_key?: string | null; evidence_role?: "factual" | "style_example" | "market_context"; authority_level?: VaultAuthorityLevel; knowledge_status?: VaultKnowledgeStatus; time_sensitive?: boolean; valid_from?: string | null; valid_until?: string | null; review_due_at?: string | null; supersedes_item_id?: string | null; has_conflict?: boolean; conflict_note?: string | null };
+        Relationships: NoRelationships;
+      };
+      vault_item_versions: {
+        Row: { id: string; item_id: string; client_id: string; version_number: number; title: string; source_url: string | null; raw_content: string | null; content_hash: string | null; authority_level: VaultAuthorityLevel; knowledge_status: VaultKnowledgeStatus; time_sensitive: boolean; valid_from: string | null; valid_until: string | null; review_due_at: string | null; supersedes_item_id: string | null; has_conflict: boolean; conflict_note: string | null; captured_by: string | null; captured_at: string };
+        Insert: { id?: string; item_id: string; client_id: string; version_number: number; title: string; source_url?: string | null; raw_content?: string | null; content_hash?: string | null; authority_level: VaultAuthorityLevel; knowledge_status: VaultKnowledgeStatus; time_sensitive?: boolean; valid_from?: string | null; valid_until?: string | null; review_due_at?: string | null; supersedes_item_id?: string | null; has_conflict?: boolean; conflict_note?: string | null; captured_by?: string | null; captured_at?: string };
+        Update: never;
         Relationships: NoRelationships;
       };
       cron_heartbeats: {

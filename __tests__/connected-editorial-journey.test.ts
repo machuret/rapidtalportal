@@ -22,6 +22,7 @@ describe("connected editorial journey", () => {
   const retrieval = read("supabase/functions/_shared/content-vault-retrieval.ts");
   const studio = read("components/content/ContentStudio.tsx");
   const workflow = read("components/content/ContentProjectWorkflow.tsx");
+  const quickDraft = read("lib/content/quick-draft.ts");
   const topics = read("components/content/TopicsTab.tsx");
   const revisions = read("db/migrations/092_unified_content_workspace.sql");
 
@@ -70,9 +71,12 @@ describe("connected editorial journey", () => {
     expect(studio).toContain("onTopicsChange={setTopics}");
     expect(studio).toContain("onTopicApproved");
     expect(topics).toContain("await onTopicApproved?.(approved)");
-    expect(studio).toContain("Company priorities &amp; Vault gaps");
-    expect(studio).toContain("Competitor opportunities");
-    expect(studio).toContain("Drafts &amp; approved library");
+    expect(studio).toContain("Quick Create");
+    expect(studio).toContain("Create a draft in under a minute");
+    expect(studio).toContain("Guided Create");
+    expect(studio).toContain("> Ideas");
+    expect(studio).toContain("Competitor ideas");
+    expect(studio).toContain("Drafts &amp; approved");
     expect(studio).toContain("openProject");
     expect(workflow).toContain("Project saved · recoverable on any device");
     for (const step of ["Idea", "Brief", "Evidence", "Generate", "Edit", "Validate", "Approve"]) {
@@ -88,8 +92,12 @@ describe("connected editorial journey", () => {
     expect(workflow).toContain("Generate a quick draft");
     expect(workflow).toContain("Generate now");
     expect(workflow).toContain("Only the objective is required");
-    expect(workflow).toContain("available.slice(0, 6)");
-    expect(workflow).toContain("vault_source_ids: automaticSourceIds");
+    expect(workflow).toContain("generateQuickDraft");
+    expect(quickDraft).toContain('current_step: "brief"');
+    expect(quickDraft).toContain('current_step: "evidence"');
+    expect(quickDraft).toContain('current_step: "generate"');
+    expect(quickDraft).toContain("available.slice(0, 6)");
+    expect(quickDraft).toContain("vault_source_ids: automaticSourceIds");
     expect(workflow).not.toContain("Complete the audience, objective, angle, format and CTA");
   });
 

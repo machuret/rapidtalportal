@@ -122,4 +122,5 @@ export const MIGRATIONS = [
   "114_content_workflow_validation_integrity.sql",
   "115_content_piece_version_clock.sql",
   "116_content_pilot_cost_total.sql",
+  "117_vault_governance_workflow.sql",
 ] as const;

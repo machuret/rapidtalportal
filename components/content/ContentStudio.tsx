@@ -1,15 +1,16 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Archive,
   ArrowRight,
   Clock3,
   FileText,
   Lightbulb,
-  Plus,
+  Loader2,
   Radar,
   Search,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type {
   ContentPiece,
+  ContentBrief,
   ContentProject,
   ContentProjectIdea,
   ContentTopic,
@@ -30,6 +32,7 @@ import { ContentErrorBoundary } from "./ErrorBoundary";
 import { ContentProjectWorkflow } from "./ContentProjectWorkflow";
 import { ContentPilotPanel } from "./ContentPilotPanel";
 import { AppliedStylePreview } from "./AppliedStylePreview";
+import { generateQuickDraft } from "@/lib/content/quick-draft";
 import {
   competitorIdeaToBrief,
   type CompetitorIntelligenceIdea,
@@ -61,7 +64,11 @@ function projectProgress(project: ContentProject): string {
   if (project.current_step === "complete") {
     return `${project.status.charAt(0).toUpperCase()}${project.status.slice(1)}`;
   }
-  return `${project.current_step.charAt(0).toUpperCase()}${project.current_step.slice(1)} stage`;
+  if (["idea", "brief", "evidence", "generate"].includes(project.current_step)) {
+    return "Preparing draft";
+  }
+  if (project.current_step === "edit") return "Draft";
+  return "In review";
 }
 
 function ContentStudioInner({
@@ -88,6 +95,11 @@ function ContentStudioInner({
   const [openingProject, setOpeningProject] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState("");
   const [manualType, setManualType] = useState<ContentType>("linkedin");
+  const [quickTitle, setQuickTitle] = useState("");
+  const [quickGuidance, setQuickGuidance] = useState("");
+  const [quickType, setQuickType] = useState<ContentType>("linkedin");
+  const [quickCreating, setQuickCreating] = useState(false);
+  const quickCreatingRef = useRef(false);
   const [previewType, setPreviewType] = useState<ContentType>("linkedin");
   const [showManual, setShowManual] = useState(false);
   const [ideaGenerationRequest, setIdeaGenerationRequest] = useState(0);
@@ -192,6 +204,10 @@ function ContentStudioInner({
     });
   }, [createProject]);
 
+  const handleContentGenerated = useCallback((piece: ContentPiece) => {
+    setHistory((previous) => [piece, ...previous.filter((item) => item.id !== piece.id)]);
+  }, []);
+
   const handleManualIdea = useCallback(async () => {
     if (!manualTitle.trim()) {
       toast.error("Add an idea title.");
@@ -213,6 +229,79 @@ function ContentStudioInner({
     }
   }, [createProject, manualTitle, manualType]);
 
+  const handleQuickCreate = useCallback(async () => {
+    if (quickCreatingRef.current) return;
+    const title = quickTitle.trim();
+    if (!title) {
+      toast.error("Tell us what you want to create.");
+      return;
+    }
+
+    quickCreatingRef.current = true;
+    setQuickCreating(true);
+    let created: ContentProject | null = null;
+    try {
+      created = await api.post<ContentProject>(ROUTES.content.projects(), {
+        client_id: clientId,
+        idea: {
+          version: 1,
+          origin: "manual",
+          title,
+          channel: quickType,
+          rationale: "A direct content request from the editorial team.",
+          differentiation: "Use Company DNA, approved voice and the most relevant company evidence.",
+          evidenceSummary: "The engine will automatically shortlist relevant factual Vault sources.",
+          marketIntelligence: null,
+        } satisfies ContentProjectIdea,
+      }, { showErrorToast: false });
+      setProjects((previous) => [
+        created as ContentProject,
+        ...previous.filter((project) => project.id !== created?.id),
+      ]);
+
+      const brief: ContentBrief = {
+        version: 1,
+        objective: title,
+        audience: null,
+        angle: null,
+        desiredFormat: null,
+        keyPoints: [],
+        callToAction: null,
+        tone: "professional",
+        length: "medium",
+        mode: "new",
+        additionalGuidance: quickGuidance.trim() || null,
+        marketIntelligence: null,
+      };
+      const result = await generateQuickDraft({
+        clientId,
+        project: created,
+        brief,
+      });
+      updateProject(result.project);
+      handleContentGenerated(result.piece);
+      setQuickTitle("");
+      setQuickGuidance("");
+      toast.success("Draft ready. You can edit it now.");
+    } catch (error) {
+      toast.error(error instanceof Error
+        ? error.message
+        : "The draft could not be generated. Your work has been saved.");
+      if (created) await openProject(created.id);
+    } finally {
+      quickCreatingRef.current = false;
+      setQuickCreating(false);
+    }
+  }, [
+    clientId,
+    handleContentGenerated,
+    openProject,
+    quickGuidance,
+    quickTitle,
+    quickType,
+    updateProject,
+  ]);
+
   const handleVaultGapSelected = useCallback(async (question: string) => {
     await createProject({
       version: 1,
@@ -225,10 +314,6 @@ function ContentStudioInner({
       marketIntelligence: null,
     });
   }, [createProject]);
-
-  const handleContentGenerated = useCallback((piece: ContentPiece) => {
-    setHistory((previous) => [piece, ...previous.filter((item) => item.id !== piece.id)]);
-  }, []);
 
   const loadMoreHistory = useCallback(async () => {
     if (loadingMoreHistory || !historyHasMore) return;
@@ -294,31 +379,102 @@ function ContentStudioInner({
 
   return (
     <div className="space-y-6">
+      <section className="rounded-2xl border border-purple-500/35 bg-gradient-to-br from-purple-500/15 via-zinc-900 to-zinc-950 p-6 shadow-lg shadow-purple-950/20">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-purple-300">
+              <Zap className="h-3.5 w-3.5" /> Quick Create
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold text-white">Create a draft in under a minute</h1>
+            <p className="mt-1 max-w-2xl text-sm text-zinc-400">
+              Give the engine a topic and channel. Company DNA, approved voice, platform structure and relevant Vault evidence are applied automatically.
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            disabled={quickCreating}
+            onClick={() => setShowManual((value) => !value)}
+          >
+            {showManual ? "Hide Guided Create" : "Need more control? Guided Create"}
+          </Button>
+        </div>
+        <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_180px_auto]">
+          <Input
+            value={quickTitle}
+            onChange={(event) => setQuickTitle(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void handleQuickCreate();
+              }
+            }}
+            disabled={quickCreating}
+            maxLength={300}
+            placeholder="What do you want to create? e.g. Why private credit matters to property investors"
+            aria-label="Content topic"
+            className="h-11 bg-zinc-950"
+          />
+          <select
+            value={quickType}
+            onChange={(event) => setQuickType(event.target.value as ContentType)}
+            disabled={quickCreating}
+            aria-label="Content channel"
+            className="h-11 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm capitalize text-white"
+          >
+            {["linkedin", "facebook", "instagram", "x", "email", "newsletter", "blog"].map((type) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+          <Button
+            size="lg"
+            disabled={quickCreating || !quickTitle.trim()}
+            onClick={() => void handleQuickCreate()}
+            className="h-11 bg-purple-600 hover:bg-purple-500"
+          >
+            {quickCreating
+              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              : <Zap className="mr-2 h-4 w-4" />}
+            {quickCreating ? "Creating draft…" : "Generate draft"}
+          </Button>
+        </div>
+        <Input
+          value={quickGuidance}
+          onChange={(event) => setQuickGuidance(event.target.value)}
+          disabled={quickCreating}
+          maxLength={2000}
+          placeholder="Optional direction: audience, angle, key point or CTA"
+          aria-label="Optional content direction"
+          className="mt-3 bg-zinc-950/80"
+        />
+        <div className="mt-4">
+          <AppliedStylePreview brandStyle={brandStyle} channel={quickType} compact />
+        </div>
+      </section>
+
+      {showManual && (
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Guided Create</p>
+          <h2 className="mt-1 text-lg font-semibold text-white">Start an evidence-led draft</h2>
+          <p className="mt-1 text-sm text-zinc-500">Review the idea, shape the brief and choose factual sources before generation.</p>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <Input value={manualTitle} onChange={(event) => setManualTitle(event.target.value)} placeholder="What should the company talk about?" className="flex-1 bg-zinc-950" />
+            <select value={manualType} onChange={(event) => setManualType(event.target.value as ContentType)} className="h-9 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm capitalize">
+              {["linkedin", "facebook", "instagram", "x", "email", "newsletter", "blog"].map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+            <Button onClick={handleManualIdea}>Start guided draft</Button>
+          </div>
+        </section>
+      )}
+
       <ContentPilotPanel clientId={clientId} projects={projects} />
       <section className="rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-purple-300">Continue working</p>
-            <h2 className="mt-1 text-lg font-semibold text-white">Unfinished content projects</h2>
-            <p className="mt-1 text-sm text-zinc-500">Every brief, source choice and draft is saved between sessions.</p>
+            <h2 className="mt-1 text-lg font-semibold text-white">Your unfinished drafts</h2>
+            <p className="mt-1 text-sm text-zinc-500">Every idea, source choice and draft is saved between sessions.</p>
           </div>
-          <Button onClick={() => setShowManual((value) => !value)}>
-            <Plus className="mr-2 h-4 w-4" /> Start with my own idea
-          </Button>
         </div>
-
-        {showManual && (
-          <div className="mt-4 space-y-3 rounded-xl border border-zinc-700 bg-zinc-900 p-4">
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input value={manualTitle} onChange={(event) => setManualTitle(event.target.value)} placeholder="What should the company talk about?" className="flex-1 bg-zinc-950" />
-              <select value={manualType} onChange={(event) => setManualType(event.target.value as ContentType)} className="h-9 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm">
-                {["linkedin", "facebook", "instagram", "x", "email", "newsletter", "blog"].map((type) => <option key={type} value={type}>{type}</option>)}
-              </select>
-              <Button onClick={handleManualIdea}>Review idea</Button>
-            </div>
-            <AppliedStylePreview brandStyle={brandStyle} channel={manualType} compact />
-          </div>
-        )}
 
         <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">IDEAS approved</p>
@@ -393,13 +549,13 @@ function ContentStudioInner({
 
       <nav aria-label="Content Studio" className="grid gap-2 rounded-xl border border-zinc-800 bg-zinc-900 p-1.5 sm:grid-cols-3">
         <button type="button" onClick={() => setView("ideas")} className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ${view === "ideas" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:bg-zinc-800"}`}>
-          <Lightbulb className="h-4 w-4" /> Company priorities &amp; Vault gaps
+          <Lightbulb className="h-4 w-4" /> Ideas
         </button>
         <button type="button" onClick={() => setView("competitors")} className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ${view === "competitors" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:bg-zinc-800"}`}>
-          <Radar className="h-4 w-4" /> Competitor opportunities
+          <Radar className="h-4 w-4" /> Competitor ideas
         </button>
         <button type="button" onClick={() => setView("library")} className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ${view === "library" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:bg-zinc-800"}`}>
-          <Archive className="h-4 w-4" /> Drafts &amp; approved library
+          <Archive className="h-4 w-4" /> Drafts &amp; approved
         </button>
       </nav>
 

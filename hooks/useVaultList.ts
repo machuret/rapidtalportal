@@ -26,6 +26,8 @@ export interface VaultListFilters {
   category?: string; // VaultCategory | "all"
   type?: string;     // source_type | "all"
   status?: string;
+  evidenceRole?: "factual" | "style_example" | "market_context";
+  knowledgeStatus?: "active" | "review_required" | "superseded";
 }
 
 const EMPTY_COUNTS: VaultCounts = { total: 0, ready: 0, processing: 0, error: 0 };
@@ -42,10 +44,20 @@ export const vaultListKeys = {
  */
 export function useVaultList(clientId: string, filters: VaultListFilters = {}) {
   const queryClient = useQueryClient();
-  const { q = "", category = "all", type = "all", status } = filters;
+  const {
+    q = "",
+    category = "all",
+    type = "all",
+    status,
+    evidenceRole,
+    knowledgeStatus,
+  } = filters;
 
   const query = useInfiniteQuery({
-    queryKey: [...vaultListKeys.all(clientId), { q, category, type, status }],
+    queryKey: [
+      ...vaultListKeys.all(clientId),
+      { q, category, type, status, evidenceRole, knowledgeStatus },
+    ],
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ clientId, page: String(pageParam) });
@@ -53,6 +65,8 @@ export function useVaultList(clientId: string, filters: VaultListFilters = {}) {
       if (category && category !== "all") params.set("category", category);
       if (type && type !== "all") params.set("type", type);
       if (status) params.set("status", status);
+      if (evidenceRole) params.set("evidenceRole", evidenceRole);
+      if (knowledgeStatus) params.set("knowledgeStatus", knowledgeStatus);
       return api.get<VaultPage>(`${ROUTES.vault.items()}?${params.toString()}`);
     },
     getNextPageParam: (last) => last.nextPage,

@@ -32,6 +32,7 @@ export async function KnowledgeCoverage({
   clientId, clientName, canCurate,
 }: { clientId: string; clientName: string; canCurate: boolean }) {
   const admin = createAdminClient();
+  const today = new Date().toISOString().slice(0, 10);
 
   const [{ data: dnaData }, { data: items }, { count: kbCount }, queriesRes] = await Promise.all([
     admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
@@ -40,6 +41,12 @@ export async function KnowledgeCoverage({
       .select("id, title, category, ai_summary, tags, source_type, updated_at, content_hash")
       .eq("client_id", clientId)
       .eq("status", "ready")
+      .eq("evidence_role", "factual")
+      .eq("knowledge_status", "active")
+      .eq("has_conflict", false)
+      .or(`valid_from.is.null,valid_from.lte.${today}`)
+      .or(`valid_until.is.null,valid_until.gte.${today}`)
+      .or(`review_due_at.is.null,review_due_at.gt.${today}`)
       .order("updated_at", { ascending: false }),
     admin.from("kb_entries").select("*", { count: "exact", head: true }).eq("client_id", clientId),
     admin

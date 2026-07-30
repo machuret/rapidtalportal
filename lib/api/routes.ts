@@ -34,6 +34,7 @@ export const ROUTES = {
   },
   vault: {
     items: () => "/api/vault/items",
+    readiness: () => "/api/vault/readiness",
     recap: () => "/api/vault/recap",
     refreshDossier: () => "/api/vault/refresh-dossier",
     expand: () => "/api/vault/expand",
@@ -52,6 +53,7 @@ export const ROUTES = {
     teach: () => "/api/vault/teach",
     gaps: () => "/api/vault/gaps",
     item: (id: string) => `/api/vault/${id}`,
+    itemVersions: (id: string) => `/api/vault/${id}/versions`,
     reprocess: (id: string) => `/api/vault/${id}/reprocess`,
   },
   sops: () => "/api/sops",

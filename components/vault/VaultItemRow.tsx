@@ -6,7 +6,7 @@ import { CategoryBadge } from "@/components/shared/CategoryBadge";
 import {
   FileText, Globe, Type, FileUp, CheckCircle2, Clock,
   AlertCircle, Loader2, ExternalLink, Pencil, Tag,
-  Sparkles, CheckSquare, Square, ChevronDown, ChevronUp, Trash2,
+  Sparkles, CheckSquare, Square, ChevronDown, ChevronUp, Trash2, ShieldCheck,
 } from "lucide-react";
 
 const SOURCE_META = {
@@ -17,10 +17,10 @@ const SOURCE_META = {
 } as const;
 
 const STATUS_META = {
-  pending:    { label: "Pending",    cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25", icon: Clock },
-  processing: { label: "Processing", cls: "bg-blue-500/15 text-blue-400 border-blue-500/25",       icon: Loader2 },
-  ready:      { label: "Ready",      cls: "bg-green-500/15 text-green-400 border-green-500/25",    icon: CheckCircle2 },
-  error:      { label: "Error",      cls: "bg-red-500/15 text-red-400 border-red-500/25",          icon: AlertCircle },
+  pending:    { label: "Preparing",       cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25", icon: Clock },
+  processing: { label: "Preparing",       cls: "bg-blue-500/15 text-blue-400 border-blue-500/25",       icon: Loader2 },
+  ready:      { label: "Usable",          cls: "bg-green-500/15 text-green-400 border-green-500/25",    icon: CheckCircle2 },
+  error:      { label: "Needs attention", cls: "bg-red-500/15 text-red-400 border-red-500/25",          icon: AlertCircle },
 } as const;
 
 interface VaultItemRowProps {
@@ -68,12 +68,29 @@ export function VaultItemRow({
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", src?.bgCls, src?.iconCls)}>{src?.label}</span>
             {item.category && <CategoryBadge category={item.category} />}
-            {item.status === "ready" && item.indexed === false && (
-              <span
-                title="Saved, but not yet searchable by AI — the indexer runs every 15 min, or use “Index for AI search”."
-                className="text-xs font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400"
-              >
-                Not indexed
+            {item.authority_level === "authoritative" && (
+              <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-xs font-medium text-blue-300">
+                <ShieldCheck className="h-3 w-3" /> Authoritative
+              </span>
+            )}
+            {item.knowledge_status === "review_required" && (
+              <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-300">
+                Review required
+              </span>
+            )}
+            {item.knowledge_status === "superseded" && (
+              <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs font-medium text-zinc-400">
+                Superseded
+              </span>
+            )}
+            {item.has_conflict && (
+              <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-xs font-medium text-red-300">
+                Conflicting information
+              </span>
+            )}
+            {item.valid_until && item.valid_until < new Date().toISOString().slice(0, 10) && (
+              <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-xs font-medium text-red-300">
+                Expired
               </span>
             )}
             <span className="text-xs text-zinc-600">
@@ -106,8 +123,8 @@ export function VaultItemRow({
           {sta?.label}
         </span>
 
-        {canWrite && (item.status === "error" || item.status === "ready") && (
-          <button onClick={onReprocess} disabled={reprocessing} title="Re-run AI processing" aria-label="Re-run AI processing"
+        {canWrite && item.status === "error" && (
+          <button onClick={onReprocess} disabled={reprocessing} title="Try preparing this source again" aria-label="Try preparing this source again"
             className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-blue-400 transition-colors disabled:opacity-40">
             {reprocessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
           </button>

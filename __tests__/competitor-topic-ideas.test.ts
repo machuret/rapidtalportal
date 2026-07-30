@@ -45,7 +45,7 @@ import { POST } from "@/app/api/content/topics/generate/route";
 
 function fluent(result: { data: unknown; error: unknown }) {
   const chain: Record<string, jest.Mock | ((resolve: (value: unknown) => unknown) => Promise<unknown>)> = {};
-  for (const method of ["select", "eq", "in", "order", "limit"]) {
+  for (const method of ["select", "eq", "in", "or", "order", "limit"]) {
     chain[method] = jest.fn(() => chain);
   }
   chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve(resolve(result));

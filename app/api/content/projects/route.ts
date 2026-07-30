@@ -456,6 +456,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   }
 
   if (parsed.data.vault_source_ids) {
+    const today = new Date().toISOString().slice(0, 10);
     let selectedReferences: Array<Record<string, unknown>> = [];
     if (parsed.data.vault_source_ids.length) {
       const { data: selected, error: selectedError } = await db
@@ -464,6 +465,11 @@ export const PATCH = withAuth(async (req, { user }) => {
         .eq("client_id", parsed.data.client_id)
         .eq("status", "ready")
         .eq("evidence_role", "factual")
+        .eq("knowledge_status", "active")
+        .eq("has_conflict", false)
+        .or(`valid_from.is.null,valid_from.lte.${today}`)
+        .or(`valid_until.is.null,valid_until.gte.${today}`)
+        .or(`review_due_at.is.null,review_due_at.gt.${today}`)
         .in("id", parsed.data.vault_source_ids);
       if (selectedError) return serverError(selectedError);
       if ((selected ?? []).length !== parsed.data.vault_source_ids.length) {

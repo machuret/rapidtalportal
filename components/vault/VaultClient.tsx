@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { DbVaultItem, VaultCategory } from "@/types/database";
 import { toast } from "sonner";
 import {
-  FileText, Trash2, Search, Loader2, CheckSquare, Square, X, Sparkles, Radar,
+  FileText, Trash2, Search, Loader2, CheckSquare, Square, X, Radar,
   AlertTriangle, RefreshCw,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import { VaultItemRow } from "./VaultItemRow";
 import { useVaultList } from "@/hooks/useVaultList";
 import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
 import { CompetitorsTab } from "@/components/content/CompetitorsTab";
+import { VaultReadinessDashboard } from "./VaultReadinessDashboard";
 
 type TypeFilter = "all" | "text" | "url" | "pdf" | "docx";
 
@@ -53,8 +54,8 @@ export function VaultClient(props: VaultClientProps) {
 
 function VaultClientInner({
   clientId, userId, role, canWrite,
-  title = "Vault",
-  subtitle = "Document and content store — the source of truth for AI-generated knowledge.",
+  title = "Company Knowledge",
+  subtitle = "Approved company facts used by Ask the Vault and content generation.",
 }: VaultClientProps) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -80,7 +81,12 @@ function VaultClientInner({
     deleteItems,
     isDeleting: bulkDeleting,
     reprocessItem,
-  } = useVaultList(clientId, { q: debouncedSearch, category: categoryFilter, type: typeFilter });
+  } = useVaultList(clientId, {
+    q: debouncedSearch,
+    category: categoryFilter,
+    type: typeFilter,
+    evidenceRole: "factual",
+  });
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [crawlJob, setCrawlJob] = useState<CrawlJob | null>(null);
@@ -100,7 +106,7 @@ function VaultClientInner({
         `${ROUTES.vault.unindexed()}?clientId=${clientId}`,
       );
       if (!itemIds.length) {
-        toast.success("All items are already indexed for AI search.");
+        toast.success("Every source is ready for Ask and content generation.");
         return;
       }
       setIndexing({ done: 0, total: itemIds.length });
@@ -128,10 +134,10 @@ function VaultClientInner({
       };
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, itemIds.length) }, worker));
       if (succeeded > 0) {
-        toast.success(`Indexed ${succeeded} item${succeeded !== 1 ? "s" : ""} for AI search.`);
+        toast.success(`Prepared ${succeeded} source${succeeded !== 1 ? "s" : ""} for Ask and content generation.`);
       }
       if (failed > 0) {
-        toast.error(`${failed} item${failed !== 1 ? "s" : ""} could not be indexed. They remain marked for retry.`);
+        toast.error(`${failed} source${failed !== 1 ? "s" : ""} could not be prepared. They remain marked for retry.`);
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Indexing failed.");
@@ -237,20 +243,6 @@ function VaultClientInner({
           <p className="text-zinc-400 text-sm mt-1">{subtitle}</p>
         </div>
         <div className="flex items-center gap-3">
-          {canReprocess && counts.total > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleIndexAll}
-              disabled={indexing !== null}
-              className="gap-1.5 border-zinc-700 h-8 text-xs"
-              title="Build the AI search index so Ask the Vault can answer from these documents"
-            >
-              {indexing !== null
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Indexing {indexing.done}/{indexing.total}</>
-                : <><Sparkles className="w-3.5 h-3.5" /> Index for AI search</>}
-            </Button>
-          )}
           {counts.total > 0 && (
             <div className="hidden md:flex items-center gap-1.5 text-xs text-zinc-500">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -263,10 +255,10 @@ function VaultClientInner({
       {/* View tabs: browse items, read the recap digest, or the deep analysis */}
       <div className="flex items-center gap-1 mb-5 border-b border-zinc-800">
         {([
-          ["items", "Items"],
-          ["recap", "Recap"],
-          ["expanded", "Expanded View"],
-          ["competitors", "Competitors"],
+          ["items", "Company sources"],
+          ["recap", "Quick summary"],
+          ["expanded", "Knowledge report"],
+          ["competitors", "Market intelligence"],
         ] as const).map(([v, label]) => (
           <button
             key={v}
@@ -294,34 +286,41 @@ function VaultClientInner({
         <VaultExpanded clientId={clientId} canWrite={canWrite} />
       ) : (
       <>
-      {/* Stats strip */}
-      {counts.total > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[
-            { label: "Total Items", value: counts.total,      color: "text-zinc-100" },
-            { label: "Ready",       value: counts.ready,      color: "text-green-400" },
-            { label: "Processing",  value: counts.processing, color: "text-blue-400" },
-            { label: "Errors",      value: counts.error,      color: "text-red-400" },
-          ].map(s => (
-            <div key={s.label} className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
-              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-zinc-500 mt-0.5">{s.label}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      <VaultReadinessDashboard
+        clientId={clientId}
+        canCurate={role === "client_admin" || role === "super_admin"}
+        canIndex={canReprocess}
+        version={`${counts.total}:${counts.ready}:${counts.processing}:${counts.error}:${indexing?.done ?? "idle"}`}
+        onAdd={() => {
+          setView("items");
+          window.setTimeout(() => {
+            document.getElementById("vault-add-knowledge")?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+          });
+        }}
+        onIndex={handleIndexAll}
+      />
 
       {/* Site-crawl progress — also resumes any job left running. */}
       <CrawlJobPanel clientId={clientId} startedJob={crawlJob} />
 
       {/* Add item — VAs and client_admin can add. Realtime invalidation refreshes the list. */}
       {(canWrite || role === "va") && (
-        <AddVaultItem clientId={clientId} userId={userId} onCrawlStarted={setCrawlJob} />
+        <div id="vault-add-knowledge">
+          <AddVaultItem
+            clientId={clientId}
+            userId={userId}
+            onAdded={() => void refetch()}
+            onCrawlStarted={setCrawlJob}
+          />
+        </div>
       )}
 
       {/* Search + filter toolbar */}
       {!isEmptyVault && (
-        <div className="flex flex-col gap-3 mb-4">
+        <div id="vault-source-list" className="flex flex-col gap-3 mb-4 scroll-mt-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <Input
