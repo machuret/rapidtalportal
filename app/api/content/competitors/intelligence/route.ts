@@ -242,10 +242,51 @@ function resolveExactSourceQuote(quote: string, source: string): string | null {
   return best?.quote ?? null;
 }
 
+function meaningfulEvidenceTokens(value: string): string[] {
+  const root = (token: string) => {
+    if (token.length > 5 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+    if (token.length > 5 && token.endsWith("ing")) return token.slice(0, -3);
+    if (token.length > 4 && token.endsWith("ed")) return token.slice(0, -2);
+    if (token.length > 4 && token.endsWith("s")) return token.slice(0, -1);
+    return token;
+  };
+  return evidenceTokens(value)
+    .filter((token) => token.length >= 3 && !STOP_WORDS.has(token))
+    .map(root);
+}
+
+function resolveSupportingSourceQuote(claim: string, source: string): string | null {
+  const claimTokens = meaningfulEvidenceTokens(claim);
+  if (claimTokens.length < 3) return null;
+  const claimNegations = negations(evidenceTokens(claim));
+  const claimSet = new Set(claimTokens);
+  let best: { quote: string; score: number } | null = null;
+  for (const candidate of sourceQuoteCandidates(source, 24)) {
+    const candidateRawTokens = evidenceTokens(candidate);
+    if (negations(candidateRawTokens) !== claimNegations) continue;
+    const candidateSet = new Set(meaningfulEvidenceTokens(candidate));
+    let shared = 0;
+    for (const token of claimSet) if (candidateSet.has(token)) shared++;
+    const claimCoverage = shared / claimSet.size;
+    const candidateCoverage = candidateSet.size ? shared / candidateSet.size : 0;
+    const score = (claimCoverage * 0.7) + (candidateCoverage * 0.3);
+    if (
+      shared >= 3 &&
+      claimCoverage >= 0.25 &&
+      candidateCoverage >= 0.12 &&
+      (!best || score > best.score)
+    ) {
+      best = { quote: candidate, score };
+    }
+  }
+  return best?.quote ?? null;
+}
+
 function canonicalEvidenceQuotes(
   sourceIds: string[],
   quotes: Array<{ source_item_id: string; quote: string }>,
   sourceById: Map<string, EvidenceRow>,
+  insightText: string,
 ): Array<{ source_item_id: string; quote: string }> {
   const provided = new Map<string, string>();
   for (const evidence of quotes) {
@@ -255,10 +296,40 @@ function canonicalEvidenceQuotes(
   return sourceIds.flatMap((sourceId) => {
     const source = sourceById.get(sourceId);
     const quote = provided.get(sourceId);
-    if (!source || !quote) return [];
-    const exact = resolveExactSourceQuote(quote, source.raw_content);
-    return exact ? [{ source_item_id: sourceId, quote: exact }] : [];
+    if (!source) return [];
+    const exact = quote
+      ? resolveExactSourceQuote(quote, source.raw_content)
+      : null;
+    const quoteHasUnresolvedNegation = quote &&
+      negations(evidenceTokens(quote)).length > 0 &&
+      !exact;
+    const resolved = exact ?? (
+      quoteHasUnresolvedNegation
+        ? null
+        : resolveSupportingSourceQuote(insightText, source.raw_content)
+    );
+    return resolved ? [{ source_item_id: sourceId, quote: resolved }] : [];
   });
+}
+
+function insightEvidenceText(value: Record<string, unknown>): string {
+  const fields = [
+    "label", "description", "summary", "name", "hook_pattern", "structure_pattern",
+    "cta_pattern", "dimension", "opportunity", "title", "rationale", "objective",
+    "why_valuable", "differentiation", "suggested_hook",
+  ];
+  const lists = [
+    "audience", "themes", "value_propositions", "tone", "suggested_angles",
+    "key_points",
+  ];
+  return [
+    ...fields.flatMap((field) =>
+      typeof value[field] === "string" ? [value[field]] : []),
+    ...lists.flatMap((field) =>
+      Array.isArray(value[field])
+        ? value[field].filter((entry): entry is string => typeof entry === "string")
+        : []),
+  ].join(" ");
 }
 
 function terms(value: string): Set<string> {
@@ -771,6 +842,7 @@ function boundAnalysis(
       entry.source_item_ids,
       entry.evidence_quotes,
       sourceById,
+      insightEvidenceText(entry),
     );
     const requiredMatches = Math.ceil((entry.source_item_ids.length * 2) / 3);
     if (evidenceQuotes.length < requiredMatches) {

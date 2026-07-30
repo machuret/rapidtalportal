@@ -626,6 +626,49 @@ test("resolves evidence inside a long page without sentence boundaries", async (
   );
 });
 
+test("selects an exact captured excerpt when a non-negated model quote is paraphrased", async () => {
+  const rows = evidenceRows();
+  rows[0].raw_content =
+    "Fast private lending gives property investors flexible access to capital for urgent purchases. " +
+    "The lender describes a streamlined assessment process for time-sensitive transactions.";
+  const paraphrased = structuredClone(analysis);
+  paraphrased.positioning_profiles[0].summary =
+    "The competitor emphasises fast, flexible private capital for urgent property transactions.";
+  paraphrased.positioning_profiles[0].themes = ["Fast private capital", "Urgent property purchases"];
+  paraphrased.positioning_profiles[0].evidence_quotes = [{
+    source_item_id: SOURCE_IDS[0],
+    quote: "Property buyers can obtain rapid and adaptable funding when timing is critical.",
+  }];
+  paraphrased.positioning_profiles[0].source_item_ids = [SOURCE_IDS[0]];
+  const { rpc } = postDb({
+    modelAnalysis: paraphrased,
+    evidenceOverride: rows,
+  });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(201);
+  expect(rpc).toHaveBeenCalledWith(
+    "complete_competitor_intelligence_job",
+    expect.objectContaining({
+      p_analysis: expect.objectContaining({
+        positioning_profiles: [
+          expect.objectContaining({
+            evidence_quotes: [{
+              source_item_id: SOURCE_IDS[0],
+              quote: "Fast private lending gives property investors flexible access to capital for urgent purchases.",
+            }],
+          }),
+        ],
+      }),
+    }),
+  );
+});
+
 test("repairs one incomplete model report and still applies deterministic evidence checks", async () => {
   const { rpc } = postDb({
     modelResponses: [
