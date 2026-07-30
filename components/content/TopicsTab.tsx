@@ -10,6 +10,10 @@ import { TopicForm } from "./TopicForm";
 import { AiSuggestions } from "./AiSuggestions";
 import type { ContentTopic, AiSuggestion } from "@/types/content";
 import { toast } from "sonner";
+import {
+  contentTypeFromGeneratedFormat,
+  type ContentIdeaChannel,
+} from "@/lib/content/idea-channel";
 
 interface TopicsTabProps {
   clientId: string;
@@ -34,6 +38,17 @@ function isStoredSuggestion(value: unknown): value is AiSuggestion {
     ["email", "x", "linkedin", "facebook", "instagram", "newsletter", "blog"]
       .includes(candidate.content_type)
   );
+}
+
+function normalizeSuggestionChannel(suggestion: AiSuggestion): AiSuggestion {
+  const recommendedFormat = suggestion.explainability?.recommendedFormat ?? "";
+  return {
+    ...suggestion,
+    content_type: contentTypeFromGeneratedFormat(
+      suggestion.content_type as ContentIdeaChannel,
+      recommendedFormat,
+    ),
+  };
 }
 
 export const TopicsTab = memo(function TopicsTab({
@@ -70,12 +85,13 @@ export const TopicsTab = memo(function TopicsTab({
   const suggestionStorageKey = `rapidtal:content-ideas:${clientId}`;
 
   const persistSuggestions = useCallback((next: AiSuggestion[] | null) => {
-    setRecoveredSuggestions(next);
+    const normalized = next?.map(normalizeSuggestionChannel) ?? null;
+    setRecoveredSuggestions(normalized);
     try {
-      if (next?.length) {
+      if (normalized?.length) {
         window.localStorage.setItem(suggestionStorageKey, JSON.stringify({
           savedAt: new Date().toISOString(),
-          suggestions: next,
+          suggestions: normalized,
         }));
       } else {
         window.localStorage.removeItem(suggestionStorageKey);
@@ -92,7 +108,10 @@ export const TopicsTab = memo(function TopicsTab({
       if (!raw) return;
       const parsed = JSON.parse(raw) as { suggestions?: unknown };
       if (Array.isArray(parsed.suggestions)) {
-        const valid = parsed.suggestions.filter(isStoredSuggestion).slice(0, 20);
+        const valid = parsed.suggestions
+          .filter(isStoredSuggestion)
+          .map(normalizeSuggestionChannel)
+          .slice(0, 20);
         if (valid.length) {
           setRecoveredSuggestions(valid);
           setShowSuggestions(true);
