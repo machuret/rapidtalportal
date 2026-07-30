@@ -25,6 +25,7 @@ const createSchema = z.object({
   ai_fit_score: z.number().int().min(0).max(100).optional().nullable(),
   ai_flagged:   z.boolean().optional(),
   why:          z.record(z.string(), z.unknown()).optional().nullable(),
+  status:       z.enum(["pending", "approved"]).optional().default("pending"),
 });
 
 const updateSchema = z.object({
@@ -85,8 +86,17 @@ export const POST = withAuth(async (req, { user }) => {
 
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
+  if (
+    parsed.data.status === "approved" &&
+    !hasContentCapability(user.role, "approve_content")
+  ) {
+    return NextResponse.json({ error: "Not allowed to approve content topics." }, { status: 403 });
+  }
 
   const admin = createAdminClient();
+  const approvedAt = parsed.data.status === "approved"
+    ? new Date().toISOString()
+    : null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("content_topics")
@@ -99,6 +109,9 @@ export const POST = withAuth(async (req, { user }) => {
       ai_fit_score: parsed.data.ai_fit_score ?? null,
       ai_flagged:   parsed.data.ai_flagged ?? false,
       why:          parsed.data.why ?? null,
+      status:       parsed.data.status,
+      approved_by:  parsed.data.status === "approved" ? user.id : null,
+      approved_at:  approvedAt,
     })
     .select()
     .single();
@@ -106,6 +119,28 @@ export const POST = withAuth(async (req, { user }) => {
   if (error) {
     console.error("[content/topics POST]", error.code, error.message);
     return serverError(error);
+  }
+
+  // An approved suggestion is both a durable editorial decision and a positive
+  // Brain signal. Saving the idea is authoritative; learning remains best-effort.
+  if (parsed.data.status === "approved" && data) {
+    const artifactText = [data.title, data.description].filter(Boolean).join(" — ").slice(0, 8000);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: signalError } = await (admin as any).from("brain_signals").insert({
+        client_id: parsed.data.client_id,
+        user_id: user.id,
+        surface: "content_topic",
+        artifact_id: data.id,
+        artifact_text: artifactText || data.title || "(topic)",
+        rating: 1,
+        reason: null,
+        context: { content_type: data.content_type, stage: "approved_idea" },
+      });
+      if (signalError) throw signalError;
+    } catch (signalError) {
+      console.error("[content/topics POST] brain_signals insert failed", signalError);
+    }
   }
   return NextResponse.json(data, { status: 201 });
 });

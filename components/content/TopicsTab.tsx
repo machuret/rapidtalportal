@@ -18,6 +18,7 @@ interface TopicsTabProps {
   regenerateRequest?: number;
   onTopicSelected: (topic: ContentTopic) => void;
   onTopicApproved?: (topic: ContentTopic) => void | Promise<void>;
+  onTopicsChange?: (topics: ContentTopic[]) => void;
   onOpenIntelligence: () => void;
 }
 
@@ -28,6 +29,7 @@ export const TopicsTab = memo(function TopicsTab({
   regenerateRequest = 0,
   onTopicSelected,
   onTopicApproved,
+  onTopicsChange,
   onOpenIntelligence,
 }: TopicsTabProps) {
   const [showForm, setShowForm] = useState(false);
@@ -48,6 +50,10 @@ export const TopicsTab = memo(function TopicsTab({
     suggestions,
   } = useTopics(clientId, initialTopics);
 
+  useEffect(() => {
+    onTopicsChange?.(topics);
+  }, [onTopicsChange, topics]);
+
   const handleCreateTopic = useCallback(
     async (data: {
       client_id: string;
@@ -57,6 +63,7 @@ export const TopicsTab = memo(function TopicsTab({
     }) => {
       await createTopic({ ...data, client_id: clientId });
       setShowForm(false);
+      toast.success("Topic saved.");
     },
     [createTopic, clientId]
   );
@@ -112,6 +119,7 @@ export const TopicsTab = memo(function TopicsTab({
             ...(s.why ?? {}),
             ...(s.explainability ? { explainability: s.explainability } : {}),
           }) as Record<string, unknown>,
+          status: canApprove ? "approved" : "pending",
         })
       );
 
@@ -121,7 +129,7 @@ export const TopicsTab = memo(function TopicsTab({
 
       if (succeeded > 0) {
         toast.success(
-          `${succeeded} topic${succeeded !== 1 ? "s" : ""} added${
+          `${succeeded} idea${succeeded !== 1 ? "s" : ""} saved${
             failed > 0 ? ` (${failed} failed)` : ""
           }`
         );
@@ -131,7 +139,34 @@ export const TopicsTab = memo(function TopicsTab({
 
       setShowSuggestions(false);
     },
-    [createTopic, clientId]
+    [canApprove, createTopic, clientId]
+  );
+
+  const handleSaveApprovedSuggestion = useCallback(
+    async (suggestion: AiSuggestion) => {
+      const saved = await createTopic({
+        client_id: clientId,
+        title: suggestion.title,
+        description: suggestion.description,
+        content_type: suggestion.content_type,
+        ai_fit_score: suggestion.fit ?? null,
+        ai_flagged: suggestion.ai_flagged ?? false,
+        why: ({
+          ...(suggestion.why ?? {}),
+          ...(suggestion.explainability
+            ? { explainability: suggestion.explainability }
+            : {}),
+        }) as Record<string, unknown>,
+        status: canApprove ? "approved" : "pending",
+      });
+      if (saved.status === "approved") await onTopicApproved?.(saved);
+      toast.success(
+        saved.status === "approved"
+          ? "Idea saved to IDEAS approved."
+          : "Idea saved for approval.",
+      );
+    },
+    [canApprove, clientId, createTopic, onTopicApproved],
   );
 
   return (
@@ -193,8 +228,10 @@ export const TopicsTab = memo(function TopicsTab({
           suggestions={suggestions as AiSuggestion[] | null}
           isGenerating={isGenerating}
           isSubmitting={isCreating}
+          canApprove={canApprove}
           mode="company"
           onGenerate={handleGenerateIdeas}
+          onSaveApproved={handleSaveApprovedSuggestion}
           onSubmitSelected={handleSubmitSuggestions}
           onClose={() => setShowSuggestions(false)}
         />

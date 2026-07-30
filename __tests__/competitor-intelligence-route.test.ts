@@ -263,6 +263,7 @@ function runRow() {
 function postDb(options: {
   ready?: boolean;
   modelAnalysis?: CompetitorIntelligence;
+  modelResponses?: unknown[];
   claimError?: { code: string; message: string } | null;
   dnaError?: { code: string; message: string } | null;
 } = {}) {
@@ -338,11 +339,19 @@ function postDb(options: {
     throw new Error(`Unexpected table ${table}`);
   });
   (createAdminClient as jest.Mock).mockReturnValue({ from, rpc });
-  jest.spyOn(global, "fetch").mockImplementation(() => Promise.resolve(
-    new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify(options.modelAnalysis ?? analysis) } }],
-    }), { status: 200, headers: { "content-type": "application/json" } }),
-  ));
+  let responseIndex = 0;
+  jest.spyOn(global, "fetch").mockImplementation(() => {
+    const responseValue = options.modelResponses?.[responseIndex] ??
+      options.modelResponses?.at(-1) ??
+      options.modelAnalysis ??
+      analysis;
+    responseIndex += 1;
+    return Promise.resolve(
+      new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify(responseValue) } }],
+      }), { status: 200, headers: { "content-type": "application/json" } }),
+    );
+  });
   return { rpc, from };
 }
 
@@ -474,6 +483,41 @@ test("rejects a model insight whose quote is not an exact source excerpt and fai
   expect(rpc).not.toHaveBeenCalledWith(
     "complete_competitor_intelligence_job",
     expect.anything(),
+  );
+});
+
+test("repairs one incomplete model report and still applies deterministic evidence checks", async () => {
+  const { rpc } = postDb({
+    modelResponses: [
+      {
+        schema_version: 2,
+        executive_summary: "An incomplete first response.",
+        topic_clusters: [],
+      },
+      analysis,
+    ],
+  });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(201);
+  expect(global.fetch).toHaveBeenCalledTimes(2);
+  const repairBody = JSON.parse(String(
+    ((global.fetch as jest.Mock).mock.calls[1][1] as RequestInit).body,
+  ));
+  expect(repairBody.temperature).toBe(0);
+  expect(repairBody.messages[1].content).toContain("VALIDATION ERRORS");
+  expect(repairBody.messages[1].content).toContain("positioning_profiles");
+  expect(rpc).toHaveBeenCalledWith(
+    "complete_competitor_intelligence_job",
+    expect.objectContaining({
+      p_job_id: JOB_ID,
+      p_lease_token: LEASE_TOKEN,
+    }),
   );
 });
 

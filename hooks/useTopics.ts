@@ -15,6 +15,7 @@ interface CreateTopicInput {
   ai_fit_score?: number | null;
   ai_flagged?: boolean;
   why?: Record<string, unknown> | null;
+  status?: "pending" | "approved";
 }
 
 interface UpdateTopicInput {
@@ -88,12 +89,13 @@ export function useTopics(clientId: string, initialTopics: ContentTopic[] = []) 
       ) || [];
       
       // Optimistic update
+      const optimisticId = `temp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const optimisticTopic: ContentTopic = {
-        id: `temp-${Date.now()}`,
+        id: optimisticId,
         title: newTopic.title,
         description: newTopic.description ?? null,
         content_type: newTopic.content_type as ContentType,
-        status: "pending",
+        status: newTopic.status ?? "pending",
         created_at: new Date().toISOString(),
         created_by: null,
       };
@@ -103,19 +105,24 @@ export function useTopics(clientId: string, initialTopics: ContentTopic[] = []) 
         ...previousTopics,
       ]);
       
-      return { previousTopics };
+      return { optimisticId };
     },
-    onError: (err, newTopic, context) => {
-      if (context?.previousTopics) {
-        queryClient.setQueryData(topicKeys.byClient(clientId), context.previousTopics);
-      }
+    onError: (err, _newTopic, context) => {
+      queryClient.setQueryData<ContentTopic[]>(
+        topicKeys.byClient(clientId),
+        (current = []) => current.filter((topic) => topic.id !== context?.optimisticId),
+      );
       toast.error(err instanceof Error ? err.message : "Failed to create topic");
     },
-    onSuccess: () => {
-      toast.success("Topic created successfully");
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: topicKeys.byClient(clientId) });
+    onSuccess: (savedTopic, _variables, context) => {
+      queryClient.setQueryData<ContentTopic[]>(
+        topicKeys.byClient(clientId),
+        (current = []) => [
+          savedTopic,
+          ...current.filter((topic) =>
+            topic.id !== savedTopic.id && topic.id !== context?.optimisticId),
+        ],
+      );
     },
   });
 

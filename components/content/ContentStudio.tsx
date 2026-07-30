@@ -80,15 +80,10 @@ function ContentStudioInner({
     () => projects.filter((project) => ["active", "saved"].includes(project.status)),
     [projects],
   );
-  const readyTopics = useMemo(() => {
-    const promotedTopicIds = new Set(
-      projects.flatMap((project) =>
-        project.idea_snapshot.topicId ? [project.idea_snapshot.topicId] : []),
-    );
-    return topics.filter(
-      (topic) => topic.status === "approved" && !promotedTopicIds.has(topic.id),
-    );
-  }, [projects, topics]);
+  const approvedTopics = useMemo(
+    () => topics.filter((topic) => topic.status === "approved"),
+    [topics],
+  );
 
   const updateProject = useCallback((project: ContentProject) => {
     setActiveProject(project);
@@ -153,10 +148,11 @@ function ContentStudioInner({
   }, [createProject, openProject, projects]);
 
   const handleTopicApproved = useCallback(async (topic: ContentTopic) => {
-    setTopics((current) =>
-      current.map((item) => item.id === topic.id ? topic : item));
-    await handleTopicSelected(topic);
-  }, [handleTopicSelected]);
+    setTopics((current) => [
+      topic,
+      ...current.filter((item) => item.id !== topic.id),
+    ]);
+  }, []);
 
   const handleCompetitorIdeaSelected = useCallback(async (
     idea: CompetitorIntelligenceIdea,
@@ -262,25 +258,36 @@ function ContentStudioInner({
           </div>
         )}
 
-        {readyTopics.length > 0 && (
-          <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-            <p className="text-sm font-medium text-emerald-200">Approved ideas ready to create</p>
-            <p className="mt-1 text-xs text-zinc-500">Approval now feeds this pipeline directly. Start a guided brief or generate a quick draft.</p>
+        <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">IDEAS approved</p>
+          <p className="mt-1 text-xs text-zinc-500">Saved ideas stay here after refresh. Start or continue a draft whenever you are ready.</p>
+          {approvedTopics.length > 0 ? (
             <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {readyTopics.slice(0, 9).map((topic) => (
-                <button
-                  key={topic.id}
-                  type="button"
-                  onClick={() => void handleTopicSelected(topic)}
-                  className="rounded-lg border border-emerald-500/20 bg-zinc-950 p-3 text-left hover:border-emerald-400/50"
-                >
-                  <span className="block text-xs capitalize text-emerald-300">{topic.content_type} · Start draft</span>
-                  <span className="mt-1 block text-sm text-zinc-200">{topic.title}</span>
-                </button>
-              ))}
+              {approvedTopics.slice(0, 12).map((topic) => {
+                const existing = projects.find((project) =>
+                  project.idea_snapshot.topicId === topic.id &&
+                  ["active", "saved"].includes(project.status));
+                return (
+                  <button
+                    key={topic.id}
+                    type="button"
+                    onClick={() => void handleTopicSelected(topic)}
+                    className="rounded-lg border border-emerald-500/20 bg-zinc-950 p-3 text-left hover:border-emerald-400/50"
+                  >
+                    <span className="block text-xs capitalize text-emerald-300">
+                      {topic.content_type} · {existing ? "Continue draft" : "Start draft"}
+                    </span>
+                    <span className="mt-1 block text-sm text-zinc-200">{topic.title}</span>
+                  </button>
+                );
+              })}
             </div>
-          </div>
-        )}
+          ) : (
+            <p className="mt-3 rounded-lg border border-dashed border-zinc-800 p-3 text-sm text-zinc-500">
+              No approved ideas yet. Generate ideas below, then click “Save idea”.
+            </p>
+          )}
+        </div>
 
         {unfinished.length > 0 ? (
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -361,6 +368,7 @@ function ContentStudioInner({
               regenerateRequest={ideaGenerationRequest}
               onTopicSelected={handleTopicSelected}
               onTopicApproved={handleTopicApproved}
+              onTopicsChange={setTopics}
               onOpenIntelligence={() => setView("competitors")}
             />
           </div>

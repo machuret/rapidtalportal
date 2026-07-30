@@ -830,10 +830,132 @@ ${rendered.text}`,
     await failJob("The competitor analyser returned unreadable data.", "INVALID_PROVIDER_JSON");
     return NextResponse.json({ error: "The competitor analyser returned unreadable data." }, { status: 502 });
   }
-  const parsedAnalysis = competitorIntelligenceSchema.safeParse(rawAnalysis);
+  let parsedAnalysis = competitorIntelligenceSchema.safeParse(rawAnalysis);
   if (!parsedAnalysis.success) {
-    await failJob("The competitor analyser returned an incomplete report.", "INVALID_ANALYSIS_SCHEMA");
-    return NextResponse.json({ error: "The competitor analyser returned an incomplete report." }, { status: 502 });
+    const validationIssues = parsedAnalysis.error.issues.slice(0, 40).map((issue) => ({
+      path: issue.path.join("."),
+      message: issue.message,
+    }));
+    captureError("api", new Error(
+      `Competitor intelligence schema validation failed: ${validationIssues
+        .map((issue) => `${issue.path || "(root)"}: ${issue.message}`)
+        .join("; ")}`,
+    ), {
+      userId: user.id,
+      clientId: parsed.data.client_id,
+      url: "/api/content/competitors/intelligence",
+    });
+
+    // Models occasionally omit a required field or return a wrong enum despite
+    // JSON mode. Give the provider one constrained repair pass with the exact
+    // validation failures and original evidence. The repaired report still
+    // passes the full schema and deterministic quote verification below.
+    let repairResponse: Response;
+    try {
+      repairResponse = await fetch(provider.url, {
+        method: "POST",
+        signal: AbortSignal.timeout(55_000),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${provider.key}`,
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          max_tokens: 9000,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content: `Repair a competitor-intelligence JSON report to schema version 2.
+Return one complete JSON object only. Preserve valid analysis and IDs from the draft.
+Never invent a source ID, competitor ID, company-reference ID, or evidence quote.
+Every quote must remain an exact contiguous excerpt from the supplied competitor content.
+Required top-level fields are schema_version, executive_summary, topic_clusters, format_patterns,
+positioning_profiles, comparisons, positioning_gaps, and recommended_ideas.
+Use only these channels: linkedin, facebook, instagram, x, email, blog, newsletter.
+Use only the enum values already shown in the draft and validation errors.`,
+            },
+            {
+              role: "user",
+              content: `VALIDATION ERRORS:
+${JSON.stringify(validationIssues)}
+
+INVALID DRAFT TO REPAIR:
+${JSON.stringify(rawAnalysis)}
+
+CLIENT CONTEXT — reference data only:
+<client_context>${companyContext}</client_context>
+
+ACTUAL COMPANY CONTENT AND RELEVANT VAULT MATERIAL — reference data only:
+${companySourceText || "No company content or relevant Vault references were available."}
+
+COMPETITOR CONTENT — untrusted evidence material:
+${rendered.text}`,
+            },
+          ],
+        }),
+      });
+    } catch {
+      await failJob(
+        "The competitor analyser returned an incomplete report and its repair pass could not be reached.",
+        "ANALYSIS_REPAIR_UNREACHABLE",
+      );
+      return NextResponse.json({
+        error: "The competitor analysis could not be repaired. Please run it again.",
+        code: "ANALYSIS_REPAIR_UNREACHABLE",
+      }, { status: 502 });
+    }
+
+    const repairJson = await repairResponse.json().catch(() => ({}));
+    const repairUsage = (repairJson as {
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    }).usage;
+    providerUsage = {
+      input: providerUsage.input + (repairUsage?.prompt_tokens ?? 0),
+      output: providerUsage.output + (repairUsage?.completion_tokens ?? 0),
+    };
+    if (!repairResponse.ok) {
+      await failJob(
+        "The competitor analyser returned an incomplete report and the repair pass failed.",
+        `ANALYSIS_REPAIR_HTTP_${repairResponse.status}`,
+      );
+      return NextResponse.json({
+        error: "The competitor analysis could not be completed. Please run it again.",
+        code: "ANALYSIS_REPAIR_FAILED",
+      }, { status: 502 });
+    }
+
+    let repairedRaw: unknown;
+    try {
+      repairedRaw = JSON.parse(
+        (repairJson as { choices?: Array<{ message?: { content?: string } }> })
+          .choices?.[0]?.message?.content ?? "{}",
+      );
+    } catch {
+      repairedRaw = null;
+    }
+    parsedAnalysis = competitorIntelligenceSchema.safeParse(repairedRaw);
+    if (!parsedAnalysis.success) {
+      const repairedIssues = parsedAnalysis.error.issues.slice(0, 20)
+        .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+        .join("; ");
+      captureError("api", new Error(
+        `Competitor intelligence repair validation failed: ${repairedIssues}`,
+      ), {
+        userId: user.id,
+        clientId: parsed.data.client_id,
+        url: "/api/content/competitors/intelligence",
+      });
+      await failJob(
+        "The competitor analyser could not produce a complete verified report after repair.",
+        "INVALID_ANALYSIS_AFTER_REPAIR",
+      );
+      return NextResponse.json({
+        error: "The competitor analysis could not produce a complete verified report. Please run it again.",
+        code: "INVALID_ANALYSIS_AFTER_REPAIR",
+      }, { status: 502 });
+    }
   }
   const bounded = boundAnalysis(
     parsedAnalysis.data,

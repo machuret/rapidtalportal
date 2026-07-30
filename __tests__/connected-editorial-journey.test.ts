@@ -65,7 +65,9 @@ describe("connected editorial journey", () => {
 
   test("the primary Studio navigation supports discovery and recovery", () => {
     expect(studio).toContain("Continue working");
-    expect(studio).toContain("Approved ideas ready to create");
+    expect(studio).toContain("IDEAS approved");
+    expect(studio).toContain("Saved ideas stay here after refresh");
+    expect(studio).toContain("onTopicsChange={setTopics}");
     expect(studio).toContain("onTopicApproved");
     expect(topics).toContain("await onTopicApproved?.(approved)");
     expect(studio).toContain("Company priorities &amp; Vault gaps");

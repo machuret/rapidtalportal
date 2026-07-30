@@ -1,7 +1,7 @@
 "use client";
 
-import { memo, useCallback, useState } from "react";
-import { RefreshCw, Wand2, Lightbulb, SquareCheckBig, Square, BookText, ThumbsUp, ThumbsDown, AlertTriangle, Info } from "lucide-react";
+import { memo, useCallback, useEffect, useState } from "react";
+import { RefreshCw, Wand2, Lightbulb, SquareCheckBig, Square, BookText, ThumbsUp, ThumbsDown, AlertTriangle, Info, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { AiSuggestion } from "@/types/content";
@@ -28,8 +28,10 @@ interface AiSuggestionsProps {
   suggestions: AiSuggestion[] | null;
   isGenerating: boolean;
   isSubmitting: boolean;
+  canApprove: boolean;
   mode?: "company" | "competitor_gap";
   onGenerate: () => Promise<void>;
+  onSaveApproved: (suggestion: AiSuggestion) => Promise<void>;
   onSubmitSelected: (selected: AiSuggestion[]) => Promise<void>;
   onClose: () => void;
 }
@@ -44,6 +46,8 @@ const SuggestionCard = memo(function SuggestionCard({
   onLike,
   onFlag,
   busy,
+  saved,
+  canApprove,
   index,
 }: {
   suggestion: AiSuggestion;
@@ -52,6 +56,8 @@ const SuggestionCard = memo(function SuggestionCard({
   onLike: (index: number) => void;
   onFlag: (index: number) => void;
   busy: boolean;
+  saved: boolean;
+  canApprove: boolean;
   index: number;
 }) {
   const TypeIcon = TYPE_ICONS[suggestion.content_type] || BookText;
@@ -169,12 +175,15 @@ const SuggestionCard = memo(function SuggestionCard({
       <div className="flex items-center justify-end gap-1 px-4 pb-2.5 -mt-1">
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || saved}
           onClick={() => onLike(index)}
-          title="Good suggestion"
-          className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-green-400 px-2 py-1 rounded hover:bg-zinc-800 disabled:opacity-40"
+          title={saved
+            ? canApprove ? "Saved to IDEAS approved" : "Saved for approval"
+            : canApprove ? "Save and approve this idea" : "Save this idea for approval"}
+          className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-green-400 px-2 py-1 rounded hover:bg-zinc-800 disabled:opacity-70"
         >
-          <ThumbsUp className="w-3.5 h-3.5" />
+          {saved ? <Check className="w-3.5 h-3.5 text-green-400" /> : <ThumbsUp className="w-3.5 h-3.5" />}
+          {saved ? "Saved" : canApprove ? "Save idea" : "Save for approval"}
         </button>
         <button
           type="button"
@@ -195,14 +204,23 @@ export const AiSuggestions = memo(function AiSuggestions({
   suggestions,
   isGenerating,
   isSubmitting,
+  canApprove,
   mode = "company",
   onGenerate,
+  onSaveApproved,
   onSubmitSelected,
   onClose,
 }: AiSuggestionsProps) {
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
+  const [saved, setSaved] = useState<Set<number>>(new Set());
   const { sendSignal, isSending } = useBrainSignal();
+
+  useEffect(() => {
+    setSelectedIndices(new Set());
+    setDismissed(new Set());
+    setSaved(new Set());
+  }, [suggestions]);
 
   const handleToggle = useCallback((index: number) => {
     setSelectedIndices((prev) => {
@@ -230,10 +248,10 @@ export const AiSuggestions = memo(function AiSuggestions({
     async (index: number) => {
       const s = suggestions?.[index];
       if (!s) return;
-      await signalFor(s, 1);
-      toast.success("Noted — the Brain will favour ideas like this.");
+      await onSaveApproved(s);
+      setSaved((previous) => new Set(previous).add(index));
     },
-    [suggestions, signalFor]
+    [suggestions, onSaveApproved]
   );
 
   const handleFlag = useCallback(
@@ -317,7 +335,9 @@ export const AiSuggestions = memo(function AiSuggestions({
                   onToggle={handleToggle}
                   onLike={handleLike}
                   onFlag={handleFlag}
-                  busy={isSending}
+                  busy={isSending || isSubmitting}
+                  saved={saved.has(index)}
+                  canApprove={canApprove}
                   index={index}
                 />
               )
@@ -338,7 +358,7 @@ export const AiSuggestions = memo(function AiSuggestions({
                 disabled={isSubmitting || selectedIndices.size === 0}
                 className="bg-purple-600 hover:bg-purple-700 text-white"
               >
-                {isSubmitting ? "Adding…" : `Add ${selectedIndices.size > 0 ? selectedIndices.size : ""} Topic${selectedIndices.size !== 1 ? "s" : ""}`}
+                {isSubmitting ? "Saving…" : `Save ${selectedIndices.size > 0 ? selectedIndices.size : ""} Idea${selectedIndices.size !== 1 ? "s" : ""}`}
               </Button>
             </div>
           </div>
