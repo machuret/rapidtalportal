@@ -236,6 +236,40 @@ function normalizeGeneratedTopic(candidate: unknown): GeneratedTopic | null {
   };
 }
 
+function decodeGeneratedCandidates(raw: string): unknown[] {
+  const trimmed = raw.trim();
+  const unfenced = trimmed
+    .replace(/^```(?:json)?\s*/iu, "")
+    .replace(/\s*```$/u, "")
+    .trim();
+  const attempts = [
+    unfenced,
+    unfenced.slice(
+      Math.max(0, unfenced.indexOf("{")),
+      unfenced.lastIndexOf("}") >= 0 ? unfenced.lastIndexOf("}") + 1 : unfenced.length,
+    ),
+  ];
+  for (const attempt of attempts) {
+    if (!attempt) continue;
+    try {
+      const decoded: unknown = JSON.parse(attempt);
+      const parsed = generatedTopicsSchema.safeParse(decoded);
+      if (parsed.success) return parsed.data.topics;
+      if (Array.isArray(decoded)) return decoded;
+      if (
+        decoded &&
+        typeof decoded === "object" &&
+        Array.isArray((decoded as { ideas?: unknown }).ideas)
+      ) {
+        return (decoded as { ideas: unknown[] }).ideas;
+      }
+    } catch {
+      // Try the next bounded JSON representation.
+    }
+  }
+  return [];
+}
+
 class TopicProviderError extends Error {
   constructor(
     readonly code: string,
@@ -305,7 +339,7 @@ async function requestGeneratedTopics(args: {
         temperature: 0.6,
         // Twenty fully explainable ideas are materially larger than the default
         // eight. Scale the output budget with the accepted request count.
-        max_tokens: Math.min(16_000, Math.max(2_800, args.count * 650)),
+        max_tokens: Math.min(10_000, Math.max(1_800, args.count * 420)),
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: args.systemPrompt },
@@ -336,23 +370,17 @@ async function requestGeneratedTopics(args: {
     const completion = await response.json();
     const raw = completion.choices?.[0]?.message?.content;
     if (typeof raw !== "string") return { topics: [], rejected: 0 };
-    try {
-      const decoded: unknown = JSON.parse(raw);
-      const parsed = generatedTopicsSchema.safeParse(decoded);
-      if (!parsed.success) return { topics: [], rejected: 0 };
-      const topics = parsed.data.topics.flatMap((candidate) => {
-        const topic = generatedTopicSchema.safeParse(candidate);
-        if (topic.success) return [topic.data];
-        const normalized = normalizeGeneratedTopic(candidate);
-        return normalized ? [normalized] : [];
-      });
-      return {
-        topics,
-        rejected: parsed.data.topics.length - topics.length,
-      };
-    } catch {
-      return { topics: [], rejected: 0 };
-    }
+    const candidates = decodeGeneratedCandidates(raw);
+    const topics = candidates.flatMap((candidate) => {
+      const topic = generatedTopicSchema.safeParse(candidate);
+      if (topic.success) return [topic.data];
+      const normalized = normalizeGeneratedTopic(candidate);
+      return normalized ? [normalized] : [];
+    });
+    return {
+      topics,
+      rejected: candidates.length - topics.length,
+    };
   } catch (error) {
     if (error instanceof TopicProviderError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
@@ -624,18 +652,13 @@ export const POST = withAuth(async (req, { user }) => {
   const outputShape = `{ "topics": [ {
     "title": string,
     "hook": string,
-    "topic": string,
     "description": string,
     "content_type": "email"|"x"|"linkedin"|"facebook"|"instagram"|"newsletter"|"blog",
     "intended_audience": string,
-    "strategic_objective": string,
-    "why_valuable": string,
-    "company_dna_fit": string,
     "vault_evidence_ids": string[],
     "rationale": string,
     "fit": number,
     "opportunity_type": "gap"|"differentiation"|"counter_position"|"market_pattern"|null,
-    "evidence_summary": string,
     "evidence_ids": string[],
     "difference_from_competitors": string,
     "existing_content_ids": string[],

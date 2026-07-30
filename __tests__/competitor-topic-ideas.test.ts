@@ -265,7 +265,7 @@ describe("competitor-gap topic generation", () => {
     expect(response.status).toBe(200);
     expect(json.topics).toHaveLength(20);
     const modelBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
-    expect(modelBody.max_tokens).toBe(13_000);
+    expect(modelBody.max_tokens).toBe(8_400);
     fetchMock.mockRestore();
   });
 
@@ -299,13 +299,13 @@ describe("competitor-gap topic generation", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         choices: [{
           message: {
-            content: JSON.stringify({
-              topics: [
+            content: `\`\`\`json\n${JSON.stringify({
+              ideas: [
                 completeIdea,
                 { title: "Idea with optional metadata omitted" },
                 null,
               ],
-            }),
+            })}\n\`\`\``,
           },
         }],
       }), { status: 200, headers: { "content-type": "application/json" } }))

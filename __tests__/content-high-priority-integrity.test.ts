@@ -27,7 +27,7 @@ describe("Content Studio high-priority integrity repairs", () => {
     expect(topics).toContain("if (rawTopics.length < count)");
     expect(topics).toContain("if (rawTopics.length === 0)");
     expect(topics).toContain("REPAIR REQUIRED");
-    expect(topics).toContain("args.count * 650");
+    expect(topics).toContain("args.count * 420");
     expect(topics).toContain("args.count * 2_500");
     expect(topics).toContain("title: z.string().trim().min(1).max(300)");
     expect(topics).toContain("description: z.string().trim().min(1).max(2000)");
