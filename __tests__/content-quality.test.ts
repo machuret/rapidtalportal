@@ -213,6 +213,13 @@ describe("platform structure contracts", () => {
     )).toEqual([]);
   });
 
+  test("recognizes an invitation to share followed by a booking option as one CTA unit", () => {
+    expect(contentStructureWarnings(
+      "Timing can determine whether an investor secures an opportunity.\n\nFast access to bridging finance can create flexibility when a purchase is time-sensitive.\n\nWhat challenges have you encountered? We invite you to share your experience or book a call with our team.",
+      "linkedin",
+    )).toEqual([]);
+  });
+
   test.each([
     [
       "email",

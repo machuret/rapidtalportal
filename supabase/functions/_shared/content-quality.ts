@@ -29,7 +29,7 @@ export const CONTENT_TYPE_INSTRUCTIONS: Record<QualityContentType, string> = {
 };
 
 const CTA_ACTION =
-  "(?:book|call|contact|discover|download|email|join|learn more|let us know|read(?: more)?|register|reply|schedule|shop|subscribe|tell us|visit)";
+  "(?:book|call|contact|discover|download|email|join|learn more|let us know|read(?: more)?|register|reply|schedule|share|shop|subscribe|tell us|visit)";
 const CTA_START_PATTERN = new RegExp(
   `^(?:(?:please|to get started|to learn more|when you're ready),?\\s+)?${CTA_ACTION}\\b`,
   "iu",
