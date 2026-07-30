@@ -776,7 +776,8 @@ export async function handleContentGenerateRequest(
           p_lease_seconds: 600,
         })
         .single();
-      if (claimError || !claim?.lease_token) {
+      const claimRow = claim as { lease_token?: unknown } | null;
+      if (claimError || typeof claimRow?.lease_token !== "string") {
         const status = claimError?.code === "55P03" || claimError?.code === "40001"
           ? 409
           : claimError?.code === "42501"
@@ -793,7 +794,7 @@ export async function handleContentGenerateRequest(
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      generationLeaseToken = claim.lease_token as string;
+      generationLeaseToken = claimRow.lease_token;
     }
 
     console.log(`✍️ Generating ${contentType} content...`);
