@@ -60,7 +60,7 @@ async function deleteTopic(input: DeleteTopicInput): Promise<void> {
 // Generate AI Topic Ideas
 async function generateTopicIdeas(
   clientId: string,
-  count: number = 8,
+  count: number = 4,
   mode: "company" | "competitor_gap" = "company",
 ): Promise<{ topics: AiSuggestion[]; mode: "company" | "competitor_gap"; warning?: string }> {
   return api.post("/content/topics/generate", { client_id: clientId, count, mode });

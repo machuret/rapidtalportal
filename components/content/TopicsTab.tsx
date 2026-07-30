@@ -93,7 +93,10 @@ export const TopicsTab = memo(function TopicsTab({
   );
 
   const handleGenerateIdeas = useCallback(async () => {
-    await generateIdeas({ count: 8, mode: "company" });
+    // Four explainable ideas complete reliably inside the interactive request
+    // window. Editors can regenerate for another batch without waiting for one
+    // oversized response.
+    await generateIdeas({ count: 4, mode: "company" });
   }, [generateIdeas]);
 
   useEffect(() => {

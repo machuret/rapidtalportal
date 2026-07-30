@@ -202,10 +202,10 @@ async function requestGeneratedTopics(args: {
       signal: controller.signal,
       body: JSON.stringify({
         model: chatModel("CONTENT_TOPICS_MODEL"),
-        temperature: 0.8,
+        temperature: 0.6,
         // Twenty fully explainable ideas are materially larger than the default
         // eight. Scale the output budget with the accepted request count.
-        max_tokens: Math.min(16_000, Math.max(5_000, args.count * 650)),
+        max_tokens: Math.min(16_000, Math.max(2_800, args.count * 650)),
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: args.systemPrompt },
@@ -552,6 +552,7 @@ export const POST = withAuth(async (req, { user }) => {
     `- Cite only supplied Vault, competitor and existing-company-content IDs. Do not invent IDs.\n` +
     `- Explain why the idea differs from existing company content. For competitor mode, also explain how it differs from competitor coverage.\n` +
     `- Recommend one channel-specific format and one specific CTA.\n\n` +
+    `- Be concise: keep each explanation to one or two short sentences. Do not repeat the same rationale across fields.\n\n` +
     `Return JSON exactly as: ${outputShape}`;
 
   const allowedEvidenceIds = new Set(competitorEvidence.map((item) => item.id));
