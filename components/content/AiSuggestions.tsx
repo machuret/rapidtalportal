@@ -28,6 +28,8 @@ interface AiSuggestionsProps {
   suggestions: AiSuggestion[] | null;
   isGenerating: boolean;
   isSubmitting: boolean;
+  warning?: string | null;
+  error?: string | null;
   canApprove: boolean;
   mode?: "company" | "competitor_gap";
   onGenerate: () => Promise<void>;
@@ -204,6 +206,8 @@ export const AiSuggestions = memo(function AiSuggestions({
   suggestions,
   isGenerating,
   isSubmitting,
+  warning,
+  error,
   canApprove,
   mode = "company",
   onGenerate,
@@ -318,6 +322,18 @@ export const AiSuggestions = memo(function AiSuggestions({
               : "Analyzing your Brain and generating ideas…"}
           </p>
         </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center gap-3 px-5 py-10 text-center">
+          <AlertTriangle className="h-8 w-8 text-red-400" />
+          <div>
+            <p className="text-sm font-medium text-red-200">Ideas could not be generated</p>
+            <p className="mt-1 max-w-xl text-xs leading-5 text-zinc-400">{error}</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={onGenerate} disabled={isGenerating}>
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            Try again
+          </Button>
+        </div>
       ) : visibleCount === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 text-center">
           <Lightbulb className="w-8 h-8 text-zinc-700 mb-2" />
@@ -325,6 +341,12 @@ export const AiSuggestions = memo(function AiSuggestions({
         </div>
       ) : (
         <>
+          {warning && (
+            <div className="mx-4 mt-4 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-200">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{warning}</span>
+            </div>
+          )}
           <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
             {suggestions?.map((suggestion, index) =>
               dismissed.has(index) ? null : (

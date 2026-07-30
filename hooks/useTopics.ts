@@ -223,6 +223,10 @@ export function useTopics(clientId: string, initialTopics: ContentTopic[] = []) 
     generateIdeas: generateIdeasMutation.mutateAsync,
     isGenerating: generateIdeasMutation.isPending,
     suggestions: generateIdeasMutation.data?.topics || null,
+    generationWarning: generateIdeasMutation.data?.warning ?? null,
+    generationError: generateIdeasMutation.error instanceof Error
+      ? generateIdeasMutation.error.message
+      : null,
     
     // Utilities
     refetch: topicsQuery.refetch,

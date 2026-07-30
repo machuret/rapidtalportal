@@ -48,6 +48,8 @@ export const TopicsTab = memo(function TopicsTab({
     generateIdeas,
     isGenerating,
     suggestions,
+    generationWarning,
+    generationError,
   } = useTopics(clientId, initialTopics);
 
   useEffect(() => {
@@ -228,6 +230,8 @@ export const TopicsTab = memo(function TopicsTab({
           suggestions={suggestions as AiSuggestion[] | null}
           isGenerating={isGenerating}
           isSubmitting={isCreating}
+          warning={generationWarning}
+          error={generationError}
           canApprove={canApprove}
           mode="company"
           onGenerate={handleGenerateIdeas}

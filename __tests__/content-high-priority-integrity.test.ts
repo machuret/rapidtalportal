@@ -21,9 +21,11 @@ describe("Content Studio high-priority integrity repairs", () => {
     expect(page).toContain("Content Studio could not load your saved work");
   });
 
-  test("topic output is bounded, repaired and exact before it reaches saving", () => {
+  test("topic output is bounded, repaired and preserves valid partial results", () => {
     expect(topics).toContain("generatedTopicsSchema.safeParse");
-    expect(topics).toContain("result.topics.length !== count");
+    expect(topics).toContain("generatedTopicSchema.safeParse(candidate)");
+    expect(topics).toContain("if (rawTopics.length < count)");
+    expect(topics).toContain("if (rawTopics.length === 0)");
     expect(topics).toContain("REPAIR REQUIRED");
     expect(topics).toContain("args.count * 650");
     expect(topics).toContain("args.count * 2_500");

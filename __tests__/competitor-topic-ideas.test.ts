@@ -269,6 +269,88 @@ describe("competitor-gap topic generation", () => {
     fetchMock.mockRestore();
   });
 
+  test("returns valid ideas when one candidate is malformed and the repair provider is unavailable", async () => {
+    const from = jest.fn(() => fluent({ data: [], error: null }));
+    (createAdminClient as jest.Mock).mockReturnValue({ from, rpc: jest.fn() });
+    const completeIdea = {
+      title: "A usable company idea",
+      hook: "A practical hook",
+      topic: "A useful topic",
+      description: "A practical company-led explanation for a relevant audience.",
+      content_type: "linkedin",
+      intended_audience: "Business decision makers",
+      strategic_objective: "Explain a useful company point of view",
+      why_valuable: "It answers a recurring audience question.",
+      company_dna_fit: "It follows the company’s practical style.",
+      vault_evidence_ids: [],
+      rationale: "A useful editorial opportunity.",
+      fit: 80,
+      opportunity_type: null,
+      evidence_summary: "No external evidence was requested.",
+      evidence_ids: [],
+      difference_from_competitors: "",
+      existing_content_ids: [],
+      difference_from_existing: "This angle should be reviewed against existing content.",
+      recommended_format: "A concise LinkedIn post",
+      recommended_cta: "Invite readers to discuss the topic",
+      harmless_extra_model_field: "must not invalidate the whole response",
+    };
+    const fetchMock = jest.spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              topics: [
+                completeIdea,
+                { title: "Missing required fields" },
+                null,
+              ],
+            }),
+          },
+        }],
+      }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        error: { code: 429, message: "rate limited" },
+      }), { status: 429, headers: { "content-type": "application/json" } }));
+
+    const response = await POST(request({
+      client_id: CLIENT_ID,
+      count: 3,
+      mode: "company",
+    }), routeCtx);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.topics).toHaveLength(1);
+    expect(json.topics[0].title).toBe("A usable company idea");
+    expect(json.warning).toContain("Generated 1 of 3 requested ideas");
+    expect(json.warning).toContain("repair attempt was unavailable");
+    fetchMock.mockRestore();
+  });
+
+  test("returns a specific client-safe error when the provider rejects the key limit", async () => {
+    const from = jest.fn(() => fluent({ data: [], error: null }));
+    (createAdminClient as jest.Mock).mockReturnValue({ from, rpc: jest.fn() });
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        error: { code: 402, message: "provider detail must remain private" },
+      }), { status: 402, headers: { "content-type": "application/json" } }),
+    );
+
+    const response = await POST(request({
+      client_id: CLIENT_ID,
+      count: 3,
+      mode: "company",
+    }), routeCtx);
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      error: "The content AI provider rejected the API key's balance or spending limit.",
+      code: "CONTENT_AI_LIMIT",
+    });
+    fetchMock.mockRestore();
+  });
+
   test("does not allow a requested competitor outside the tenant boundary", async () => {
     const from = jest.fn((table: string) => fluent({
       data: table === "vault_items" || table === "content_pieces"

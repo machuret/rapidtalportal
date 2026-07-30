@@ -123,18 +123,72 @@ const generatedTopicSchema = z.object({
   difference_from_existing: z.string().trim().min(1).max(1600),
   recommended_format: z.string().trim().min(1).max(500),
   recommended_cta: z.string().trim().min(1).max(800),
-}).strict();
+}).passthrough();
 
 const generatedTopicsSchema = z.object({
-  topics: z.array(generatedTopicSchema),
-}).strict();
+  topics: z.array(z.unknown()),
+}).passthrough();
+
+type GeneratedTopic = z.infer<typeof generatedTopicSchema>;
+
+interface GeneratedTopicBatch {
+  topics: GeneratedTopic[];
+  rejected: number;
+}
+
+class TopicProviderError extends Error {
+  constructor(
+    readonly code: string,
+    readonly clientMessage: string,
+    readonly httpStatus: number,
+  ) {
+    super(code);
+    this.name = "TopicProviderError";
+  }
+}
+
+function providerFailure(status: number): TopicProviderError {
+  if (status === 401 || status === 403) {
+    return new TopicProviderError(
+      "CONTENT_AI_AUTH",
+      "The content AI connection needs administrator attention. Please try again shortly.",
+      502,
+    );
+  }
+  if (status === 402) {
+    return new TopicProviderError(
+      "CONTENT_AI_LIMIT",
+      "The content AI provider rejected the API key's balance or spending limit.",
+      502,
+    );
+  }
+  if (status === 429) {
+    return new TopicProviderError(
+      "CONTENT_AI_BUSY",
+      "The content AI service is busy. Please wait a moment and try again.",
+      503,
+    );
+  }
+  if (status === 400 || status === 404) {
+    return new TopicProviderError(
+      "CONTENT_AI_MODEL",
+      "The configured content model could not accept this request. An administrator needs to review it.",
+      502,
+    );
+  }
+  return new TopicProviderError(
+    "CONTENT_AI_UNAVAILABLE",
+    "The content AI service is temporarily unavailable. Please try again.",
+    502,
+  );
+}
 
 async function requestGeneratedTopics(args: {
   llm: { url: string; key: string; provider: string };
   systemPrompt: string;
   userPrompt: string;
   count: number;
-}): Promise<{ topics: z.infer<typeof generatedTopicSchema>[] } | null> {
+}): Promise<GeneratedTopicBatch> {
   const controller = new AbortController();
   const timeoutMs = Math.min(90_000, 40_000 + args.count * 2_500);
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -160,19 +214,57 @@ async function requestGeneratedTopics(args: {
       }),
     });
     if (!response.ok) {
-      console.error("[topics/generate] LLM error:", response.status, await response.text());
-      throw new Error("MODEL_REQUEST_FAILED");
+      let providerCode: string | undefined;
+      try {
+        const payload = await response.json() as {
+          error?: { code?: string | number };
+        };
+        providerCode = payload.error?.code === undefined
+          ? undefined
+          : String(payload.error.code).slice(0, 80);
+      } catch {
+        // The status is sufficient for the client-safe error below.
+      }
+      console.error("[topics/generate] provider rejected request", {
+        provider: args.llm.provider,
+        model: chatModel("CONTENT_TOPICS_MODEL"),
+        status: response.status,
+        providerCode,
+      });
+      throw providerFailure(response.status);
     }
     const completion = await response.json();
     const raw = completion.choices?.[0]?.message?.content;
-    if (typeof raw !== "string") return null;
+    if (typeof raw !== "string") return { topics: [], rejected: 0 };
     try {
       const decoded: unknown = JSON.parse(raw);
       const parsed = generatedTopicsSchema.safeParse(decoded);
-      return parsed.success ? parsed.data : null;
+      if (!parsed.success) return { topics: [], rejected: 0 };
+      const topics = parsed.data.topics.flatMap((candidate) => {
+        const topic = generatedTopicSchema.safeParse(candidate);
+        return topic.success ? [topic.data] : [];
+      });
+      return {
+        topics,
+        rejected: parsed.data.topics.length - topics.length,
+      };
     } catch {
-      return null;
+      return { topics: [], rejected: 0 };
     }
+  } catch (error) {
+    if (error instanceof TopicProviderError) throw error;
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new TopicProviderError(
+        "CONTENT_AI_TIMEOUT",
+        "Idea generation took too long. Please try again.",
+        504,
+      );
+    }
+    throw new TopicProviderError(
+      "CONTENT_AI_NETWORK",
+      "The content AI service could not be reached. Please try again.",
+      502,
+    );
   } finally {
     clearTimeout(timeout);
   }
@@ -468,11 +560,8 @@ export const POST = withAuth(async (req, { user }) => {
   const vaultById = new Map(ideaVaultEvidence.map((item) => [item.id, item]));
   const allowedCompanyContentIds = new Set(existingCompanyContent.map((item) => item.id));
   const companyContentById = new Map(existingCompanyContent.map((item) => [item.id, item]));
-  const modelResultIsUsable = (
-    result: { topics: z.infer<typeof generatedTopicSchema>[] } | null,
-  ): result is { topics: z.infer<typeof generatedTopicSchema>[] } => {
-    if (!result || result.topics.length !== count) return false;
-    return result.topics.every((topic) => {
+  const usableTopics = (result: GeneratedTopicBatch): GeneratedTopic[] =>
+    result.topics.filter((topic) => {
       const vaultValid = topic.vault_evidence_ids.every((id) => allowedVaultIds.has(id));
       const existingValid = topic.existing_content_ids.every((id) =>
         allowedCompanyContentIds.has(id));
@@ -491,45 +580,81 @@ export const POST = withAuth(async (req, { user }) => {
         )
       );
     });
+
+  const providerErrorResponse = (error: unknown) => {
+    const failure = error instanceof TopicProviderError
+      ? error
+      : new TopicProviderError(
+        "CONTENT_AI_NETWORK",
+        "The content AI service could not be reached. Please try again.",
+        502,
+      );
+    return NextResponse.json({
+      error: failure.clientMessage,
+      code: failure.code,
+    }, { status: failure.httpStatus });
   };
 
-  let modelResult: { topics: z.infer<typeof generatedTopicSchema>[] } | null;
+  let firstBatch: GeneratedTopicBatch;
   try {
-    modelResult = await requestGeneratedTopics({
+    firstBatch = await requestGeneratedTopics({
       llm,
       systemPrompt,
       userPrompt,
       count,
     });
   } catch (err) {
-    console.error("[topics/generate] LLM fetch error:", err);
-    return NextResponse.json({ error: `Failed to reach ${llm.provider}.` }, { status: 502 });
+    console.error("[topics/generate] initial generation failed", {
+      provider: llm.provider,
+      code: err instanceof TopicProviderError ? err.code : "CONTENT_AI_NETWORK",
+    });
+    return providerErrorResponse(err);
   }
 
-  if (!modelResultIsUsable(modelResult)) {
+  let rawTopics = usableTopics(firstBatch);
+  let rejectedIdeas = firstBatch.rejected + (firstBatch.topics.length - rawTopics.length);
+  let repairFailed = false;
+
+  if (rawTopics.length < count) {
+    const missing = count - rawTopics.length;
     try {
-      modelResult = await requestGeneratedTopics({
+      const repairBatch = await requestGeneratedTopics({
         llm,
         systemPrompt,
-        count,
+        count: missing,
         userPrompt:
-          `${userPrompt}\n\nREPAIR REQUIRED: the previous response was malformed or did not contain exactly ${count} valid topics. ` +
-          `Return exactly ${count} complete topics. Cite only supplied IDs whose text directly overlaps the idea. ` +
+          `${userPrompt}\n\nREPAIR REQUIRED: ignore the earlier requested count and return exactly ${missing} additional complete topics. ` +
+          `Do not repeat these accepted titles: ${rawTopics.map((topic) => JSON.stringify(topic.title)).join(", ") || "none"}. ` +
+          `Cite only supplied IDs whose text directly overlaps the idea. ` +
           `Keep every title at 300 characters or fewer and every description at 2,000 characters or fewer.`,
       });
+      const repairedTopics = usableTopics(repairBatch);
+      rejectedIdeas += repairBatch.rejected + (repairBatch.topics.length - repairedTopics.length);
+      const seenTitles = new Set(rawTopics.map((topic) => topic.title.trim().toLocaleLowerCase()));
+      for (const topic of repairedTopics) {
+        const key = topic.title.trim().toLocaleLowerCase();
+        if (seenTitles.has(key)) continue;
+        seenTitles.add(key);
+        rawTopics.push(topic);
+        if (rawTopics.length === count) break;
+      }
     } catch (err) {
-      console.error("[topics/generate] repair request failed:", err);
-      return NextResponse.json({ error: `Failed to reach ${llm.provider}.` }, { status: 502 });
+      repairFailed = true;
+      console.error("[topics/generate] repair generation failed", {
+        provider: llm.provider,
+        code: err instanceof TopicProviderError ? err.code : "CONTENT_AI_NETWORK",
+      });
+      if (rawTopics.length === 0) return providerErrorResponse(err);
     }
   }
-  if (!modelResultIsUsable(modelResult)) {
+
+  rawTopics = rawTopics.slice(0, count);
+  if (rawTopics.length === 0) {
     return NextResponse.json({
-      error: `The idea generator did not return ${count} complete, saveable ideas. Please try again.`,
+      error: "The idea generator did not return any complete, saveable ideas. Please try again.",
       code: "INVALID_IDEA_SET",
     }, { status: 502 });
   }
-
-  const rawTopics = modelResult.topics;
 
   // Normalise + capture the model's self-assessed fit.
   const base = rawTopics
@@ -700,7 +825,7 @@ export const POST = withAuth(async (req, { user }) => {
     grounded: embFits !== null,
   };
 
-  const topics = base.map((t, i) => {
+  let topics = base.map((t, i) => {
     const emb = embFits?.[i] ?? null;
     const fit =
       t.llmFit !== null && emb !== null ? Math.round(t.llmFit * 0.5 + emb * 0.5)
@@ -927,15 +1052,18 @@ export const POST = withAuth(async (req, { user }) => {
     };
   });
 
-  if (
-    topics.length !== count ||
-    (parsed.data.mode === "competitor_gap" && topics.some((topic) =>
-      !("competitor_evidence" in topic) || !topic.competitor_evidence?.length))
-  ) {
+  if (parsed.data.mode === "competitor_gap") {
+    topics = topics.filter((topic) =>
+      "competitor_evidence" in topic && Boolean(topic.competitor_evidence?.length));
+  }
+
+  if (topics.length === 0) {
     return NextResponse.json({
-      error: `The idea generator could not produce ${count} complete ideas with verified evidence. Please try again.`,
+      error: parsed.data.mode === "competitor_gap"
+        ? "No ideas had enough verified competitor evidence. Collect more competitor content or try another competitor."
+        : "The idea generator did not return any complete, saveable ideas. Please try again.",
       code: "INCOMPLETE_VERIFIED_IDEA_SET",
-    }, { status: 502 });
+    }, { status: 422 });
   }
 
   // Journal: surface the value the Brain just delivered (weak ideas filtered).
@@ -951,8 +1079,14 @@ export const POST = withAuth(async (req, { user }) => {
     mode: parsed.data.mode,
     competitors: includedCompetitors,
     readiness: parsed.data.mode === "competitor_gap" ? readiness : undefined,
-    warning: parsed.data.mode === "competitor_gap" && topics.length < count
-      ? "Some ideas were removed because their competitor evidence could not be verified."
+    warning: topics.length < count
+      ? `Generated ${topics.length} of ${count} requested ideas. ${
+        parsed.data.mode === "competitor_gap"
+          ? "Ideas without verified competitor evidence were left out."
+          : "Incomplete model responses were left out."
+      }${repairFailed ? " The repair attempt was unavailable." : ""}${
+        rejectedIdeas > 0 ? ` ${rejectedIdeas} incomplete idea${rejectedIdeas === 1 ? " was" : "s were"} excluded.` : ""
+      }`
       : undefined,
     learnedFrom: { positives: brain.positives, negatives: brain.negatives, grounded: embFits !== null },
   });
