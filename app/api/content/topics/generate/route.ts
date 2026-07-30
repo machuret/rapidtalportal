@@ -136,6 +136,106 @@ interface GeneratedTopicBatch {
   rejected: number;
 }
 
+function generatedText(
+  candidate: Record<string, unknown>,
+  key: string,
+  fallback: string,
+  max: number,
+): string {
+  const value = candidate[key];
+  return typeof value === "string" && value.trim()
+    ? value.trim().slice(0, max)
+    : fallback.slice(0, max);
+}
+
+function generatedIds(candidate: Record<string, unknown>, key: string, max: number): string[] {
+  const value = candidate[key];
+  return Array.isArray(value)
+    ? [...new Set(value.filter((id): id is string => typeof id === "string"))].slice(0, max)
+    : [];
+}
+
+function normalizeGeneratedTopic(candidate: unknown): GeneratedTopic | null {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+  const value = candidate as Record<string, unknown>;
+  const title = generatedText(value, "title", "", 300);
+  if (!title) return null;
+
+  const description = generatedText(
+    value,
+    "description",
+    generatedText(value, "rationale", title, 2_000),
+    2_000,
+  );
+  const requestedType = typeof value.content_type === "string"
+    ? value.content_type.toLocaleLowerCase()
+    : "";
+  const contentType = VALID_TYPES.has(requestedType)
+    ? requestedType as GeneratedTopic["content_type"]
+    : "linkedin";
+  const rawFit = Number(value.fit);
+  const fit = Number.isFinite(rawFit) ? Math.max(0, Math.min(100, Math.round(rawFit))) : 60;
+  const requestedOpportunity = typeof value.opportunity_type === "string"
+    ? value.opportunity_type
+    : "";
+  const opportunityType = VALID_OPPORTUNITY_TYPES.has(requestedOpportunity)
+    ? requestedOpportunity as NonNullable<GeneratedTopic["opportunity_type"]>
+    : null;
+
+  return {
+    title,
+    hook: generatedText(value, "hook", title, 500),
+    topic: generatedText(value, "topic", title, 300),
+    description,
+    content_type: contentType,
+    intended_audience: generatedText(
+      value,
+      "intended_audience",
+      "Audience requires editor confirmation.",
+      1_000,
+    ),
+    strategic_objective: generatedText(
+      value,
+      "strategic_objective",
+      "Build useful awareness with the intended audience.",
+      1_200,
+    ),
+    why_valuable: generatedText(value, "why_valuable", description, 1_600),
+    company_dna_fit: generatedText(
+      value,
+      "company_dna_fit",
+      "Aligned using the available Company Brain context; editor review is recommended.",
+      1_600,
+    ),
+    vault_evidence_ids: generatedIds(value, "vault_evidence_ids", 8),
+    rationale: generatedText(value, "rationale", description, 2_000),
+    fit,
+    opportunity_type: opportunityType,
+    evidence_summary: generatedText(
+      value,
+      "evidence_summary",
+      "No external evidence summary was supplied.",
+      1_000,
+    ),
+    evidence_ids: generatedIds(value, "evidence_ids", 5),
+    difference_from_competitors: generatedText(value, "difference_from_competitors", "", 1_600),
+    existing_content_ids: generatedIds(value, "existing_content_ids", 8),
+    difference_from_existing: generatedText(
+      value,
+      "difference_from_existing",
+      "No source-grounded comparison with existing company content was supplied.",
+      1_600,
+    ),
+    recommended_format: generatedText(value, "recommended_format", `${contentType} post`, 500),
+    recommended_cta: generatedText(
+      value,
+      "recommended_cta",
+      "Invite the audience to take one relevant next step.",
+      800,
+    ),
+  };
+}
+
 class TopicProviderError extends Error {
   constructor(
     readonly code: string,
@@ -242,7 +342,9 @@ async function requestGeneratedTopics(args: {
       if (!parsed.success) return { topics: [], rejected: 0 };
       const topics = parsed.data.topics.flatMap((candidate) => {
         const topic = generatedTopicSchema.safeParse(candidate);
-        return topic.success ? [topic.data] : [];
+        if (topic.success) return [topic.data];
+        const normalized = normalizeGeneratedTopic(candidate);
+        return normalized ? [normalized] : [];
       });
       return {
         topics,

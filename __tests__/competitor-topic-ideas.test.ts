@@ -269,7 +269,7 @@ describe("competitor-gap topic generation", () => {
     fetchMock.mockRestore();
   });
 
-  test("returns valid ideas when one candidate is malformed and the repair provider is unavailable", async () => {
+  test("normalizes incomplete editorial metadata and preserves ideas when repair is unavailable", async () => {
     const from = jest.fn(() => fluent({ data: [], error: null }));
     (createAdminClient as jest.Mock).mockReturnValue({ from, rpc: jest.fn() });
     const completeIdea = {
@@ -302,7 +302,7 @@ describe("competitor-gap topic generation", () => {
             content: JSON.stringify({
               topics: [
                 completeIdea,
-                { title: "Missing required fields" },
+                { title: "Idea with optional metadata omitted" },
                 null,
               ],
             }),
@@ -321,9 +321,16 @@ describe("competitor-gap topic generation", () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.topics).toHaveLength(1);
+    expect(json.topics).toHaveLength(2);
     expect(json.topics[0].title).toBe("A usable company idea");
-    expect(json.warning).toContain("Generated 1 of 3 requested ideas");
+    expect(json.topics[1]).toMatchObject({
+      title: "Idea with optional metadata omitted",
+      content_type: "linkedin",
+      explainability: {
+        intendedAudience: "Audience requires editor confirmation.",
+      },
+    });
+    expect(json.warning).toContain("Generated 2 of 3 requested ideas");
     expect(json.warning).toContain("repair attempt was unavailable");
     fetchMock.mockRestore();
   });
