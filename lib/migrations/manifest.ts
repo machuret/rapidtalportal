@@ -118,4 +118,5 @@ export const MIGRATIONS = [
   "110_content_db_lint_cleanup.sql",
   "111_competitor_analysis_usability.sql",
   "112_company_dna_brand_voice_compatibility.sql",
+  "113_content_high_priority_integrity.sql",
 ] as const;

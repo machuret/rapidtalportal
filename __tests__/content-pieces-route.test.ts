@@ -226,12 +226,31 @@ Would you like to learn more?`,
     }), routeCtx);
 
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: "Not allowed to approve content." });
+    expect(await response.json()).toEqual({ error: "Not allowed to change the content lifecycle." });
     expect(admin.from).not.toHaveBeenCalled();
     expect(admin.rpc).not.toHaveBeenCalled();
   });
 
+  test.each(["archived", "draft"] as const)(
+    "prevents VAs from changing lifecycle status to %s",
+    async (status) => {
+      const admin = makeAdmin();
+      (createAdminClient as jest.Mock).mockReturnValue(admin);
+
+      const response = await PATCH(jsonReq({
+        client_id: CLIENT_A,
+        id: PIECE_ID,
+        status,
+      }), routeCtx);
+
+      expect(response.status).toBe(403);
+      expect(admin.from).not.toHaveBeenCalled();
+      expect(admin.rpc).not.toHaveBeenCalled();
+    },
+  );
+
   test("maps stale review conflicts to HTTP 409", async () => {
+    (requireApiAuth as jest.Mock).mockResolvedValue({ user: user("client_admin") });
     const admin = makeAdmin({
       rpc: {
         data: null,

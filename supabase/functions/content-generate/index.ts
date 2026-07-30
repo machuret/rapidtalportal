@@ -691,26 +691,46 @@ export async function handleContentGenerateRequest(
           CONTENT_LENGTH_HINTS[length] ?? "",
         );
     const baseTemplate = await promptOverride(admin, "content.generate", DEFAULT_SYSTEM);
+    let generationLeaseToken: string | null = null;
     const complete = async (request: ContentModelRequest): Promise<string> => {
-      const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openrouterKey}` },
-        body: JSON.stringify({
-          model: "openai/gpt-4o-mini",
-          max_tokens: request.maxTokens,
-          ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
-          ...(request.json ? { response_format: { type: "json_object" } } : {}),
-          messages: [
-            { role: "system", content: request.system },
-            { role: "user", content: request.user },
-          ],
-        }),
-      });
-      const json = await response.json();
-      if (!response.ok) {
-        throw new Error(`OpenAI failed: ${json?.error?.message ?? "Unknown"}`);
+      if (projectId && generationLeaseToken) {
+        const { error: renewError } = await admin.rpc("renew_content_project_generation", {
+          p_client_id: clientId,
+          p_project_id: projectId,
+          p_actor_id: authUser.id,
+          p_lease_token: generationLeaseToken,
+          p_lease_seconds: 600,
+        });
+        if (renewError) {
+          throw new Error(renewError.message || "The generation claim expired.");
+        }
       }
-      return json.choices?.[0]?.message?.content ?? "";
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 75_000);
+      try {
+        const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          signal: controller.signal,
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openrouterKey}` },
+          body: JSON.stringify({
+            model: "openai/gpt-4o-mini",
+            max_tokens: request.maxTokens,
+            ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
+            ...(request.json ? { response_format: { type: "json_object" } } : {}),
+            messages: [
+              { role: "system", content: request.system },
+              { role: "user", content: request.user },
+            ],
+          }),
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          throw new Error(`OpenAI failed: ${json?.error?.message ?? "Unknown"}`);
+        }
+        return json.choices?.[0]?.message?.content ?? "";
+      } finally {
+        clearTimeout(timeout);
+      }
     };
 
     const marketIntelligence = record(contentBrief.marketIntelligence);
@@ -734,24 +754,73 @@ export async function handleContentGenerateRequest(
         }
       : contentBrief;
 
+    const releaseGenerationLease = async () => {
+      if (!projectId || !generationLeaseToken) return;
+      const { error: releaseError } = await admin.rpc("release_content_project_generation", {
+        p_client_id: clientId,
+        p_project_id: projectId,
+        p_actor_id: authUser.id,
+        p_lease_token: generationLeaseToken,
+      });
+      if (releaseError) {
+        console.error("content-generate: failed to release generation lease:", releaseError);
+      }
+      generationLeaseToken = null;
+    };
+    if (persist && projectId) {
+      const { data: claim, error: claimError } = await admin
+        .rpc("claim_content_project_generation", {
+          p_client_id: clientId,
+          p_project_id: projectId,
+          p_actor_id: authUser.id,
+          p_lease_seconds: 600,
+        })
+        .single();
+      if (claimError || !claim?.lease_token) {
+        const status = claimError?.code === "55P03" || claimError?.code === "40001"
+          ? 409
+          : claimError?.code === "42501"
+            ? 403
+            : claimError?.code === "P0002"
+              ? 404
+              : 500;
+        return new Response(JSON.stringify({
+          error: status === 409
+            ? claimError?.message ?? "A draft is already being generated for this project."
+            : "The draft generation lock could not be acquired.",
+        }), {
+          status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      generationLeaseToken = claim.lease_token as string;
+    }
+
     console.log(`✍️ Generating ${contentType} content...`);
+    let orchestration;
+    try {
+      orchestration = await runContentGenerationOrchestration({
+        contentType: contentType as keyof typeof CONTENT_TYPE_INSTRUCTIONS,
+        title,
+        contentBrief: modelContentBrief,
+        context,
+        sourceContext,
+        style,
+        dna: resolvedDna,
+        sources: retrieval.sources,
+        complete,
+        baseTemplate,
+      });
+    } catch (error) {
+      await releaseGenerationLease();
+      throw error;
+    }
     const {
       finalBody,
       critique,
       verifiedSources,
       qualityWarnings,
-    } = await runContentGenerationOrchestration({
-      contentType: contentType as keyof typeof CONTENT_TYPE_INSTRUCTIONS,
-      title,
-      contentBrief: modelContentBrief,
-      context,
-      sourceContext,
-      style,
-      dna: resolvedDna,
-      sources: retrieval.sources,
-      complete,
-      baseTemplate,
-    });
+    } = orchestration;
     const styleSnapshot = {
       ...createContentStyleSnapshot(
       style,
@@ -763,6 +832,7 @@ export async function handleContentGenerateRequest(
       exampleSources: retrieval.styleSources,
     };
     if (qualityWarnings.length && !evaluationStyleMode) {
+      await releaseGenerationLease();
       return new Response(JSON.stringify({
         error: "The generated draft did not pass the content quality gate. No draft was created.",
         warnings: qualityWarnings,
@@ -789,6 +859,7 @@ export async function handleContentGenerateRequest(
             p_style_snapshot: styleSnapshot,
             p_generation_kind: generationKind,
             p_parent_piece_id: generationKind === "adaptation" ? parentPieceId : null,
+            p_generation_lease_token: generationLeaseToken,
           }).single()
         : await admin
           .from("content_pieces")
@@ -811,6 +882,7 @@ export async function handleContentGenerateRequest(
       const { data: piece, error: dbError } = persistence;
 
       if (dbError) {
+        await releaseGenerationLease();
         const status = dbError.code === "40001"
           ? 409
           : dbError.code === "P0002"

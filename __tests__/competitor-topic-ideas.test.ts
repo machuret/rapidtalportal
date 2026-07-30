@@ -23,7 +23,11 @@ jest.mock("@/lib/rate-limit", () => ({
 jest.mock("@/lib/supabase/admin", () => ({ createAdminClient: jest.fn() }));
 jest.mock("@/lib/prompts/server", () => ({ renderPrompt: jest.fn(async () => "System prompt") }));
 jest.mock("@/lib/brain/context", () => ({ buildBrainContext: jest.fn() }));
-jest.mock("@/lib/brain/embed", () => ({ embeddingFit: jest.fn(async () => null) }));
+jest.mock("@/lib/brain/embed", () => ({
+  cosine: jest.fn(() => 0.5),
+  embeddingFit: jest.fn(async () => null),
+  embedTexts: jest.fn(async (texts: string[]) => texts.map(() => [1, 0])),
+}));
 jest.mock("@/lib/brain/events", () => ({ logBrainEvent: jest.fn(async () => undefined) }));
 jest.mock("@/lib/brain/llm", () => ({
   chatProvider: jest.fn(() => ({
@@ -107,33 +111,35 @@ describe("competitor-gap topic generation", () => {
       error: null,
     });
     (createAdminClient as jest.Mock).mockReturnValue({ from, rpc });
-    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify({
+    const completeIdea = (title: string) => ({
+      title,
+      hook: "A practical recurring industry gap the market keeps missing",
+      topic: "Practical recurring industry market gap",
+      description: "An original practical company angle on a recurring industry topic.",
+      content_type: "linkedin",
+      intended_audience: "Business decision makers",
+      strategic_objective: "Demonstrate a useful company point of view",
+      why_valuable: "It answers a recurring industry market question with a practical angle.",
+      company_dna_fit: "It uses the company’s practical evidence-led positioning.",
+      vault_evidence_ids: [],
+      rationale: "The market discusses the recurring industry topic but not this practical angle.",
+      fit: 88,
+      opportunity_type: "gap",
+      evidence_summary: "The competitor repeatedly frames the recurring industry topic.",
+      evidence_ids: [ITEM_ID],
+      difference_from_competitors: "It explains the practical next step competitors omit.",
+      existing_content_ids: [],
+      difference_from_existing: "No equivalent company content was found.",
+      recommended_format: "A concise LinkedIn point-of-view post",
+      recommended_cta: "Ask readers which constraint they see most often",
+    });
+    const fetchMock = jest.spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
       choices: [{
         message: {
           content: JSON.stringify({
             topics: [
-              {
-                title: "A defensible gap",
-                hook: "A practical gap the market keeps missing",
-                topic: "Practical market gap",
-                description: "An original company angle.",
-                content_type: "linkedin",
-                intended_audience: "Business decision makers",
-                strategic_objective: "Demonstrate a useful company point of view",
-                why_valuable: "It answers a repeated market question with a practical angle.",
-                company_dna_fit: "It uses the company’s evidence-led positioning.",
-                vault_evidence_ids: [],
-                rationale: "The market discusses the problem but not this practical angle.",
-                fit: 88,
-                opportunity_type: "gap",
-                evidence_summary: "The competitor repeatedly frames the industry problem.",
-                evidence_ids: [ITEM_ID],
-                difference_from_competitors: "It explains the practical next step competitors omit.",
-                existing_content_ids: [],
-                difference_from_existing: "No equivalent company content was found.",
-                recommended_format: "A concise LinkedIn point-of-view post",
-                recommended_cta: "Ask readers which constraint they see most often",
-              },
+              completeIdea("A defensible gap"),
               {
                 title: "Spoofed evidence",
                 description: "Must be removed.",
@@ -148,7 +154,20 @@ describe("competitor-gap topic generation", () => {
           }),
         },
       }],
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+      }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              topics: [
+                completeIdea("A defensible gap"),
+                completeIdea("A second defensible gap"),
+                completeIdea("A third defensible gap"),
+              ],
+            }),
+          },
+        }],
+      }), { status: 200, headers: { "content-type": "application/json" } }));
 
     const response = await POST(request({
       client_id: CLIENT_ID,
@@ -158,7 +177,7 @@ describe("competitor-gap topic generation", () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.topics).toHaveLength(1);
+    expect(json.topics).toHaveLength(3);
     expect(json.topics[0]).toMatchObject({
       title: "A defensible gap",
       opportunity_type: "gap",
@@ -174,11 +193,11 @@ describe("competitor-gap topic generation", () => {
         competitor_sources: [{ item_id: ITEM_ID }],
       },
       explainability: {
-        hook: "A practical gap the market keeps missing",
+        hook: "A practical recurring industry gap the market keeps missing",
         intendedAudience: "Business decision makers",
         supportingMarketSignals: [{ itemId: ITEM_ID, competitorName: "Market Co" }],
         differenceFromCompetitors: "It explains the practical next step competitors omit.",
-        differenceFromExisting: "No equivalent company content was found.",
+        differenceFromExisting: expect.stringContaining("No source-grounded comparison claim was verified"),
         recommendedFormat: "A concise LinkedIn point-of-view post",
         confidence: expect.stringMatching(/low|medium|high/u),
         scores: {
@@ -192,10 +211,61 @@ describe("competitor-gap topic generation", () => {
         },
       },
     });
-    expect(json.warning).toContain("removed");
+    expect(json.warning).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     const modelBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
     expect(modelBody.messages[1].content).toContain(`id="${ITEM_ID}"`);
     expect(modelBody.messages[1].content).toContain("Never copy its wording or voice.");
+    expect(json.topics[0].explainability.evidenceVerification).toMatchObject({
+      method: "semantic_embeddings",
+      verifiedCompetitorIds: [ITEM_ID],
+      competitorComparisonVerified: true,
+    });
+    fetchMock.mockRestore();
+  });
+
+  test("supports the declared maximum of twenty complete ideas with a scaled output budget", async () => {
+    const from = jest.fn(() => fluent({ data: [], error: null }));
+    (createAdminClient as jest.Mock).mockReturnValue({ from, rpc: jest.fn() });
+    const topics = Array.from({ length: 20 }, (_, index) => ({
+      title: `Complete idea ${index + 1}`,
+      hook: `A useful hook ${index + 1}`,
+      topic: `Useful topic ${index + 1}`,
+      description: "A practical company-led explanation for a relevant audience.",
+      content_type: "linkedin",
+      intended_audience: "Business decision makers",
+      strategic_objective: "Explain a useful company point of view",
+      why_valuable: "It answers a recurring audience question.",
+      company_dna_fit: "It follows the company’s practical style.",
+      vault_evidence_ids: [],
+      rationale: "A useful editorial opportunity.",
+      fit: 80,
+      opportunity_type: null,
+      evidence_summary: "No external evidence was requested.",
+      evidence_ids: [],
+      difference_from_competitors: "",
+      existing_content_ids: [],
+      difference_from_existing: "This angle should be reviewed against existing content.",
+      recommended_format: "A concise LinkedIn post",
+      recommended_cta: "Invite readers to discuss the topic",
+    }));
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({ topics }) } }],
+      }), { status: 200, headers: { "content-type": "application/json" } }),
+    );
+
+    const response = await POST(request({
+      client_id: CLIENT_ID,
+      count: 20,
+      mode: "company",
+    }), routeCtx);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.topics).toHaveLength(20);
+    const modelBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+    expect(modelBody.max_tokens).toBe(13_000);
     fetchMock.mockRestore();
   });
 

@@ -21,14 +21,7 @@ export default async function ContentPage() {
   // the client boundary before this server-side read.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any;
-  const [
-    { data: history },
-    { data: topics },
-    { data: brandStyle },
-    { data: styleAnalyses },
-    { data: projects },
-    { data: vaultQueries },
-  ] = await Promise.all([
+  const results = await Promise.all([
     admin
       .from("content_pieces")
       .select("id, content_type, title, status, created_at")
@@ -65,6 +58,21 @@ export default async function ContentPage() {
       .order("created_at", { ascending: false })
       .limit(100),
   ]);
+  const failed = results.find((result) => result.error);
+  if (failed?.error) {
+    console.error("[content page] initial data load failed", failed.error);
+    throw new Error(
+      "Content Studio could not load your saved work. Nothing has been deleted; please try again.",
+    );
+  }
+  const [
+    { data: history },
+    { data: topics },
+    { data: brandStyle },
+    { data: styleAnalyses },
+    { data: projects },
+    { data: vaultQueries },
+  ] = results;
   const styleAnalysisProfiles = Object.fromEntries(
     ((styleAnalyses ?? []) as Array<{ channel: string }>).map((profile) => [profile.channel, profile]),
   );

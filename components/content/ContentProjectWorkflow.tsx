@@ -19,7 +19,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +69,11 @@ interface ContentProjectWorkflowProps {
   onRegenerateIdeas: () => void;
   onContentGenerated: (piece: ContentPiece) => void;
 }
+
+type RetryOperation =
+  | { kind: "patch"; updates: Record<string, unknown> }
+  | { kind: "quick_draft" }
+  | { kind: "generate" };
 
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -140,6 +145,8 @@ export function ContentProjectWorkflow({
   const [draftDirty, setDraftDirty] = useState(false);
   const [evidence, setEvidence] = useState<ContentEvidenceOption[]>([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const [retryOperation, setRetryOperation] = useState<RetryOperation | null>(null);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const autosaveTimer = useRef<number | null>(null);
   const [history, setHistory] = useState<ContentPiece[]>(
@@ -185,6 +192,14 @@ export function ContentProjectWorkflow({
     );
   }, [project.current_piece, project.pieces]);
 
+  const loadProject = useCallback(async () => {
+    const loaded = await api.get<ContentProject>(
+      ROUTES.content.project(clientId, project.id),
+    );
+    onProjectChange(loaded);
+    return loaded;
+  }, [clientId, onProjectChange, project.id]);
+
   const patchProject = useCallback(async (
     updates: Record<string, unknown>,
   ): Promise<ContentProject | null> => {
@@ -196,44 +211,59 @@ export function ContentProjectWorkflow({
         id: project.id,
         expected_updated_at: project.updated_at,
         ...updates,
-      });
+      }, { showErrorToast: false });
       onProjectChange(updated);
+      setRetryOperation(null);
       setSaveState("saved");
       return updated;
-    } catch {
+    } catch (error) {
+      // Keep the exact failed payload. A generic "retry the current step" loses
+      // intent for save/reject/back/validate transitions after a conflict reload.
+      setRetryOperation({ kind: "patch", updates });
+      if (error instanceof ApiError && error.statusCode === 409) {
+        try {
+          await loadProject();
+          toast.error("This project changed elsewhere. The latest version is loaded; review and retry your change.");
+        } catch {
+          toast.error("This project changed elsewhere and could not be refreshed.");
+        }
+      } else {
+        toast.error(errorMessage(error, "The project could not be saved."));
+      }
       setSaveState("error");
       return null;
     } finally {
       setBusy(false);
     }
-  }, [clientId, onProjectChange, project.id, project.updated_at]);
+  }, [clientId, loadProject, onProjectChange, project.id, project.updated_at]);
 
-  const loadProject = useCallback(async () => {
-    const loaded = await api.get<ContentProject>(
-      ROUTES.content.project(clientId, project.id),
-    );
-    onProjectChange(loaded);
-    return loaded;
-  }, [clientId, onProjectChange, project.id]);
+  const loadEvidence = useCallback(async () => {
+    setEvidenceLoading(true);
+    setEvidenceError(null);
+    try {
+      const rows = await api.get<ContentEvidenceOption[]>(
+        ROUTES.content.projectEvidence(clientId, project.id),
+        { showErrorToast: false },
+      );
+      setEvidence(rows);
+    } catch (error) {
+      setEvidence([]);
+      setEvidenceError(errorMessage(error, "Vault evidence could not be loaded."));
+    } finally {
+      setEvidenceLoading(false);
+    }
+  }, [clientId, project.id]);
 
   useEffect(() => {
     if (project.current_step !== "evidence") return;
     let cancelled = false;
-    setEvidenceLoading(true);
-    api.get<ContentEvidenceOption[]>(
-      ROUTES.content.projectEvidence(clientId, project.id),
-    )
-      .then((rows) => {
-        if (!cancelled) setEvidence(rows);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setEvidenceLoading(false);
-      });
+    void loadEvidence().catch(() => {
+      if (!cancelled) setEvidenceError("Vault evidence could not be loaded.");
+    });
     return () => {
       cancelled = true;
     };
-  }, [clientId, project.current_step, project.id]);
+  }, [loadEvidence, project.current_step]);
 
   const market = project.idea_snapshot.marketIntelligence ?? null;
   const styleSummary = Array.isArray(project.style_snapshot?.summary)
@@ -324,14 +354,6 @@ export function ContentProjectWorkflow({
     return () => window.clearTimeout(timer);
   }, [busy, patchProject, project.current_step, project.vault_source_ids, saveState, selectedSourceIds]);
 
-  const retryProjectSave = useCallback(() => {
-    if (project.current_step === "brief") {
-      void patchProject({ content_brief: brief, status: "active" });
-    } else if (project.current_step === "evidence") {
-      void patchProject({ vault_source_ids: [...selectedSourceIds] });
-    }
-  }, [brief, patchProject, project.current_step, selectedSourceIds]);
-
   const handleSaveBrief = useCallback(async () => {
     if (brief.objective.length < 3) {
       toast.error("Add a short objective. The other fields are optional.");
@@ -421,10 +443,24 @@ export function ContentProjectWorkflow({
         { showErrorToast: false },
       );
       onProjectChange(loaded);
+      setRetryOperation(null);
       setSaveState("saved");
       toast.success("Draft generated with an automatic Vault shortlist.");
     } catch (error) {
+      setRetryOperation({ kind: "quick_draft" });
       setSaveState("error");
+      try {
+        const recovered = await loadProject();
+        if (recovered.current_piece && recovered.current_step === "edit") {
+          setHistory([recovered.current_piece]);
+          onContentGenerated(recovered.current_piece);
+          setSaveState("saved");
+          toast.success("Draft generated and recovered from the saved project.");
+          return;
+        }
+      } catch {
+        // Keep the explicit retry action even if refresh is temporarily unavailable.
+      }
       toast.error(errorMessage(error, "The quick draft could not be generated."));
     } finally {
       setBusy(false);
@@ -435,6 +471,7 @@ export function ContentProjectWorkflow({
     clientId,
     isGenerating,
     onContentGenerated,
+    loadProject,
     onProjectChange,
     project,
   ]);
@@ -476,10 +513,37 @@ export function ContentProjectWorkflow({
       onContentGenerated(piece);
       setHistory([piece]);
       await loadProject();
+      setRetryOperation(null);
+      setSaveState("saved");
     } catch {
-      // Generation hook surfaces the provider or quality error.
+      setRetryOperation({ kind: "generate" });
+      setSaveState("error");
+      try {
+        const recovered = await loadProject();
+        if (recovered.current_piece && recovered.current_step === "edit") {
+          setHistory([recovered.current_piece]);
+          onContentGenerated(recovered.current_piece);
+          setSaveState("saved");
+          toast.success("Draft generated and recovered from the saved project.");
+        }
+      } catch {
+        // Generation hook already surfaced the provider or quality error.
+      }
     }
   }, [clientId, generate, loadProject, onContentGenerated, project]);
+
+  const retryProjectSave = useCallback(() => {
+    if (!retryOperation) return;
+    if (retryOperation.kind === "quick_draft") {
+      void handleQuickDraft();
+      return;
+    }
+    if (retryOperation.kind === "generate") {
+      void handleGenerate();
+      return;
+    }
+    void patchProject(retryOperation.updates);
+  }, [handleGenerate, handleQuickDraft, patchProject, retryOperation]);
 
   const runValidation = useCallback(async () => {
     if (!project.current_piece_id) return;
@@ -508,10 +572,21 @@ export function ContentProjectWorkflow({
     }
   }, [loadProject]);
 
-  const handleDerivedArtifactCreated = useCallback((piece: ContentPiece) => {
+  const handleDerivedArtifactCreated = useCallback(async (piece: ContentPiece) => {
     onContentGenerated(piece);
-    void loadProject();
-  }, [loadProject, onContentGenerated]);
+    try {
+      if (piece.project_id && piece.project_id !== project.id) {
+        const derivedProject = await api.get<ContentProject>(
+          ROUTES.content.project(clientId, piece.project_id),
+        );
+        onProjectChange(derivedProject);
+        return;
+      }
+      await loadProject();
+    } catch (error) {
+      toast.error(errorMessage(error, "The new draft was saved, but its project could not be opened."));
+    }
+  }, [clientId, loadProject, onContentGenerated, onProjectChange, project.id]);
 
   if (project.status === "rejected") {
     return (
@@ -681,7 +756,15 @@ export function ContentProjectWorkflow({
               <p className="mt-1 text-xs text-zinc-400">Only these sources may support factual claims in the draft.</p>
               <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
                 {evidenceLoading && <p className="py-8 text-center text-sm text-zinc-500">Loading factual Vault sources…</p>}
-                {!evidenceLoading && evidence.length === 0 && <p className="py-8 text-center text-sm text-zinc-500">No ready factual sources are available. You can continue, but claims will be limited to Company DNA.</p>}
+                {!evidenceLoading && evidenceError && (
+                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+                    <p>{evidenceError}</p>
+                    <Button className="mt-3" size="sm" variant="outline" onClick={() => void loadEvidence()}>
+                      Retry loading Vault evidence
+                    </Button>
+                  </div>
+                )}
+                {!evidenceLoading && !evidenceError && evidence.length === 0 && <p className="py-8 text-center text-sm text-zinc-500">No ready factual sources are available. You can continue, but claims will be limited to Company DNA.</p>}
                 {evidence.map((source) => {
                   const selected = selectedSourceIds.has(source.id);
                   return (
@@ -714,7 +797,7 @@ export function ContentProjectWorkflow({
           </div>
           <div className="flex justify-between">
             <Button variant="ghost" onClick={() => patchProject({ current_step: "brief" })}><ArrowLeft className="mr-2 h-4 w-4" /> Brief</Button>
-            <Button disabled={busy} onClick={handleSaveEvidence}>{busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />} Continue with {selectedSourceIds.size} factual source{selectedSourceIds.size === 1 ? "" : "s"}</Button>
+            <Button disabled={busy || evidenceLoading || !!evidenceError} onClick={handleSaveEvidence}>{busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />} Continue with {selectedSourceIds.size} factual source{selectedSourceIds.size === 1 ? "" : "s"}</Button>
           </div>
         </div>
       )}

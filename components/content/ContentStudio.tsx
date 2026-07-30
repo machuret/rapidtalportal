@@ -217,6 +217,7 @@ function ContentStudioInner({
     return (
       <ContentErrorBoundary>
         <ContentProjectWorkflow
+          key={activeProject.id}
           clientId={clientId}
           canApprove={canApprove}
           project={activeProject}

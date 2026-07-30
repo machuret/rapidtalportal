@@ -403,7 +403,7 @@ function PieceDetail({
           </Button>
         )}
 
-        {piece.status !== "archived" && (
+        {canApprove && piece.status !== "archived" && (
           <Button
             size="sm"
             variant="ghost"
@@ -416,7 +416,7 @@ function PieceDetail({
           </Button>
         )}
 
-        {piece.status === "archived" && (
+        {canApprove && piece.status === "archived" && (
           <Button
             size="sm"
             variant="ghost"

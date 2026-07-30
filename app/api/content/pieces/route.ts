@@ -189,9 +189,10 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (denied) return denied;
   const admin = createAdminClient();
 
-  // VAs prepare and validate drafts, but final approval is a client/admin decision.
-  if (parsed.data.status === "approved" && !hasContentCapability(user.role, "approve_content")) {
-    return NextResponse.json({ error: "Not allowed to approve content." }, { status: 403 });
+  // VAs can edit draft copy, but approval, archival and restoration are lifecycle
+  // decisions reserved for the tenant's content approvers.
+  if (parsed.data.status !== undefined && !hasContentCapability(user.role, "approve_content")) {
+    return NextResponse.json({ error: "Not allowed to change the content lifecycle." }, { status: 403 });
   }
 
   // Read the exact version that will be passed to the atomic updater. It locks and
