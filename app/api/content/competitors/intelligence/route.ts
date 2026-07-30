@@ -143,8 +143,104 @@ function escapeXml(value: string): string {
 }
 
 function compactWhitespace(value: string): string {
-  return value.normalize("NFKC").replace(/[“”]/gu, "\"").replace(/[‘’]/gu, "'")
+  return decodeEntities(value).normalize("NFKC").replace(/[“”]/gu, "\"").replace(/[‘’]/gu, "'")
     .replace(/\s+/gu, " ").trim().toLocaleLowerCase();
+}
+
+function decodeEntities(value: string): string {
+  const decodeCodePoint = (code: string, radix: number, fallback: string) => {
+    const parsed = Number.parseInt(code, radix);
+    return Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= 0x10ffff
+      ? String.fromCodePoint(parsed)
+      : fallback;
+  };
+  return value
+    .replace(/&amp;/giu, "&")
+    .replace(/&quot;/giu, "\"")
+    .replace(/&apos;|&#39;/giu, "'")
+    .replace(/&lt;/giu, "<")
+    .replace(/&gt;/giu, ">")
+    .replace(/&#(\d+);/gu, (match, code: string) =>
+      decodeCodePoint(code, 10, match))
+    .replace(/&#x([\da-f]+);/giu, (match, code: string) =>
+      decodeCodePoint(code, 16, match));
+}
+
+const NEGATION_WORDS = new Set([
+  "cannot", "can't", "didn't", "doesn't", "isn't", "neither", "never", "no",
+  "nor", "not", "wasn't", "without", "won't", "wouldn't",
+]);
+
+function evidenceTokens(value: string): string[] {
+  return decodeEntities(value)
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}']+/gu, " ")
+    .split(/\s+/u)
+    .filter(Boolean);
+}
+
+function negations(tokens: string[]): string {
+  return tokens.filter((token) => NEGATION_WORDS.has(token)).sort().join("|");
+}
+
+function sourceQuoteCandidates(source: string): string[] {
+  const sentences = source.trim().slice(0, 3500)
+    .split(/(?<=[.!?])\s+|\n+/u)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length >= 20 && sentence.length <= 500);
+  const pairs = sentences.slice(0, -1)
+    .map((sentence, index) => `${sentence} ${sentences[index + 1]}`)
+    .filter((sentence) => sentence.length <= 500);
+  return [...sentences, ...pairs];
+}
+
+function resolveExactSourceQuote(quote: string, source: string): string | null {
+  const rawSource = source.trim().slice(0, 3500);
+  if (rawSource.includes(quote)) return quote.trim();
+  const requested = evidenceTokens(quote);
+  if (requested.length < 4) return null;
+  const requestedNegations = negations(requested);
+  let best: { quote: string; score: number } | null = null;
+  for (const candidate of sourceQuoteCandidates(rawSource)) {
+    const candidateTokens = evidenceTokens(candidate);
+    if (negations(candidateTokens) !== requestedNegations) continue;
+    const requestedSet = new Set(requested);
+    const candidateSet = new Set(candidateTokens);
+    let shared = 0;
+    for (const token of requestedSet) if (candidateSet.has(token)) shared++;
+    const requestedCoverage = shared / requestedSet.size;
+    const candidateCoverage = shared / candidateSet.size;
+    const score = Math.min(requestedCoverage, candidateCoverage);
+    if (
+      shared >= 6 &&
+      requestedCoverage >= 0.8 &&
+      candidateCoverage >= 0.65 &&
+      (!best || score > best.score)
+    ) {
+      best = { quote: candidate, score };
+    }
+  }
+  return best?.quote ?? null;
+}
+
+function canonicalEvidenceQuotes(
+  sourceIds: string[],
+  quotes: Array<{ source_item_id: string; quote: string }>,
+  sourceById: Map<string, EvidenceRow>,
+): Array<{ source_item_id: string; quote: string }> {
+  const provided = new Map<string, string>();
+  for (const evidence of quotes) {
+    if (provided.has(evidence.source_item_id)) return [];
+    provided.set(evidence.source_item_id, evidence.quote);
+  }
+  return sourceIds.flatMap((sourceId) => {
+    const source = sourceById.get(sourceId);
+    const quote = provided.get(sourceId);
+    if (!source || !quote) return [];
+    const exact = resolveExactSourceQuote(quote, source.raw_content);
+    return exact ? [{ source_item_id: sourceId, quote: exact }] : [];
+  });
 }
 
 function terms(value: string): Set<string> {
@@ -427,10 +523,23 @@ function boundAnalysis(
     quotes: Array<{ source_item_id: string; quote: string }>,
     minimum: number,
   ) => citedEvidenceIsValid(ids, quotes, sourceById, minimum);
+  const canonicalize = <
+    T extends {
+      source_item_ids: string[];
+      evidence_quotes: Array<{ source_item_id: string; quote: string }>;
+    },
+  >(entry: T): T => ({
+    ...entry,
+    evidence_quotes: canonicalEvidenceQuotes(
+      entry.source_item_ids,
+      entry.evidence_quotes,
+      sourceById,
+    ),
+  });
 
   return {
     ...analysis,
-    topic_clusters: analysis.topic_clusters
+    topic_clusters: analysis.topic_clusters.map(canonicalize)
       .filter((entry) =>
         evidenceValid(entry.source_item_ids, entry.evidence_quotes, 2) &&
         competitorsAreValid(entry.competitor_ids) &&
@@ -439,16 +548,16 @@ function boundAnalysis(
         ...entry,
         signal_strength: deterministicSignalStrength(entry.source_item_ids, sourceById),
       })),
-    format_patterns: analysis.format_patterns.filter((entry) =>
+    format_patterns: analysis.format_patterns.map(canonicalize).filter((entry) =>
       evidenceValid(entry.source_item_ids, entry.evidence_quotes, 2) &&
       competitorsAreValid(entry.competitor_ids) &&
       provenanceMatches(entry.source_item_ids, entry.competitor_ids)),
-    positioning_profiles: analysis.positioning_profiles.filter((entry) =>
+    positioning_profiles: analysis.positioning_profiles.map(canonicalize).filter((entry) =>
       validCompetitorIds.has(entry.competitor_id) &&
       evidenceValid(entry.source_item_ids, entry.evidence_quotes, 1) &&
       entry.source_item_ids.every((id) =>
         sourceById.get(id)?.competitor_id === entry.competitor_id)),
-    comparisons: analysis.comparisons.filter((entry) =>
+    comparisons: analysis.comparisons.map(canonicalize).filter((entry) =>
       evidenceValid(entry.source_item_ids, entry.evidence_quotes, 2) &&
       entry.observations.every((observation) =>
         validCompetitorIds.has(observation.competitor_id)) &&
@@ -457,11 +566,11 @@ function boundAnalysis(
         entry.source_item_ids,
         [...new Set(entry.observations.map((observation) => observation.competitor_id))],
       )),
-    positioning_gaps: analysis.positioning_gaps.filter((entry) =>
+    positioning_gaps: analysis.positioning_gaps.map(canonicalize).filter((entry) =>
       evidenceValid(entry.source_item_ids, entry.evidence_quotes, 2) &&
       competitorsAreValid(entry.competitor_ids) &&
       provenanceMatches(entry.source_item_ids, entry.competitor_ids)),
-    recommended_ideas: analysis.recommended_ideas
+    recommended_ideas: analysis.recommended_ideas.map(canonicalize)
       .filter((entry) =>
         evidenceValid(entry.source_item_ids, entry.evidence_quotes, 2) &&
         competitorsAreValid(entry.competitor_ids) &&

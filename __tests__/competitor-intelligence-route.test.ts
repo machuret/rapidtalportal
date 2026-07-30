@@ -508,6 +508,70 @@ test("drops a model insight whose quote is not exact while preserving the verifi
   );
 });
 
+test("resolves a near-exact excerpt to immutable source text without accepting negation changes", async () => {
+  const nearExact = structuredClone(analysis);
+  nearExact.recommended_ideas[0].evidence_quotes[0].quote =
+    "Practical market explanation 1 — useful detail helps teams make better decisions";
+  nearExact.recommended_ideas[0].evidence_quotes[1].quote =
+    "Practical market explanation 2. Useful detail does not help teams make better decisions.";
+  const { rpc } = postDb({ modelAnalysis: nearExact });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(201);
+  await expect(response.json()).resolves.toMatchObject({
+    run: {
+      analysis: {
+        recommended_ideas: [],
+      },
+    },
+  });
+  expect(rpc).toHaveBeenCalledWith(
+    "complete_competitor_intelligence_job",
+    expect.objectContaining({
+      p_analysis: expect.objectContaining({
+        topic_clusters: expect.any(Array),
+      }),
+    }),
+  );
+});
+
+test("persists the exact captured sentence for a punctuation-only quote variation", async () => {
+  const nearExact = structuredClone(analysis);
+  nearExact.recommended_ideas[0].evidence_quotes[0].quote =
+    "Practical market explanation 1 — useful detail helps teams make better decisions";
+  const { rpc } = postDb({ modelAnalysis: nearExact });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(201);
+  expect(rpc).toHaveBeenCalledWith(
+    "complete_competitor_intelligence_job",
+    expect.objectContaining({
+      p_analysis: expect.objectContaining({
+        recommended_ideas: [
+          expect.objectContaining({
+            evidence_quotes: expect.arrayContaining([
+              {
+                source_item_id: SOURCE_IDS[0],
+                quote: exactQuote(0),
+              },
+            ]),
+          }),
+        ],
+      }),
+    }),
+  );
+});
+
 test("repairs one incomplete model report and still applies deterministic evidence checks", async () => {
   const { rpc } = postDb({
     modelResponses: [
