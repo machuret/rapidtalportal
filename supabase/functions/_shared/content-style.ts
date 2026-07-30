@@ -50,6 +50,10 @@ export interface ContentStyleSnapshot {
   styleAnalysis: ContentStyleAnalysisProvenance | null;
   companyDnaUpdatedAt: string | null;
   capturedAt: string;
+  /** Frozen generation instructions used to keep later rewrites on-voice. */
+  prompt?: string;
+  prohibitedPhrases?: string[];
+  disallowEmoji?: boolean;
   exampleSources?: Array<{
     itemId: string;
     title: string;
@@ -353,5 +357,8 @@ export function createContentStyleSnapshot(
     styleAnalysis: style.styleAnalysis,
     companyDnaUpdatedAt,
     capturedAt,
+    prompt: style.prompt,
+    prohibitedPhrases: style.prohibitedPhrases,
+    disallowEmoji: style.disallowEmoji,
   };
 }

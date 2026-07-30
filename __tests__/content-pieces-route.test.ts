@@ -128,6 +128,7 @@ describe("content piece integrity", () => {
   });
 
   test("blocks deterministic Company DNA violations before approval", async () => {
+    (requireApiAuth as jest.Mock).mockResolvedValue({ user: user("client_admin") });
     const admin = makeAdmin({
       piece: {
         data: {
@@ -159,6 +160,7 @@ describe("content piece integrity", () => {
   });
 
   test("blocks unsupported factual claims before approval", async () => {
+    (requireApiAuth as jest.Mock).mockResolvedValue({ user: user("client_admin") });
     const admin = makeAdmin({
       piece: {
         data: {
@@ -192,6 +194,7 @@ Would you like to learn more?`,
   });
 
   test("approves through the atomic RPC with exact piece and DNA versions", async () => {
+    (requireApiAuth as jest.Mock).mockResolvedValue({ user: user("client_admin") });
     const admin = makeAdmin();
     (createAdminClient as jest.Mock).mockReturnValue(admin);
 
@@ -210,6 +213,22 @@ Would you like to learn more?`,
         companyDnaUpdatedAt: DNA_UPDATED_AT,
       }),
     }));
+  });
+
+  test("lets VAs prepare drafts but reserves final approval for client administrators", async () => {
+    const admin = makeAdmin();
+    (createAdminClient as jest.Mock).mockReturnValue(admin);
+
+    const response = await PATCH(jsonReq({
+      client_id: CLIENT_A,
+      id: PIECE_ID,
+      status: "approved",
+    }), routeCtx);
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "Not allowed to approve content." });
+    expect(admin.from).not.toHaveBeenCalled();
+    expect(admin.rpc).not.toHaveBeenCalled();
   });
 
   test("maps stale review conflicts to HTTP 409", async () => {

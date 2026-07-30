@@ -65,7 +65,10 @@ describe("content brand style", () => {
     )).toEqual({
       channel: "facebook",
       summary: style.summary,
+      prompt: style.prompt,
       hardRules: [],
+      prohibitedPhrases: style.prohibitedPhrases,
+      disallowEmoji: style.disallowEmoji,
       styleAnalysis: null,
       companyDnaUpdatedAt: "2026-07-28T00:00:00.000Z",
       capturedAt: "2026-07-28T01:00:00.000Z",

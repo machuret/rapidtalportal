@@ -18,6 +18,18 @@ import {
 
 type MarketIntelligence = z.infer<typeof contentMarketIntelligenceSchema>;
 
+function completeEditorialBrief(
+  brief: z.infer<typeof contentBriefSchema> | undefined,
+): boolean {
+  return !!(
+    brief &&
+    brief.audience?.trim() &&
+    brief.angle?.trim() &&
+    brief.desiredFormat?.trim() &&
+    brief.callToAction?.trim()
+  );
+}
+
 function sameSet(left: string[], right: string[]): boolean {
   const leftSet = new Set(left);
   const rightSet = new Set(right);
@@ -55,6 +67,8 @@ async function verifyMarketIntelligence(
     : [];
   const idea = ideas.find((candidate) =>
     candidate.title === provenance.ideaTitle &&
+    candidate.why_valuable === provenance.whyValuable &&
+    candidate.differentiation === provenance.differentiation &&
     candidate.confidence === provenance.confidence &&
     candidate.novelty === provenance.novelty
   );
@@ -219,7 +233,7 @@ export const GET = withAuth(async (req, { user }) => {
       .select(columns)
       .eq("client_id", parsed.data.client_id)
       .order("updated_at", { ascending: false })
-      .limit(50);
+      .limit(200);
     if (error) return serverError(error);
     return NextResponse.json(data ?? []);
   }
@@ -244,7 +258,15 @@ export const GET = withAuth(async (req, { user }) => {
     if (pieceError) return serverError(pieceError);
     currentPiece = piece;
   }
-  return NextResponse.json({ ...project, current_piece: currentPiece });
+  const { data: pieces, error: piecesError } = await db
+    .from("content_pieces")
+    .select("id,project_id,content_type,title,status,generation_kind,parent_piece_id,created_at")
+    .eq("project_id", project.id)
+    .eq("client_id", parsed.data.client_id)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (piecesError) return serverError(piecesError);
+  return NextResponse.json({ ...project, current_piece: currentPiece, pieces: pieces ?? [] });
 });
 
 export const POST = withAuth(async (req, { user }) => {
@@ -321,9 +343,11 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (
     parsed.data.current_step &&
     ["evidence", "generate", "edit", "validate", "approve"].includes(parsed.data.current_step) &&
-    !resolvedBrief
+    !completeEditorialBrief(resolvedBrief)
   ) {
-    return NextResponse.json({ error: "Complete the structured brief before continuing." }, { status: 422 });
+    return NextResponse.json({
+      error: "Complete the audience, objective, angle, format and CTA before continuing.",
+    }, { status: 422 });
   }
   if (
     parsed.data.current_step &&

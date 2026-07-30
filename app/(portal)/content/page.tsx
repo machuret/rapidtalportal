@@ -26,6 +26,7 @@ export default async function ContentPage() {
     { data: brandStyle },
     { data: styleAnalyses },
     { data: projects },
+    { data: vaultQueries },
   ] = await Promise.all([
     admin
       .from("content_pieces")
@@ -53,14 +54,27 @@ export default async function ContentPage() {
       .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,created_at,updated_at")
       .eq("client_id", user.client_id)
       .order("updated_at", { ascending: false })
-      .limit(50),
+      .limit(200),
+    admin
+      .from("vault_queries")
+      .select("question,answered,dismissed,created_at")
+      .eq("client_id", user.client_id)
+      .eq("answered", false)
+      .eq("dismissed", false)
+      .order("created_at", { ascending: false })
+      .limit(100),
   ]);
   const styleAnalysisProfiles = Object.fromEntries(
     ((styleAnalyses ?? []) as Array<{ channel: string }>).map((profile) => [profile.channel, profile]),
   );
 
-  // VAs run this tool end-to-end; client and super admins retain approval too.
-  const canApprove = ["va", "client_admin", "super_admin"].includes(user.role);
+  // VAs can prepare and validate drafts; final approval remains a client/admin decision.
+  const canApprove = ["client_admin", "super_admin"].includes(user.role);
+  const vaultGaps = Array.from(new Set(
+    ((vaultQueries ?? []) as Array<{ question: string }>)
+      .map((query) => query.question.trim())
+      .filter(Boolean),
+  )).slice(0, 12);
 
   return (
     <div>
@@ -80,6 +94,7 @@ export default async function ContentPage() {
         history={(history ?? []) as ContentPiece[]}
         topics={(topics ?? []) as ContentTopic[]}
         projects={(projects ?? []) as unknown as ContentProject[]}
+        vaultGaps={vaultGaps}
       />
     </div>
   );

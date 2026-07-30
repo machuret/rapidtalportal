@@ -54,6 +54,23 @@ test.describe("signed-in Content Studio roles", () => {
     await expect(page.getByTestId("competitor-analyse-button")).toHaveCount(0);
   });
 
+  test("VA cannot approve content even inside their own tenant", async ({ page }) => {
+    const ownClientId = process.env.E2E_CLIENT_ADMIN_CLIENT_ID;
+    if (!ownClientId) throw new Error("Missing E2E client ID for the VA approval test.");
+    await signIn(page, "VA");
+
+    const response = await page.request.patch("/api/content/pieces", {
+      data: {
+        client_id: ownClientId,
+        id: crypto.randomUUID(),
+        status: "approved",
+      },
+    });
+
+    expect(response.status()).toBe(403);
+    expect(await response.json()).toEqual({ error: "Not allowed to approve content." });
+  });
+
   test("client admin session cannot read another tenant's intelligence API", async ({ page }) => {
     const ownClientId = process.env.E2E_CLIENT_ADMIN_CLIENT_ID;
     const otherClientId = process.env.E2E_OTHER_CLIENT_ID;
@@ -73,7 +90,7 @@ test.describe("signed-in Content Studio roles", () => {
     expect(other.status()).toBe(403);
   });
 
-  test("client admin can recover a saved editorial project after leaving the workflow", async ({ page }) => {
+  test("client admin can recover the brief and evidence workflow after closing the page", async ({ page }) => {
     await signIn(page, "CLIENT_ADMIN");
     await page.goto("/content");
     const title = `E2E recoverable idea ${Date.now()}`;
@@ -88,9 +105,35 @@ test.describe("signed-in Content Studio roles", () => {
     await expect(page.getByText("Continue working")).toBeVisible();
     await page.reload();
     await page.getByText(title, { exact: true }).first().click();
-    await expect(page.getByText("Saved automatically · recoverable on any device")).toBeVisible();
+    await expect(page.getByText("Project saved · recoverable on any device")).toBeVisible();
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
 
+    await page.getByRole("button", { name: "Promote into a brief" }).click();
+    await page.getByLabel("Audience").fill("Prospective clients");
+    await page.getByLabel("Objective").fill("Explain one practical way to make a better-informed decision.");
+    await page.getByLabel("Angle").fill("Lead with a useful question and answer it in plain language.");
+    await page.getByLabel("Desired format").fill("Short educational post");
+    await page.getByLabel("Call to action").fill("Invite the reader to learn more");
+    await expect(page.getByText("Project saved · recoverable on any device")).toBeVisible();
+
+    await page.reload();
+    await page.getByText(title, { exact: true }).first().click();
+    await expect(page.getByLabel("Audience")).toHaveValue("Prospective clients");
+    await expect(page.getByLabel("Angle")).toHaveValue(
+      "Lead with a useful question and answer it in plain language.",
+    );
+
+    await page.getByRole("button", { name: "Review evidence" }).click();
+    await expect(page.getByText("Facts from the company Vault")).toBeVisible();
+    await page.getByRole("button", { name: /Continue with \d+ factual sources?/u }).click();
+    await expect(page.getByText("Ready to generate")).toBeVisible();
+
+    await page.reload();
+    await page.getByText(title, { exact: true }).first().click();
+    await expect(page.getByText("Ready to generate")).toBeVisible();
+    await page.getByRole("button", { name: "Evidence" }).click();
+    await page.getByRole("button", { name: "Brief" }).click();
+    await page.getByRole("button", { name: "Idea" }).click();
     await page.getByRole("button", { name: "Reject idea" }).click();
     await expect(page.getByText("Idea rejected")).toBeVisible();
   });

@@ -83,6 +83,7 @@ describe("unified content engine", () => {
 describe("editorial workspace integrity", () => {
   const migration = read("db/migrations/092_unified_content_workspace.sql");
   const atomicRewrite = read("db/migrations/093_atomic_content_rewrites.sql");
+  const connectedDerivations = read("db/migrations/106_connected_rewrite_provenance.sql");
   const rewrite = read("app/api/content/rewrite/route.ts");
   const revisions = read("app/api/content/revisions/route.ts");
   const duplicate = read("app/api/content/duplicate/route.ts");
@@ -113,6 +114,9 @@ describe("editorial workspace integrity", () => {
     expect(atomicRewrite).toContain("FOR UPDATE");
     expect(atomicRewrite).toContain("v_piece.updated_at IS DISTINCT FROM p_expected_updated_at");
     expect(atomicRewrite).toContain("FROM PUBLIC, anon, authenticated");
+    expect(connectedDerivations).toContain("UPDATE content_projects");
+    expect(connectedDerivations).toContain("v_piece.project_id");
+    expect(connectedDerivations).toContain("v_project.vault_source_ids");
   });
 
   test("duplicate and adaptation retain lineage and always create a draft artifact", () => {
@@ -123,6 +127,11 @@ describe("editorial workspace integrity", () => {
     expect(adapt).toContain('generationKind: "adaptation"');
     expect(adapt).not.toContain('.update({');
     expect(adapt).toContain('target_type: z.enum(["email", "x", "linkedin", "facebook", "instagram"');
+    expect(duplicate).toContain('rpc("create_content_project_derived_draft"');
+    expect(adapt).toContain('rpc("create_content_project_derived_draft"');
+    expect(connectedDerivations).toContain("p_generation_kind NOT IN ('duplicate', 'adaptation')");
+    expect(connectedDerivations).toContain("current_step = 'edit'");
+    expect(connectedDerivations).toContain("status = 'active'");
   });
 
   test("workspace exposes editing, rewriting, comparison, workflow, duplication and export", () => {

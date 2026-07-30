@@ -65,6 +65,8 @@ export interface ContentMarketIntelligenceProvenance {
   runId: string;
   reportSchemaVersion: 2;
   ideaTitle: string;
+  whyValuable: string;
+  differentiation: string;
   confidence: "low" | "medium" | "high";
   novelty: "new" | "adjacent" | "overlap";
   competitorIds: string[];
@@ -139,6 +141,9 @@ export interface ContentPiece {
     }>;
     companyDnaUpdatedAt?: string | null;
     capturedAt?: string;
+    prompt?: string;
+    prohibitedPhrases?: string[];
+    disallowEmoji?: boolean;
   } | null;
   content_brief?: ContentBrief | null;
   source_references?: ContentSourceReference[];
@@ -192,6 +197,7 @@ export interface ContentProject {
   style_snapshot: NonNullable<ContentPiece["style_snapshot"]>;
   current_piece_id: string | null;
   current_piece?: ContentPiece | null;
+  pieces?: ContentPiece[];
   created_at: string;
   updated_at: string;
 }

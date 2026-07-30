@@ -184,10 +184,8 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (denied) return denied;
   const admin = createAdminClient();
 
-  // Approval is allowed for any member with access to this client (VAs run the
-  // content workflow end-to-end and may approve their own client's content;
-  // tenant access is already enforced by assertClientAccess above).
-  if (parsed.data.status === "approved" && !["va", "client_admin", "super_admin"].includes(user.role)) {
+  // VAs prepare and validate drafts, but final approval is a client/admin decision.
+  if (parsed.data.status === "approved" && !["client_admin", "super_admin"].includes(user.role)) {
     return NextResponse.json({ error: "Not allowed to approve content." }, { status: 403 });
   }
 

@@ -57,7 +57,7 @@ export const POST = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: piece, error } = await (admin as any)
     .from("content_pieces")
-    .select("id,content_type,title,body,status,content_brief,source_references,updated_at")
+    .select("id,project_id,content_type,title,body,status,content_brief,source_references,style_snapshot,updated_at")
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
     .single();
@@ -82,16 +82,37 @@ export const POST = withAuth(async (req, { user }) => {
   const existingBrief = piece.content_brief && typeof piece.content_brief === "object"
     ? piece.content_brief as Record<string, unknown>
     : {};
+  let projectVaultSourceIds: string[] | undefined;
+  if (piece.project_id) {
+    const { data: project, error: projectError } = await admin
+      .from("content_projects")
+      .select("id,vault_source_ids")
+      .eq("id", piece.project_id)
+      .eq("client_id", parsed.data.client_id)
+      .maybeSingle();
+    if (projectError) {
+      return NextResponse.json({ error: "The connected project could not be loaded." }, { status: 503 });
+    }
+    if (!project) {
+      return NextResponse.json({ error: "The connected project was not found." }, { status: 409 });
+    }
+    projectVaultSourceIds = project.vault_source_ids ?? [];
+  }
   const resolvedBrief = {
     ...existingBrief,
     version: 1,
-    objective: parsed.data.instruction,
     tone: existingBrief.tone ?? "professional",
     length: existingBrief.length ?? "medium",
     mode: "new",
-    additionalGuidance: parsed.data.scope === "section"
-      ? "Rewrite only the selected section. Return only its replacement text."
-      : "Rewrite the complete draft. Return the complete replacement draft.",
+    additionalGuidance: [
+      typeof existingBrief.additionalGuidance === "string"
+        ? existingBrief.additionalGuidance
+        : "",
+      `Editorial rewrite instruction: ${parsed.data.instruction}`,
+      parsed.data.scope === "section"
+        ? "Rewrite only the selected section. Return only its replacement text."
+        : "Rewrite the complete draft. Return the complete replacement draft.",
+    ].filter(Boolean).join("\n"),
   };
   const edgeResponse = await proxyToEdgeFunction("content-generate", {
     clientId: parsed.data.client_id,
@@ -100,6 +121,10 @@ export const POST = withAuth(async (req, { user }) => {
     persist: false,
     brief: resolvedBrief,
     sourceContext: target,
+    projectId: piece.project_id ?? undefined,
+    vaultSourceIds: projectVaultSourceIds,
+    parentPieceId: piece.id,
+    generationKind: "rewrite",
   });
   const generated = await edgeResponse.json() as {
     error?: string;
@@ -124,9 +149,9 @@ export const POST = withAuth(async (req, { user }) => {
       p_actor_id: user.id,
       p_expected_updated_at: parsed.data.expected_updated_at,
       p_body: nextBody,
-      p_content_brief: resolvedBrief,
+      p_content_brief: existingBrief,
       p_source_references: sourceReferences,
-      p_style_snapshot: generated.styleSnapshot ?? {},
+      p_style_snapshot: piece.style_snapshot ?? generated.styleSnapshot ?? {},
       p_reason: parsed.data.scope === "section" ? "section rewrite" : "full rewrite",
     })
     .single();

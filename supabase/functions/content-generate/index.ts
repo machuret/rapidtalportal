@@ -12,6 +12,9 @@ import { retrieveContentVault } from "../_shared/content-vault-retrieval.ts";
 import {
   createContentStyleSnapshot,
   resolveContentStyle,
+  type ContentHardRule,
+  type ContentStyleAnalysisProvenance,
+  type ResolvedContentStyle,
 } from "../_shared/content-style.ts";
 import {
   CONTENT_TYPE_INSTRUCTIONS,
@@ -68,7 +71,46 @@ function uniqueStrings(value: unknown): string[] | null {
 }
 
 function sameStringSet(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((value) => right.includes(value));
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  return (
+    leftSet.size === left.length &&
+    rightSet.size === right.length &&
+    leftSet.size === rightSet.size &&
+    [...leftSet].every((value) => rightSet.has(value))
+  );
+}
+
+function resolvedStyleFromSnapshot(raw: unknown, channel: string): ResolvedContentStyle | null {
+  const snapshot = record(raw);
+  if (!snapshot || snapshot.channel !== channel) return null;
+  const summary = Array.isArray(snapshot.summary)
+    ? snapshot.summary.filter((item): item is string => typeof item === "string").slice(0, 100)
+    : [];
+  const hardRules = Array.isArray(snapshot.hardRules)
+    ? snapshot.hardRules.filter(
+        (item): item is ContentHardRule =>
+          !!item && typeof item === "object" && !Array.isArray(item),
+      ).slice(0, 100)
+    : [];
+  const prohibitedPhrases = Array.isArray(snapshot.prohibitedPhrases)
+    ? snapshot.prohibitedPhrases
+      .filter((item): item is string => typeof item === "string")
+      .slice(0, 100)
+    : [];
+  const prompt = typeof snapshot.prompt === "string" && snapshot.prompt.length <= 20_000
+    ? snapshot.prompt
+    : summary.join("\n");
+  if (!summary.length || !prompt) return null;
+  const styleAnalysis = record(snapshot.styleAnalysis) as ContentStyleAnalysisProvenance | null;
+  return {
+    summary,
+    prompt,
+    hardRules,
+    prohibitedPhrases,
+    disallowEmoji: snapshot.disallowEmoji === true,
+    styleAnalysis,
+  };
 }
 
 // A content brief may carry market inspiration, but it must reference the exact
@@ -85,6 +127,8 @@ async function validateMarketIntelligence(admin: any, clientId: string, value: u
     provenance.reportSchemaVersion !== 2 ||
     typeof provenance.runId !== "string" ||
     typeof provenance.ideaTitle !== "string" ||
+    typeof provenance.whyValuable !== "string" ||
+    typeof provenance.differentiation !== "string" ||
     !["low", "medium", "high"].includes(String(provenance.confidence)) ||
     !["new", "adjacent", "overlap"].includes(String(provenance.novelty))
   ) return "Market intelligence provenance is malformed.";
@@ -120,6 +164,8 @@ async function validateMarketIntelligence(admin: any, clientId: string, value: u
     : [];
   const idea = ideas.find((candidate) =>
     candidate.title === provenance.ideaTitle &&
+    candidate.why_valuable === provenance.whyValuable &&
+    candidate.differentiation === provenance.differentiation &&
     candidate.confidence === provenance.confidence &&
     candidate.novelty === provenance.novelty);
   if (!idea) return "The selected idea is not part of the verified report.";
@@ -283,6 +329,15 @@ export async function handleContentGenerateRequest(
       : undefined;
     const requestedGenerationKind = body.generationKind;
     const parentPieceId = typeof body.parentPieceId === "string" ? body.parentPieceId : null;
+    const connectedRewrite =
+      projectId !== null &&
+      requestedGenerationKind === "rewrite" &&
+      persist === false;
+    const connectedAdaptation =
+      projectId !== null &&
+      requestedGenerationKind === "adaptation" &&
+      persist === false;
+    const connectedDerivedGeneration = connectedRewrite || connectedAdaptation;
     const rawBrief = body.brief;
     const structuredBrief =
       rawBrief && typeof rawBrief === "object" && !Array.isArray(rawBrief)
@@ -365,9 +420,10 @@ export async function handleContentGenerateRequest(
       });
     }
 
+    let projectStyleSnapshot: unknown = null;
     if (projectId) {
       if (
-        !persist ||
+        (!persist && !connectedDerivedGeneration) ||
         !UUID_RE.test(projectId) ||
         !selectedVaultSourceIds ||
         selectedVaultSourceIds.some((id) => !UUID_RE.test(id))
@@ -379,7 +435,7 @@ export async function handleContentGenerateRequest(
       }
       const { data: project, error: projectError } = await admin
         .from("content_projects")
-        .select("id,status,content_brief,vault_source_ids")
+        .select("id,status,content_brief,vault_source_ids,style_snapshot")
         .eq("id", projectId)
         .eq("client_id", clientId)
         .maybeSingle();
@@ -395,7 +451,10 @@ export async function handleContentGenerateRequest(
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (!["active", "saved"].includes(project.status)) {
+      if (
+        !["active", "saved"].includes(project.status) &&
+        !(connectedAdaptation && ["approved", "archived"].includes(project.status))
+      ) {
         return new Response(JSON.stringify({ error: "This content project cannot generate a new draft." }), {
           status: 422,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -407,6 +466,7 @@ export async function handleContentGenerateRequest(
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      projectStyleSnapshot = project.style_snapshot;
     }
 
     const marketIntelligenceError = await validateMarketIntelligence(
@@ -431,7 +491,7 @@ export async function handleContentGenerateRequest(
       }
       const { data: parent, error: parentError } = await admin
         .from("content_pieces")
-        .select("id")
+        .select("id,project_id")
         .eq("id", parentPieceId)
         .eq("client_id", clientId)
         .maybeSingle();
@@ -447,7 +507,39 @@ export async function handleContentGenerateRequest(
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      if (connectedAdaptation && parent.project_id !== projectId) {
+        return new Response(JSON.stringify({ error: "The adaptation source does not belong to this project." }), {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       generationKind = "adaptation";
+    } else if (connectedRewrite) {
+      if (!parentPieceId || !UUID_RE.test(parentPieceId)) {
+        return new Response(JSON.stringify({ error: "A valid connected draft is required for rewriting." }), {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: parent, error: parentError } = await admin
+        .from("content_pieces")
+        .select("id,project_id")
+        .eq("id", parentPieceId)
+        .eq("client_id", clientId)
+        .maybeSingle();
+      if (parentError) {
+        return new Response(JSON.stringify({ error: "Content lineage is temporarily unavailable." }), {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!parent || parent.project_id !== projectId) {
+        return new Response(JSON.stringify({ error: "The connected draft does not belong to this project." }), {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      generationKind = "rewrite";
     }
 
     // ── Fetch context: DNA + category-relevant vault items ──────────────────────
@@ -569,12 +661,20 @@ export async function handleContentGenerateRequest(
     }
 
     // ── OpenAI generation ─────────────────────────────────────────────────────
-    const style = resolveContentStyle(
-      resolvedDna,
-      contentType,
-      tone,
-      CONTENT_LENGTH_HINTS[length] ?? "",
-    );
+    const style = connectedRewrite
+      ? resolvedStyleFromSnapshot(projectStyleSnapshot, contentType) ??
+        resolveContentStyle(
+          resolvedDna,
+          contentType,
+          tone,
+          CONTENT_LENGTH_HINTS[length] ?? "",
+        )
+      : resolveContentStyle(
+        resolvedDna,
+        contentType,
+        tone,
+        CONTENT_LENGTH_HINTS[length] ?? "",
+      );
     const baseTemplate = await promptOverride(admin, "content.generate", DEFAULT_SYSTEM);
     const complete = async (request: ContentModelRequest): Promise<string> => {
       const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
@@ -604,6 +704,8 @@ export async function handleContentGenerateRequest(
           ...contentBrief,
           marketIntelligence: {
             ideaTitle: marketIntelligence.ideaTitle,
+            whyValuable: marketIntelligence.whyValuable,
+            differentiation: marketIntelligence.differentiation,
             confidence: marketIntelligence.confidence,
             novelty: marketIntelligence.novelty,
             competitorSourceCount: Array.isArray(marketIntelligence.competitorSources)

@@ -43,6 +43,7 @@ interface ContentStudioProps {
   history: ContentPiece[];
   topics: ContentTopic[];
   projects: ContentProject[];
+  vaultGaps: string[];
 }
 
 function projectProgress(project: ContentProject): string {
@@ -60,6 +61,7 @@ function ContentStudioInner({
   history: initialHistory,
   topics: initialTopics,
   projects: initialProjects,
+  vaultGaps,
 }: ContentStudioProps) {
   const [view, setView] = useState<DiscoverView>("ideas");
   const [history, setHistory] = useState<ContentPiece[]>(initialHistory);
@@ -70,6 +72,7 @@ function ContentStudioInner({
   const [manualType, setManualType] = useState<ContentType>("linkedin");
   const [showManual, setShowManual] = useState(false);
   const [ideaGenerationRequest, setIdeaGenerationRequest] = useState(0);
+  const [showAllProjects, setShowAllProjects] = useState(false);
 
   const unfinished = useMemo(
     () => projects.filter((project) => ["active", "saved"].includes(project.status)),
@@ -169,6 +172,19 @@ function ContentStudioInner({
     }
   }, [createProject, manualTitle, manualType]);
 
+  const handleVaultGapSelected = useCallback(async (question: string) => {
+    await createProject({
+      version: 1,
+      origin: "company_topic",
+      title: question,
+      channel: "linkedin",
+      rationale: "The team asked this question and the company Vault could not answer it.",
+      differentiation: "Turn a demonstrated knowledge gap into a useful company-led explanation.",
+      evidenceSummary: "Observed as an unanswered question in the company Vault.",
+      marketIntelligence: null,
+    });
+  }, [createProject]);
+
   const handleContentGenerated = useCallback((piece: ContentPiece) => {
     setHistory((previous) => [piece, ...previous.filter((item) => item.id !== piece.id)]);
   }, []);
@@ -219,7 +235,7 @@ function ContentStudioInner({
 
         {unfinished.length > 0 ? (
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
-            {unfinished.slice(0, 6).map((project) => (
+            {(showAllProjects ? unfinished : unfinished.slice(0, 6)).map((project) => (
               <button key={project.id} type="button" onClick={() => openProject(project.id)} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-left transition-colors hover:border-purple-500/40 hover:bg-zinc-800/70">
                 <div className="flex items-center justify-between gap-3">
                   <span className="rounded-full bg-purple-500/10 px-2 py-1 text-2xs font-medium uppercase text-purple-300">{projectProgress(project)}</span>
@@ -229,6 +245,15 @@ function ContentStudioInner({
                 <p className="mt-2 text-xs capitalize text-zinc-500">{project.idea_snapshot.channel} · {project.idea_snapshot.origin.replaceAll("_", " ")}</p>
               </button>
             ))}
+            {unfinished.length > 6 && (
+              <Button
+                variant="ghost"
+                className="sm:col-span-2 xl:col-span-3"
+                onClick={() => setShowAllProjects((value) => !value)}
+              >
+                {showAllProjects ? "Show recent projects" : `View all ${unfinished.length} unfinished projects`}
+              </Button>
+            )}
           </div>
         ) : (
           <div className="mt-4 rounded-xl border border-dashed border-zinc-800 py-8 text-center">
@@ -252,14 +277,43 @@ function ContentStudioInner({
 
       {view === "ideas" && (
         <ContentErrorBoundary>
-          <TopicsTab
-            clientId={clientId}
-            canApprove={canApprove}
-            initialTopics={initialTopics}
-            regenerateRequest={ideaGenerationRequest}
-            onTopicSelected={handleTopicSelected}
-            onOpenIntelligence={() => setView("competitors")}
-          />
+          <div className="space-y-5">
+            <section className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
+              <div>
+                <p className="text-sm font-medium text-blue-200">Observed Vault gaps</p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Real questions the team asked that the Vault could not answer.
+                </p>
+              </div>
+              {vaultGaps.length ? (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {vaultGaps.map((question) => (
+                    <button
+                      key={question}
+                      type="button"
+                      onClick={() => void handleVaultGapSelected(question)}
+                      className="rounded-lg border border-blue-500/20 bg-zinc-950 p-3 text-left text-sm text-zinc-300 hover:border-blue-400/50"
+                    >
+                      <span className="block text-xs text-blue-300">Build an idea from this gap</span>
+                      <span className="mt-1 block">{question}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 rounded-lg border border-dashed border-zinc-800 p-4 text-sm text-zinc-500">
+                  No unanswered Vault questions are currently recorded.
+                </p>
+              )}
+            </section>
+            <TopicsTab
+              clientId={clientId}
+              canApprove={canApprove}
+              initialTopics={initialTopics}
+              regenerateRequest={ideaGenerationRequest}
+              onTopicSelected={handleTopicSelected}
+              onOpenIntelligence={() => setView("competitors")}
+            />
+          </div>
         </ContentErrorBoundary>
       )}
 

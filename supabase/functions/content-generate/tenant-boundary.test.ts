@@ -135,6 +135,8 @@ Deno.test("content-generate rejects another tenant's market-intelligence provena
             runId: "44444444-4444-4444-8444-444444444444",
             reportSchemaVersion: 2,
             ideaTitle: "Another tenant's idea",
+            whyValuable: "The report identifies a timely and relevant opportunity.",
+            differentiation: "The company can address it with a distinct evidence-led view.",
             confidence: "high",
             novelty: "new",
             competitorIds: ["55555555-5555-4555-8555-555555555555"],

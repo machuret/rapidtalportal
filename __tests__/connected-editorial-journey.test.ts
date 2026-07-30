@@ -67,7 +67,7 @@ describe("connected editorial journey", () => {
     expect(studio).toContain("Competitor opportunities");
     expect(studio).toContain("Drafts &amp; approved library");
     expect(studio).toContain("openProject");
-    expect(workflow).toContain("Saved automatically · recoverable on any device");
+    expect(workflow).toContain("Project saved · recoverable on any device");
     for (const step of ["Idea", "Brief", "Evidence", "Generate", "Edit", "Validate", "Approve"]) {
       expect(workflow).toContain(`label: "${step}"`);
     }
@@ -107,6 +107,8 @@ describe("connected editorial journey", () => {
       runId: "22222222-2222-4222-8222-222222222222",
       reportSchemaVersion: 2,
       ideaTitle: "A verified opportunity",
+      whyValuable: "The market evidence shows a useful, timely audience need.",
+      differentiation: "The company can answer it with a specific evidence-led angle.",
       confidence: "high",
       novelty: "new",
       competitorIds: [duplicateId, duplicateId],

@@ -68,6 +68,17 @@ interface ContentProjectWorkflowProps {
   onContentGenerated: (piece: ContentPiece) => void;
 }
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
 function isBrief(value: ContentProject["content_brief"]): value is ContentBrief {
   return (
     !!value &&
@@ -123,11 +134,17 @@ export function ContentProjectWorkflow({
   onContentGenerated,
 }: ContentProjectWorkflowProps) {
   const [busy, setBusy] = useState(false);
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
+  const [draftDirty, setDraftDirty] = useState(false);
   const [evidence, setEvidence] = useState<ContentEvidenceOption[]>([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [history, setHistory] = useState<ContentPiece[]>(
-    project.current_piece ? [project.current_piece] : [],
+    project.pieces?.length
+      ? project.pieces
+      : project.current_piece
+        ? [project.current_piece]
+        : [],
   );
   const { generate, isGenerating } = useGenerateContent();
 
@@ -145,13 +162,20 @@ export function ContentProjectWorkflow({
   );
 
   useEffect(() => {
-    setHistory(project.current_piece ? [project.current_piece] : []);
-  }, [project.current_piece]);
+    setHistory(
+      project.pieces?.length
+        ? project.pieces
+        : project.current_piece
+          ? [project.current_piece]
+          : [],
+    );
+  }, [project.current_piece, project.pieces]);
 
   const patchProject = useCallback(async (
     updates: Record<string, unknown>,
   ): Promise<ContentProject | null> => {
     setBusy(true);
+    setSaveState("saving");
     try {
       const updated = await api.patch<ContentProject>(ROUTES.content.projects(), {
         client_id: clientId,
@@ -160,8 +184,10 @@ export function ContentProjectWorkflow({
         ...updates,
       });
       onProjectChange(updated);
+      setSaveState("saved");
       return updated;
     } catch {
+      setSaveState("error");
       return null;
     } finally {
       setBusy(false);
@@ -223,6 +249,71 @@ export function ContentProjectWorkflow({
     objective,
     tone,
   ]);
+  const briefDirty =
+    project.current_step === "brief" &&
+    canonicalJson(project.content_brief) !== canonicalJson(brief);
+  const evidenceDirty = project.current_step === "evidence" && (() => {
+    const selected = [...selectedSourceIds].sort();
+    const persisted = [...project.vault_source_ids].sort();
+    return (
+      selected.length !== persisted.length ||
+      selected.some((value, index) => value !== persisted[index])
+    );
+  })();
+  const projectDirty = briefDirty || evidenceDirty;
+
+  useEffect(() => {
+    if (!projectDirty && saveState !== "saving") return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [projectDirty, saveState]);
+
+  const closeWorkflow = useCallback(() => {
+    if (
+      (projectDirty || saveState === "saving" || saveState === "error") &&
+      !window.confirm("This project still has changes that may not be saved. Leave anyway?")
+    ) return;
+    onClose();
+  }, [onClose, projectDirty, saveState]);
+
+  useEffect(() => {
+    if (
+      project.current_step !== "brief" ||
+      brief.objective.length < 3 ||
+      busy ||
+      saveState === "error"
+    ) return;
+    if (canonicalJson(project.content_brief) === canonicalJson(brief)) return;
+    const timer = window.setTimeout(() => {
+      void patchProject({ content_brief: brief, status: "active" });
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [brief, busy, patchProject, project.content_brief, project.current_step, saveState]);
+
+  useEffect(() => {
+    if (project.current_step !== "evidence" || busy || saveState === "error") return;
+    const selected = [...selectedSourceIds].sort();
+    const persisted = [...project.vault_source_ids].sort();
+    if (
+      selected.length === persisted.length &&
+      selected.every((value, index) => value === persisted[index])
+    ) return;
+    const timer = window.setTimeout(() => {
+      void patchProject({ vault_source_ids: selected });
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [busy, patchProject, project.current_step, project.vault_source_ids, saveState, selectedSourceIds]);
+
+  const retryProjectSave = useCallback(() => {
+    if (project.current_step === "brief") {
+      void patchProject({ content_brief: brief, status: "active" });
+    } else if (project.current_step === "evidence") {
+      void patchProject({ vault_source_ids: [...selectedSourceIds] });
+    }
+  }, [brief, patchProject, project.current_step, selectedSourceIds]);
 
   const handleSaveBrief = useCallback(async () => {
     if (brief.objective.length < 3 || !brief.audience || !brief.angle || !brief.callToAction || !brief.desiredFormat) {
@@ -301,6 +392,11 @@ export function ContentProjectWorkflow({
     }
   }, [loadProject]);
 
+  const handleDerivedArtifactCreated = useCallback((piece: ContentPiece) => {
+    onContentGenerated(piece);
+    void loadProject();
+  }, [loadProject, onContentGenerated]);
+
   if (project.status === "rejected") {
     return (
       <div className="space-y-5">
@@ -335,6 +431,7 @@ export function ContentProjectWorkflow({
             initialSelectedId={project.current_piece_id}
             onBackToWorkflow={onClose}
             onPieceStatusChanged={handlePieceStatusChanged}
+            onArtifactCreated={handleDerivedArtifactCreated}
           />
         )}
       </div>
@@ -344,12 +441,24 @@ export function ContentProjectWorkflow({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="ghost" onClick={closeWorkflow}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Content Studio
         </Button>
         <div className="text-right">
           <p className="text-sm font-semibold text-white">{project.title}</p>
-          <p className="text-xs text-zinc-500">Saved automatically · recoverable on any device</p>
+          {saveState === "error" ? (
+            <button type="button" onClick={retryProjectSave} className="text-xs text-red-300 underline underline-offset-2">
+              Project save failed — retry
+            </button>
+          ) : (
+            <p className="text-xs text-zinc-500">
+              {saveState === "saving"
+                ? "Saving project…"
+                : projectDirty
+                  ? "Unsaved changes · saving shortly"
+                  : "Project saved · recoverable on any device"}
+            </p>
+          )}
         </div>
       </div>
       <ProjectProgress project={project} />
@@ -481,9 +590,12 @@ export function ContentProjectWorkflow({
         <div className="space-y-4">
           <div className="flex items-center justify-between rounded-xl border border-purple-500/20 bg-purple-500/5 p-4">
             <div><p className="font-medium text-purple-200">Edit and refine</p><p className="text-xs text-zinc-500">Inline edits and rewrites retain the project’s brief, evidence and style provenance.</p></div>
-            <Button onClick={() => patchProject({ current_step: "validate" })}>Validate draft <ArrowRight className="ml-2 h-4 w-4" /></Button>
+            <div className="text-right">
+              {draftDirty && <p className="mb-1 text-xs text-amber-300">Save the draft before validation.</p>}
+              <Button disabled={draftDirty || busy} onClick={() => patchProject({ current_step: "validate" })}>Validate draft <ArrowRight className="ml-2 h-4 w-4" /></Button>
+            </div>
           </div>
-          <HistoryTab history={history} clientId={clientId} canApprove={false} onHistoryUpdate={setHistory} initialSelectedId={project.current_piece_id} onBackToWorkflow={() => patchProject({ current_step: "generate" })} />
+          <HistoryTab history={history} clientId={clientId} canApprove={false} onHistoryUpdate={setHistory} initialSelectedId={project.current_piece_id} onBackToWorkflow={() => patchProject({ current_step: "generate" })} onDirtyChange={setDraftDirty} onArtifactCreated={handleDerivedArtifactCreated} />
         </div>
       )}
 
@@ -510,7 +622,7 @@ export function ContentProjectWorkflow({
             <p className="flex items-center gap-2 font-medium text-green-300"><FileText className="h-4 w-4" /> Final approval</p>
             <p className="mt-1 text-xs text-zinc-400">{canApprove ? "Review the connected draft, then approve it below." : "A client approver must complete this final step."}</p>
           </div>
-          <HistoryTab history={history} clientId={clientId} canApprove={canApprove} onHistoryUpdate={setHistory} initialSelectedId={project.current_piece_id} onBackToWorkflow={() => patchProject({ current_step: "validate" })} onPieceStatusChanged={handlePieceStatusChanged} />
+          <HistoryTab history={history} clientId={clientId} canApprove={canApprove} onHistoryUpdate={setHistory} initialSelectedId={project.current_piece_id} onBackToWorkflow={() => patchProject({ current_step: "validate" })} onPieceStatusChanged={handlePieceStatusChanged} onDirtyChange={setDraftDirty} onArtifactCreated={handleDerivedArtifactCreated} />
         </div>
       )}
     </div>

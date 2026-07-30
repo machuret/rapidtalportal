@@ -17,6 +17,8 @@ export const contentMarketIntelligenceSchema = z.object({
   runId: z.uuid(),
   reportSchemaVersion: z.literal(2),
   ideaTitle: z.string().trim().min(1).max(220),
+  whyValuable: z.string().trim().min(1).max(2000),
+  differentiation: z.string().trim().min(1).max(2000),
   confidence: z.enum(["low", "medium", "high"]),
   novelty: z.enum(["new", "adjacent", "overlap"]),
   competitorIds: z.array(z.uuid()).min(1).max(12),

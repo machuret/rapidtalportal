@@ -24,6 +24,9 @@ const CLIENT_A = "11111111-1111-4111-8111-111111111111";
 const CLIENT_B = "22222222-2222-4222-8222-222222222222";
 const PIECE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const CHILD_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const PROJECT_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const SOURCE_OLD = "10000000-0000-4000-8000-000000000001";
+const SOURCE_NEW = "10000000-0000-4000-8000-000000000002";
 const USER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const UPDATED_AT = "2026-07-28T01:00:00.000Z";
 const NEXT_UPDATED_AT = "2026-07-28T01:01:00.000Z";
@@ -108,6 +111,8 @@ describe("unified content generation boundary", () => {
             runId: "30000000-0000-4000-8000-000000000001",
             reportSchemaVersion: 2,
             ideaTitle: "Evidence-backed idea",
+            whyValuable: "The evidence shows a timely market opportunity.",
+            differentiation: "The company can add a transparent evidence-led perspective.",
             confidence: "medium",
             novelty: "adjacent",
             competitorIds: ["33333333-3333-4333-8333-333333333333"],
@@ -167,6 +172,7 @@ describe("unified content generation boundary", () => {
 describe("content rewrite route", () => {
   const piece = {
     id: PIECE_ID,
+    project_id: PROJECT_ID,
     content_type: "linkedin",
     title: "Launch",
     body: "Repeat this. Keep this. Repeat this.",
@@ -177,13 +183,19 @@ describe("content rewrite route", () => {
       tone: "professional",
       length: "medium",
     },
-    source_references: [{ itemId: "source-old", title: "Original", kind: "vault_item" }],
+    source_references: [{ itemId: SOURCE_OLD, title: "Original", kind: "vault_item" }],
+    style_snapshot: { channel: "linkedin", prompt: "Frozen project style" },
     updated_at: UPDATED_AT,
   };
 
   function adminWithRpc(rpcResult: DbResult) {
     return {
-      from: jest.fn(() => chain({ data: piece, error: null })),
+      from: jest.fn((table: string) => chain({
+        data: table === "content_projects"
+          ? { id: PROJECT_ID, vault_source_ids: [SOURCE_OLD, SOURCE_NEW] }
+          : piece,
+        error: null,
+      })),
       rpc: jest.fn(() => chain(rpcResult)),
     };
   }
@@ -192,10 +204,10 @@ describe("content rewrite route", () => {
     const updated = {
       ...piece,
       body: "Repeat this. Keep this. Replacement.",
-      content_brief: { ...piece.content_brief, objective: "Make it clearer" },
+      content_brief: piece.content_brief,
       source_references: [
         piece.source_references[0],
-        { itemId: "source-new", title: "New", kind: "semantic" },
+        { itemId: SOURCE_NEW, title: "New", kind: "semantic" },
       ],
       updated_at: NEXT_UPDATED_AT,
     };
@@ -203,7 +215,7 @@ describe("content rewrite route", () => {
     (createAdminClient as jest.Mock).mockReturnValue(admin);
     (proxyToEdgeFunction as jest.Mock).mockResolvedValue(NextResponse.json({
       body: "Replacement.",
-      sources: [{ itemId: "source-new", title: "New", kind: "semantic" }],
+      sources: [{ itemId: SOURCE_NEW, title: "New", kind: "semantic" }],
       styleSnapshot: { channel: "linkedin" },
     }));
 
@@ -219,14 +231,26 @@ describe("content rewrite route", () => {
     }), routeCtx);
 
     expect(response.status).toBe(200);
+    expect(proxyToEdgeFunction).toHaveBeenCalledWith("content-generate", expect.objectContaining({
+      projectId: PROJECT_ID,
+      vaultSourceIds: [SOURCE_OLD, SOURCE_NEW],
+      parentPieceId: PIECE_ID,
+      generationKind: "rewrite",
+      persist: false,
+      brief: expect.objectContaining({
+        objective: "Original objective",
+        additionalGuidance: expect.stringContaining("Editorial rewrite instruction: Make it clearer"),
+      }),
+    }));
     expect(admin.rpc).toHaveBeenCalledWith("commit_content_piece_rewrite", expect.objectContaining({
       p_expected_updated_at: UPDATED_AT,
       p_body: "Repeat this. Keep this. Replacement.",
-      p_content_brief: expect.objectContaining({ objective: "Make it clearer" }),
+      p_content_brief: expect.objectContaining({ objective: "Original objective" }),
       p_source_references: expect.arrayContaining([
-        expect.objectContaining({ itemId: "source-old" }),
-        expect.objectContaining({ itemId: "source-new" }),
+        expect.objectContaining({ itemId: SOURCE_OLD }),
+        expect.objectContaining({ itemId: SOURCE_NEW }),
       ]),
+      p_style_snapshot: piece.style_snapshot,
     }));
   });
 
@@ -313,11 +337,65 @@ describe("content adaptation route", () => {
     expect(admin.from).toHaveBeenCalledTimes(1);
     expect(await response.json()).toMatchObject(created);
   });
+
+  test("atomically reopens a connected project around an adapted draft", async () => {
+    const source = {
+      project_id: PROJECT_ID,
+      title: "Source",
+      body: "A long source body",
+      content_brief: { version: 1, objective: "Explain it", tone: "friendly", length: "long" },
+      updated_at: UPDATED_AT,
+    };
+    const project = { id: PROJECT_ID, vault_source_ids: [SOURCE_OLD] };
+    const rpcResult = {
+      id: CHILD_ID,
+      project_id: PROJECT_ID,
+      content_type: "facebook",
+      title: "Source — facebook",
+      status: "draft",
+      generation_kind: "adaptation",
+      parent_piece_id: PIECE_ID,
+      created_at: NEXT_UPDATED_AT,
+    };
+    const admin = {
+      from: jest.fn((table: string) => chain({
+        data: table === "content_projects" ? project : source,
+        error: null,
+      })),
+      rpc: jest.fn(() => chain({ data: rpcResult, error: null })),
+    };
+    (createAdminClient as jest.Mock).mockReturnValue(admin);
+    (proxyToEdgeFunction as jest.Mock).mockResolvedValue(NextResponse.json({
+      body: "Adapted body",
+      sources: [{ itemId: SOURCE_OLD, title: "Original", kind: "vault_item" }],
+      styleSnapshot: { channel: "facebook", prompt: "Frozen Facebook style" },
+    }));
+
+    const response = await adapt(jsonReq({
+      client_id: CLIENT_A,
+      id: PIECE_ID,
+      target_type: "facebook",
+    }), routeCtx);
+
+    expect(response.status).toBe(201);
+    expect(proxyToEdgeFunction).toHaveBeenCalledWith("content-generate", expect.objectContaining({
+      projectId: PROJECT_ID,
+      vaultSourceIds: [SOURCE_OLD],
+      persist: false,
+    }));
+    expect(admin.rpc).toHaveBeenCalledWith("create_content_project_derived_draft", expect.objectContaining({
+      p_project_id: PROJECT_ID,
+      p_parent_piece_id: PIECE_ID,
+      p_generation_kind: "adaptation",
+      p_source_references: [expect.objectContaining({ itemId: SOURCE_OLD })],
+    }));
+  });
 });
 
 describe("duplicate and revision tenant boundaries", () => {
   test("duplicates provenance and lineage in one insert", async () => {
     const source = {
+      project_id: null,
       content_type: "linkedin",
       title: "Source",
       brief: "Brief",
@@ -353,6 +431,42 @@ describe("duplicate and revision tenant boundaries", () => {
       parent_piece_id: PIECE_ID,
       generation_kind: "duplicate",
       content_brief: source.content_brief,
+    }));
+  });
+
+  test("keeps connected duplicates recoverable through the project RPC", async () => {
+    const source = {
+      project_id: PROJECT_ID,
+      content_type: "linkedin",
+      title: "Source",
+      brief: "Brief",
+      body: "Body",
+      content_brief: { version: 1, objective: "Explain it", tone: "professional", length: "short" },
+      source_references: [{ itemId: SOURCE_OLD }],
+      style_snapshot: { channel: "linkedin", prompt: "Frozen style" },
+    };
+    const admin = {
+      from: jest.fn(() => chain({ data: source, error: null })),
+      rpc: jest.fn(() => chain({
+        data: {
+          id: CHILD_ID,
+          project_id: PROJECT_ID,
+          generation_kind: "duplicate",
+        },
+        error: null,
+      })),
+    };
+    (createAdminClient as jest.Mock).mockReturnValue(admin);
+
+    const response = await duplicate(jsonReq({ client_id: CLIENT_A, id: PIECE_ID }), routeCtx);
+
+    expect(response.status).toBe(201);
+    expect(admin.rpc).toHaveBeenCalledWith("create_content_project_derived_draft", expect.objectContaining({
+      p_project_id: PROJECT_ID,
+      p_parent_piece_id: PIECE_ID,
+      p_generation_kind: "duplicate",
+      p_content_brief: source.content_brief,
+      p_style_snapshot: source.style_snapshot,
     }));
   });
 

@@ -48,6 +48,8 @@ interface HistoryTabProps {
   initialSelectedId?: string | null;
   onBackToWorkflow?: () => void;
   onPieceStatusChanged?: (piece: ContentPieceFull) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onArtifactCreated?: (piece: ContentPiece) => void;
 }
 
 /* ── List item ──────────────────────────────────────────────────── */
@@ -97,6 +99,7 @@ function PieceDetail({
   onStatusChanged,
   onArtifactCreated,
   onPieceChanged,
+  onDirtyChange,
 }: {
   piece: ContentPieceFull;
   clientId: string;
@@ -105,6 +108,7 @@ function PieceDetail({
   onStatusChanged: (id: string, status: ContentStatus) => void;
   onArtifactCreated: (piece: ContentPiece) => void;
   onPieceChanged: (piece: ContentPieceFull) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [body, setBody] = useState(piece.body ?? "");
@@ -156,6 +160,21 @@ function PieceDetail({
   }, [clientId, piece.id]);
 
   useEffect(() => { void loadRevisions(); }, [loadRevisions]);
+
+  const dirty = body !== persistedBody;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [dirty]);
 
   const TypeIcon = TYPE_ICONS[piece.content_type] || BookText;
   const iconColor = TYPE_ICON_COLORS[piece.content_type] || "text-zinc-400";
@@ -262,6 +281,10 @@ function PieceDetail({
 
   const handleStatusChange = useCallback(
     async (newStatus: ContentStatus) => {
+      if (dirty) {
+        toast.error("Save or discard the current edit before changing status.");
+        return;
+      }
       try {
         const updated = await updateStatus({
           client_id: clientId,
@@ -277,7 +300,7 @@ function PieceDetail({
         // error toast handled by the mutation
       }
     },
-    [updateStatus, clientId, piece.id, currentUpdatedAt, persistedBody, onStatusChanged, onPieceChanged]
+    [dirty, updateStatus, clientId, piece.id, currentUpdatedAt, persistedBody, onStatusChanged, onPieceChanged]
   );
 
   return (
@@ -286,7 +309,9 @@ function PieceDetail({
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={onBack}
+          onClick={() => {
+            if (!dirty || window.confirm("Discard your unsaved draft changes?")) onBack();
+          }}
           className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -346,7 +371,8 @@ function PieceDetail({
         </button>
         <button
           onClick={duplicate}
-          className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800"
+          disabled={dirty}
+          className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 disabled:opacity-40"
         >
           <CopyPlus className="w-3.5 h-3.5" /> Duplicate
         </button>
@@ -360,7 +386,7 @@ function PieceDetail({
               .filter((type) => type !== piece.content_type)
               .map((type) => <option key={type} value={type}>{type}</option>)}
           </select>
-          <button onClick={adapt} className="h-8 px-2 text-xs text-purple-300 hover:bg-zinc-800 border-l border-zinc-700">
+          <button disabled={dirty} onClick={adapt} className="h-8 px-2 text-xs text-purple-300 hover:bg-zinc-800 border-l border-zinc-700 disabled:opacity-40">
             Adapt
           </button>
         </div>
@@ -369,7 +395,7 @@ function PieceDetail({
           <Button
             size="sm"
             onClick={() => handleStatusChange("approved")}
-            disabled={isUpdating}
+            disabled={isUpdating || dirty}
             className="bg-green-600 hover:bg-green-700 text-white border-0 text-xs h-8"
           >
             {isUpdating ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5 mr-1.5" />}
@@ -382,7 +408,7 @@ function PieceDetail({
             size="sm"
             variant="ghost"
             onClick={() => handleStatusChange("archived")}
-            disabled={isUpdating}
+            disabled={isUpdating || dirty}
             className="text-xs h-8 text-zinc-400 hover:text-zinc-200"
           >
             <Archive className="w-3.5 h-3.5 mr-1.5" />
@@ -466,6 +492,12 @@ function PieceDetail({
             {piece.content_brief.marketIntelligence.confidence} confidence ·{" "}
             {piece.content_brief.marketIntelligence.novelty} relative to company content
           </p>
+          <p className="mt-2 text-xs leading-5 text-zinc-400">
+            {piece.content_brief.marketIntelligence.whyValuable}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-orange-100/80">
+            Differentiation: {piece.content_brief.marketIntelligence.differentiation}
+          </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {piece.content_brief.marketIntelligence.competitorSources.map((source) => (
               <a
@@ -511,14 +543,18 @@ function PieceDetail({
               placeholder="e.g. Lead with the customer benefit and make it more direct"
               className="bg-zinc-950 border-zinc-700 h-9 text-sm"
             />
-            <Button size="sm" variant="outline" disabled={rewriting || !rewriteInstruction.trim()} onClick={() => rewrite("section")}>
+            <Button size="sm" variant="outline" disabled={dirty || rewriting || !rewriteInstruction.trim()} onClick={() => rewrite("section")}>
               Rewrite selection
             </Button>
-            <Button size="sm" variant="outline" disabled={rewriting || !rewriteInstruction.trim()} onClick={() => rewrite("full")}>
+            <Button size="sm" variant="outline" disabled={dirty || rewriting || !rewriteInstruction.trim()} onClick={() => rewrite("full")}>
               Rewrite all
             </Button>
           </div>
-          <p className="text-xs text-zinc-600 mt-2">For a section rewrite, select text inside the editor first.</p>
+          <p className={`text-xs mt-2 ${dirty ? "text-amber-300" : "text-zinc-600"}`}>
+            {dirty
+              ? "Save the visible draft before rewriting, duplicating or adapting it."
+              : "For a section rewrite, select text inside the editor first."}
+          </p>
         </div>
       )}
 
@@ -599,6 +635,8 @@ export const HistoryTab = memo(function HistoryTab({
   initialSelectedId = null,
   onBackToWorkflow,
   onPieceStatusChanged,
+  onDirtyChange,
+  onArtifactCreated,
 }: HistoryTabProps) {
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [selectedPiece, setSelectedPiece] = useState<ContentPieceFull | null>(null);
@@ -655,8 +693,12 @@ export const HistoryTab = memo(function HistoryTab({
         canApprove={canApprove}
         onBack={handleBack}
         onStatusChanged={handleStatusChanged}
-        onArtifactCreated={(created) => onHistoryUpdate((previous) => [created, ...previous])}
+        onArtifactCreated={(created) => {
+          onHistoryUpdate((previous) => [created, ...previous]);
+          onArtifactCreated?.(created);
+        }}
         onPieceChanged={setSelectedPiece}
+        onDirtyChange={onDirtyChange}
       />
     );
   }

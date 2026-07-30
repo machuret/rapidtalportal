@@ -235,6 +235,8 @@ export function competitorIdeaToBrief(
         runId: run.id,
         reportSchemaVersion: 2,
         ideaTitle: idea.title,
+        whyValuable: idea.why_valuable,
+        differentiation: idea.differentiation,
         confidence: idea.confidence,
         novelty: idea.novelty,
         competitorIds: idea.competitor_ids,
