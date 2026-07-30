@@ -184,7 +184,7 @@ function negations(tokens: string[]): string {
   return tokens.filter((token) => NEGATION_WORDS.has(token)).sort().join("|");
 }
 
-function sourceQuoteCandidates(source: string): string[] {
+function sourceQuoteCandidates(source: string, targetWords: number): string[] {
   const sentences = source.trim().slice(0, 3500)
     .split(/(?<=[.!?])\s+|\n+/u)
     .map((sentence) => sentence.trim())
@@ -192,7 +192,25 @@ function sourceQuoteCandidates(source: string): string[] {
   const pairs = sentences.slice(0, -1)
     .map((sentence, index) => `${sentence} ${sentences[index + 1]}`)
     .filter((sentence) => sentence.length <= 500);
-  return [...sentences, ...pairs];
+  const raw = source.trim().slice(0, 3500);
+  const words = [...raw.matchAll(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)];
+  const sizes = [...new Set([
+    Math.max(6, targetWords - 6),
+    Math.max(6, targetWords),
+    Math.min(60, targetWords + 6),
+    Math.min(60, targetWords + 12),
+  ])];
+  const windows: string[] = [];
+  for (const size of sizes) {
+    for (let start = 0; start + size <= words.length; start++) {
+      const first = words[start];
+      const last = words[start + size - 1];
+      if (first.index === undefined || last.index === undefined) continue;
+      const candidate = raw.slice(first.index, last.index + last[0].length).trim();
+      if (candidate.length >= 20 && candidate.length <= 500) windows.push(candidate);
+    }
+  }
+  return [...sentences, ...pairs, ...windows];
 }
 
 function resolveExactSourceQuote(quote: string, source: string): string | null {
@@ -202,7 +220,7 @@ function resolveExactSourceQuote(quote: string, source: string): string | null {
   if (requested.length < 4) return null;
   const requestedNegations = negations(requested);
   let best: { quote: string; score: number } | null = null;
-  for (const candidate of sourceQuoteCandidates(rawSource)) {
+  for (const candidate of sourceQuoteCandidates(rawSource, requested.length)) {
     const candidateTokens = evidenceTokens(candidate);
     if (negations(candidateTokens) !== requestedNegations) continue;
     const requestedSet = new Set(requested);
@@ -214,8 +232,8 @@ function resolveExactSourceQuote(quote: string, source: string): string | null {
     const score = Math.min(requestedCoverage, candidateCoverage);
     if (
       shared >= 6 &&
-      requestedCoverage >= 0.8 &&
-      candidateCoverage >= 0.65 &&
+      requestedCoverage >= 0.7 &&
+      candidateCoverage >= 0.55 &&
       (!best || score > best.score)
     ) {
       best = { quote: candidate, score };
@@ -664,14 +682,30 @@ function boundAnalysis(
       source_item_ids: string[];
       evidence_quotes: Array<{ source_item_id: string; quote: string }>;
     },
-  >(entry: T): T => ({
-    ...entry,
-    evidence_quotes: canonicalEvidenceQuotes(
+  >(entry: T): T => {
+    const evidenceQuotes = canonicalEvidenceQuotes(
       entry.source_item_ids,
       entry.evidence_quotes,
       sourceById,
-    ),
-  });
+    );
+    const requiredMatches = Math.ceil((entry.source_item_ids.length * 2) / 3);
+    if (evidenceQuotes.length < requiredMatches) {
+      return { ...entry, source_item_ids: [], evidence_quotes: [] };
+    }
+    const supportedSourceIds = evidenceQuotes.map((quote) => quote.source_item_id);
+    const supportedCompetitorIds = [...new Set(supportedSourceIds.flatMap((sourceId) => {
+      const competitorId = sourceById.get(sourceId)?.competitor_id;
+      return competitorId ? [competitorId] : [];
+    }))];
+    return {
+      ...entry,
+      source_item_ids: supportedSourceIds,
+      evidence_quotes: evidenceQuotes,
+      ...("competitor_ids" in entry
+        ? { competitor_ids: supportedCompetitorIds }
+        : {}),
+    };
+  };
 
   return {
     ...analysis,

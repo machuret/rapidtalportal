@@ -264,6 +264,7 @@ function postDb(options: {
   ready?: boolean;
   modelAnalysis?: CompetitorIntelligence;
   modelResponses?: unknown[];
+  evidenceOverride?: ReturnType<typeof evidenceRows>;
   claimError?: { code: string; message: string } | null;
   dnaError?: { code: string; message: string } | null;
 } = {}) {
@@ -324,7 +325,7 @@ function postDb(options: {
       });
     }
     if (name === "competitor_intelligence_evidence") {
-      return Promise.resolve({ data: evidenceRows(), error: null });
+      return Promise.resolve({ data: options.evidenceOverride ?? evidenceRows(), error: null });
     }
     if (name === "start_competitor_intelligence_job") {
       return Promise.resolve(options.claimError
@@ -482,7 +483,7 @@ test("uses publication-window evidence, exact quotes, company material and an at
   expect(modelBody.messages[1].content).toContain(`capture_version_id="${CAPTURE_IDS[0]}"`);
 });
 
-test("drops a model insight whose quote is not exact while preserving the verified report", async () => {
+test("drops an invalid quote while preserving an insight with enough exact evidence", async () => {
   const invalid = structuredClone(analysis);
   invalid.recommended_ideas[0].evidence_quotes[0].quote =
     "This quote was invented and is not present in the immutable source.";
@@ -498,7 +499,12 @@ test("drops a model insight whose quote is not exact while preserving the verifi
   await expect(response.json()).resolves.toMatchObject({
     run: {
       analysis: {
-        recommended_ideas: [],
+        recommended_ideas: [
+          expect.objectContaining({
+            source_item_ids: SOURCE_IDS.slice(1, 3),
+            evidence_quotes: quotes(SOURCE_IDS.slice(1, 3)),
+          }),
+        ],
       },
     },
   });
@@ -526,7 +532,15 @@ test("resolves a near-exact excerpt to immutable source text without accepting n
   await expect(response.json()).resolves.toMatchObject({
     run: {
       analysis: {
-        recommended_ideas: [],
+        recommended_ideas: [
+          expect.objectContaining({
+            source_item_ids: [SOURCE_IDS[0], SOURCE_IDS[2]],
+            evidence_quotes: [
+              { source_item_id: SOURCE_IDS[0], quote: exactQuote(0) },
+              { source_item_id: SOURCE_IDS[2], quote: exactQuote(2) },
+            ],
+          }),
+        ],
       },
     },
   });
@@ -564,6 +578,45 @@ test("persists the exact captured sentence for a punctuation-only quote variatio
                 source_item_id: SOURCE_IDS[0],
                 quote: exactQuote(0),
               },
+            ]),
+          }),
+        ],
+      }),
+    }),
+  );
+});
+
+test("resolves evidence inside a long page without sentence boundaries", async () => {
+  const rows = evidenceRows();
+  const exact = "Flexible private lending provides property investors with fast access to capital for time sensitive opportunities";
+  rows[0].raw_content =
+    `${"background market context ".repeat(45)}${exact} ${"additional lending detail ".repeat(45)}`;
+  const nearExact = structuredClone(analysis);
+  nearExact.recommended_ideas[0].evidence_quotes[0].quote =
+    "Flexible private lending gives property investors fast capital for time-sensitive opportunities";
+  const { rpc } = postDb({
+    modelAnalysis: nearExact,
+    evidenceOverride: rows,
+  });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(201);
+  expect(rpc).toHaveBeenCalledWith(
+    "complete_competitor_intelligence_job",
+    expect.objectContaining({
+      p_analysis: expect.objectContaining({
+        recommended_ideas: [
+          expect.objectContaining({
+            evidence_quotes: expect.arrayContaining([
+              expect.objectContaining({
+                source_item_id: SOURCE_IDS[0],
+                quote: expect.stringContaining("property investors with fast access to capital"),
+              }),
             ]),
           }),
         ],
