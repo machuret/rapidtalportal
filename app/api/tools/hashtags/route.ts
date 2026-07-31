@@ -42,7 +42,7 @@ export const POST = withTool(
       branded: clean(result.data.branded, 6),
       note: clampStr(result.data.note, 300),
     };
-    logToolRun("hashtags", data.clientId, user.id, data.topic.slice(0, 80), result.tokens, payload);
+    logToolRun("hashtags", data.clientId, user.id, data.topic.slice(0, 80), result.tokens, payload, result.brainContextSnapshotId);
     return NextResponse.json(payload);
   },
 );

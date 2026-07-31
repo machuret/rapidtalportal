@@ -49,7 +49,7 @@ export const POST = withTool(
       preview: stripDashes(String(r.preview ?? "")).slice(0, 200),
       body: stripDashes(String(r.body ?? "")).slice(0, 3000),
     };
-    logToolRun("spintax", data.clientId, user.id, data.brief.slice(0, 80), result.tokens, payload);
+    logToolRun("spintax", data.clientId, user.id, data.brief.slice(0, 80), result.tokens, payload, result.brainContextSnapshotId);
     return NextResponse.json(payload);
   },
 );

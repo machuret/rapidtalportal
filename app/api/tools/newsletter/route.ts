@@ -38,7 +38,7 @@ export const POST = withTool(
       preview: clampStr(result.data.preview, 200),
       body: clampStr(result.data.body, 6000),
     };
-    logToolRun("newsletter", data.clientId, user.id, data.topic.slice(0, 80), result.tokens, payload);
+    logToolRun("newsletter", data.clientId, user.id, data.topic.slice(0, 80), result.tokens, payload, result.brainContextSnapshotId);
     return NextResponse.json(payload);
   },
 );

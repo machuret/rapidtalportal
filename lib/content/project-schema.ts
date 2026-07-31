@@ -106,6 +106,7 @@ export const contentProjectIdeaSchema = z.object({
   differentiation: z.string().trim().max(2000).default(""),
   evidenceSummary: z.string().trim().max(2000).default(""),
   topicId: z.uuid().optional().nullable(),
+  brainContextSnapshotId: z.uuid().optional().nullable(),
   marketIntelligence: contentMarketIntelligenceSchema.optional().nullable(),
   explainability: z.object({
     hook: z.string().trim().min(1).max(1000),

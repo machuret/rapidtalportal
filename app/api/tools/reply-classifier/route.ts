@@ -59,7 +59,7 @@ export const POST = withTool(
       reasoning: stripDashes(String(result.data.reasoning ?? "")).slice(0, 300),
       draft: stripDashes(String(result.data.draft ?? "")).slice(0, 2000),
     };
-    logToolRun("reply-classifier", data.clientId, user.id, data.reply.slice(0, 80), result.tokens, payload);
+    logToolRun("reply-classifier", data.clientId, user.id, data.reply.slice(0, 80), result.tokens, payload, result.brainContextSnapshotId);
     return NextResponse.json(payload);
   },
 );

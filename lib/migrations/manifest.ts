@@ -125,4 +125,7 @@ export const MIGRATIONS = [
   "117_vault_governance_workflow.sql",
   "118_content_operation_recovery.sql",
   "119_client_portal_polish.sql",
+  "120_brain_context_foundation.sql",
+  "121_brain_context_rollout.sql",
+  "122_task_aware_brain_memory.sql",
 ] as const;

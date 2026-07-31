@@ -10,6 +10,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { captureError } from "@/lib/error-tracking";
 import { salvageJson } from "@/lib/tools/json-salvage";
 import { buildBrainContext } from "@/lib/brain/context";
+import {
+  nodeBrainContextEnabled,
+  persistNodeBrainContextSnapshot,
+  resolveNodeBrainContext,
+} from "@/lib/brain/resolver";
 
 export const TOOL_MODEL = process.env.TOOLS_MODEL || "openai/gpt-4o";
 // High-frequency, low-complexity tools (hashtags, hooks, replies) run on a
@@ -108,17 +113,38 @@ export async function toolGrounding(clientId: string): Promise<string> {
 
 /** Fire-and-forget usage record — feeds /tools history + Supervision stats.
  *  Pass the response payload as `output` to make the run reopenable. */
-export function logToolRun(tool: string, clientId: string, userId: string, inputSummary: string, tokens: number, output?: unknown): void {
+export function logToolRun(
+  tool: string,
+  clientId: string,
+  userId: string,
+  inputSummary: string,
+  tokens: number,
+  output?: unknown,
+  brainContextSnapshotId?: string | null,
+): void {
   try {
     const admin = createAdminClient();
     void admin
       .from("tool_runs")
-      .insert({ client_id: clientId, user_id: userId, tool, input_summary: inputSummary.slice(0, 200), tokens_used: tokens, output: (output as Record<string, unknown> | undefined) ?? null })
+      .insert({
+        client_id: clientId,
+        user_id: userId,
+        tool,
+        input_summary: inputSummary.slice(0, 200),
+        tokens_used: tokens,
+        output: (output as Record<string, unknown> | undefined) ?? null,
+        brain_context_snapshot_id: brainContextSnapshotId ?? null,
+      })
       .then(({ error }) => { if (error) console.warn("[tool_runs]", error.message); });
   } catch { /* never block the tool result */ }
 }
 
-interface JsonResult<T> { data: T | null; tokens: number; error?: string }
+interface JsonResult<T> {
+  data: T | null;
+  tokens: number;
+  error?: string;
+  brainContextSnapshotId?: string | null;
+}
 
 /**
  * OpenRouter call expecting a JSON object; tolerates ```json fences.
@@ -136,7 +162,47 @@ export async function toolJson<T>(
 ): Promise<JsonResult<T>> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return { data: null, tokens: 0, error: "OPENROUTER_API_KEY is not configured." };
-  const userContent = groundingClientId ? `${await toolGrounding(groundingClientId)}${user}` : user;
+  let brainContextSnapshotId: string | null = null;
+  let grounding = "";
+  if (groundingClientId) {
+    const admin = createAdminClient();
+    const enabled = await nodeBrainContextEnabled(admin, groundingClientId, "tools");
+    if (enabled) {
+      try {
+        const resolved = await resolveNodeBrainContext({
+          admin,
+          clientId: groundingClientId,
+          request: {
+            surface: "tool",
+            topic: user.slice(0, 2_000),
+            intent: system.slice(0, 1_000),
+            selectedVaultSourceIds: [],
+            includeMarketIntelligence: false,
+          },
+          model,
+          promptVersion: "tool-json-v1",
+          maxKnowledge: 8,
+          maxMemory: 15,
+        });
+        grounding = resolved.prompt;
+        const snapshot = await persistNodeBrainContextSnapshot({
+          admin,
+          context: resolved.context,
+        });
+        brainContextSnapshotId = snapshot.id;
+      } catch (error) {
+        captureError("api", error, { url: "tools:brain-context" });
+        return {
+          data: null,
+          tokens: 0,
+          error: "The company context could not be prepared. Please try again.",
+        };
+      }
+    } else {
+      grounding = await toolGrounding(groundingClientId);
+    }
+  }
+  const userContent = `${grounding}${user}`;
   try {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -154,13 +220,18 @@ export async function toolJson<T>(
       // Handled failure, but surface it in /admin/errors — if a model starts
       // failing a chunk of calls, the admin should see it, not just users.
       captureError("api", new Error(`Tool AI call failed: ${json?.error?.message ?? res.status}`), { url: "tools:llm" });
-      return { data: null, tokens: 0, error: json?.error?.message ?? `Model returned ${res.status}` };
+      return {
+        data: null,
+        tokens: 0,
+        error: json?.error?.message ?? `Model returned ${res.status}`,
+        brainContextSnapshotId,
+      };
     }
     const raw: string = json.choices?.[0]?.message?.content ?? "";
     const cleaned = raw.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
     const tokens: number = json.usage?.total_tokens ?? 0;
     try {
-      return { data: JSON.parse(cleaned) as T, tokens };
+      return { data: JSON.parse(cleaned) as T, tokens, brainContextSnapshotId };
     } catch {
       // Almost always a truncated response (max_tokens hit mid-JSON). Try to
       // salvage the complete elements rather than failing the whole run — a
@@ -169,14 +240,24 @@ export async function toolJson<T>(
       if (salvaged) {
         captureError("api", new Error(`Tool AI JSON truncated, salvaged (${cleaned.length} chars, max_tokens ${maxTokens})`), { url: "tools:llm" });
         try {
-          return { data: JSON.parse(salvaged) as T, tokens };
+          return { data: JSON.parse(salvaged) as T, tokens, brainContextSnapshotId };
         } catch { /* fall through to the hard error below */ }
       }
       captureError("api", new Error(`Tool AI returned unparseable JSON (likely truncated; ${cleaned.length} chars, max_tokens ${maxTokens})`), { url: "tools:llm" });
-      return { data: null, tokens, error: "The AI response was cut off. Try again — or use a shorter input." };
+      return {
+        data: null,
+        tokens,
+        error: "The AI response was cut off. Try again — or use a shorter input.",
+        brainContextSnapshotId,
+      };
     }
   } catch (err) {
     captureError("api", err, { url: "tools:llm" });
-    return { data: null, tokens: 0, error: err instanceof Error ? err.message : "AI request failed." };
+    return {
+      data: null,
+      tokens: 0,
+      error: err instanceof Error ? err.message : "AI request failed.",
+      brainContextSnapshotId,
+    };
   }
 }

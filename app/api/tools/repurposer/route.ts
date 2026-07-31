@@ -51,7 +51,7 @@ export const POST = withTool(
         script: clampStr(s.script, 2500),
       })),
     };
-    logToolRun("repurposer", data.clientId, user.id, data.content.split("\n").find(Boolean)?.slice(0, 80) ?? "blog post", result.tokens, payload);
+    logToolRun("repurposer", data.clientId, user.id, data.content.split("\n").find(Boolean)?.slice(0, 80) ?? "blog post", result.tokens, payload, result.brainContextSnapshotId);
     return NextResponse.json(payload);
   },
 );

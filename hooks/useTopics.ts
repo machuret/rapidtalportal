@@ -15,6 +15,7 @@ interface CreateTopicInput {
   ai_fit_score?: number | null;
   ai_flagged?: boolean;
   why?: Record<string, unknown> | null;
+  brain_context_snapshot_id?: string | null;
   status?: "pending" | "approved";
 }
 

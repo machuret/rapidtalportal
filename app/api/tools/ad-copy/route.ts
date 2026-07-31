@@ -46,7 +46,7 @@ export const POST = withTool(
         angle: clampStr(v.angle, 60),
       })),
     };
-    logToolRun("ad-copy", data.clientId, user.id, data.offer.slice(0, 80), result.tokens, payload);
+    logToolRun("ad-copy", data.clientId, user.id, data.offer.slice(0, 80), result.tokens, payload, result.brainContextSnapshotId);
     return NextResponse.json(payload);
   },
 );

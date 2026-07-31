@@ -10,10 +10,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { memoryAppliesToSurfaces } from "../_shared/brain-surfaces.ts";
 import { retrieveContentVault } from "../_shared/content-vault-retrieval.ts";
 import {
+  brainContextSurfaceEnabled,
+  persistBrainContextSnapshot,
+  renderBrainContext,
+  resolveBrainContext,
+  type BrainContextV1,
+} from "../_shared/brain-context.ts";
+import { embedBrainMemoryQuery } from "../_shared/brain-memory-embedding.ts";
+import {
   createContentStyleSnapshot,
   resolveContentStyle,
   type ContentHardRule,
   type ContentStyleAnalysisProvenance,
+  type ContentStyleSnapshot,
   type ResolvedContentStyle,
 } from "../_shared/content-style.ts";
 import {
@@ -219,6 +228,30 @@ function resolvedStyleFromSnapshot(raw: unknown, channel: string): ResolvedConte
     prohibitedPhrases,
     disallowEmoji: snapshot.disallowEmoji === true,
     styleAnalysis,
+  };
+}
+
+function contentStyleSnapshotFromUnknown(
+  raw: unknown,
+  channel: string,
+): ContentStyleSnapshot | null {
+  const snapshot = record(raw);
+  const resolved = resolvedStyleFromSnapshot(raw, channel);
+  if (!snapshot || !resolved) return null;
+  return {
+    channel,
+    summary: resolved.summary,
+    hardRules: resolved.hardRules,
+    styleAnalysis: resolved.styleAnalysis,
+    companyDnaUpdatedAt: typeof snapshot.companyDnaUpdatedAt === "string"
+      ? snapshot.companyDnaUpdatedAt
+      : null,
+    capturedAt: typeof snapshot.capturedAt === "string"
+      ? snapshot.capturedAt
+      : new Date().toISOString(),
+    prompt: resolved.prompt,
+    prohibitedPhrases: resolved.prohibitedPhrases,
+    disallowEmoji: resolved.disallowEmoji,
   };
 }
 
@@ -734,62 +767,148 @@ export async function handleContentGenerateRequest(
         ? { [contentType]: approvedStyleAnalysis }
         : {},
     };
-    let retrieval;
-    try {
-      retrieval = await retrieveContentVault({
-        admin,
-        clientId,
-        query: `${title}. ${objective}. ${String(contentBrief.additionalGuidance ?? "")}`,
-        relevantCategories: relevantCats,
-        styleChannel: contentType,
-        selectedSourceIds: projectId ? selectedVaultSourceIds : undefined,
-      });
-    } catch (error) {
-      console.error("content-generate: Vault query failed:", error);
-      return new Response(JSON.stringify({ error: "Vault context is temporarily unavailable. No draft was created." }), {
-        status: 503,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    const structuredBrainEnabled = await brainContextSurfaceEnabled(
+      admin,
+      clientId,
+      "content",
+    );
+    let brainContext: BrainContextV1 | null = null;
+    let brainContextSnapshotId: string | null = null;
+    let retrieval: {
+      context: string;
+      sources: Array<{
+        itemId: string;
+        title: string;
+        kind: "semantic" | "vault_item";
+        excerpt: string;
+        similarity: number | null;
+      }>;
+      styleSources: Array<{
+        itemId: string;
+        title: string;
+        sourceUrl: string | null;
+      }>;
+      groundedCount: number;
+    };
     let context = "";
-    const d = resolvedDna;
-    context += "=== COMPANY CONTEXT ===\n";
-    for (const [k, v] of Object.entries(d)) {
-      if (k !== "updated_at" && v && typeof v === "string") context += `${k}: ${v}\n`;
-    }
-    if (d.extra && typeof d.extra === "object" && !Array.isArray(d.extra)) {
-      context += `additional company details: ${JSON.stringify(d.extra).slice(0, 4000)}\n`;
-    }
-    if (d.social_links && typeof d.social_links === "object" && !Array.isArray(d.social_links)) {
-      context += `official social channels: ${JSON.stringify(d.social_links).slice(0, 2000)}\n`;
-    }
-    context += "\n";
-    if (retrieval.context) context += `${retrieval.context}\n`;
+    try {
+      if (structuredBrainEnabled) {
+        const channel = contentType as
+          | "linkedin"
+          | "facebook"
+          | "instagram"
+          | "x"
+          | "email"
+          | "blog"
+          | "newsletter"
+          | "message"
+          | "other";
+        brainContext = await resolveBrainContext({
+          admin,
+          clientId,
+          request: {
+            surface: "content",
+            channel,
+            contentType,
+            topic: title,
+            audience: typeof contentBrief.audience === "string"
+              ? contentBrief.audience
+              : undefined,
+            objective,
+            intent: typeof contentBrief.additionalGuidance === "string"
+              ? contentBrief.additionalGuidance
+              : undefined,
+            selectedVaultSourceIds: projectId ? selectedVaultSourceIds : [],
+            includeMarketIntelligence: Boolean(contentBrief.marketIntelligence),
+          },
+          model: contentModel,
+          promptVersion: "content.generate",
+          frozenStyleSnapshot: projectId && !connectedAdaptation
+            ? contentStyleSnapshotFromUnknown(projectStyleSnapshot, contentType)
+            : null,
+          requestedTone: tone,
+          lengthHint: CONTENT_LENGTH_HINTS[length] ?? "",
+          maxKnowledge: 20,
+          maxMemory: 20,
+          memoryEmbed: embedBrainMemoryQuery,
+          restrictToSelectedSources: Boolean(projectId),
+          embed: async (value) => {
+            // deno-lint-ignore no-explicit-any
+            const session = new (globalThis as any).Supabase.ai.Session("gte-small");
+            return await session.run(value, { mean_pool: true, normalize: true }) as number[];
+          },
+        });
+        context = renderBrainContext(brainContext);
+        retrieval = {
+          context,
+          sources: brainContext.knowledge.sources.map((source) => ({
+            itemId: source.itemId,
+            title: source.title,
+            kind: source.selectionMethod === "semantic" ? "semantic" : "vault_item",
+            excerpt: source.excerpt.slice(0, 700),
+            similarity: source.relevance,
+          })),
+          styleSources: [],
+          groundedCount: brainContext.knowledge.sources.filter(
+            (source) => source.selectionMethod === "semantic",
+          ).length,
+        };
+        const snapshot = await persistBrainContextSnapshot({
+          admin,
+          context: brainContext,
+          createdBy: authUser.id,
+        });
+        brainContextSnapshotId = snapshot.id;
+      } else {
+        retrieval = await retrieveContentVault({
+          admin,
+          clientId,
+          query: `${title}. ${objective}. ${String(contentBrief.additionalGuidance ?? "")}`,
+          relevantCategories: relevantCats,
+          styleChannel: contentType,
+          selectedSourceIds: projectId ? selectedVaultSourceIds : undefined,
+        });
+        const d = resolvedDna;
+        context += "=== COMPANY CONTEXT ===\n";
+        for (const [k, v] of Object.entries(d)) {
+          if (k !== "updated_at" && v && typeof v === "string") context += `${k}: ${v}\n`;
+        }
+        if (d.extra && typeof d.extra === "object" && !Array.isArray(d.extra)) {
+          context += `additional company details: ${JSON.stringify(d.extra).slice(0, 4000)}\n`;
+        }
+        if (d.social_links && typeof d.social_links === "object" && !Array.isArray(d.social_links)) {
+          context += `official social channels: ${JSON.stringify(d.social_links).slice(0, 2000)}\n`;
+        }
+        context += "\n";
+        if (retrieval.context) context += `${retrieval.context}\n`;
 
-    // Brain memory — learned preferences & rules the draft must honour.
-    const { data: memRows, error: memoryError } = await admin.from("brain_memory")
-      .select("kind, content, scope").eq("client_id", clientId).eq("active", true)
-      .order("pinned", { ascending: false }).limit(60);
-    if (memoryError) {
-      console.error("content-generate: Brain memory query failed:", memoryError);
-      return new Response(JSON.stringify({ error: "Company style memory is temporarily unavailable. No draft was created." }), {
+        const { data: memRows, error: memoryError } = await admin.from("brain_memory")
+          .select("kind, content, scope").eq("client_id", clientId).eq("active", true)
+          .order("pinned", { ascending: false }).limit(60);
+        if (memoryError) throw memoryError;
+        const mem = ((memRows ?? []) as {
+          kind: string;
+          content: string;
+          scope: { surfaces?: string[] } | null;
+        }[])
+          .filter((memory) => memoryAppliesToSurfaces(memory.scope, ["content", contentType]))
+          .slice(0, 20);
+        if (mem.length) {
+          const memLabel: Record<string, string> = { preference: "Prefer", anti_pattern: "Avoid", rule: "Rule" };
+          context += "=== COMPANY PREFERENCES & RULES (learned — follow these) ===\n";
+          for (const m of mem) context += `${memLabel[m.kind] ?? "Note"}: ${m.content}\n`;
+          context += "\n";
+        }
+      }
+    } catch (error) {
+      console.error("content-generate: Brain context failed:", error);
+      return new Response(JSON.stringify({
+        error: "Vault context is temporarily unavailable. No draft was created.",
+        code: "brain_context_unavailable",
+      }), {
         status: 503,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-    }
-    const mem = ((memRows ?? []) as {
-      kind: string;
-      content: string;
-      scope: { surfaces?: string[] } | null;
-    }[])
-      .filter((memory) => memoryAppliesToSurfaces(memory.scope, ["content", contentType]))
-      .slice(0, 20);
-    if (mem.length) {
-      const memLabel: Record<string, string> = { preference: "Prefer", anti_pattern: "Avoid", rule: "Rule" };
-      context += "=== COMPANY PREFERENCES & RULES (learned — follow these) ===\n";
-      for (const m of mem) context += `${memLabel[m.kind] ?? "Note"}: ${m.content}\n`;
-      context += "\n";
     }
 
     // ── OpenAI generation ─────────────────────────────────────────────────────
@@ -935,6 +1054,7 @@ export async function handleContentGenerateRequest(
         : null,
       ),
       exampleSources: retrieval.styleSources,
+      brainContextSnapshotId,
     };
     if (topicWarnings.length && !evaluationStyleMode) {
       await releaseGenerationLease();
@@ -993,6 +1113,7 @@ export async function handleContentGenerateRequest(
             status: "draft",
             created_by: authUser.id,
             style_snapshot: styleSnapshot,
+            brain_context_snapshot_id: brainContextSnapshotId,
             generation_kind: generationKind,
             parent_piece_id: generationKind === "adaptation" ? parentPieceId : null,
           })
@@ -1021,6 +1142,24 @@ export async function handleContentGenerateRequest(
       }
       pieceId = (piece as { id: string }).id;
       persistedPiece = piece as Record<string, unknown>;
+      if (brainContextSnapshotId && projectId) {
+        const [pieceLink, projectLink] = await Promise.all([
+          admin.from("content_pieces")
+            .update({ brain_context_snapshot_id: brainContextSnapshotId })
+            .eq("id", pieceId)
+            .eq("client_id", clientId),
+          admin.from("content_projects")
+            .update({ brain_context_snapshot_id: brainContextSnapshotId })
+            .eq("id", projectId)
+            .eq("client_id", clientId),
+        ]);
+        if (pieceLink.error || projectLink.error) {
+          console.error(
+            "content-generate: Brain context link failed:",
+            pieceLink.error ?? projectLink.error,
+          );
+        }
+      }
       const { error: eventError } = await admin.from("content_workflow_events").insert({
         client_id: clientId,
         project_id: projectId ?? null,
@@ -1056,6 +1195,7 @@ export async function handleContentGenerateRequest(
       sources: verifiedSources,
       contextSources: retrieval.sources,
       styleSources: retrieval.styleSources,
+      brainContextSnapshotId,
       contentType,
       warnings: [...topicWarnings, ...qualityWarnings],
     }), {

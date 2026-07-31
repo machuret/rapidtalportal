@@ -6,6 +6,11 @@ import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderPrompt } from "@/lib/prompts/server";
 import { buildBrainContext } from "@/lib/brain/context";
+import {
+  nodeBrainContextEnabled,
+  persistNodeBrainContextSnapshot,
+  resolveNodeBrainContext,
+} from "@/lib/brain/resolver";
 import { cosine, embeddingFit, embedTexts } from "@/lib/brain/embed";
 import { logBrainEvent } from "@/lib/brain/events";
 import { chatProvider, chatModel } from "@/lib/brain/llm";
@@ -521,12 +526,112 @@ export const POST = withAuth(async (req, { user }) => {
   // These are service-role reads behind the authenticated tenant boundary.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any;
-  // The Brain assembles the profile + Vault highlights + learned positives/negatives.
-  // Topic generation spans every content channel, so inject content + all
-  // channel-scoped lessons (plus global). Ask/Compose-only lessons are excluded.
-  const brain = await buildBrainContext(admin, parsed.data.client_id, {
-    surfaces: ["content", "email", "x", "social", "blog", "newsletter"],
-  });
+  const useStructuredBrain = await nodeBrainContextEnabled(
+    admin,
+    parsed.data.client_id,
+    "topics",
+  );
+  let brainContextSnapshotId: string | null = null;
+  let structuredBrain: Awaited<ReturnType<typeof resolveNodeBrainContext>> | null = null;
+  let brain: Awaited<ReturnType<typeof buildBrainContext>>;
+  if (useStructuredBrain) {
+    structuredBrain = await resolveNodeBrainContext({
+      admin,
+      clientId: parsed.data.client_id,
+      request: {
+        surface: "content",
+        contentType: "content_ideas",
+        topic: parsed.data.mode === "competitor_gap"
+          ? "Competitor-informed content opportunities"
+          : "Company content opportunities",
+        selectedVaultSourceIds: [],
+        includeMarketIntelligence: parsed.data.mode === "competitor_gap",
+      },
+      model: chatModel("CONTENT_TOPICS_MODEL"),
+      promptVersion: "content.topics",
+      maxKnowledge: 20,
+      maxMemory: 30,
+    });
+    const [positiveResult, negativeResult, negativeSignalResult] = await Promise.all([
+      db.from("content_topics")
+        .select("title,description")
+        .eq("client_id", parsed.data.client_id)
+        .eq("status", "approved")
+        .order("updated_at", { ascending: false })
+        .limit(8),
+      db.from("content_topics")
+        .select("title,description,flag_reason")
+        .eq("client_id", parsed.data.client_id)
+        .or("status.eq.rejected,flagged.eq.true")
+        .order("updated_at", { ascending: false })
+        .limit(8),
+      db.from("brain_signals")
+        .select("artifact_text,reason")
+        .eq("client_id", parsed.data.client_id)
+        .eq("surface", "content_topic")
+        .eq("rating", -1)
+        .order("created_at", { ascending: false })
+        .limit(8),
+    ]);
+    if (positiveResult.error || negativeResult.error || negativeSignalResult.error) {
+      console.error(
+        "[topics/generate] idea history unavailable",
+        positiveResult.error ?? negativeResult.error ?? negativeSignalResult.error,
+      );
+      return NextResponse.json({
+        error: "The idea history needed for company fit is temporarily unavailable.",
+        code: "BRAIN_IDEA_HISTORY_UNAVAILABLE",
+      }, { status: 503 });
+    }
+    const positiveRows = positiveResult.data;
+    const negativeRows = negativeResult.data;
+    const negativeSignalRows = negativeSignalResult.data;
+    const positiveExamples = (positiveRows ?? []).map(
+      (row: { title: string; description?: string | null }) =>
+        `${row.title}${row.description ? ` — ${row.description}` : ""}`,
+    );
+    const negativeExamples = [
+      ...(negativeRows ?? []).map(
+        (row: { title: string; description?: string | null; flag_reason?: string | null }) =>
+          `${row.title}${row.description ? ` — ${row.description}` : ""}${
+            row.flag_reason ? ` (reason: ${row.flag_reason})` : ""
+          }`,
+      ),
+      ...(negativeSignalRows ?? []).map(
+        (row: { artifact_text: string; reason?: string | null }) =>
+          `${row.artifact_text}${row.reason ? ` (reason: ${row.reason})` : ""}`,
+      ),
+    ];
+    brain = {
+      text: structuredBrain.prompt,
+      hasProfile: Object.keys(structuredBrain.context.company.fields).length > 0,
+      hasVault: structuredBrain.context.knowledge.sources.length > 0,
+      positives: positiveExamples.length,
+      negatives: negativeExamples.length,
+      memories: structuredBrain.context.memories.length,
+      positiveExamples,
+      negativeExamples,
+    };
+    try {
+      const snapshot = await persistNodeBrainContextSnapshot({
+        admin,
+        context: structuredBrain.context,
+        createdBy: user.id,
+      });
+      brainContextSnapshotId = snapshot.id;
+    } catch (error) {
+      console.error("[topics/generate] Brain context snapshot failed", error);
+      return NextResponse.json({
+        error: "The idea context could not be recorded safely. Please try again.",
+        code: "BRAIN_CONTEXT_SNAPSHOT_FAILED",
+      }, { status: 503 });
+    }
+  } else {
+    // Rollback path while the per-client Phase 1 flag is disabled.
+    brain = await buildBrainContext(admin, parsed.data.client_id, {
+      surfaces: ["content", "email", "x", "social", "blog", "newsletter"],
+    });
+  }
 
   if (!brain.hasProfile && !brain.hasVault) {
     return NextResponse.json(
@@ -1213,7 +1318,10 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   return NextResponse.json({
-    topics,
+    topics: topics.map((topic) => ({
+      ...topic,
+      brain_context_snapshot_id: brainContextSnapshotId,
+    })),
     mode: parsed.data.mode,
     competitors: includedCompetitors,
     readiness: parsed.data.mode === "competitor_gap" ? readiness : undefined,
@@ -1227,5 +1335,6 @@ export const POST = withAuth(async (req, { user }) => {
       }`
       : undefined,
     learnedFrom: { positives: brain.positives, negatives: brain.negatives, grounded: embFits !== null },
+    brainContextSnapshotId,
   });
 });

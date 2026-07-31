@@ -83,7 +83,7 @@ export const POST = withTool(
       gaps: clampArr(b.gaps, 6).map((g) => clampStr(g, 300)),
       faqSchema,
     };
-    logToolRun("keyword-brief", data.clientId, user.id, data.keyword, result.tokens, payload);
+    logToolRun("keyword-brief", data.clientId, user.id, data.keyword, result.tokens, payload, result.brainContextSnapshotId);
     return NextResponse.json(payload);
   },
 );

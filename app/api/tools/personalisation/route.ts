@@ -31,7 +31,7 @@ export const POST = withTool(
     const lines = clampArr(result.data.lines, 3)
       .filter((l) => typeof l === "string" && l.trim())
       .map((l) => stripDashes(String(l)).slice(0, 600));
-    logToolRun("personalisation", data.clientId, user.id, data.about.slice(0, 80), result.tokens, { lines });
+    logToolRun("personalisation", data.clientId, user.id, data.about.slice(0, 80), result.tokens, { lines }, result.brainContextSnapshotId);
     return NextResponse.json({ lines });
   },
 );

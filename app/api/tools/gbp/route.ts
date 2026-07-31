@@ -43,7 +43,7 @@ export const POST = withTool(
       .map((p) => ({ body: clampStr(p.body, 1600), cta: clampStr(p.cta, 40), localAngle: clampStr(p.localAngle, 120) }));
 
     const payload = { posts, hasContext: !!(ctx.location || ctx.services) };
-    logToolRun("gbp", data.clientId, user.id, data.topic, result.tokens, payload);
+    logToolRun("gbp", data.clientId, user.id, data.topic, result.tokens, payload, result.brainContextSnapshotId);
     return NextResponse.json(payload);
   },
 );

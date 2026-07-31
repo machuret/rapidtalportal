@@ -62,7 +62,7 @@ export const POST = withTool(
         hook: clampStr(d.hook, 160),
       }));
 
-    logToolRun("calendar", data.clientId, user.id, data.focus || "content calendar", result.tokens, { days });
+    logToolRun("calendar", data.clientId, user.id, data.focus || "content calendar", result.tokens, { days }, result.brainContextSnapshotId);
     return NextResponse.json({ days });
   },
 );

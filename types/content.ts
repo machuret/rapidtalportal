@@ -118,6 +118,7 @@ export interface ContentTopic {
   why?: (BrainWhy & { explainability?: ContentIdeaExplainability }) | null;
   ai_fit_score?: number | null;
   ai_flagged?: boolean;
+  brain_context_snapshot_id?: string | null;
 }
 
 export interface ContentPiece {
@@ -183,6 +184,7 @@ export interface ContentProjectIdea {
   differentiation: string;
   evidenceSummary: string;
   topicId?: string | null;
+  brainContextSnapshotId?: string | null;
   marketIntelligence?: ContentMarketIntelligenceProvenance | null;
   explainability?: ContentIdeaExplainability | null;
 }
@@ -200,6 +202,7 @@ export interface ContentProject {
   competitor_signals: ContentMarketIntelligenceSource[];
   style_snapshot: NonNullable<ContentPiece["style_snapshot"]>;
   current_piece_id: string | null;
+  brain_context_snapshot_id?: string | null;
   last_operation?: "quick_draft" | "generate" | "save_brief" | "save_evidence" | "validate" | null;
   last_error_code?: string | null;
   last_error_message?: string | null;
@@ -230,6 +233,8 @@ export interface AiSuggestion {
   fit?: number | null;
   /** Brain flagged this as weak/off-brand (fit below threshold). */
   ai_flagged?: boolean;
+  /** Immutable Brain Context used to generate this suggestion. */
+  brain_context_snapshot_id?: string | null;
   /** Provenance for "Why this?" — what the Brain drew on. */
   why?: BrainWhy | null;
   opportunity_type?: "gap" | "differentiation" | "counter_position" | "market_pattern" | null;

@@ -200,6 +200,7 @@ function ContentStudioInner({
         ? `${explainability.supportingVaultMaterial.length} Vault source${explainability.supportingVaultMaterial.length === 1 ? "" : "s"} and ${explainability.supportingMarketSignals.length} market signal${explainability.supportingMarketSignals.length === 1 ? "" : "s"} informed this idea.`
         : "Company DNA, Vault material and approved content priorities informed this idea.",
       topicId: topic.id,
+      brainContextSnapshotId: topic.brain_context_snapshot_id ?? null,
       marketIntelligence: null,
       explainability,
     });

@@ -84,10 +84,10 @@ describe("Brain surface scoping", () => {
   const ask = read("supabase/functions/vault-ask/index.ts");
   const content = read("supabase/functions/content-generate/index.ts");
 
-  test("distillation emits the canonical Ask scope", () => {
-    expect(distill).toContain('"vault_answer"');
-    expect(distill).toContain("normalizeBrainScopes");
-    expect(distill).not.toContain('["content","ask"');
+  test("distillation emits the Phase 2 canonical scope vocabulary", () => {
+    expect(distill).toContain('surfaces ["ask","content","compose","tool"]');
+    expect(distill).toContain("normalizeBrainMemoryScope");
+    expect(distill).not.toContain('"vault_answer"');
   });
 
   test("short-term signals and both Edge surfaces use the shared scope policy", () => {

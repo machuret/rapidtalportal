@@ -56,7 +56,7 @@ export const POST = withTool(
       internalLinks: clampArr(a.internalLinks, 6).map((l) => clampStr(l, 200)),
       quickWins: clampArr(a.quickWins, 6).map((w) => clampStr(w, 300)),
     };
-    logToolRun("content-auditor", data.clientId, user.id, data.keyword || "page copy", result.tokens, payload);
+    logToolRun("content-auditor", data.clientId, user.id, data.keyword || "page copy", result.tokens, payload, result.brainContextSnapshotId);
     return NextResponse.json(payload);
   },
 );

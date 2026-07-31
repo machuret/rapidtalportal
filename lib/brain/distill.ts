@@ -5,18 +5,22 @@
  * of a flat append it now:
  *   • reinforces an existing lesson when the same idea recurs (confidence ↑),
  *   • routes near-duplicate-but-conflicting lessons to a "proposed" review queue,
- *   • gates hard rules / low-confidence lessons to "proposed" (human approval),
- *   • scopes each lesson to the surfaces it applies to,
+ *   • makes every new lesson proposed until a human approves it,
+ *   • scopes each lesson to its surface, channel, content type and task,
+ *   • records the exact signals supporting or contradicting each lesson,
  *   • decays lessons that haven't been reinforced, muting the stale ones.
  *
- * Similarity uses lesson embeddings (stored as JSON) compared in-process.
+ * Similarity uses the same OpenAI vectors stored in pgvector for runtime match.
  * Pure server util; callers must have authorised access to the client.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logBrainEvent } from "./events";
 import { embedTexts, cosine } from "./embed";
 import { chatProvider, chatModel } from "./llm";
-import { normalizeBrainScopes } from "../../supabase/functions/_shared/brain-surfaces";
+import {
+  normalizeBrainMemoryScope,
+  type BrainMemoryScope,
+} from "../../supabase/functions/_shared/brain-memory-scope";
 
 type Admin = SupabaseClient;
 
@@ -29,20 +33,25 @@ const CLAIM_LEASE_SECONDS = 600;
 
 const SIM_REINFORCE = 0.9;   // ≥ this & same kind → reinforce, don't duplicate
 const SIM_CONFLICT = 0.86;   // ≥ this & opposing kind → flag as proposed (conflict)
-const ACTIVE_CONF_MIN = 60;  // below this (or a hard rule) → proposed for review
-const DECAY_DAYS = 21;
-const DECAY_AMT = 3;
-const MUTE_FLOOR = 25;
-
 interface SignalRow {
   id: string;
   surface: string;
   artifact_text: string;
   rating: number;
   reason: string | null;
+  context: Record<string, unknown> | null;
   distill_claim_token: string | null;
 }
-interface MemRow { id: string; kind: string; content: string; confidence: number; source_count: number; embedding: number[] | null }
+interface MemRow {
+  id: string;
+  kind: string;
+  content: string;
+  confidence: number;
+  source_count: number;
+  embedding: number[] | null;
+  scope: BrainMemoryScope | null;
+  status: "proposed" | "active" | "muted" | "review_required";
+}
 
 export interface DistillResult {
   skipped: boolean;
@@ -51,13 +60,75 @@ export interface DistillResult {
   newMemories: number;
   reinforced: number;
   proposed: number;
+  conflicts?: number;
 }
 
 const VALID_KINDS = new Set(["preference", "anti_pattern", "rule"]);
 const POLARITY = new Set(["preference", "anti_pattern"]);
 
+function textList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(
+    value
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim().toLocaleLowerCase())
+      .filter(Boolean),
+  )).slice(0, 20);
+}
+
+function scopeFromSignals(rows: SignalRow[]): BrainMemoryScope {
+  const raw = {
+    surfaces: rows.map((signal) => signal.surface),
+    channels: rows.flatMap((signal) => textList([
+      signal.context?.channel,
+      signal.context?.platform,
+    ])),
+    contentTypes: rows.flatMap((signal) => textList([
+      signal.context?.content_type,
+      signal.context?.contentType,
+    ])),
+    audiences: rows.flatMap((signal) => textList([signal.context?.audience])),
+    objectives: rows.flatMap((signal) => textList([signal.context?.objective])),
+  };
+  const normalized = normalizeBrainMemoryScope(raw);
+  return normalized.surfaces?.length ? normalized : { surfaces: ["content"] };
+}
+
+function overlap(left: string[] | undefined, right: string[] | undefined): boolean {
+  if (!left?.length || !right?.length) return true;
+  return left.some((value) => right.includes(value));
+}
+
+function scopesOverlap(leftValue: unknown, rightValue: unknown): boolean {
+  const left = normalizeBrainMemoryScope(leftValue);
+  const right = normalizeBrainMemoryScope(rightValue);
+  if (left.global || right.global) return true;
+  return (
+    overlap(left.surfaces, right.surfaces) &&
+    overlap(left.channels, right.channels) &&
+    overlap(left.contentTypes, right.contentTypes) &&
+    overlap(left.audiences, right.audiences) &&
+    overlap(left.objectives, right.objectives)
+  );
+}
+
+function scopesEquivalent(leftValue: unknown, rightValue: unknown): boolean {
+  const canonical = (value: unknown) => {
+    const scope = normalizeBrainMemoryScope(value);
+    return JSON.stringify({
+      surfaces: [...(scope.surfaces ?? [])].sort(),
+      channels: [...(scope.channels ?? [])].sort(),
+      contentTypes: [...(scope.contentTypes ?? [])].sort(),
+      audiences: [...(scope.audiences ?? [])].sort(),
+      objectives: [...(scope.objectives ?? [])].sort(),
+      global: scope.global === true,
+    });
+  };
+  return canonical(leftValue) === canonical(rightValue);
+}
+
 export async function distillClientMemory(admin: Admin, clientId: string): Promise<DistillResult> {
-  const empty: DistillResult = { skipped: true, processedSignals: 0, newMemories: 0, reinforced: 0, proposed: 0 };
+  const empty: DistillResult = { skipped: true, processedSignals: 0, newMemories: 0, reinforced: 0, proposed: 0, conflicts: 0 };
   const llm = chatProvider();
   if (!llm) return { ...empty, reason: "No LLM provider configured (set OPENROUTER_API_KEY or OPENAI_API_KEY)." };
 
@@ -92,9 +163,9 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
   // Existing lessons we might reinforce or conflict with.
   const { data: memData, error: memoryReadError } = await admin
     .from("brain_memory")
-    .select("id, kind, content, confidence, source_count, embedding")
+    .select("id, kind, content, confidence, source_count, embedding, scope, status")
     .eq("client_id", clientId)
-    .in("status", ["active", "proposed"])
+    .in("status", ["active", "proposed", "review_required"])
     .limit(200);
   if (memoryReadError) {
     await releaseClaim();
@@ -104,7 +175,10 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
 
   const liked = signals.filter((s) => s.rating === 1);
   const disliked = signals.filter((s) => s.rating === -1);
-  const fmt = (s: SignalRow) => `- [${s.surface}] ${s.artifact_text.slice(0, 180)}${s.reason ? ` (reason: ${s.reason})` : ""}`;
+  const fmt = (s: SignalRow) =>
+    `- signal_id=${s.id} [${s.surface}] ${s.artifact_text.slice(0, 240)}` +
+    `${s.reason ? ` (reason: ${s.reason})` : ""}` +
+    `${s.context && Object.keys(s.context).length ? ` context=${JSON.stringify(s.context).slice(0, 500)}` : ""}`;
 
   const userPrompt =
     `You maintain the long-term memory of an AI that produces marketing content and answers for ONE company.\n` +
@@ -114,9 +188,11 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
     `DISLIKED 👎:\n${disliked.length ? disliked.map(fmt).join("\n") : "(none)"}\n\n` +
     `Rules:\n- Only lessons clearly supported above. Specific to this company.\n` +
     `- kind: "preference" (favour), "anti_pattern" (avoid), "rule" (hard constraint).\n` +
-    `- scope: array of where it applies, from ["content","vault_answer","compose","tool","kb","email","social","blog","newsletter","all"]. Use "vault_answer" for Ask the Vault and ["all"] if general.\n` +
+    `- scope is an object with optional arrays: surfaces ["ask","content","compose","tool"], channels ["linkedin","facebook","instagram","email","blog","newsletter"], contentTypes, audiences, objectives, plus optional global boolean.\n` +
+    `- Prefer the narrowest scope supported by the linked signals. Do not use global merely because no channel is obvious.\n` +
+    `- signal_ids must list the exact signal_id values that independently support this lesson. Never cite an ID that is not shown above.\n` +
     `- At most 6 lessons; empty list if nothing new.\n\n` +
-    `Return JSON: { "memories": [ { "kind", "content", "confidence" (0-100), "scope": string[] } ] }`;
+    `Return JSON: { "memories": [ { "kind", "content", "confidence" (0-100), "scope": object, "signal_ids": string[] } ] }`;
 
   let res: Response;
   try {
@@ -150,10 +226,7 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
     return { ...empty, reason: "Failed to parse AI response." };
   }
 
-  // If the model omits or misspells scope, contain the lesson to the surfaces
-  // that produced this batch. Only an explicit "all" may become global.
-  const batchScopes = normalizeBrainScopes(signals.map((signal) => signal.surface));
-  const fallbackScopes = batchScopes.length ? batchScopes : normalizeBrainScopes(["all"]);
+  const claimedIds = new Set(signalIds);
   const candidates = (Array.isArray(parsed.memories) ? parsed.memories : [])
     .map((m) => {
       const o = (m ?? {}) as Record<string, unknown>;
@@ -161,14 +234,24 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
       const content = typeof o.content === "string" ? o.content.trim() : "";
       const confNum = Number(o.confidence);
       const confidence = Number.isFinite(confNum) ? Math.max(0, Math.min(100, Math.round(confNum))) : 50;
-      const requestedScopes = normalizeBrainScopes(Array.isArray(o.scope) ? o.scope : []);
-      const scopeArr = requestedScopes.length ? requestedScopes : fallbackScopes;
-      return { kind, content, confidence, scope: scopeArr };
+      const supportingIds = Array.from(new Set(
+        Array.isArray(o.signal_ids)
+          ? o.signal_ids.filter((id): id is string => typeof id === "string" && claimedIds.has(id))
+          : [],
+      ));
+      const supportingSignals = signals.filter((signal) => supportingIds.includes(signal.id));
+      const requestedScope = normalizeBrainMemoryScope(o.scope);
+      const scope = requestedScope.global || requestedScope.surfaces?.length
+        ? requestedScope
+        : scopeFromSignals(supportingSignals);
+      return { kind, content, confidence, scope, signalIds: supportingIds };
     })
-    .filter((m) => m.content);
+    .filter((m) => m.content && m.signalIds.length > 0);
 
   // Embed candidates + any existing lessons missing an embedding (backfill).
-  const needEmbedExisting = existing.filter((m) => !Array.isArray(m.embedding) || m.embedding.length === 0);
+  const needEmbedExisting = existing
+    .filter((m) => !Array.isArray(m.embedding) || m.embedding.length === 0)
+    .slice(0, 40);
   const toEmbed = [...candidates.map((c) => c.content), ...needEmbedExisting.map((m) => m.content)];
   const vecs = await embedTexts(toEmbed);
   const candVecs = vecs ? vecs.slice(0, candidates.length) : null;
@@ -182,45 +265,69 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
     });
   }
 
-  const reinforces: { id: string }[] = [];
+  const reinforces: { id: string; signalIds: string[] }[] = [];
   const inserts: {
     kind: string;
     content: string;
     confidence: number;
-    status: "active" | "proposed";
-    scope: { surfaces?: string[] };
+    scope: BrainMemoryScope;
     embedding: number[] | null;
+    signalIds: string[];
+    contradictsMemoryId?: string;
+    conflictSummary?: string;
   }[] = [];
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
     const cVec = candVecs?.[i] ?? null;
 
-    // Find the most similar existing lesson (if we have vectors).
-    let best: { m: MemRow; sim: number } | null = null;
+    // Find duplicates only inside the exact same task scope. A semantically
+    // closer Instagram lesson must never hide an existing LinkedIn duplicate.
+    let bestEquivalent: { m: MemRow; sim: number } | null = null;
+    let bestConflict: { m: MemRow; sim: number } | null = null;
     if (cVec) {
       for (const m of existing) {
         if (!Array.isArray(m.embedding) || m.embedding.length === 0) continue;
         const sim = cosine(cVec, m.embedding);
-        if (!best || sim > best.sim) best = { m, sim };
+        if (
+          m.kind === c.kind &&
+          scopesEquivalent(m.scope, c.scope) &&
+          (!bestEquivalent || sim > bestEquivalent.sim)
+        ) {
+          bestEquivalent = { m, sim };
+        }
+        if (
+          m.kind !== c.kind &&
+          POLARITY.has(m.kind) &&
+          POLARITY.has(c.kind) &&
+          scopesOverlap(m.scope, c.scope) &&
+          (!bestConflict || sim > bestConflict.sim)
+        ) {
+          bestConflict = { m, sim };
+        }
       }
     }
 
     // Reinforce a recurring lesson rather than duplicating it.
-    if (best && best.sim >= SIM_REINFORCE && best.m.kind === c.kind) {
-      reinforces.push({ id: best.m.id });
+    if (
+      bestEquivalent &&
+      bestEquivalent.sim >= SIM_REINFORCE
+    ) {
+      reinforces.push({ id: bestEquivalent.m.id, signalIds: c.signalIds });
       continue;
     }
 
-    // Conflict (same topic, opposite polarity) or low confidence / hard rule → propose.
-    const conflict = !!best && best.sim >= SIM_CONFLICT && best.m.kind !== c.kind && POLARITY.has(best.m.kind) && POLARITY.has(c.kind);
-    const status = conflict || c.kind === "rule" || c.confidence < ACTIVE_CONF_MIN ? "proposed" : "active";
+    const conflict = !!bestConflict && bestConflict.sim >= SIM_CONFLICT;
     inserts.push({
       kind: c.kind,
       content: c.content,
       confidence: c.confidence,
-      status,
-      scope: { surfaces: c.scope },
+      scope: c.scope,
       embedding: cVec ?? null,
+      signalIds: c.signalIds,
+      ...(conflict && bestConflict ? {
+        contradictsMemoryId: bestConflict.m.id,
+        conflictSummary: `Existing: “${bestConflict.m.content.slice(0, 500)}” New feedback: “${c.content.slice(0, 500)}” Suggested resolution: narrow the lessons to distinct task scopes or choose which should apply.`,
+      } : {}),
     });
   }
 
@@ -241,6 +348,7 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
     newMemories: number;
     reinforced: number;
     proposed: number;
+    conflicts?: number;
   } | null;
   if (!committed || committed.processedSignals !== signals.length) {
     throw new Error("Brain distillation commit returned an invalid acknowledgement.");
@@ -254,14 +362,15 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
     console.error("[brain/distill] decay after commit", error);
   }
 
-  if (committed.newMemories + committed.reinforced + committed.proposed > 0) {
+  if (committed.newMemories + committed.reinforced + committed.proposed + (committed.conflicts ?? 0) > 0) {
     const bits: string[] = [];
     if (committed.newMemories) bits.push(`learned ${committed.newMemories}`);
     if (committed.reinforced) bits.push(`reinforced ${committed.reinforced}`);
     if (committed.proposed) bits.push(`proposed ${committed.proposed} for review`);
-    const total = committed.newMemories + committed.reinforced + committed.proposed;
+    if (committed.conflicts) bits.push(`flagged ${committed.conflicts} conflict${committed.conflicts === 1 ? "" : "s"}`);
+    const total = committed.newMemories + committed.reinforced + committed.proposed + (committed.conflicts ?? 0);
     await logBrainEvent(admin, clientId, "learned", `From your feedback: ${bits.join(", ")} lesson${total === 1 ? "" : "s"}`,
-      { inserted: committed.newMemories, reinforced: committed.reinforced, proposed: committed.proposed });
+      { inserted: committed.newMemories, reinforced: committed.reinforced, proposed: committed.proposed, conflicts: committed.conflicts ?? 0 });
   }
 
   return { skipped: false, ...committed };
@@ -271,23 +380,8 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
  * low. Exported so the cron can decay idle clients (no new feedback) too —
  * otherwise stale lessons would never fade for a client that stops rating. */
 export async function decayClientMemory(admin: Admin, clientId: string): Promise<void> {
-  const cutoff = new Date(Date.now() - DECAY_DAYS * 86_400_000).toISOString();
-  const { data, error: readError } = await admin
-    .from("brain_memory")
-    .select("id, confidence")
-    .eq("client_id", clientId)
-    .eq("status", "active")
-    .lt("last_reinforced_at", cutoff)
-    .limit(200);
-  if (readError) throw new Error(`Could not load stale Brain memory: ${readError.message}`);
-  const stale = (data ?? []) as { id: string; confidence: number }[];
-  const updates = await Promise.all(stale.map((m) => {
-    const next = m.confidence - DECAY_AMT;
-    if (next < MUTE_FLOOR) {
-      return admin.from("brain_memory").update({ status: "muted", active: false, confidence: Math.max(0, next), updated_at: new Date().toISOString() }).eq("id", m.id);
-    }
-    return admin.from("brain_memory").update({ confidence: next, updated_at: new Date().toISOString() }).eq("id", m.id);
-  }));
-  const failed = updates.find((result) => result.error);
-  if (failed?.error) throw new Error(`Could not decay Brain memory: ${failed.error.message}`);
+  const { error } = await admin.rpc("decay_brain_memories", { p_client_id: clientId });
+  if (error && !/function .* does not exist/i.test(error.message)) {
+    throw new Error(`Could not decay Brain memory: ${error.message}`);
+  }
 }

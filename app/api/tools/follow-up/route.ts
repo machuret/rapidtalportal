@@ -45,7 +45,7 @@ export const POST = withTool(
         body: stripDashes(String(t.body ?? "")).slice(0, 2000),
         purpose: stripDashes(String(t.purpose ?? "")).slice(0, 120),
       }));
-    logToolRun("follow-up", data.clientId, user.id, data.email.split("\n").find(Boolean)?.slice(0, 80) ?? "follow-up sequence", result.tokens, { touches });
+    logToolRun("follow-up", data.clientId, user.id, data.email.split("\n").find(Boolean)?.slice(0, 80) ?? "follow-up sequence", result.tokens, { touches }, result.brainContextSnapshotId);
     return NextResponse.json({ touches });
   },
 );

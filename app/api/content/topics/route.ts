@@ -25,6 +25,7 @@ const createSchema = z.object({
   ai_fit_score: z.number().int().min(0).max(100).optional().nullable(),
   ai_flagged:   z.boolean().optional(),
   why:          z.record(z.string(), z.unknown()).optional().nullable(),
+  brain_context_snapshot_id: z.string().uuid().optional().nullable(),
   status:       z.enum(["pending", "approved"]).optional().default("pending"),
 });
 
@@ -64,7 +65,7 @@ export const GET = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (admin as any)
     .from("content_topics")
-    .select("id, title, description, content_type, status, created_at, created_by, approved_by, approved_at, why, ai_fit_score, ai_flagged")
+    .select("id, title, description, content_type, status, created_at, created_by, approved_by, approved_at, why, ai_fit_score, ai_flagged, brain_context_snapshot_id")
     .eq("client_id", parsed.data.client_id)
     .order("created_at", { ascending: false });
 
@@ -109,6 +110,7 @@ export const POST = withAuth(async (req, { user }) => {
       ai_fit_score: parsed.data.ai_fit_score ?? null,
       ai_flagged:   parsed.data.ai_flagged ?? false,
       why:          parsed.data.why ?? null,
+      brain_context_snapshot_id: parsed.data.brain_context_snapshot_id ?? null,
       status:       parsed.data.status,
       approved_by:  parsed.data.status === "approved" ? user.id : null,
       approved_at:  approvedAt,
@@ -135,7 +137,11 @@ export const POST = withAuth(async (req, { user }) => {
         artifact_text: artifactText || data.title || "(topic)",
         rating: 1,
         reason: null,
-        context: { content_type: data.content_type, stage: "approved_idea" },
+        context: {
+          content_type: data.content_type,
+          channel: data.content_type === "social" ? undefined : data.content_type,
+          stage: "approved_idea",
+        },
       });
       if (signalError) throw signalError;
     } catch (signalError) {
@@ -206,7 +212,10 @@ export const PATCH = withAuth(async (req, { user }) => {
         artifact_text: artifactText || data.title || "(topic)",
         rating:        isNegative ? -1 : 1,
         reason:        parsed.data.flag_reason ?? null,
-        context:       { content_type: data.content_type },
+        context: {
+          content_type: data.content_type,
+          channel: data.content_type === "social" ? undefined : data.content_type,
+        },
       });
       if (signalError) throw signalError;
     } catch (e) {

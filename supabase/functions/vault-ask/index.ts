@@ -17,6 +17,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { visibleSopsForUser } from "../_shared/sop-visibility.ts";
 import { memoryAppliesToSurfaces } from "../_shared/brain-surfaces.ts";
 import { resolveCompetitorTargets } from "../_shared/competitor-context.ts";
+import {
+  brainContextSurfaceEnabled,
+  persistBrainContextSnapshot,
+  resolveBrainContext,
+  type BrainContextV1,
+} from "../_shared/brain-context.ts";
+import { embedBrainMemoryQuery } from "../_shared/brain-memory-embedding.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "https://rapidtal.online",
@@ -149,7 +156,7 @@ function encodeSources(s: unknown): string {
 }
 
 /** A one-shot SSE response (OpenAI delta format) for the no-context case. */
-function sseOnce(content: string): Response {
+function sseOnce(content: string, brainContextSnapshotId: string | null = null): Response {
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     start(c) {
@@ -159,7 +166,14 @@ function sseOnce(content: string): Response {
     },
   });
   return new Response(stream, {
-    headers: { ...corsHeaders, "Content-Type": "text/event-stream", "X-Vault-Sources": encodeSources([]) },
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "text/event-stream",
+      "X-Vault-Sources": encodeSources([]),
+      ...(brainContextSnapshotId
+        ? { "X-Brain-Context-Snapshot": brainContextSnapshotId }
+        : {}),
+    },
   });
 }
 
@@ -299,13 +313,58 @@ Deno.serve(async (req: Request) => {
     } catch (e) {
       console.warn("vault-ask: question embedding failed, continuing without vector search:", e);
     }
+    const structuredBrainEnabled = await brainContextSurfaceEnabled(
+      admin,
+      clientId,
+      "ask",
+    );
+    let brainContext: BrainContextV1 | null = null;
+    let brainContextSnapshotId: string | null = null;
+    if (structuredBrainEnabled) {
+      brainContext = await resolveBrainContext({
+        admin,
+        clientId,
+        request: {
+          surface: body.surface === "compose" ? "compose" : "ask",
+          topic: retrievalQuery,
+          intent: deep ? "thorough answer" : "concise answer",
+          selectedVaultSourceIds: [],
+          includeMarketIntelligence: false,
+        },
+        model: deep ? DEEP_MODEL : CONCISE_MODEL,
+        promptVersion: deep ? "vault.ask.deep" : "vault.ask.answer",
+        maxKnowledge: matchCount,
+        maxMemory: 20,
+        memoryEmbed: embedBrainMemoryQuery,
+        embed: async (value) => {
+          // Reuse the first already-computed embedding for the exact query.
+          if (value === retrievalQuery.slice(0, 1_500) && embeddings[0]) {
+            return embeddings[0];
+          }
+          // deno-lint-ignore no-explicit-any
+          const session = new (globalThis as any).Supabase.ai.Session("gte-small");
+          return await session.run(value, {
+            mean_pool: true,
+            normalize: true,
+          }) as number[];
+        },
+      });
+      const snapshot = await persistBrainContextSnapshot({
+        admin,
+        context: brainContext,
+        createdBy: authUser.id,
+      });
+      brainContextSnapshotId = snapshot.id;
+    }
 
     // ── Retrieve from all sources in parallel ───────────────────────────────────
     // Hybrid: vector search over chunks PLUS keyword (FTS) search over documents,
     // so exact terms (product names, codes) are caught even when vectors miss.
     const perEmbed = Math.max(deep ? 8 : 4, Math.ceil(matchCount / Math.max(1, embeddings.length)));
     const [dnaRes, kbRes, sopRes, sopAccessRes, competitorsRes, vaultResults, ftsResults] = await Promise.all([
-      admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
+      structuredBrainEnabled
+        ? Promise.resolve({ data: null, error: null })
+        : admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
       admin.from("kb_entries").select("question, answer")
         .eq("client_id", clientId)
         .textSearch("fts", ftsQuery, { type: "websearch", config: "english" })
@@ -325,20 +384,52 @@ Deno.serve(async (req: Request) => {
         .eq("status", "active")
         .order("name")
         .limit(50),
-      Promise.all(embeddings.map((e) =>
-        admin.rpc("match_vault_chunks", { p_client_id: clientId, p_query_embedding: e, p_match_count: perEmbed }),
-      )),
-      Promise.all(ftsQueries.map((q) =>
-        admin.from("vault_items").select("id, title, ai_summary, raw_content")
-          .eq("client_id", clientId)
-          .eq("status", "ready")
-          .eq("evidence_role", "factual")
-          .textSearch("fts", q, { type: "websearch", config: "english" })
-          .limit(deep ? 10 : 8),
-      )),
+      structuredBrainEnabled
+        ? Promise.resolve([])
+        : Promise.all(embeddings.map((e) =>
+          admin.rpc("match_vault_chunks", { p_client_id: clientId, p_query_embedding: e, p_match_count: perEmbed }),
+        )),
+      structuredBrainEnabled
+        ? Promise.resolve([])
+        : Promise.all(ftsQueries.map((q) =>
+          admin.from("vault_items").select("id, title, ai_summary, raw_content")
+            .eq("client_id", clientId)
+            .eq("status", "ready")
+            .eq("evidence_role", "factual")
+            .textSearch("fts", q, { type: "websearch", config: "english" })
+            .limit(deep ? 10 : 8),
+        )),
     ]);
 
     const blocks: Block[] = [];
+
+    if (brainContext) {
+      const companyText = Object.entries(brainContext.company.fields)
+        .map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`)
+        .join("\n");
+      if (companyText) {
+        blocks.push({ kind: "dna", title: "Company DNA", text: companyText });
+      }
+      if (brainContext.memories.length) {
+        const labels = { preference: "Prefer", anti_pattern: "Avoid", rule: "Rule" };
+        blocks.push({
+          kind: "dna",
+          title: "Company preferences & rules (learned)",
+          text: brainContext.memories
+            .map((memory) => `${labels[memory.kind]}: ${memory.content}`)
+            .join("\n"),
+        });
+      }
+      for (const source of brainContext.knowledge.sources) {
+        blocks.push({
+          kind: "vault",
+          title: source.title,
+          text: source.excerpt,
+          itemId: source.itemId,
+          score: source.relevance ?? lexicalScore(question, `${source.title} ${source.excerpt}`),
+        });
+      }
+    }
 
     // 1. Company DNA — always, the authoritative profile.
     const dna = dnaRes.data as Record<string, unknown> | null;
@@ -362,16 +453,18 @@ Deno.serve(async (req: Request) => {
     // 1b. Brain memory — learned, authoritative preferences & rules to respect.
     // Scope-filter to lessons relevant to THIS surface. The shared helper also
     // maps legacy "ask" scopes to the canonical "vault_answer" vocabulary.
-    const { data: memRows } = await admin.from("brain_memory")
-      .select("kind, content, scope").eq("client_id", clientId).eq("active", true)
-      .order("pinned", { ascending: false }).limit(60);
-    const mem = ((memRows ?? []) as { kind: string; content: string; scope: { surfaces?: string[] } | null }[])
-      .filter((m) => memoryAppliesToSurfaces(m.scope, [memorySurface]))
-      .slice(0, 20);
-    if (mem.length) {
-      const memLabel: Record<string, string> = { preference: "Prefer", anti_pattern: "Avoid", rule: "Rule" };
-      const memText = mem.map((m) => `${memLabel[m.kind] ?? "Note"}: ${m.content}`).join("\n");
-      blocks.push({ kind: "dna", title: "Company preferences & rules (learned)", text: memText });
+    if (!structuredBrainEnabled) {
+      const { data: memRows } = await admin.from("brain_memory")
+        .select("kind, content, scope").eq("client_id", clientId).eq("active", true)
+        .order("pinned", { ascending: false }).limit(60);
+      const mem = ((memRows ?? []) as { kind: string; content: string; scope: { surfaces?: string[] } | null }[])
+        .filter((m) => memoryAppliesToSurfaces(m.scope, [memorySurface]))
+        .slice(0, 20);
+      if (mem.length) {
+        const memLabel: Record<string, string> = { preference: "Prefer", anti_pattern: "Avoid", rule: "Rule" };
+        const memText = mem.map((m) => `${memLabel[m.kind] ?? "Note"}: ${m.content}`).join("\n");
+        blocks.push({ kind: "dna", title: "Company preferences & rules (learned)", text: memText });
+      }
     }
 
     // 1c. Competitor intelligence — a deliberately separate external context.
@@ -619,8 +712,13 @@ Deno.serve(async (req: Request) => {
     if (!blocks.length) {
       await logQuery(0);
       const msg = "I don't have anything in the Vault that answers this yet. Add a relevant document (or fill in Company DNA), then it'll show up here.";
-      if (stream) return sseOnce(msg);
-      return json({ answer: msg, sources: [], chunksUsed: 0 });
+      if (stream) return sseOnce(msg, brainContextSnapshotId);
+      return json({
+        answer: msg,
+        sources: [],
+        chunksUsed: 0,
+        brainContextSnapshotId,
+      });
     }
 
     // ── Re-rank: lead with the most relevant material so the model focuses there,
@@ -695,6 +793,9 @@ Deno.serve(async (req: Request) => {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache, no-transform",
           "X-Vault-Sources": encodeSources(sources),
+          ...(brainContextSnapshotId
+            ? { "X-Brain-Context-Snapshot": brainContextSnapshotId }
+            : {}),
         },
       });
     }
@@ -709,7 +810,13 @@ Deno.serve(async (req: Request) => {
     const tokensUsed: number = chatJson.usage?.total_tokens ?? 0;
 
     await logQuery(blocks.length);
-    return json({ answer, sources, chunksUsed: blocks.length, tokensUsed });
+    return json({
+      answer,
+      sources,
+      chunksUsed: blocks.length,
+      tokensUsed,
+      brainContextSnapshotId,
+    });
   } catch (error) {
     console.error("❌ vault-ask error:", error);
     return json({ error: error instanceof Error ? error.message : "Internal server error" }, 500);

@@ -30,7 +30,7 @@ export default async function ContentPage() {
       .limit(51),
     admin
       .from("content_topics")
-      .select("id, title, description, content_type, status, created_at, created_by")
+      .select("id, title, description, content_type, status, created_at, created_by, brain_context_snapshot_id")
       .eq("client_id", user.client_id)
       .order("created_at", { ascending: false }),
     admin
@@ -45,7 +45,7 @@ export default async function ContentPage() {
       .eq("status", "approved"),
     admin
       .from("content_projects")
-      .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,created_at,updated_at")
+      .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,brain_context_snapshot_id,created_at,updated_at")
       .eq("client_id", user.client_id)
       .order("updated_at", { ascending: false })
       .limit(201),

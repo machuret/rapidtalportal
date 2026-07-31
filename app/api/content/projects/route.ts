@@ -246,7 +246,7 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const db = createAdminClient();
-  const columns = "id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,created_at,updated_at";
+  const columns = "id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,brain_context_snapshot_id,created_at,updated_at";
   if (!parsed.data.id) {
     const paged = searchParams.has("offset") || searchParams.has("limit");
     const { data, error } = await db
@@ -329,6 +329,29 @@ export const POST = withAuth(async (req, { user }) => {
     const marketError = await verifyMarketIntelligence(db, parsed.data.client_id, market);
     if (marketError) return NextResponse.json({ error: marketError }, { status: 422 });
   }
+  let inheritedBrainContextSnapshotId = parsed.data.idea.brainContextSnapshotId ?? null;
+  if (parsed.data.idea.topicId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: topic, error: topicError } = await (db as any)
+      .from("content_topics")
+      .select("id,brain_context_snapshot_id")
+      .eq("id", parsed.data.idea.topicId)
+      .eq("client_id", parsed.data.client_id)
+      .maybeSingle();
+    if (topicError) return serverError(topicError);
+    if (!topic) {
+      return NextResponse.json({ error: "The selected content idea was not found." }, { status: 404 });
+    }
+    if (
+      inheritedBrainContextSnapshotId &&
+      inheritedBrainContextSnapshotId !== topic.brain_context_snapshot_id
+    ) {
+      return NextResponse.json({
+        error: "The selected idea context does not match its saved provenance.",
+      }, { status: 422 });
+    }
+    inheritedBrainContextSnapshotId = topic.brain_context_snapshot_id ?? null;
+  }
   // The validated Zod object contains nested JSON that the generated Supabase
   // type cannot narrow to its recursive Json alias.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -341,9 +364,10 @@ export const POST = withAuth(async (req, { user }) => {
       current_step: "idea",
       idea_snapshot: parsed.data.idea,
       competitor_signals: market?.competitorSources ?? [],
+      brain_context_snapshot_id: inheritedBrainContextSnapshotId,
       created_by: user.id,
     })
-    .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,created_at,updated_at")
+    .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,brain_context_snapshot_id,created_at,updated_at")
     .single();
   if (error) return serverError(error);
   await recordWorkflowEvent(db as unknown as PilotDbClient, {

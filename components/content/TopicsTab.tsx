@@ -197,6 +197,7 @@ export const TopicsTab = memo(function TopicsTab({
             ...(s.why ?? {}),
             ...(s.explainability ? { explainability: s.explainability } : {}),
           }) as Record<string, unknown>,
+          brain_context_snapshot_id: s.brain_context_snapshot_id ?? null,
           status: canApprove ? "approved" : "pending",
         })
       );
@@ -246,6 +247,7 @@ export const TopicsTab = memo(function TopicsTab({
             ? { explainability: suggestion.explainability }
             : {}),
         }) as Record<string, unknown>,
+        brain_context_snapshot_id: suggestion.brain_context_snapshot_id ?? null,
         status: canApprove ? "approved" : "pending",
       });
       if (saved.status === "approved") await onTopicApproved?.(saved);

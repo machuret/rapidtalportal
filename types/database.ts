@@ -175,6 +175,129 @@ export interface Database {
           { foreignKeyName: "users_client_id_fkey"; columns: ["client_id"]; isOneToOne: false; referencedRelation: "clients"; referencedColumns: ["id"] }
         ];
       };
+      brain_context_snapshots: {
+        Row: {
+          id: string;
+          client_id: string;
+          version: "brain-context-v1";
+          resolver_version: "resolver-v1" | "resolver-v2-task-memory";
+          surface: "ask" | "content" | "compose" | "tool";
+          channel: string | null;
+          artifact_kind: string | null;
+          artifact_id: string | null;
+          request: Json;
+          snapshot: Json;
+          snapshot_hash: string;
+          model: string | null;
+          prompt_version: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          version: "brain-context-v1";
+          resolver_version: "resolver-v1" | "resolver-v2-task-memory";
+          surface: "ask" | "content" | "compose" | "tool";
+          channel?: string | null;
+          artifact_kind?: string | null;
+          artifact_id?: string | null;
+          request: Json;
+          snapshot: Json;
+          model?: string | null;
+          prompt_version?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: NoRelationships;
+      };
+      brain_evaluation_cases: {
+        Row: {
+          id: string;
+          client_id: string;
+          version: 1;
+          name: string;
+          case_type: "ask" | "content_idea" | "content_draft" | "tool";
+          channel: string | null;
+          input: Json;
+          expected: Json;
+          baseline_output: string;
+          baseline_context_snapshot_id: string | null;
+          baseline_model: string | null;
+          baseline_prompt_version: string | null;
+          baseline_captured_at: string | null;
+          tags: string[];
+          active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          version?: 1;
+          name: string;
+          case_type: "ask" | "content_idea" | "content_draft" | "tool";
+          channel?: string | null;
+          input: Json;
+          expected?: Json;
+          baseline_output?: string;
+          baseline_context_snapshot_id?: string | null;
+          baseline_model?: string | null;
+          baseline_prompt_version?: string | null;
+          baseline_captured_at?: string | null;
+          tags?: string[];
+          active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          channel?: string | null;
+          input?: Json;
+          expected?: Json;
+          baseline_output?: string;
+          baseline_context_snapshot_id?: string | null;
+          baseline_model?: string | null;
+          baseline_prompt_version?: string | null;
+          baseline_captured_at?: string | null;
+          tags?: string[];
+          active?: boolean;
+          updated_at?: string;
+        };
+        Relationships: NoRelationships;
+      };
+      brain_context_feature_flags: {
+        Row: {
+          client_id: string;
+          ask_enabled: boolean;
+          content_enabled: boolean;
+          topics_enabled: boolean;
+          tools_enabled: boolean;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          client_id: string;
+          ask_enabled?: boolean;
+          content_enabled?: boolean;
+          topics_enabled?: boolean;
+          tools_enabled?: boolean;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          ask_enabled?: boolean;
+          content_enabled?: boolean;
+          topics_enabled?: boolean;
+          tools_enabled?: boolean;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: NoRelationships;
+      };
       company_dna: {
         Row: { id: string; client_id: string; company_name: string | null; company_description: string | null; founders: string | null; location: string | null; address: string | null; phone: string | null; email: string | null; website: string | null; values: string | null; services: string | null; target_demographic: string | null; client_type: string | null; brand_voice: string | null; sign_off: string | null; business_goals: string | null; marketing_goals: string | null; team: string | null; tools_used: string | null; website_content: string | null; content_style: string | null; internal_rules: string | null; preferred_terms: string | null; prohibited_terms: string | null; emoji_policy: string | null; humour_policy: string | null; spelling_locale: string | null; default_cta_style: string | null; approved_claims: string | null; prohibited_claims: string | null; channel_styles: Record<string, string>; social_links: Record<string, string>; hard_rules: ContentHardRule[]; extra: Record<string, unknown>; updated_at: string };
         Insert: { id?: string; client_id: string; company_name?: string | null; company_description?: string | null; founders?: string | null; location?: string | null; address?: string | null; phone?: string | null; email?: string | null; website?: string | null; values?: string | null; services?: string | null; target_demographic?: string | null; client_type?: string | null; brand_voice?: string | null; sign_off?: string | null; business_goals?: string | null; marketing_goals?: string | null; team?: string | null; tools_used?: string | null; website_content?: string | null; content_style?: string | null; internal_rules?: string | null; preferred_terms?: string | null; prohibited_terms?: string | null; emoji_policy?: string | null; humour_policy?: string | null; spelling_locale?: string | null; default_cta_style?: string | null; approved_claims?: string | null; prohibited_claims?: string | null; channel_styles?: Record<string, string>; social_links?: Record<string, string>; hard_rules?: ContentHardRule[]; extra?: Record<string, unknown>; updated_at?: string };
@@ -314,15 +437,15 @@ export interface Database {
         Relationships: NoRelationships;
       };
       content_pieces: {
-        Row: { id: string; client_id: string; project_id: string | null; content_type: string; title: string; brief: string | null; body: string | null; status: string; style_snapshot: Json; content_brief: Json; source_references: Json; parent_piece_id: string | null; generation_kind: string; revision_reason: string | null; created_by: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; client_id: string; project_id?: string | null; content_type: string; title: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
-        Update: { id?: string; client_id?: string; project_id?: string | null; content_type?: string; title?: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Row: { id: string; client_id: string; project_id: string | null; content_type: string; title: string; brief: string | null; body: string | null; status: string; style_snapshot: Json; content_brief: Json; source_references: Json; parent_piece_id: string | null; generation_kind: string; revision_reason: string | null; brain_context_snapshot_id: string | null; created_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; project_id?: string | null; content_type: string; title: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; brain_context_snapshot_id?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; project_id?: string | null; content_type?: string; title?: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; brain_context_snapshot_id?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
       content_projects: {
-        Row: { id: string; client_id: string; title: string; status: string; current_step: string; idea_snapshot: Json; content_brief: Json; vault_source_ids: string[]; vault_source_references: Json; competitor_signals: Json; style_snapshot: Json; current_piece_id: string | null; created_by: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; client_id: string; title: string; status?: string; current_step?: string; idea_snapshot?: Json; content_brief?: Json; vault_source_ids?: string[]; vault_source_references?: Json; competitor_signals?: Json; style_snapshot?: Json; current_piece_id?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
-        Update: { id?: string; client_id?: string; title?: string; status?: string; current_step?: string; idea_snapshot?: Json; content_brief?: Json; vault_source_ids?: string[]; vault_source_references?: Json; competitor_signals?: Json; style_snapshot?: Json; current_piece_id?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Row: { id: string; client_id: string; title: string; status: string; current_step: string; idea_snapshot: Json; content_brief: Json; vault_source_ids: string[]; vault_source_references: Json; competitor_signals: Json; style_snapshot: Json; current_piece_id: string | null; brain_context_snapshot_id: string | null; created_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; title: string; status?: string; current_step?: string; idea_snapshot?: Json; content_brief?: Json; vault_source_ids?: string[]; vault_source_references?: Json; competitor_signals?: Json; style_snapshot?: Json; current_piece_id?: string | null; brain_context_snapshot_id?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; title?: string; status?: string; current_step?: string; idea_snapshot?: Json; content_brief?: Json; vault_source_ids?: string[]; vault_source_references?: Json; competitor_signals?: Json; style_snapshot?: Json; current_piece_id?: string | null; brain_context_snapshot_id?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
       content_piece_revisions: {
@@ -443,9 +566,9 @@ export interface Database {
         Relationships: NoRelationships;
       };
       tool_runs: {
-        Row: { id: string; client_id: string; user_id: string | null; tool: string; input_summary: string | null; tokens_used: number; output: Record<string, unknown> | null; created_at: string };
-        Insert: { id?: string; client_id: string; user_id?: string | null; tool: string; input_summary?: string | null; tokens_used?: number; output?: Record<string, unknown> | null; created_at?: string };
-        Update: { id?: string; client_id?: string; user_id?: string | null; tool?: string; input_summary?: string | null; tokens_used?: number; output?: Record<string, unknown> | null; created_at?: string };
+        Row: { id: string; client_id: string; user_id: string | null; tool: string; input_summary: string | null; tokens_used: number; output: Record<string, unknown> | null; brain_context_snapshot_id: string | null; created_at: string };
+        Insert: { id?: string; client_id: string; user_id?: string | null; tool: string; input_summary?: string | null; tokens_used?: number; output?: Record<string, unknown> | null; brain_context_snapshot_id?: string | null; created_at?: string };
+        Update: { id?: string; client_id?: string; user_id?: string | null; tool?: string; input_summary?: string | null; tokens_used?: number; output?: Record<string, unknown> | null; brain_context_snapshot_id?: string | null; created_at?: string };
         Relationships: NoRelationships;
       };
       vault_analyses: {
@@ -460,6 +583,7 @@ export interface Database {
           client_id: string;
           channel: string;
           status: string;
+          version: number;
           analysis: StyleAnalysisProfile;
           source_item_ids: string[];
           source_count: number;
@@ -478,6 +602,7 @@ export interface Database {
           client_id: string;
           channel: string;
           status?: string;
+          version?: number;
           analysis?: StyleAnalysisProfile;
           source_item_ids?: string[];
           source_count?: number;
@@ -496,6 +621,7 @@ export interface Database {
           client_id?: string;
           channel?: string;
           status?: string;
+          version?: number;
           analysis?: StyleAnalysisProfile;
           source_item_ids?: string[];
           source_count?: number;
@@ -570,6 +696,45 @@ export interface Database {
           p_operations: Json;
         };
         Returns: Json;
+      };
+      match_brain_memories: {
+        Args: {
+          p_client_id: string;
+          p_query_embedding: string | number[] | null;
+          p_surface: "ask" | "content" | "compose" | "tool";
+          p_channel?: string | null;
+          p_content_type?: string | null;
+          p_limit?: number;
+          p_audience?: string | null;
+          p_objective?: string | null;
+        };
+        Returns: {
+          id: string;
+          kind: "preference" | "anti_pattern" | "rule";
+          content: string;
+          confidence: number;
+          source_count: number;
+          pinned: boolean;
+          scope: Json;
+          semantic_relevance: number;
+          scope_specificity: number;
+          rank_score: number;
+          selection_reason: string;
+        }[];
+      };
+      resolve_brain_memory_conflict: {
+        Args: {
+          p_client_id: string;
+          p_memory_id: string;
+          p_action: "keep_existing" | "replace_existing" | "merge" | "narrow" | "keep_both";
+          p_actor_id: string;
+          p_resolution?: Json;
+        };
+        Returns: Json;
+      };
+      decay_brain_memories: {
+        Args: { p_client_id: string };
+        Returns: number;
       };
       approve_content_style_analysis: {
         Args: {

@@ -17,15 +17,20 @@ export async function embedTexts(texts: string[]): Promise<number[][] | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key || texts.length === 0) return null;
   let res: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
   try {
     res = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({ model: EMBED_MODEL, input: texts.map((t) => t.slice(0, 2000)) }),
+      signal: controller.signal,
     });
   } catch (e) {
     console.error("[brain/embed] fetch error", e);
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
   if (!res.ok) {
     console.error("[brain/embed] OpenAI error", res.status);
