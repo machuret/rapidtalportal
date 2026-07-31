@@ -56,6 +56,8 @@ describe("Coach trust boundary", () => {
     expect(migration).toContain("NEW.visibility = 'private_coach'");
     expect(migration).toContain("audience = 'client' AND current_user_role() = 'client_admin'");
     expect(migration).toContain("audience = 'va_team' AND current_user_role() = 'va'");
+    expect(migration.indexOf("ALTER TABLE coach_turns DROP CONSTRAINT IF EXISTS coach_turns_thread_owner_fkey"))
+      .toBeLessThan(migration.indexOf("ALTER TABLE coach_threads DROP CONSTRAINT IF EXISTS coach_threads_identity_unique"));
     expect(sendMessage).toContain('audience === "client" && user.role === "client_admin"');
     expect(sendMessage).toContain('audience === "va_team" && user.role === "va"');
     expect(askRoute).toContain("if (impersonating)");

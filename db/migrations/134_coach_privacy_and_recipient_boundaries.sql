@@ -155,9 +155,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS coach_threads_one_active_owner
   ON coach_threads (client_id, owner_id) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS coach_threads_owner_time
   ON coach_threads (owner_id, updated_at DESC);
-ALTER TABLE coach_threads DROP CONSTRAINT IF EXISTS coach_threads_identity_unique;
-ALTER TABLE coach_threads
-  ADD CONSTRAINT coach_threads_identity_unique UNIQUE (id, client_id, owner_id);
 
 CREATE TABLE IF NOT EXISTS coach_turns (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -184,7 +181,12 @@ CREATE TABLE IF NOT EXISTS coach_turns (
 
 CREATE INDEX IF NOT EXISTS coach_turns_thread_time
   ON coach_turns (thread_id, created_at);
+-- Drop the child FK before rebuilding the parent identity constraint. This
+-- ordering is required when an idempotent rerun finds both already present.
 ALTER TABLE coach_turns DROP CONSTRAINT IF EXISTS coach_turns_thread_owner_fkey;
+ALTER TABLE coach_threads DROP CONSTRAINT IF EXISTS coach_threads_identity_unique;
+ALTER TABLE coach_threads
+  ADD CONSTRAINT coach_threads_identity_unique UNIQUE (id, client_id, owner_id);
 ALTER TABLE coach_turns
   ADD CONSTRAINT coach_turns_thread_owner_fkey
   FOREIGN KEY (thread_id, client_id, owner_id)
