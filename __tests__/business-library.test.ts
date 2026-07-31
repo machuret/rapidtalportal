@@ -2,6 +2,7 @@ import {
   businessLibraryCreateSchema,
   businessLibraryTransitionSchema,
   businessLibraryUpdateSchema,
+  businessLibraryValidationMessage,
   isLibraryReviewDue,
   slugifyLibraryTitle,
 } from "@/lib/business-library";
@@ -35,6 +36,53 @@ describe("Business Library contracts", () => {
       ...validInput,
       slug: "local-seo-foundation",
     }).success).toBe(true);
+  });
+
+  it("normalises a bare source domain and surrounding whitespace", () => {
+    const result = businessLibraryCreateSchema.safeParse({
+      ...validInput,
+      slug: "local-seo-foundation",
+      sourceUrl: "  www.example.com/local-seo  ",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sourceUrl).toBe("https://www.example.com/local-seo");
+    }
+  });
+
+  it("returns a field-specific message for a malformed source URL", () => {
+    const result = businessLibraryCreateSchema.safeParse({
+      ...validInput,
+      slug: "local-seo-foundation",
+      sourceUrl: "not a valid URL",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(businessLibraryValidationMessage(result.error)).toBe(
+        "Source URL: Enter a valid source URL, for example https://example.com.",
+      );
+    }
+  });
+
+  it("accepts a date-only review boundary and normalises it to UTC", () => {
+    const result = businessLibraryCreateSchema.safeParse({
+      ...validInput,
+      slug: "local-seo-foundation",
+      reviewDueAt: "2026-12-01",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.reviewDueAt).toBe("2026-12-01T00:00:00.000Z");
+    }
+  });
+
+  it("rejects non-web source protocols", () => {
+    const result = businessLibraryCreateSchema.safeParse({
+      ...validInput,
+      slug: "local-seo-foundation",
+      sourceUrl: "javascript:alert(1)",
+    });
+    expect(result.success).toBe(false);
   });
 
   it("requires a freshness boundary for time-sensitive guidance", () => {

@@ -28,6 +28,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LocalTime } from "@/components/ui/LocalTime";
 import {
+  businessLibraryCreateSchema,
+  businessLibraryUpdateSchema,
+  businessLibraryValidationMessage,
   isLibraryReviewDue,
   slugifyLibraryTitle,
   type BusinessLibraryCategory,
@@ -288,15 +291,30 @@ export function BusinessLibraryAdmin({
 
   async function saveDraft() {
     if (saving) return;
+
+    const draftPayload = creating
+      ? {
+          ...payload(form),
+          slug: form.slug || slugifyLibraryTitle(form.title),
+        }
+      : {
+          ...payload(form),
+          versionId: detail?.workingVersion?.id ?? "",
+        };
+    const validation = creating
+      ? businessLibraryCreateSchema.safeParse(draftPayload)
+      : businessLibraryUpdateSchema.safeParse(draftPayload);
+    if (!validation.success) {
+      toast.error(businessLibraryValidationMessage(validation.error));
+      return;
+    }
+
     setSaving(true);
     try {
       if (creating) {
         const result = await api.post<EntryResponse>(
           ROUTES.admin.library(),
-          {
-            ...payload(form),
-            slug: form.slug || slugifyLibraryTitle(form.title),
-          },
+          draftPayload,
           { showErrorToast: false },
         );
         setCreating(false);
@@ -307,10 +325,7 @@ export function BusinessLibraryAdmin({
       } else if (detail?.workingVersion?.status === "draft") {
         const result = await api.patch<EntryResponse>(
           ROUTES.admin.libraryEntry(detail.id),
-          {
-            ...payload(form),
-            versionId: detail.workingVersion.id,
-          },
+          draftPayload,
           { showErrorToast: false },
         );
         setDetail(result.entry);

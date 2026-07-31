@@ -4,6 +4,7 @@ import { serverError } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   businessLibraryCreateSchema,
+  businessLibraryValidationMessage,
 } from "@/lib/business-library";
 import { loadBusinessLibrary, loadBusinessLibraryEntry } from "@/lib/business-library-admin";
 
@@ -29,7 +30,7 @@ export const POST = withSuperAdmin(async (request, { user }) => {
   const parsed = businessLibraryCreateSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({
-      error: parsed.error.issues[0]?.message ?? "Check the Library entry and try again.",
+      error: businessLibraryValidationMessage(parsed.error),
     }, { status: 422 });
   }
 

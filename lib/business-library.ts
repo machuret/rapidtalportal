@@ -78,26 +78,85 @@ const shortList = z.array(
   z.string().trim().min(1).max(120),
 ).max(30).default([]);
 
-const optionalUrl = z.union([
-  z.literal(""),
-  z.url().max(2000),
-]).transform((value) => value || null);
+const optionalUrl = z.string()
+  .trim()
+  .max(2000, { message: "Enter a source URL shorter than 2,000 characters." })
+  .transform((value) => {
+    if (!value) return null;
+    return /^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`;
+  })
+  .refine((value) => {
+    if (!value) return true;
+    try {
+      const url = new URL(value);
+      return (url.protocol === "https:" || url.protocol === "http:")
+        && Boolean(url.hostname);
+    } catch {
+      return false;
+    }
+  }, { message: "Enter a valid source URL, for example https://example.com." });
 
-const optionalDate = z.union([
-  z.literal(""),
-  z.iso.date(),
-]).transform((value) => value || null);
+const optionalDate = z.string()
+  .trim()
+  .refine(
+    (value) => !value || z.iso.date().safeParse(value).success,
+    { message: "Enter a valid date." },
+  )
+  .transform((value) => value || null);
 
-const optionalTimestamp = z.union([
-  z.literal(""),
-  z.iso.datetime({ offset: true }),
-]).transform((value) => value || null);
+const optionalTimestamp = z.string()
+  .trim()
+  .refine(
+    (value) => !value
+      || z.iso.date().safeParse(value).success
+      || z.iso.datetime({ offset: true }).safeParse(value).success,
+    { message: "Enter a valid review date." },
+  )
+  .transform((value) => {
+    if (!value) return null;
+    return value.length === 10 ? `${value}T00:00:00.000Z` : value;
+  });
+
+const LIBRARY_FIELD_LABELS: Record<string, string> = {
+  categoryId: "Category",
+  title: "Title",
+  slug: "Slug",
+  summary: "Summary",
+  body: "Library guidance",
+  sourceUrl: "Source URL",
+  tags: "Tags",
+  industries: "Industries",
+  countries: "Countries",
+  audiences: "Audiences",
+  lifecycleStages: "Lifecycle stages",
+  channels: "Channels",
+  validFrom: "Valid from",
+  validUntil: "Valid until",
+  reviewDueAt: "Review due",
+  changeNote: "Change note",
+  versionId: "Version",
+};
+
+export function businessLibraryValidationMessage(error: z.ZodError): string {
+  const issue = error.issues[0];
+  if (!issue) return "Check the Library entry and try again.";
+  const field = typeof issue.path[0] === "string"
+    ? LIBRARY_FIELD_LABELS[issue.path[0]]
+    : null;
+  return field ? `${field}: ${issue.message}` : issue.message;
+}
 
 export const businessLibraryInputSchema = z.object({
-  categoryId: z.uuid(),
-  title: z.string().trim().min(3).max(300),
-  summary: z.string().trim().min(10).max(2000),
-  body: z.string().trim().min(50).max(100000),
+  categoryId: z.uuid({ message: "Choose a Library category." }),
+  title: z.string().trim()
+    .min(3, { message: "Enter at least 3 characters." })
+    .max(300, { message: "Keep the title under 300 characters." }),
+  summary: z.string().trim()
+    .min(10, { message: "Enter at least 10 characters." })
+    .max(2000, { message: "Keep the summary under 2,000 characters." }),
+  body: z.string().trim()
+    .min(50, { message: "Enter at least 50 characters." })
+    .max(100000, { message: "Keep the guidance under 100,000 characters." }),
   sourceUrl: optionalUrl.default(""),
   tags: shortList,
   industries: shortList,
@@ -128,8 +187,13 @@ export const businessLibraryInputSchema = z.object({
 });
 
 export const businessLibraryCreateSchema = businessLibraryInputSchema.extend({
-  slug: z.string().trim().min(3).max(120)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  slug: z.string().trim()
+    .min(3, { message: "Enter at least 3 letters or numbers." })
+    .max(120, { message: "Keep the slug under 120 characters." })
+    .regex(
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+      { message: "Use lowercase letters, numbers and single hyphens only." },
+    ),
 });
 
 export const businessLibraryUpdateSchema = businessLibraryInputSchema.extend({

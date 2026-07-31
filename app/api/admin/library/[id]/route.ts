@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { withSuperAdmin } from "@/lib/api/with-auth";
 import { serverError } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { businessLibraryUpdateSchema } from "@/lib/business-library";
+import {
+  businessLibraryUpdateSchema,
+  businessLibraryValidationMessage,
+} from "@/lib/business-library";
 import { loadBusinessLibraryEntry } from "@/lib/business-library-admin";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +36,7 @@ export const PATCH = withSuperAdmin<Params>(async (request, { user, params }) =>
   const parsed = businessLibraryUpdateSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({
-      error: parsed.error.issues[0]?.message ?? "Check the draft and try again.",
+      error: businessLibraryValidationMessage(parsed.error),
     }, { status: 422 });
   }
 
