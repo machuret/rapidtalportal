@@ -67,6 +67,7 @@ const vaLinks: NavItem[] = [
   { href: "/ask",            label: "Ask the Vault",  icon: Sparkles },
   { href: "/vault",          label: "Vault",          icon: Archive },
   { href: "/company-dna",    label: "Company DNA",    icon: Dna },
+  { href: "/brain",          label: "Company Brain",  icon: Brain },
   { href: "/company-report", label: "Company Report", icon: Brain },
   { section: "Tools" },
   { href: "/tools",          label: "Tools",           icon: Wrench },

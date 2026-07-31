@@ -19,7 +19,7 @@ export default async function BrainPage({
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user, client } = ctx;
-  if (!["client_admin", "super_admin"].includes(user.role)) redirect("/dashboard");
+  if (!["client_admin", "super_admin", "va"].includes(user.role)) redirect("/dashboard");
 
   const admin = createAdminClient();
   let clientId = user.client_id;

@@ -74,7 +74,8 @@ describe("Phase 4 Brain readiness product", () => {
     expect(migration).toContain("WHERE meaningful = true");
   });
 
-  it("keeps the live Brain discoverable for client and super admins", () => {
+  it("keeps the read-only live Brain discoverable for every company role", () => {
+    expect(brainPage).toContain('["client_admin", "super_admin", "va"]');
     expect(brainPage).toContain('user.role === "super_admin"');
     expect(brainPage).toContain('.from("clients")');
     expect(brainPage).not.toContain('if (!user.client_id) redirect("/dashboard")');
