@@ -10,6 +10,7 @@ import type {
   ContentStatus,
   ContentType,
 } from "@/types/content";
+import type { EditorialLearningSuggestion } from "@/components/content/EditorialLearningPrompt";
 
 const PIECES_KEY = "content-pieces";
 
@@ -18,6 +19,8 @@ export interface ContentPieceFull extends ContentPiece {
   brief?: string | null;
   body: string | null;
   updated_at?: string;
+  learning_suggestion?: EditorialLearningSuggestion | null;
+  editorial_warning?: string | null;
 }
 
 interface GenerationResponse {

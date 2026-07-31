@@ -5,6 +5,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
+import { recordEditorialRevision } from "@/lib/brain/editorial-events";
 
 const schema = z.object({
   client_id: z.string().uuid(),
@@ -168,8 +169,34 @@ export const POST = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: updateError.message }, { status });
   }
 
+  let editorialWarning: string | null = null;
+  try {
+    await recordEditorialRevision({
+      admin,
+      clientId: parsed.data.client_id,
+      projectId: piece.project_id,
+      pieceId: piece.id,
+      actorId: user.id,
+      origin: "ai_rewrite",
+      beforeTitle: piece.title,
+      afterTitle: piece.title,
+      beforeBody: originalBody,
+      afterBody: nextBody,
+      channel: piece.content_type,
+      contentType: typeof existingBrief.desiredFormat === "string"
+        ? existingBrief.desiredFormat
+        : piece.content_type,
+    });
+  } catch (editorialError) {
+    editorialWarning = editorialError instanceof Error
+      ? editorialError.message
+      : "AI rewrite lineage could not be recorded.";
+    console.error("[content/rewrite editorial]", editorialWarning);
+  }
+
   return NextResponse.json({
     ...updated,
     sources: generated.sources ?? [],
+    editorial_warning: editorialWarning,
   });
 });

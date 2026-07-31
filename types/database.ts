@@ -437,9 +437,9 @@ export interface Database {
         Relationships: NoRelationships;
       };
       content_pieces: {
-        Row: { id: string; client_id: string; project_id: string | null; content_type: string; title: string; brief: string | null; body: string | null; status: string; style_snapshot: Json; content_brief: Json; source_references: Json; parent_piece_id: string | null; generation_kind: string; revision_reason: string | null; brain_context_snapshot_id: string | null; created_by: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; client_id: string; project_id?: string | null; content_type: string; title: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; brain_context_snapshot_id?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
-        Update: { id?: string; client_id?: string; project_id?: string | null; content_type?: string; title?: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; brain_context_snapshot_id?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Row: { id: string; client_id: string; project_id: string | null; content_type: string; title: string; brief: string | null; body: string | null; status: string; style_snapshot: Json; content_brief: Json; source_references: Json; parent_piece_id: string | null; generation_kind: string; revision_reason: string | null; brain_context_snapshot_id: string | null; ai_original: string | null; outcome: string | null; outcome_at: string | null; created_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; project_id?: string | null; content_type: string; title: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; brain_context_snapshot_id?: string | null; ai_original?: string | null; outcome?: string | null; outcome_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; client_id?: string; project_id?: string | null; content_type?: string; title?: string; brief?: string | null; body?: string | null; status?: string; style_snapshot?: Json; content_brief?: Json; source_references?: Json; parent_piece_id?: string | null; generation_kind?: string; revision_reason?: string | null; brain_context_snapshot_id?: string | null; ai_original?: string | null; outcome?: string | null; outcome_at?: string | null; created_by?: string | null; created_at?: string; updated_at?: string };
         Relationships: NoRelationships;
       };
       content_projects: {
@@ -452,6 +452,18 @@ export interface Database {
         Row: { id: string; piece_id: string; client_id: string; revision_number: number; title: string; body: string | null; content_type: string; content_brief: Json; style_snapshot: Json; source_references: Json; reason: string; created_by: string | null; created_at: string };
         Insert: { id?: string; piece_id: string; client_id: string; revision_number: number; title: string; body?: string | null; content_type: string; content_brief?: Json; style_snapshot?: Json; source_references?: Json; reason?: string; created_by?: string | null; created_at?: string };
         Update: { id?: string; piece_id?: string; client_id?: string; revision_number?: number; title?: string; body?: string | null; content_type?: string; content_brief?: Json; style_snapshot?: Json; source_references?: Json; reason?: string; created_by?: string | null; created_at?: string };
+        Relationships: NoRelationships;
+      };
+      content_editorial_events: {
+        Row: { id: string; client_id: string; project_id: string | null; piece_id: string; event_type: "generated" | "manual_revision" | "ai_rewrite" | "submitted" | "approved"; edit_origin: "generation" | "manual" | "ai_rewrite" | "workflow"; before_title: string | null; after_title: string | null; before_body: string | null; after_body: string | null; analysis: Json; created_by: string | null; created_at: string };
+        Insert: { id?: string; client_id: string; project_id?: string | null; piece_id: string; event_type: "generated" | "manual_revision" | "ai_rewrite" | "submitted" | "approved"; edit_origin: "generation" | "manual" | "ai_rewrite" | "workflow"; before_title?: string | null; after_title?: string | null; before_body?: string | null; after_body?: string | null; analysis?: Json; created_by?: string | null; created_at?: string };
+        Update: { analysis?: Json; created_by?: string | null };
+        Relationships: NoRelationships;
+      };
+      editorial_learning_suggestions: {
+        Row: { id: string; client_id: string; project_id: string | null; piece_id: string; event_id: string; classification: string; proposed_outcome: string; dimensions: string[]; summary: string; lesson_content: string; explanation: string; before_excerpt: string; after_excerpt: string; proposed_scope: Json; confidence: number; status: string; signal_id: string | null; memory_id: string | null; created_by: string | null; reviewed_by: string | null; reviewed_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; client_id: string; project_id?: string | null; piece_id: string; event_id: string; classification: string; proposed_outcome: string; dimensions?: string[]; summary: string; lesson_content: string; explanation: string; before_excerpt?: string; after_excerpt?: string; proposed_scope?: Json; confidence?: number; status?: string; signal_id?: string | null; memory_id?: string | null; created_by?: string | null; reviewed_by?: string | null; reviewed_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { proposed_scope?: Json; status?: string; signal_id?: string | null; memory_id?: string | null; reviewed_by?: string | null; reviewed_at?: string | null; updated_at?: string };
         Relationships: NoRelationships;
       };
       daily_logs: {
@@ -677,6 +689,11 @@ export interface Database {
           rating: number;
           reason: string | null;
           context: Json;
+          dimensions: string[];
+          channel: string | null;
+          content_type: string | null;
+          learning_intent: string;
+          editorial_event_id: string | null;
           resolved: boolean;
           created_at: string;
           distilled_at: string | null;
@@ -735,6 +752,15 @@ export interface Database {
       decay_brain_memories: {
         Args: { p_client_id: string };
         Returns: number;
+      };
+      approve_editorial_learning_suggestion: {
+        Args: {
+          p_client_id: string;
+          p_suggestion_id: string;
+          p_actor_id: string;
+          p_scope?: Json | null;
+        };
+        Returns: Database["public"]["Tables"]["editorial_learning_suggestions"]["Row"][];
       };
       approve_content_style_analysis: {
         Args: {

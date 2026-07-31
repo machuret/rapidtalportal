@@ -18,6 +18,7 @@ import {
   claimSupportFromDna,
   contentQualityWarnings,
 } from "@/supabase/functions/_shared/content-quality";
+import { recordEditorialRevision } from "@/lib/brain/editorial-events";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function approvedStyleProfile(db: any, clientId: string, channel: string) {
@@ -217,7 +218,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: current, error: currentError } = await (admin as any)
     .from("content_pieces")
-    .select("project_id, content_type, body, status, updated_at, source_references, style_snapshot")
+    .select("project_id, content_type, title, body, status, updated_at, source_references, style_snapshot, content_brief")
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
     .single();
@@ -330,7 +331,14 @@ export const PATCH = withAuth(async (req, { user }) => {
   }
 
   // Approval used to land silently — tell the author.
-  const piece = data as { title: string; created_by: string | null };
+  const piece = data as {
+    id: string;
+    title: string;
+    body: string | null;
+    content_type: string;
+    project_id: string | null;
+    created_by: string | null;
+  };
   if (parsed.data.status === "approved" && piece.created_by && piece.created_by !== user.id) {
     void notify([piece.created_by], {
       clientId: parsed.data.client_id,
@@ -363,5 +371,40 @@ export const PATCH = withAuth(async (req, { user }) => {
     });
   }
 
-  return NextResponse.json(data);
+  let learningSuggestion = null;
+  let editorialWarning: string | null = null;
+  const editorialContentChanged =
+    (parsed.data.body !== undefined && (parsed.data.body ?? "") !== (current.body ?? "")) ||
+    (parsed.data.title !== undefined && parsed.data.title.trim() !== current.title);
+  try {
+    if (parsed.data.status !== "approved" && editorialContentChanged) {
+      learningSuggestion = await recordEditorialRevision({
+        admin,
+        clientId: parsed.data.client_id,
+        projectId: current.project_id,
+        pieceId: parsed.data.id,
+        actorId: user.id,
+        origin: "manual",
+        beforeTitle: current.title,
+        afterTitle: piece.title,
+        beforeBody: current.body ?? "",
+        afterBody: piece.body ?? "",
+        channel: current.content_type,
+        contentType: typeof current.content_brief?.desiredFormat === "string"
+          ? current.content_brief.desiredFormat
+          : current.content_type,
+      });
+    }
+  } catch (editorialError) {
+    editorialWarning = editorialError instanceof Error
+      ? editorialError.message
+      : "Editorial learning could not be recorded.";
+    console.error("[content/pieces editorial]", editorialWarning);
+  }
+
+  return NextResponse.json({
+    ...piece,
+    learning_suggestion: learningSuggestion,
+    editorial_warning: editorialWarning,
+  });
 });

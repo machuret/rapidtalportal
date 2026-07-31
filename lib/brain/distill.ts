@@ -40,6 +40,9 @@ interface SignalRow {
   rating: number;
   reason: string | null;
   context: Record<string, unknown> | null;
+  dimensions: string[];
+  channel: string | null;
+  content_type: string | null;
   distill_claim_token: string | null;
 }
 interface MemRow {
@@ -80,10 +83,12 @@ function scopeFromSignals(rows: SignalRow[]): BrainMemoryScope {
   const raw = {
     surfaces: rows.map((signal) => signal.surface),
     channels: rows.flatMap((signal) => textList([
+      signal.channel,
       signal.context?.channel,
       signal.context?.platform,
     ])),
     contentTypes: rows.flatMap((signal) => textList([
+      signal.content_type,
       signal.context?.content_type,
       signal.context?.contentType,
     ])),
@@ -125,6 +130,15 @@ function scopesEquivalent(leftValue: unknown, rightValue: unknown): boolean {
     });
   };
   return canonical(leftValue) === canonical(rightValue);
+}
+
+export function sharedSignalDimensions(
+  rows: Array<{ dimensions?: string[] | null }>,
+): string[] {
+  if (!rows.length) return [];
+  return Array.from(new Set(rows[0].dimensions ?? [])).filter((dimension) =>
+    rows.every((row) => row.dimensions?.includes(dimension))
+  );
 }
 
 export async function distillClientMemory(admin: Admin, clientId: string): Promise<DistillResult> {
@@ -178,6 +192,7 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
   const fmt = (s: SignalRow) =>
     `- signal_id=${s.id} [${s.surface}] ${s.artifact_text.slice(0, 240)}` +
     `${s.reason ? ` (reason: ${s.reason})` : ""}` +
+    `${s.dimensions?.length ? ` dimensions=${JSON.stringify(s.dimensions)}` : ""}` +
     `${s.context && Object.keys(s.context).length ? ` context=${JSON.stringify(s.context).slice(0, 500)}` : ""}`;
 
   const userPrompt =
@@ -191,8 +206,9 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
     `- scope is an object with optional arrays: surfaces ["ask","content","compose","tool"], channels ["linkedin","facebook","instagram","email","blog","newsletter"], contentTypes, audiences, objectives, plus optional global boolean.\n` +
     `- Prefer the narrowest scope supported by the linked signals. Do not use global merely because no channel is obvious.\n` +
     `- signal_ids must list the exact signal_id values that independently support this lesson. Never cite an ID that is not shown above.\n` +
+    `- dimensions must list only the feedback dimensions explicitly present on all supporting signals. Never turn topic, factual or audience feedback into a voice/style lesson.\n` +
     `- At most 6 lessons; empty list if nothing new.\n\n` +
-    `Return JSON: { "memories": [ { "kind", "content", "confidence" (0-100), "scope": object, "signal_ids": string[] } ] }`;
+    `Return JSON: { "memories": [ { "kind", "content", "confidence" (0-100), "scope": object, "dimensions": string[], "signal_ids": string[] } ] }`;
 
   let res: Response;
   try {
@@ -240,13 +256,24 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
           : [],
       ));
       const supportingSignals = signals.filter((signal) => supportingIds.includes(signal.id));
+      const supportedDimensions = new Set(sharedSignalDimensions(supportingSignals));
+      const hasStructuredDimensions = supportingSignals.some((signal) => signal.dimensions?.length);
+      const dimensions = hasStructuredDimensions
+        ? Array.from(new Set(
+            Array.isArray(o.dimensions)
+              ? o.dimensions.filter((dimension): dimension is string =>
+                  typeof dimension === "string" && supportedDimensions.has(dimension)
+                )
+              : [],
+          ))
+        : ["legacy_feedback"];
       const requestedScope = normalizeBrainMemoryScope(o.scope);
       const scope = requestedScope.global || requestedScope.surfaces?.length
         ? requestedScope
         : scopeFromSignals(supportingSignals);
-      return { kind, content, confidence, scope, signalIds: supportingIds };
+      return { kind, content, confidence, scope, dimensions, signalIds: supportingIds };
     })
-    .filter((m) => m.content && m.signalIds.length > 0);
+    .filter((m) => m.content && m.signalIds.length > 0 && m.dimensions.length > 0);
 
   // Embed candidates + any existing lessons missing an embedding (backfill).
   const needEmbedExisting = existing

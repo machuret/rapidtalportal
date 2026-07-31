@@ -6,11 +6,14 @@ import { ROUTES } from "@/lib/api/routes";
 
 export interface BrainSignalInput {
   client_id: string;
-  surface: "content_topic" | "vault_answer" | "compose" | "tool" | "content_draft" | "kb" | "content_outcome";
+  surface: "content_topic" | "vault_answer" | "compose" | "tool" | "content_draft" | "kb";
   artifact_id?: string | null;
   artifact_text: string;
   rating: 1 | -1;
   reason?: string | null;
+  dimensions?: string[];
+  channel?: string | null;
+  content_type?: string | null;
   context?: Record<string, unknown>;
 }
 

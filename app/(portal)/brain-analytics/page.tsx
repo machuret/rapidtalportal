@@ -8,6 +8,7 @@ import { KnowledgeGaps } from "@/components/vault/KnowledgeGaps";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { AnswersToReview, type ReviewItem } from "@/components/vault/AnswersToReview";
 import { BrainMemoryPanel, type BrainMemoryItem } from "@/components/brain/BrainMemoryPanel";
+import { BrainLearningInbox } from "@/components/brain/BrainLearningInbox";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 
 export const dynamic = "force-dynamic";
@@ -257,6 +258,7 @@ export default async function BrainAnalyticsPage() {
       )}
 
       {/* Brain memory — learned lessons, independent of Ask-the-Vault usage */}
+      <BrainLearningInbox clientId={clientId} memories={memory} />
       <BrainMemoryPanel clientId={clientId} initial={memory} pendingSignals={pendingSignals} />
     </div>
   );

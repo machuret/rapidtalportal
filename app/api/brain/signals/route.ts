@@ -4,6 +4,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { EDITORIAL_DIMENSIONS } from "@/lib/brain/editorial-learning";
 
 /**
  * Brain signals — the learning input. Any AI surface posts a 👍 / 👎 (with an
@@ -12,11 +13,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
  */
 const createSchema = z.object({
   client_id:     z.string().uuid(),
-  surface:       z.enum(["content_topic", "vault_answer", "compose", "tool", "content_draft", "kb", "content_outcome"]),
+  surface:       z.enum(["content_topic", "vault_answer", "compose", "tool", "content_draft", "kb"]),
   artifact_id:   z.string().uuid().optional().nullable(),
   artifact_text: z.string().min(1).max(8000),
   rating:        z.union([z.literal(1), z.literal(-1)]),
   reason:        z.string().max(2000).optional().nullable(),
+  dimensions:    z.array(z.enum(EDITORIAL_DIMENSIONS)).max(12).optional().default([]),
+  channel:       z.enum(["linkedin", "facebook", "instagram", "email", "blog", "newsletter"]).optional().nullable(),
+  content_type:  z.string().trim().min(1).max(120).optional().nullable(),
   context:       z.record(z.string(), z.unknown()).optional().default({}),
 });
 
@@ -52,6 +56,10 @@ export const POST = withAuth(async (req, { user }) => {
           reason:        parsed.data.reason ?? null,
           artifact_text: parsed.data.artifact_text,
           context:       parsed.data.context ?? {},
+          dimensions:    parsed.data.dimensions,
+          channel:       parsed.data.channel ?? null,
+          content_type:  parsed.data.content_type ?? null,
+          learning_intent: "explicit_feedback",
           distilled_at:  null,
           // Invalidate an in-flight distillation of the old judgement. Its
           // transactional commit will lose ownership and roll back.
@@ -82,6 +90,10 @@ export const POST = withAuth(async (req, { user }) => {
       rating:        parsed.data.rating,
       reason:        parsed.data.reason ?? null,
       context:       parsed.data.context ?? {},
+      dimensions:    parsed.data.dimensions,
+      channel:       parsed.data.channel ?? null,
+      content_type:  parsed.data.content_type ?? null,
+      learning_intent: "explicit_feedback",
     })
     .select("id")
     .single();

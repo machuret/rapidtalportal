@@ -1,14 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import { ThumbsUp, ThumbsDown, Check } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ThumbsUp, ThumbsDown, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { useBrainSignal, type BrainSignalInput } from "@/hooks/useBrainSignal";
+import {
+  dimensionsForFeedbackReason,
+  NEGATIVE_FEEDBACK_REASONS,
+  POSITIVE_FEEDBACK_REASONS,
+} from "@/lib/brain/editorial-learning";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 /**
- * One feedback control for every AI surface. A 👍 / 👎 (👎 asks for an optional
- * reason) that records a brain_signal, so the Brain learns from the whole
- * product — not just content topics. Compact; collapses to a thank-you once given.
+ * Structured, dimension-specific feedback for every AI surface. Nothing becomes
+ * permanent memory here: the signal enters the reviewed Brain-learning flow.
  */
 export function BrainFeedback({
   clientId,
@@ -27,14 +33,47 @@ export function BrainFeedback({
 }) {
   const { sendSignal, isSending } = useBrainSignal();
   const [done, setDone] = useState<null | "up" | "down">(null);
+  const [rating, setRating] = useState<1 | -1 | null>(null);
+  const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
+  const [commentary, setCommentary] = useState("");
 
-  async function rate(rating: 1 | -1) {
+  const reasons = rating === 1 ? POSITIVE_FEEDBACK_REASONS : NEGATIVE_FEEDBACK_REASONS;
+  const dimensions = useMemo(
+    () => Array.from(new Set(selectedReasons.flatMap(dimensionsForFeedbackReason))),
+    [selectedReasons],
+  );
+
+  function open(nextRating: 1 | -1) {
     if (isSending || done) return;
-    const reason =
-      rating === -1 && typeof window !== "undefined"
-        ? window.prompt("What was off about this? (optional — helps the Brain improve)")
+    setRating(nextRating);
+    setSelectedReasons([]);
+    setCommentary("");
+  }
+
+  function toggleReason(reason: string) {
+    setSelectedReasons((current) =>
+      current.includes(reason)
+        ? current.filter((entry) => entry !== reason)
+        : [...current, reason],
+    );
+  }
+
+  async function submit() {
+    if (isSending || done || rating === null || selectedReasons.length === 0) return;
+    const reason = [
+      selectedReasons.join(", "),
+      commentary.trim(),
+    ].filter(Boolean).join(" — ");
+    const channel = typeof context.channel === "string"
+      ? context.channel
+      : typeof context.platform === "string"
+        ? context.platform
         : null;
-    if (rating === -1 && reason === null && typeof window !== "undefined") return; // cancelled
+    const contentType = typeof context.contentType === "string"
+      ? context.contentType
+      : typeof context.content_type === "string"
+        ? context.content_type
+        : null;
     try {
       await sendSignal({
         client_id: clientId,
@@ -43,13 +82,19 @@ export function BrainFeedback({
         artifact_text: artifactText.slice(0, 8000),
         rating,
         reason,
+        dimensions,
+        channel: ["linkedin", "facebook", "instagram", "email", "blog", "newsletter"].includes(channel ?? "")
+          ? channel
+          : null,
+        content_type: contentType,
         context,
       });
     } catch {
       return; // api-client already toasted; leave the control active to retry
     }
     setDone(rating === 1 ? "up" : "down");
-    toast.success(rating === 1 ? "Glad it helped — the Brain will favour this." : "Noted — the Brain will learn from this.");
+    setRating(null);
+    toast.success("Feedback saved for Brain learning review.");
   }
 
   if (done) {
@@ -61,25 +106,83 @@ export function BrainFeedback({
   }
 
   return (
-    <span className={`inline-flex items-center gap-1 ${className}`}>
+    <div className={`relative inline-flex items-center gap-1 ${className}`}>
       <button
         type="button"
-        onClick={() => rate(1)}
+        onClick={() => open(1)}
         disabled={isSending}
-        title="Good — teach the Brain"
-        className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-green-400 px-1.5 py-1 rounded hover:bg-zinc-800 disabled:opacity-40"
+        aria-label="Give positive feedback"
+        title="Good — give specific feedback"
+        className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-green-400 disabled:opacity-40"
       >
-        <ThumbsUp className="w-3.5 h-3.5" />
+        <ThumbsUp className="h-3.5 w-3.5" />
       </button>
       <button
         type="button"
-        onClick={() => rate(-1)}
+        onClick={() => open(-1)}
         disabled={isSending}
-        title="Not right — teach the Brain"
-        className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-red-400 px-1.5 py-1 rounded hover:bg-zinc-800 disabled:opacity-40"
+        aria-label="Give negative feedback"
+        title="Not right — give specific feedback"
+        className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-red-400 disabled:opacity-40"
       >
-        <ThumbsDown className="w-3.5 h-3.5" />
+        <ThumbsDown className="h-3.5 w-3.5" />
       </button>
-    </span>
+      {rating !== null && (
+        <div className="absolute right-0 top-full z-50 mt-2 block w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-left shadow-2xl">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-white">
+              {rating === 1 ? "What worked?" : "What should change?"}
+            </p>
+            <button
+              type="button"
+              aria-label="Close feedback"
+              onClick={() => setRating(null)}
+              className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {reasons.map((reason) => (
+              <button
+                key={reason}
+                type="button"
+                aria-pressed={selectedReasons.includes(reason)}
+                onClick={() => toggleReason(reason)}
+                className={`rounded-full border px-2.5 py-1 text-xs ${
+                  selectedReasons.includes(reason)
+                    ? "border-purple-400 bg-purple-500/15 text-purple-200"
+                    : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                }`}
+              >
+                {reason}
+              </button>
+            ))}
+          </div>
+          <Textarea
+            value={commentary}
+            onChange={(event) => setCommentary(event.target.value)}
+            maxLength={1500}
+            rows={3}
+            placeholder="Optional detail"
+            aria-label="Optional feedback detail"
+            className="mt-3 bg-zinc-900 text-sm"
+          />
+          <div className="mt-3 flex justify-end gap-2">
+            <Button type="button" size="sm" variant="ghost" onClick={() => setRating(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={isSending || selectedReasons.length === 0}
+              onClick={submit}
+            >
+              Save feedback
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

@@ -105,6 +105,9 @@ export const ROUTES = {
   },
   brain: {
     signals: () => "/api/brain/signals",
+    learningInbox: () => "/api/brain/learning-inbox",
+    learningInboxForClient: (clientId: string) =>
+      `/api/brain/learning-inbox?client_id=${clientId}`,
     onboard: () => "/api/brain/onboard",
     memory: () => "/api/brain/memory",
     memoryForClient: (clientId: string) => `/api/brain/memory?client_id=${clientId}`,

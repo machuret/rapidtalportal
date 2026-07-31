@@ -37,6 +37,11 @@ import type {
   ContentType,
 } from "@/types/content";
 import { TYPE_ICON_COLORS, TYPE_ICONS, CONTENT_STATUS_STYLES } from "@/types/content";
+import {
+  EditorialLearningPrompt,
+  type EditorialLearningSuggestion,
+} from "./EditorialLearningPrompt";
+import { BrainFeedback } from "@/components/brain/BrainFeedback";
 
 /* ── Props ──────────────────────────────────────────────────────── */
 interface HistoryTabProps {
@@ -134,6 +139,7 @@ function PieceDetail({
     created_at: string;
   }[]>([]);
   const [compareRevision, setCompareRevision] = useState<string | null>(null);
+  const [learningSuggestion, setLearningSuggestion] = useState<EditorialLearningSuggestion | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const loadedPieceId = useRef(piece.id);
 
@@ -158,6 +164,7 @@ function PieceDetail({
       setPersistedBody(piece.body ?? "");
       setCurrentUpdatedAt(piece.updated_at ?? "");
       setEditing(false);
+      setLearningSuggestion(null);
       setAdaptType(piece.content_type === "linkedin" ? "facebook" : "linkedin");
     }
   }, [
@@ -220,10 +227,14 @@ function PieceDetail({
       });
       setPersistedBody(updated.body ?? "");
       setCurrentUpdatedAt(updated.updated_at ?? "");
+      setLearningSuggestion(updated.learning_suggestion ?? null);
       onPieceChanged(updated);
       setEditing(false);
       await loadRevisions();
       toast.success("Draft saved.");
+      if (updated.editorial_warning) {
+        toast.warning("Draft saved, but its editorial learning record needs attention.");
+      }
     } catch {
       // mutation surfaces the error
     }
@@ -261,6 +272,9 @@ function PieceDetail({
       setRewriteInstruction("");
       await loadRevisions();
       toast.success(scope === "section" ? "Section rewritten." : "Draft rewritten.");
+      if (result.editorial_warning) {
+        toast.warning("Rewrite saved, but its AI-rewrite lineage needs attention.");
+      }
     } catch {
       // API client surfaces the error.
     } finally {
@@ -387,6 +401,19 @@ function PieceDetail({
 
       {/* Actions bar */}
       <div className="flex items-center gap-2 flex-wrap">
+        <span className="mr-1 text-xs text-zinc-500">Rate this draft</span>
+        <BrainFeedback
+          clientId={clientId}
+          surface="content_draft"
+          artifactId={piece.id}
+          artifactText={body}
+          context={{
+            channel: piece.content_type,
+            contentType: piece.content_brief?.desiredFormat ?? piece.content_type,
+            audience: piece.content_brief?.audience ?? null,
+            objective: piece.content_brief?.objective ?? null,
+          }}
+        />
         <button
           onClick={handleCopy}
           disabled={!body}
@@ -597,6 +624,16 @@ function PieceDetail({
               : "For a section rewrite, select text inside the editor first."}
           </p>
         </div>
+      )}
+
+      {learningSuggestion && (
+        <EditorialLearningPrompt
+          clientId={clientId}
+          suggestion={learningSuggestion}
+          channel={piece.content_type}
+          contentType={piece.content_brief?.desiredFormat ?? piece.content_type}
+          onHandled={() => setLearningSuggestion(null)}
+        />
       )}
 
       {/* Body */}
