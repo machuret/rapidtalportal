@@ -11,9 +11,9 @@ import {
 } from "./content-style.ts";
 
 export const BRAIN_CONTEXT_VERSION = "brain-context-v1" as const;
-export const BRAIN_RESOLVER_VERSION = "resolver-v3-business-library" as const;
+export const BRAIN_RESOLVER_VERSION = "resolver-v4-library-availability" as const;
 
-export type BrainSurface = "ask" | "content" | "compose" | "tool";
+export type BrainSurface = "ask" | "content" | "compose" | "tool" | "diagnostic";
 export type BrainChannel =
   | "linkedin"
   | "facebook"
@@ -83,6 +83,7 @@ export interface BrainContextV1 {
     retrievalQuery: string;
     retrievalMethod: "full_text" | "lexical_recovery" | "none";
     coverage: "strong" | "partial" | "weak" | "none";
+    availability: "available" | "degraded" | "unavailable" | "not_requested";
   };
   style: {
     source:
@@ -361,9 +362,12 @@ async function retrieveBusinessLibrary(args: {
 }): Promise<{
   sources: BrainLibrarySource[];
   method: BrainContextV1["library"]["retrievalMethod"];
+  availability: BrainContextV1["library"]["availability"];
   warnings: BrainContextV1["warnings"];
 }> {
-  if (!args.query.trim()) return { sources: [], method: "none", warnings: [] };
+  if (!args.query.trim()) {
+    return { sources: [], method: "none", availability: "not_requested", warnings: [] };
+  }
 
   try {
     const { data, error } = await args.admin.rpc("match_business_library_chunks", {
@@ -376,6 +380,7 @@ async function retrieveBusinessLibrary(args: {
     const rows = (data ?? []) as LibrarySearchRow[];
     return {
       method: "full_text",
+      availability: "available",
       warnings: [],
       sources: rows.slice(0, args.maxSources).map((row) => ({
         entryId: row.entry_id,
@@ -459,6 +464,7 @@ async function retrieveBusinessLibrary(args: {
     return {
       sources,
       method: "lexical_recovery",
+      availability: "degraded",
       warnings: [{
         code: "business_library_search_degraded",
         message: "Business Library search recovered through its published-release fallback.",
@@ -470,9 +476,10 @@ async function retrieveBusinessLibrary(args: {
     return {
       sources: [],
       method: "none",
+      availability: "unavailable",
       warnings: [{
         code: "business_library_unavailable",
-        message: "Business Library guidance was temporarily unavailable; other verified Brain context was preserved.",
+        message: "Library temporarily unavailable. This answer used a verified snapshot of the remaining company context and can be retried.",
         severity: "warning",
       }],
     };
@@ -753,6 +760,7 @@ export async function resolveBrainContext(args: {
     : Promise.resolve({
       sources: [] as BrainLibrarySource[],
       method: "none" as const,
+      availability: "not_requested" as const,
       warnings: [] as BrainContextV1["warnings"],
     });
 
@@ -1082,6 +1090,7 @@ export async function resolveBrainContext(args: {
       retrievalQuery,
       retrievalMethod: libraryResult.method,
       coverage: coverageFor(libraryResult.sources),
+      availability: libraryResult.availability,
     },
     style,
     memories,

@@ -180,8 +180,8 @@ export interface Database {
           id: string;
           client_id: string;
           version: "brain-context-v1";
-          resolver_version: "resolver-v1" | "resolver-v2-task-memory";
-          surface: "ask" | "content" | "compose" | "tool";
+          resolver_version: "resolver-v1" | "resolver-v2-task-memory" | "resolver-v3-business-library" | "resolver-v4-library-availability";
+          surface: "ask" | "content" | "compose" | "tool" | "diagnostic";
           channel: string | null;
           artifact_kind: string | null;
           artifact_id: string | null;
@@ -197,8 +197,8 @@ export interface Database {
           id?: string;
           client_id: string;
           version: "brain-context-v1";
-          resolver_version: "resolver-v1" | "resolver-v2-task-memory";
-          surface: "ask" | "content" | "compose" | "tool";
+          resolver_version: "resolver-v1" | "resolver-v2-task-memory" | "resolver-v3-business-library" | "resolver-v4-library-availability";
+          surface: "ask" | "content" | "compose" | "tool" | "diagnostic";
           channel?: string | null;
           artifact_kind?: string | null;
           artifact_id?: string | null;
@@ -207,6 +207,128 @@ export interface Database {
           model?: string | null;
           prompt_version?: string | null;
           created_by?: string | null;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: NoRelationships;
+      };
+      brain_diagnostic_runs: {
+        Row: {
+          id: string;
+          client_id: string;
+          status: "running" | "completed" | "failed";
+          trigger_kind: "scheduled" | "manual";
+          brain_context_snapshot_id: string | null;
+          summary: Json;
+          opportunities_created: number;
+          error_code: string | null;
+          error_message: string | null;
+          recoverable: boolean;
+          created_by: string | null;
+          started_at: string;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          status?: "running" | "completed" | "failed";
+          trigger_kind: "scheduled" | "manual";
+          brain_context_snapshot_id?: string | null;
+          summary?: Json;
+          opportunities_created?: number;
+          error_code?: string | null;
+          error_message?: string | null;
+          recoverable?: boolean;
+          created_by?: string | null;
+          started_at?: string;
+          completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["brain_diagnostic_runs"]["Insert"]>;
+        Relationships: NoRelationships;
+      };
+      brain_opportunities: {
+        Row: {
+          id: string;
+          client_id: string;
+          diagnostic_run_id: string;
+          brain_context_snapshot_id: string;
+          fingerprint: string;
+          kind: "knowledge_gap" | "voice" | "personalisation" | "reliability" | "market" | "growth";
+          title: string;
+          summary: string;
+          rationale: string;
+          recommended_action: string;
+          impact: "low" | "medium" | "high";
+          effort: "low" | "medium" | "high";
+          priority_score: number;
+          source_layers: string[];
+          company_provenance: Json;
+          library_provenance: Json;
+          status: "suggested" | "approved" | "dismissed" | "in_progress" | "completed";
+          approved_by: string | null;
+          approved_at: string | null;
+          dismissed_by: string | null;
+          dismissed_at: string | null;
+          started_at: string | null;
+          completed_by: string | null;
+          completed_at: string | null;
+          outcome: Json;
+          effectiveness_status: "unmeasured" | "measuring" | "effective" | "mixed" | "ineffective";
+          measured_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          diagnostic_run_id: string;
+          brain_context_snapshot_id: string;
+          fingerprint: string;
+          kind: Database["public"]["Tables"]["brain_opportunities"]["Row"]["kind"];
+          title: string;
+          summary: string;
+          rationale: string;
+          recommended_action: string;
+          impact: "low" | "medium" | "high";
+          effort: "low" | "medium" | "high";
+          priority_score: number;
+          source_layers?: string[];
+          company_provenance?: Json;
+          library_provenance?: Json;
+          status?: Database["public"]["Tables"]["brain_opportunities"]["Row"]["status"];
+          outcome?: Json;
+          effectiveness_status?: Database["public"]["Tables"]["brain_opportunities"]["Row"]["effectiveness_status"];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: never;
+        Relationships: NoRelationships;
+      };
+      brain_opportunity_events: {
+        Row: {
+          id: string;
+          opportunity_id: string;
+          client_id: string;
+          event_kind: "suggested" | "approved" | "dismissed" | "started" | "completed" | "reopened" | "measured";
+          from_status: string | null;
+          to_status: string | null;
+          metadata: Json;
+          actor_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          opportunity_id: string;
+          client_id: string;
+          event_kind: Database["public"]["Tables"]["brain_opportunity_events"]["Row"]["event_kind"];
+          from_status?: string | null;
+          to_status?: string | null;
+          metadata?: Json;
+          actor_id?: string | null;
           created_at?: string;
         };
         Update: never;
@@ -940,11 +1062,21 @@ export interface Database {
         };
         Returns: Json;
       };
+      transition_brain_opportunity: {
+        Args: {
+          p_opportunity_id: string;
+          p_client_id: string;
+          p_action: "approve" | "dismiss" | "start" | "complete" | "reopen" | "measure";
+          p_actor_id: string;
+          p_outcome?: Json;
+        };
+        Returns: Database["public"]["Tables"]["brain_opportunities"]["Row"];
+      };
       match_brain_memories: {
         Args: {
           p_client_id: string;
           p_query_embedding: string | number[] | null;
-          p_surface: "ask" | "content" | "compose" | "tool";
+          p_surface: "ask" | "content" | "compose" | "tool" | "diagnostic";
           p_channel?: string | null;
           p_content_type?: string | null;
           p_limit?: number;

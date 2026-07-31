@@ -115,6 +115,10 @@ export const ROUTES = {
     memory: () => "/api/brain/memory",
     memoryForClient: (clientId: string) => `/api/brain/memory?client_id=${clientId}`,
     memoryDistill: () => "/api/brain/memory/distill",
+    opportunities: () => "/api/brain/opportunities",
+    opportunitiesForClient: (clientId: string) =>
+      `/api/brain/opportunities?clientId=${clientId}`,
+    opportunity: (id: string) => `/api/brain/opportunities/${id}`,
   },
   tasks: () => "/api/tasks",
   taskEvents: () => "/api/tasks/events",

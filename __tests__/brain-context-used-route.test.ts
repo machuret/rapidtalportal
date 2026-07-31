@@ -72,6 +72,7 @@ function snapshot(): BrainContext {
       retrievalQuery: "Private credit",
       retrievalMethod: "lexical_recovery",
       coverage: "weak",
+      availability: "degraded",
     },
     style: {
       source: "approved_channel_analysis",
@@ -105,7 +106,11 @@ function snapshot(): BrainContext {
         confidence: "medium",
       }],
     },
-    warnings: [],
+    warnings: [{
+      code: "business_library_search_degraded",
+      message: "Business Library search recovered through its published-release fallback.",
+      severity: "warning",
+    }],
     provenance: {
       resolverVersion: BRAIN_RESOLVER_VERSION,
       generatedAt: "2026-07-31T02:00:00.000Z",
@@ -176,6 +181,10 @@ it("returns five explicitly separated influence areas with contextual readiness"
     title: "SEO foundations",
     versionNumber: 1,
   });
+  expect(body.businessLibrary.availability).toBe("degraded");
+  expect(body.recoverableWarnings).toContainEqual(expect.objectContaining({
+    code: "business_library_search_degraded",
+  }));
   expect(body.companyVoice.instructions).toEqual(["Use direct founder observations."]);
   expect(body.learnedPreferences[0].reason).toContain("LinkedIn");
   expect(body.marketContext.insights[0].kind).toBe("positioning_gap");

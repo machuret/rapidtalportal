@@ -8,7 +8,21 @@ import { errorMessage } from "@/lib/error-message";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Loader2, Sparkles, ChevronDown, ThumbsUp, ThumbsDown, BookmarkPlus, Check, GraduationCap } from "lucide-react";
+import {
+  AlertTriangle,
+  BookmarkPlus,
+  Check,
+  ChevronDown,
+  ExternalLink,
+  GraduationCap,
+  LibraryBig,
+  Loader2,
+  RotateCcw,
+  Send,
+  Sparkles,
+  ThumbsDown,
+  ThumbsUp,
+} from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
 import {
@@ -23,7 +37,19 @@ interface Source {
   kindLabel: string;
   title: string;
   itemId: string | null;
+  sourceUrl: string | null;
+  versionId: string | null;
+  versionNumber: number | null;
+  chunkId: string | null;
+  category: string | null;
 }
+
+type LibraryAvailability = "available" | "degraded" | "unavailable" | "not_requested";
+type ContextWarning = {
+  code: string;
+  message: string;
+  severity: "info" | "warning" | "blocking";
+};
 
 interface AskResponse {
   answer: string;
@@ -31,6 +57,9 @@ interface AskResponse {
   chunksUsed: number;
   tokensUsed?: number;
   brainContextSnapshotId?: string | null;
+  libraryAvailability: LibraryAvailability;
+  warnings: ContextWarning[];
+  suggestions: string[];
 }
 
 interface Turn {
@@ -38,16 +67,37 @@ interface Turn {
   answer: string;
   sources: Source[];
   brainContextSnapshotId?: string | null;
+  libraryAvailability: LibraryAvailability;
+  warnings: ContextWarning[];
+  suggestions: string[];
+  queriedKinds: AskSourceKind[];
 }
 
 type HistoryItem = { question: string; answer: string };
 
 const SUGGESTIONS = [
-  "What services do we offer?",
-  "How do I onboard a new client?",
-  "What's our refund policy?",
-  "Who do I contact about billing?",
+  "What services do we offer, based on our company evidence?",
+  "Which SEO basics should our business apply first?",
+  "How could we improve our Facebook Ads approach?",
+  "What knowledge is missing from our Brain?",
 ];
+
+const DEFAULT_QUERIED_KINDS: AskSourceKind[] = ["dna", "vault", "library", "memory"];
+
+function queriedKinds(question: string): AskSourceKind[] {
+  return /\b(competitor|competition|market|industry|rival|benchmark)\b/iu.test(question)
+    ? [...DEFAULT_QUERIED_KINDS, "market"]
+    : DEFAULT_QUERIED_KINDS;
+}
+
+function decodeHeader<T>(value: string | null, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(decodeURIComponent(escape(atob(value)))) as T;
+  } catch {
+    return fallback;
+  }
+}
 
 /**
  * Stream an answer from /api/vault/ask-stream (SSE). Calls onProgress with the
@@ -60,7 +110,17 @@ async function askStream(
   history: HistoryItem[],
   onProgress: (answer: string, sources: Source[]) => void,
   mode?: "deep",
-): Promise<{ ok: boolean; answer: string; sources: Source[]; brainContextSnapshotId: string | null }> {
+): Promise<{
+  ok: boolean;
+  answer: string;
+  sources: Source[];
+  brainContextSnapshotId: string | null;
+  libraryAvailability: LibraryAvailability;
+  warnings: ContextWarning[];
+  suggestions: string[];
+  error: string | null;
+  recoverable: boolean;
+}> {
   let answer = "";
   let sources: Source[] = [];
   try {
@@ -69,13 +129,33 @@ async function askStream(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clientId, question, history, ...(mode ? { mode } : {}) }),
     });
-    if (!res.ok || !res.body) return { ok: false, answer: "", sources: [], brainContextSnapshotId: null };
+    if (!res.ok || !res.body) {
+      let message = "The Brain could not complete that answer.";
+      let recoverable = res.status >= 500;
+      try {
+        const body = await res.json() as { error?: string; recoverable?: boolean };
+        message = body.error ?? message;
+        recoverable = body.recoverable ?? recoverable;
+      } catch { /* response was not JSON */ }
+      return {
+        ok: false,
+        answer: "",
+        sources: [],
+        brainContextSnapshotId: null,
+        libraryAvailability: "not_requested",
+        warnings: [],
+        suggestions: [],
+        error: message,
+        recoverable,
+      };
+    }
     const brainContextSnapshotId = res.headers.get("X-Brain-Context-Snapshot") || null;
+    const libraryAvailability = (res.headers.get("X-Brain-Library-Availability") || "not_requested") as LibraryAvailability;
+    const warnings = decodeHeader<ContextWarning[]>(res.headers.get("X-Brain-Warnings"), []);
+    const suggestions = decodeHeader<string[]>(res.headers.get("X-Brain-Suggestions"), []);
 
     const sh = res.headers.get("X-Vault-Sources");
-    if (sh) {
-      try { sources = JSON.parse(decodeURIComponent(escape(atob(sh)))); } catch { /* ignore */ }
-    }
+    sources = decodeHeader<Source[]>(sh, []);
 
     const reader = res.body.getReader();
     const dec = new TextDecoder();
@@ -97,9 +177,29 @@ async function askStream(
         } catch { /* partial JSON line; ignore */ }
       }
     }
-    return { ok: answer.length > 0, answer, sources, brainContextSnapshotId };
+    return {
+      ok: answer.length > 0,
+      answer,
+      sources,
+      brainContextSnapshotId,
+      libraryAvailability,
+      warnings,
+      suggestions,
+      error: answer.length ? null : "The Brain returned an empty answer.",
+      recoverable: true,
+    };
   } catch {
-    return { ok: false, answer: "", sources: [], brainContextSnapshotId: null };
+    return {
+      ok: false,
+      answer: "",
+      sources: [],
+      brainContextSnapshotId: null,
+      libraryAvailability: "not_requested",
+      warnings: [],
+      suggestions: [],
+      error: "The Brain connection was interrupted.",
+      recoverable: true,
+    };
   }
 }
 
@@ -119,6 +219,7 @@ export function AskVaultClient({
   const [turns, setTurns] = useState<Turn[]>([]);
   const [loading, setLoading] = useState(false);
   const [interim, setInterim] = useState<Turn | null>(null);
+  const [askFailure, setAskFailure] = useState<{ question: string; message: string; recoverable: boolean } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -136,12 +237,23 @@ export function AskVaultClient({
     if (trimmed.length < 3 || loading) return;
     setQuestion("");
     setLoading(true);
+    setAskFailure(null);
     const history: HistoryItem[] = turns.slice(-4).map((t) => ({ question: t.question, answer: t.answer }));
-    setInterim({ question: trimmed, answer: "", sources: [], brainContextSnapshotId: null });
+    const requestedLayers = queriedKinds(trimmed);
+    setInterim({
+      question: trimmed,
+      answer: "",
+      sources: [],
+      brainContextSnapshotId: null,
+      libraryAvailability: "not_requested",
+      warnings: [],
+      suggestions: [],
+      queriedKinds: requestedLayers,
+    });
 
     // Stream first; fall back to the non-streaming endpoint if anything fails.
     const r = await askStream(clientId, trimmed, history, (answer, sources) =>
-      setInterim({ question: trimmed, answer, sources, brainContextSnapshotId: null }),
+      setInterim((current) => current ? { ...current, answer, sources } : null),
     );
     if (r.ok) {
       setTurns((prev) => [...prev, {
@@ -149,6 +261,10 @@ export function AskVaultClient({
         answer: r.answer,
         sources: r.sources,
         brainContextSnapshotId: r.brainContextSnapshotId,
+        libraryAvailability: r.libraryAvailability,
+        warnings: r.warnings,
+        suggestions: r.suggestions,
+        queriedKinds: requestedLayers,
       }]);
     } else {
       try {
@@ -162,9 +278,17 @@ export function AskVaultClient({
           answer: res.answer,
           sources: res.sources ?? [],
           brainContextSnapshotId: res.brainContextSnapshotId ?? null,
+          libraryAvailability: res.libraryAvailability ?? "not_requested",
+          warnings: res.warnings ?? [],
+          suggestions: res.suggestions ?? [],
+          queriedKinds: requestedLayers,
         }]);
       } catch (error) {
-        toast.error(errorMessage(error, "The Vault could not answer that question."));
+        setAskFailure({
+          question: trimmed,
+          message: r.error ?? errorMessage(error, "The Brain could not answer that question."),
+          recoverable: r.recoverable,
+        });
       }
     }
     setInterim(null);
@@ -187,6 +311,12 @@ export function AskVaultClient({
     : latestTurn
       ? "ready"
       : "idle";
+  const visibleQueriedKinds = interim?.queriedKinds
+    ?? latestTurn?.queriedKinds
+    ?? [];
+  const visibleLibraryAvailability = interim?.libraryAvailability
+    ?? latestTurn?.libraryAvailability
+    ?? "not_requested";
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-8rem)]">
@@ -195,7 +325,9 @@ export function AskVaultClient({
           companyName={companyName}
           state={flowState}
           activeKinds={[...new Set(visibleSources.map((source) => source.kind))]}
+          queriedKinds={visibleQueriedKinds}
           snapshotAvailable={Boolean(latestTurn?.brainContextSnapshotId)}
+          libraryAvailability={visibleLibraryAvailability}
         />
       </div>
 
@@ -206,7 +338,7 @@ export function AskVaultClient({
             <Sparkles className="w-7 h-7 text-purple-400 mx-auto mb-3" />
             <p className="text-zinc-300 font-medium mb-1">What would you like to know?</p>
             <p className="text-zinc-500 text-sm mb-5">
-              I answer from your Vault and Company DNA, and show which company sources were used.
+              I combine verified company evidence with published Business Library guidance, then save the exact context before answering.
             </p>
             <div className="flex flex-wrap gap-2 justify-center">
               {SUGGESTIONS.map((s) => (
@@ -229,6 +361,7 @@ export function AskVaultClient({
             clientId={clientId}
             canCurate={canCurate}
             history={turns.slice(Math.max(0, i - 4), i).map((p) => ({ question: p.question, answer: p.answer }))}
+            onAsk={ask}
           />
         ))}
 
@@ -250,6 +383,23 @@ export function AskVaultClient({
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Searching the brain…
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+        {askFailure && (
+          <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-4" role="alert">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-300" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-red-200">The Brain could not finish safely</p>
+                <p className="mt-1 text-xs leading-5 text-red-200/70">{askFailure.message}</p>
+              </div>
+              {askFailure.recoverable && (
+                <Button size="sm" variant="outline" onClick={() => ask(askFailure.question)} disabled={loading}>
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                  Retry
+                </Button>
               )}
             </div>
           </div>
@@ -279,9 +429,15 @@ export function AskVaultClient({
 
 /** One Q&A exchange — clean answer by default, with optional "Go deeper" + sources. */
 function ChatTurn({
-  turn, clientId, history, canCurate,
-}: { turn: Turn; clientId: string; history: HistoryItem[]; canCurate: boolean }) {
-  const [showSources, setShowSources] = useState(false);
+  turn, clientId, history, canCurate, onAsk,
+}: {
+  turn: Turn;
+  clientId: string;
+  history: HistoryItem[];
+  canCurate: boolean;
+  onAsk: (question: string) => Promise<void>;
+}) {
+  const [showSources, setShowSources] = useState(true);
   const [deepAnswer, setDeepAnswer] = useState<string | null>(null);
   const [deepLoading, setDeepLoading] = useState(false);
   const [rated, setRated] = useState<1 | -1 | null>(null);
@@ -376,6 +532,31 @@ function ChatTurn({
       <div className="surface-card p-4">
         <p className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">{turn.answer}</p>
 
+        {turn.libraryAvailability === "unavailable" && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+            <LibraryBig className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+            <div>
+              <p className="text-xs font-semibold text-amber-200">Library temporarily unavailable</p>
+              <p className="mt-0.5 text-xs leading-5 text-amber-200/70">
+                This answer used a saved snapshot of the available company context. You can retry to include Library guidance.
+              </p>
+              <button
+                type="button"
+                onClick={() => void onAsk(turn.question)}
+                className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-amber-300 hover:text-amber-200"
+              >
+                <RotateCcw className="h-3 w-3" /> Retry with Library
+              </button>
+            </div>
+          </div>
+        )}
+
+        {turn.libraryAvailability === "degraded" && (
+          <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/80">
+            Library search recovered from published releases. The exact versions used remain recorded in this answer&apos;s snapshot.
+          </p>
+        )}
+
         {deepAnswer && (
           <div className="mt-3 pt-3 border-t border-zinc-800">
             <p className="label-section mb-1.5">More detail</p>
@@ -446,7 +627,7 @@ function ChatTurn({
               className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
             >
               <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showSources && "rotate-180")} />
-              {showSources ? "Hide sources" : `Sources (${turn.sources.length})`}
+              {showSources ? "Hide citations" : `Citations (${turn.sources.length})`}
             </button>
           )}
 
@@ -487,18 +668,39 @@ function ChatTurn({
         </div>
 
         {showSources && turn.sources.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <ol className="mt-3 grid gap-2 sm:grid-cols-2">
             {turn.sources.map((s) => (
-              <span
+              <li
                 key={s.n}
-                className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-300"
-                title={s.kindLabel}
+                className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 text-xs text-zinc-300"
               >
-                <span className="text-3xs uppercase tracking-wide text-zinc-500">{s.kindLabel}</span>
-                <span className="truncate max-w-[14rem] text-zinc-300">{s.title}</span>
-              </span>
+                <div className="flex items-start gap-2">
+                  <span className="font-mono text-orange-300">[{s.n}]</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-3xs uppercase tracking-wide text-zinc-500">{s.kindLabel}</p>
+                    {s.sourceUrl ? (
+                      <a
+                        href={s.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-0.5 inline-flex max-w-full items-center gap-1 font-medium text-zinc-200 hover:text-white"
+                      >
+                        <span className="truncate">{s.title}</span>
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                      </a>
+                    ) : (
+                      <p className="mt-0.5 truncate font-medium text-zinc-200">{s.title}</p>
+                    )}
+                    {s.kind === "library" && s.versionNumber && (
+                      <p className="mt-1 text-3xs text-orange-300/70">
+                        Version {s.versionNumber} · General guidance, not a company fact
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </li>
             ))}
-          </div>
+          </ol>
         )}
         <div className="mt-3">
           <BrainContextUsed
@@ -506,6 +708,24 @@ function ChatTurn({
             snapshotId={turn.brainContextSnapshotId}
           />
         </div>
+
+        {turn.suggestions.length > 0 && (
+          <div className="mt-3 border-t border-zinc-800 pt-3">
+            <p className="text-xs font-medium text-zinc-400">Ask a grounded follow-up</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {turn.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => void onAsk(suggestion)}
+                  className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:border-orange-500/50 hover:text-white"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

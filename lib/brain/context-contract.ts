@@ -6,14 +6,15 @@ import { z } from "zod";
  * still be inspected while current outputs use the latest resolver.
  */
 export const BRAIN_CONTEXT_VERSION = "brain-context-v1" as const;
-export const BRAIN_RESOLVER_VERSION = "resolver-v3-business-library" as const;
+export const BRAIN_RESOLVER_VERSION = "resolver-v4-library-availability" as const;
 export const BRAIN_RESOLVER_VERSIONS = [
   "resolver-v1",
   "resolver-v2-task-memory",
+  "resolver-v3-business-library",
   BRAIN_RESOLVER_VERSION,
 ] as const;
 
-export const BRAIN_CONTEXT_SURFACES = ["ask", "content", "compose", "tool"] as const;
+export const BRAIN_CONTEXT_SURFACES = ["ask", "content", "compose", "tool", "diagnostic"] as const;
 export const BRAIN_CONTEXT_CHANNELS = [
   "linkedin",
   "facebook",
@@ -162,11 +163,13 @@ export const brainContextSchema = z.object({
     retrievalQuery: z.string().trim().max(4000),
     retrievalMethod: z.enum(["full_text", "lexical_recovery", "none"]),
     coverage: z.enum(["strong", "partial", "weak", "none"]),
+    availability: z.enum(["available", "degraded", "unavailable", "not_requested"]).default("available"),
   }).default({
     sources: [],
     retrievalQuery: "",
     retrievalMethod: "none",
     coverage: "none",
+    availability: "not_requested",
   }),
   style: z.object({
     source: z.enum([
@@ -290,6 +293,31 @@ export const brainContextSchema = z.object({
       path: ["provenance", "libraryChunkIds"],
       message: "Library chunk provenance must match the selected guidance.",
     });
+  }
+  if (context.library.availability === "unavailable") {
+    const visibleWarning = context.warnings.some((warning) =>
+      warning.code === "business_library_unavailable" &&
+      warning.severity === "warning"
+    );
+    if (!visibleWarning || context.library.sources.length > 0) {
+      refinement.addIssue({
+        code: "custom",
+        path: ["library", "availability"],
+        message: "Unavailable Library context must be empty and carry a visible recoverable warning.",
+      });
+    }
+  }
+  if (context.library.availability === "degraded") {
+    const visibleWarning = context.warnings.some((warning) =>
+      warning.code === "business_library_search_degraded"
+    );
+    if (!visibleWarning) {
+      refinement.addIssue({
+        code: "custom",
+        path: ["library", "availability"],
+        message: "Degraded Library context must carry a visible warning.",
+      });
+    }
   }
   if (!sameSet(context.provenance.memoryIds, memoryIds)) {
     refinement.addIssue({

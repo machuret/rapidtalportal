@@ -1,16 +1,17 @@
 import {
   Archive,
-  BookOpenCheck,
   Brain,
   Dna,
   FileQuestion,
-  ListChecks,
+  LibraryBig,
+  Lightbulb,
   MessageSquareText,
+  Radar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import styles from "./IntelligenceMotion.module.css";
 
-export type AskSourceKind = "dna" | "vault" | "kb" | "sop";
+export type AskSourceKind = "dna" | "vault" | "library" | "memory" | "market";
 export type AskFlowState = "idle" | "searching" | "answering" | "ready";
 
 const SOURCE_NODES: Array<{
@@ -22,8 +23,9 @@ const SOURCE_NODES: Array<{
 }> = [
   { kind: "dna", label: "Company DNA", detail: "Identity and goals", icon: Dna, position: styles.sourceDna },
   { kind: "vault", label: "Vault", detail: "Company evidence", icon: Archive, position: styles.sourceVault },
-  { kind: "kb", label: "Knowledge", detail: "Approved answers", icon: BookOpenCheck, position: styles.sourceKnowledge },
-  { kind: "sop", label: "SOPs", detail: "Working processes", icon: ListChecks, position: styles.sourceSop },
+  { kind: "library", label: "Library", detail: "General guidance", icon: LibraryBig, position: styles.sourceKnowledge },
+  { kind: "memory", label: "Learning", detail: "Approved preferences", icon: Lightbulb, position: styles.sourceSop },
+  { kind: "market", label: "Market", detail: "External intelligence", icon: Radar, position: styles.sourceMarket },
 ];
 
 const STATE_COPY: Record<AskFlowState, { label: string; tone: "active" | "ready" }> = {
@@ -37,16 +39,21 @@ export function AskBrainFlow({
   companyName,
   state,
   activeKinds,
+  queriedKinds,
   snapshotAvailable,
+  libraryAvailability,
 }: {
   companyName: string;
   state: AskFlowState;
   activeKinds: AskSourceKind[];
+  queriedKinds: AskSourceKind[];
   snapshotAvailable: boolean;
+  libraryAvailability?: "available" | "degraded" | "unavailable" | "not_requested";
 }) {
   const copy = STATE_COPY[state];
   const working = state === "searching" || state === "answering";
   const active = new Set(activeKinds);
+  const queried = new Set(queriedKinds);
 
   return (
     <section
@@ -76,10 +83,10 @@ export function AskBrainFlow({
           aria-hidden
         >
           <path className={working ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 142 132 C 225 132, 235 132, 322 132" />
-          <path className={active.has("dna") || working ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 220 55 C 300 55, 295 105, 333 116" />
-          <path className={active.has("vault") || working ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 220 210 C 300 210, 295 160, 333 148" />
-          <path className={active.has("kb") || working ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 540 55 C 460 55, 465 105, 427 116" />
-          <path className={active.has("sop") || working ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 540 210 C 460 210, 465 160, 427 148" />
+          <path className={active.has("dna") || (working && queried.has("dna")) ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 220 55 C 300 55, 295 105, 333 116" />
+          <path className={active.has("vault") || (working && queried.has("vault")) ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 220 210 C 300 210, 295 160, 333 148" />
+          <path className={active.has("library") || (working && queried.has("library")) ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 540 55 C 460 55, 465 105, 427 116" />
+          <path className={active.has("memory") || (working && queried.has("memory")) ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 540 210 C 460 210, 465 160, 427 148" />
           <path className={state === "answering" || state === "ready" ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 438 132 C 525 132, 535 132, 618 132" />
         </svg>
 
@@ -93,7 +100,9 @@ export function AskBrainFlow({
 
         {SOURCE_NODES.map((source) => {
           const Icon = source.icon;
-          const isActive = active.has(source.kind) || working;
+          const isChecking = working && queried.has(source.kind);
+          const isActive = active.has(source.kind) || isChecking;
+          const unavailable = source.kind === "library" && libraryAvailability === "unavailable";
           return (
             <article
               key={source.kind}
@@ -103,14 +112,27 @@ export function AskBrainFlow({
                 source.position,
                 isActive && styles.nodeActive,
                 active.has(source.kind) && styles.nodeReady,
+                unavailable && styles.nodeWarning,
               )}
             >
-              {isActive && <span className={styles.nodePulse} aria-hidden />}
+              {isChecking && <span className={styles.nodePulse} aria-hidden />}
               <div className={styles.nodeHead}>
                 <Icon aria-hidden />
                 <span className={styles.nodeLabel}>{source.label}</span>
               </div>
-              <strong className={styles.nodeValue}>{active.has(source.kind) ? "Used" : working ? "Checking" : "Available"}</strong>
+              <strong className={styles.nodeValue}>
+                {active.has(source.kind)
+                  ? "Used"
+                  : unavailable
+                    ? "Unavailable"
+                    : isChecking
+                      ? "Checking"
+                      : state === "ready" && queried.has(source.kind)
+                        ? "No match"
+                        : queried.has(source.kind)
+                          ? "Ready"
+                          : "Not requested"}
+              </strong>
               <span className={styles.nodeDetail}>{source.detail}</span>
             </article>
           );

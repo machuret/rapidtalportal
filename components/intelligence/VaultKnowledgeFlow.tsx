@@ -7,6 +7,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import type { VaultReadiness } from "@/lib/vault/readiness";
+import { cn } from "@/lib/utils";
 import styles from "./IntelligenceMotion.module.css";
 
 function statusCopy(readiness: VaultReadiness) {
@@ -44,7 +45,7 @@ export function VaultKnowledgeFlow({ readiness }: { readiness: VaultReadiness })
 
   return (
     <section
-      className={styles.shell}
+      className={cn(styles.shell, readiness.metrics.processing > 0 && styles.working)}
       aria-label={`Live Vault knowledge flow. ${readiness.metrics.total} captured sources, ${readiness.metrics.ready} verified and ${readiness.metrics.searchable} available to the Brain.`}
     >
       <div className={styles.topbar}>
@@ -88,7 +89,6 @@ export function VaultKnowledgeFlow({ readiness }: { readiness: VaultReadiness })
         </svg>
 
         <article className={`${styles.node} ${styles.vaultCaptured} ${readiness.metrics.total > 0 ? styles.nodeActive : ""}`}>
-          {readiness.metrics.total > 0 && <span className={styles.nodePulse} aria-hidden />}
           <div className={styles.nodeHead}>
             <FileStack aria-hidden />
             <span className={styles.nodeLabel}>Captured</span>
@@ -98,7 +98,6 @@ export function VaultKnowledgeFlow({ readiness }: { readiness: VaultReadiness })
         </article>
 
         <article className={`${styles.node} ${styles.vaultVerified} ${readiness.metrics.ready > 0 ? styles.nodeReady : ""}`}>
-          {readiness.metrics.ready > 0 && <span className={styles.nodePulse} aria-hidden />}
           <div className={styles.nodeHead}>
             <CheckCircle2 aria-hidden />
             <span className={styles.nodeLabel}>Verified</span>
@@ -113,7 +112,6 @@ export function VaultKnowledgeFlow({ readiness }: { readiness: VaultReadiness })
         </div>
 
         <article className={`${styles.node} ${styles.vaultSearchable} ${readiness.metrics.searchable > 0 ? styles.nodeReady : ""}`}>
-          {readiness.metrics.searchable > 0 && <span className={styles.nodePulse} aria-hidden />}
           <div className={styles.nodeHead}>
             <SearchCheck aria-hidden />
             <span className={styles.nodeLabel}>Searchable</span>
@@ -123,7 +121,6 @@ export function VaultKnowledgeFlow({ readiness }: { readiness: VaultReadiness })
         </article>
 
         <article className={`${styles.node} ${styles.vaultAttention} ${attention > 0 ? styles.nodeWarning : ""}`}>
-          {attention > 0 && <span className={styles.nodePulse} aria-hidden />}
           <div className={styles.nodeHead}>
             {attention > 0 ? <ShieldAlert aria-hidden /> : <Brain aria-hidden />}
             <span className={styles.nodeLabel}>{attention > 0 ? "Attention" : "Connected"}</span>

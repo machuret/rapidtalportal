@@ -131,14 +131,25 @@ live within ~30s of a save (cache TTL), no deploy.
 ## The Brain (the learning system)
 
 The "Company Brain" is the loop that makes every AI surface get smarter from use.
-It is **Next-side** (not the Deno edge functions) and lives in `lib/brain/*`.
+Its official context contract is shared by Next and the Deno edge functions:
+`lib/brain/context-contract.ts` is the parser/validator and
+`supabase/functions/_shared/brain-context.ts` is the edge resolver. Keep their
+resolver versions and invariants aligned.
 
 - **Signals → memory → context.** Every 👍/👎 (`<BrainFeedback>` → `/api/brain/
   signals`, table `brain_signals`) is distilled (`lib/brain/distill.ts`, cron
   `/api/cron/brain-distill` + manual "Distill now") into curated lessons
-  (`brain_memory`). `lib/brain/context.ts` `buildBrainContext` injects profile +
-  Vault + lessons into generation. **Don't re-derive any of this inline** — reuse
-  these modules.
+  (`brain_memory`). Generation surfaces must call the official resolver and
+  persist the exact result with `persistBrainContextSnapshot` before producing
+  an answer. **There is no legacy context fallback** — do not re-derive profile,
+  Vault, Library, memory or market context inline.
+- **Library is a separate evidence boundary.** Company DNA, Vault and learned
+  memory are company evidence and outrank generic Library guidance. Every
+  Library statement carries entry, version and chunk provenance. Library
+  retrieval reports `available`, `degraded`, `unavailable` or `not_requested`.
+  When it fails, persist a valid snapshot with the visible warning
+  "Library temporarily unavailable", answer from verified company context when
+  possible, and expose a retry. Never fail silently or fabricate Library use.
 - **Memory is self-correcting (migration 076).** Lessons have `scope`
   (surfaces), `status` (`proposed`|`active`|`muted`), an `embedding` (JSON) and
   `last_reinforced_at`. Distillation reinforces repeats, routes conflicts/rules/
@@ -153,10 +164,18 @@ It is **Next-side** (not the Deno edge functions) and lives in `lib/brain/*`.
   on `/brain`); the cron snapshots it to `brain_score_history` (trend) and writes
   human-readable `brain_events` (the journal). Score/journal are derived — never
   the source of truth.
-- **Surfaces are unified.** `brain_signals.surface` ∈ {content_topic,
-  vault_answer, compose, tool, content_draft, kb, content_outcome}. Ask-the-Vault
-  dual-writes via `/api/vault/feedback`; outcomes via `/api/content/outcome` and
-  the approval edit-distance check in `/api/content/pieces` PATCH.
+- **Surfaces are unified.** Official context surfaces include `ask`,
+  `content_generate`, `content_quick_draft`, `content_pilot` and `diagnostic`.
+  Legacy signal names are compatibility data only, not context fallbacks.
+  Ask-the-Brain dual-writes feedback via `/api/vault/feedback`; outcomes via
+  `/api/content/outcome` and the approval edit-distance check in
+  `/api/content/pieces` PATCH.
+- **Proactive opportunities are snapshot-backed.** The weekly
+  `/api/cron/brain-opportunities` diagnostic and manual Brain-page run resolve
+  official context, persist a required snapshot, and only then create
+  `brain_opportunities`. State changes go through
+  `transition_brain_opportunity`, which records the approval/outcome event and
+  effectiveness. Opportunity queries and writes must remain client-scoped.
 - **Grounded + self-critical generation** lives in the `content-generate` **edge
   function** (semantic retrieval via `match_vault_chunks` + a self-critique pass)
   — **redeploy it manually** after changes. `ai_original` (the AI's delivered
@@ -170,9 +189,9 @@ It is **Next-side** (not the Deno edge functions) and lives in `lib/brain/*`.
   memory dedup/reinforce/contradiction and embedding fit are skipped, everything
   else works. Models: `BRAIN_DISTILL_MODEL`, `BRAIN_EMBED_MODEL`. The edge
   functions use `OPENROUTER_API_KEY`. `/admin/health` shows both rows.
-- **Tables to migrate:** 070–077 (`brain_signals`, `brain_memory`,
-  `brain_events`, `brain_score_history`, `content_topics.why`,
-  vault_feedback backfill, `brain_memory` v2, `content_pieces` outcomes).
+- **Core migration ranges:** 070–077 (learning loop), 125–129 (official context
+  and Library), and 130 (`brain_diagnostic_runs`, `brain_opportunities`,
+  `brain_opportunity_events`).
 
 ## Cron
 

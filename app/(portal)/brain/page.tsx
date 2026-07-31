@@ -5,6 +5,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { computeBrainReadiness } from "@/lib/brain/readiness";
 import { BrainHome, type BrainEventRow } from "@/components/brain/BrainHome";
 import { KnowledgeCoverage } from "@/components/brain/KnowledgeCoverage";
+import { BrainOpportunities } from "@/components/brain/BrainOpportunities";
+import {
+  listBrainOpportunities,
+  type BrainOpportunity,
+} from "@/lib/brain/opportunities";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -74,6 +79,12 @@ export default async function BrainPage({
     .limit(20);
 
   const events = (eventsRes.data ?? []) as BrainEventRow[];
+  let opportunities: BrainOpportunity[] = [];
+  try {
+    opportunities = await listBrainOpportunities(admin, clientId);
+  } catch (error) {
+    console.error("[brain] proactive opportunities unavailable", error);
+  }
 
   return (
     <>
@@ -99,6 +110,11 @@ export default async function BrainPage({
         </div>
       )}
       <BrainHome clientName={clientName} readiness={readiness} events={events} />
+      <BrainOpportunities
+        clientId={clientId}
+        canManage={user.role === "client_admin" || user.role === "super_admin"}
+        initialOpportunities={opportunities}
+      />
       {/* "What the Vault knows" — folded in from the retired Company Report nav
           entry so client admins have one Company Brain home, not three. */}
       <div className="mt-10 pt-8 border-t border-zinc-800">

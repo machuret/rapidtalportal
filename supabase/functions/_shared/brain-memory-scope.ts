@@ -1,4 +1,4 @@
-export const BRAIN_MEMORY_SURFACES = ["ask", "content", "compose", "tool"] as const;
+export const BRAIN_MEMORY_SURFACES = ["ask", "content", "compose", "tool", "diagnostic"] as const;
 export const BRAIN_MEMORY_CHANNELS = [
   "linkedin",
   "facebook",
@@ -41,6 +41,7 @@ const LEGACY_SURFACES: Record<string, BrainMemorySurface | null> = {
   content_outcome: "content",
   compose: "compose",
   tool: "tool",
+  diagnostic: "diagnostic",
   social: "content",
   email: "content",
   blog: "content",

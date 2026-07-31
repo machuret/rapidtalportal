@@ -76,6 +76,7 @@ const SOURCE_LABEL: Record<string, string> = {
   dna: "Company DNA",
   vault: "Vault document",
   library: "Business Library",
+  memory: "Learned preference",
   market: "Market intelligence",
 };
 
@@ -113,7 +114,12 @@ function encodeSources(s: unknown): string {
 }
 
 /** A one-shot SSE response (OpenAI delta format) for the no-context case. */
-function sseOnce(content: string, brainContextSnapshotId: string | null = null): Response {
+function sseOnce(
+  content: string,
+  brainContextSnapshotId: string | null = null,
+  libraryAvailability: BrainContextV1["library"]["availability"] = "not_requested",
+  warnings: BrainContextV1["warnings"] = [],
+): Response {
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     start(c) {
@@ -130,16 +136,39 @@ function sseOnce(content: string, brainContextSnapshotId: string | null = null):
       ...(brainContextSnapshotId
         ? { "X-Brain-Context-Snapshot": brainContextSnapshotId }
         : {}),
+      "X-Brain-Library-Availability": libraryAvailability,
+      "X-Brain-Warnings": encodeSources(warnings),
     },
   });
 }
 
 interface Block {
-  kind: "dna" | "vault" | "library" | "market";
+  kind: "dna" | "vault" | "library" | "memory" | "market";
   title: string;
   text: string;
   itemId?: string;
+  sourceUrl?: string | null;
+  versionId?: string | null;
+  versionNumber?: number | null;
+  chunkId?: string | null;
+  category?: string | null;
   score?: number;
+}
+
+function followUpSuggestions(
+  blocks: Block[],
+  question: string,
+): string[] {
+  const suggestions: string[] = [];
+  const library = blocks.find((block) => block.kind === "library");
+  const company = blocks.find((block) => block.kind === "vault");
+  const market = blocks.find((block) => block.kind === "market");
+  if (library) suggestions.push(`How should we apply ${library.title.replace(/\s+\(v\d+\)$/u, "")} to our business?`);
+  if (company) suggestions.push(`What should the team do next based on ${company.title}?`);
+  if (market) suggestions.push("Which market opportunity best fits our company context?");
+  suggestions.push("What company information would make this answer stronger?");
+  suggestions.push(`Can you turn this into a practical checklist for ${question.slice(0, 80)}?`);
+  return Array.from(new Set(suggestions)).slice(0, 3);
 }
 
 const RANK_STOPWORDS = new Set(["the","a","an","and","or","but","of","to","in","on","for","is","are","was","were","with","what","how","do","does","i","we","you","my","our","can","about","this","that","it","at","as","by","be","from","who","when","where","which","there","their"]);
@@ -307,7 +336,7 @@ Deno.serve(async (req: Request) => {
     if (brainContext.memories.length) {
       const labels = { preference: "Prefer", anti_pattern: "Avoid", rule: "Rule" };
       blocks.push({
-        kind: "dna",
+        kind: "memory",
         title: "Company preferences & rules (learned)",
         text: brainContext.memories
           .map((memory) => `${labels[memory.kind]}: ${memory.content}`)
@@ -320,6 +349,9 @@ Deno.serve(async (req: Request) => {
         title: source.title,
         text: source.excerpt,
         itemId: source.itemId,
+        sourceUrl: source.sourceUrl,
+        chunkId: source.chunkId,
+        category: source.category,
         score: source.relevance ?? lexicalScore(question, `${source.title} ${source.excerpt}`),
       });
     }
@@ -329,6 +361,11 @@ Deno.serve(async (req: Request) => {
         title: `${source.title} (v${source.versionNumber})`,
         text: `General guidance, not a company fact.\n${source.excerpt}`,
         itemId: source.entryId,
+        sourceUrl: source.sourceUrl,
+        versionId: source.versionId,
+        versionNumber: source.versionNumber,
+        chunkId: source.chunkId,
+        category: source.category,
         score: source.relevance ?? lexicalScore(question, `${source.title} ${source.excerpt}`),
       });
     }
@@ -346,12 +383,22 @@ Deno.serve(async (req: Request) => {
     if (!blocks.length) {
       await logQuery(0);
       const msg = "I don't have verified company context or published Library guidance that answers this yet. Add a relevant Vault document, fill in Company DNA, or publish a suitable Library guide.";
-      if (stream) return sseOnce(msg, brainContextSnapshotId);
+      if (stream) {
+        return sseOnce(
+          msg,
+          brainContextSnapshotId,
+          brainContext.library.availability,
+          brainContext.warnings,
+        );
+      }
       return json({
         answer: msg,
         sources: [],
         chunksUsed: 0,
         brainContextSnapshotId,
+        libraryAvailability: brainContext.library.availability,
+        warnings: brainContext.warnings,
+        suggestions: followUpSuggestions([], question),
       });
     }
 
@@ -362,8 +409,17 @@ Deno.serve(async (req: Request) => {
     //    score — vault blocks by vector similarity, keyword-only sources by
     //    lexical overlap, all in [0,1]. No extra model calls.
     const ranked = [
+      // Authority order is structural, not merely prompt wording: company facts
+      // always precede general guidance even when a Library lexical score is
+      // higher. Relevance sorting happens only inside each trust boundary.
       ...blocks.filter((b) => b.kind === "dna"),
-      ...blocks.filter((b) => b.kind !== "dna").sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
+      ...blocks.filter((b) => b.kind === "vault")
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
+      ...blocks.filter((b) => b.kind === "memory"),
+      ...blocks.filter((b) => b.kind === "library")
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
+      ...blocks.filter((b) => b.kind === "market")
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
     ];
 
     // ── Build grounded context + sources ────────────────────────────────────────
@@ -381,7 +437,13 @@ Deno.serve(async (req: Request) => {
       kindLabel: SOURCE_LABEL[b.kind],
       title: b.title,
       itemId: b.itemId ?? null,
+      sourceUrl: b.sourceUrl ?? null,
+      versionId: b.versionId ?? null,
+      versionNumber: b.versionNumber ?? null,
+      chunkId: b.chunkId ?? null,
+      category: b.category ?? null,
     }));
+    const suggestions = followUpSuggestions(ranked, question);
 
     const systemPrompt = deep
       ? await promptOverride(admin, "vault.ask.deep", DEEP_PROMPT)
@@ -430,6 +492,9 @@ Deno.serve(async (req: Request) => {
           ...(brainContextSnapshotId
             ? { "X-Brain-Context-Snapshot": brainContextSnapshotId }
             : {}),
+          "X-Brain-Library-Availability": brainContext.library.availability,
+          "X-Brain-Warnings": encodeSources(brainContext.warnings),
+          "X-Brain-Suggestions": encodeSources(suggestions),
         },
       });
     }
@@ -450,6 +515,9 @@ Deno.serve(async (req: Request) => {
       chunksUsed: blocks.length,
       tokensUsed,
       brainContextSnapshotId,
+      libraryAvailability: brainContext.library.availability,
+      warnings: brainContext.warnings,
+      suggestions,
     });
   } catch (error) {
     console.error("❌ vault-ask error:", error);

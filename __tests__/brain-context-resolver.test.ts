@@ -17,6 +17,7 @@ class FakeQuery {
   constructor(
     private readonly rows: unknown[],
     private readonly singleRow: unknown = rows[0] ?? null,
+    private readonly error: { message: string } | null = null,
   ) {}
   select() { return this; }
   eq() { return this; }
@@ -26,14 +27,17 @@ class FakeQuery {
   contains() { return this; }
   limit() { return this; }
   maybeSingle() {
-    return Promise.resolve({ data: this.singleRow, error: null });
+    return Promise.resolve({ data: this.singleRow, error: this.error });
   }
-  then(resolve: (value: { data: unknown[]; error: null }) => unknown) {
-    return Promise.resolve({ data: this.rows, error: null }).then(resolve);
+  then(resolve: (value: { data: unknown[]; error: { message: string } | null }) => unknown) {
+    return Promise.resolve({ data: this.rows, error: this.error }).then(resolve);
   }
 }
 
-function fakeAdmin(options: { librarySearchFails?: boolean } = {}) {
+function fakeAdmin(options: {
+  librarySearchFails?: boolean;
+  libraryRecoveryFails?: boolean;
+} = {}) {
   const fixtures: Record<string, unknown[]> = {
     company_dna: [{
       company_name: "Example Co",
@@ -101,6 +105,9 @@ function fakeAdmin(options: { librarySearchFails?: boolean } = {}) {
   return {
     from(table: string) {
       const rows = fixtures[table] ?? [];
+      if (table === "business_library_versions" && options.libraryRecoveryFails) {
+        return new FakeQuery([], null, { message: "temporary published-release failure" });
+      }
       return new FakeQuery(rows);
     },
     rpc(name: string) {
@@ -180,6 +187,7 @@ describe("Brain Context Phase 1 resolver", () => {
       libraryChunkIds: [LIBRARY_CHUNK_ID],
       memoryIds: [MEMORY_ID],
     }));
+    expect(context.library.availability).toBe("available");
   });
 
   it("renders company facts, owned style and lessons as labelled sections", async () => {
@@ -221,6 +229,7 @@ describe("Brain Context Phase 1 resolver", () => {
 
     expect(context.library).toEqual(expect.objectContaining({
       retrievalMethod: "lexical_recovery",
+      availability: "degraded",
       sources: [expect.objectContaining({
         versionId: LIBRARY_VERSION_ID,
         selectionMethod: "lexical_recovery",
@@ -228,6 +237,36 @@ describe("Brain Context Phase 1 resolver", () => {
     }));
     expect(context.warnings).toContainEqual(expect.objectContaining({
       code: "business_library_search_degraded",
+    }));
+  });
+
+  it("preserves company context in a valid snapshot when the Library is temporarily unavailable", async () => {
+    const context = await resolveBrainContext({
+      admin: fakeAdmin({
+        librarySearchFails: true,
+        libraryRecoveryFails: true,
+      }),
+      clientId: CLIENT_ID,
+      request: {
+        surface: "ask",
+        topic: "What should we improve?",
+        selectedVaultSourceIds: [],
+        includeMarketIntelligence: false,
+      },
+      createdAt: "2026-07-31T01:00:00.000Z",
+    });
+
+    expect(() => brainContextSchema.parse(context)).not.toThrow();
+    expect(context.company.fields.company_name).toBe("Example Co");
+    expect(context.knowledge.sources).toHaveLength(1);
+    expect(context.library).toEqual(expect.objectContaining({
+      availability: "unavailable",
+      retrievalMethod: "none",
+      sources: [],
+    }));
+    expect(context.warnings).toContainEqual(expect.objectContaining({
+      code: "business_library_unavailable",
+      severity: "warning",
     }));
   });
 });

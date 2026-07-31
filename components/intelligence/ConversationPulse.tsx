@@ -27,7 +27,7 @@ export function ConversationPulse({
 
   return (
     <section
-      className={styles.shell}
+      className={cn(styles.shell, connection !== "live" && styles.working)}
       aria-label={`Private team conversation. ${messageCount} message${messageCount === 1 ? "" : "s"}. ${copy.label}.`}
     >
       <div className={styles.topbar}>

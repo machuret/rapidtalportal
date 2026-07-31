@@ -36,6 +36,8 @@ describe("Business Library Brain retrieval", () => {
     expect(resolver).toContain("libraryChunkIds");
     expect(resolver).toContain("business_library_search_degraded");
     expect(resolver).toContain("business_library_unavailable");
+    expect(resolver).toContain('availability: "unavailable"');
+    expect(resolver).toContain("Library temporarily unavailable");
   });
 
   test("Ask always resolves and snapshots the official Brain before generation", () => {

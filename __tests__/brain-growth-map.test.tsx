@@ -29,7 +29,11 @@ describe("BrainGrowthMap", () => {
   it("shows the real readiness dimensions as a visible Brain growth map", () => {
     render(<BrainGrowthMap clientName="Example Co" readiness={readiness} />);
 
-    expect(screen.getByRole("region", { name: "Live Brain growth map for Example Co" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", {
+        name: "Current Brain readiness visualisation for Example Co. Motion represents measured capability, not live work.",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Watch the business Brain grow")).toBeInTheDocument();
     expect(screen.getByText("Developing")).toBeInTheDocument();
     expect(screen.getByText("Knowledge readiness")).toBeInTheDocument();

@@ -57,6 +57,7 @@ export const GET = withAuth(async (req, { user }) => {
       })),
     },
     businessLibrary: {
+      availability: snapshot.library.availability,
       coverage: snapshot.library.coverage,
       retrievalMethod: snapshot.library.retrievalMethod,
       sources: snapshot.library.sources.map((source) => ({
@@ -95,6 +96,11 @@ export const GET = withAuth(async (req, { user }) => {
       insights: snapshot.market.insights,
     },
     warnings: snapshot.warnings,
+    recoverableWarnings: snapshot.warnings.filter((warning) =>
+      warning.code === "business_library_unavailable" ||
+      warning.code === "business_library_search_degraded" ||
+      warning.code === "semantic_retrieval_unavailable"
+    ),
     contextualReadiness: {
       channel: snapshot.request.channel ?? null,
       channelReadiness:

@@ -72,7 +72,6 @@
   height: 0.45rem;
   border-radius: 50%;
   background: rgb(var(--orange-400));
-  animation: livePulse 2s ease-out infinite;
 }
 
 .stage {

@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // This repository sits beside an unrelated parent lockfile in local tooling.
+  // Pin tracing to this app so builds and tests do not infer the parent folder.
+  outputFileTracingRoot: process.cwd(),
+
   // Enable compression for better performance
   compress: true,
   

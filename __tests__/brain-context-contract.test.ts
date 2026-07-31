@@ -71,6 +71,7 @@ function context(): BrainContext {
       retrievalQuery: "Private credit",
       retrievalMethod: "full_text",
       coverage: "weak",
+      availability: "available",
     },
     style: {
       source: "company_channel_style",
@@ -136,6 +137,30 @@ describe("Brain Context v1 contract", () => {
     expect(() => brainContextSchema.parse(invalid)).toThrow(
       "Memory provenance must match the selected lessons.",
     );
+  });
+
+  test("requires an unavailable Library to be visibly recoverable", () => {
+    const unavailable = context();
+    unavailable.library = {
+      sources: [],
+      retrievalQuery: "Private credit",
+      retrievalMethod: "none",
+      coverage: "none",
+      availability: "unavailable",
+    };
+    unavailable.provenance.libraryEntryIds = [];
+    unavailable.provenance.libraryVersionIds = [];
+    unavailable.provenance.libraryChunkIds = [];
+    expect(() => brainContextSchema.parse(unavailable)).toThrow(
+      "Unavailable Library context must be empty and carry a visible recoverable warning.",
+    );
+
+    unavailable.warnings.push({
+      code: "business_library_unavailable",
+      message: "Library temporarily unavailable. Retry is available.",
+      severity: "warning",
+    });
+    expect(() => brainContextSchema.parse(unavailable)).not.toThrow();
   });
 
   test("never accepts market material when market context is excluded", () => {

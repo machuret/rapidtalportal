@@ -45,11 +45,11 @@ export function BrainGrowthMap({
   return (
     <section
       className={styles.shell}
-      aria-label={`Live Brain growth map for ${clientName}`}
+      aria-label={`Current Brain readiness visualisation for ${clientName}. Motion represents measured capability, not live work.`}
     >
       <div className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Live capability map</p>
+          <p className={styles.eyebrow}>Current capability map</p>
           <h2 className={styles.title}>Watch the business Brain grow</h2>
           <p className={styles.subtitle}>
             Every trusted source, approved lesson and successful retrieval strengthens a pathway.
@@ -57,7 +57,7 @@ export function BrainGrowthMap({
         </div>
         <div className={styles.observing}>
           <span className={styles.liveDot} aria-hidden />
-          Observing
+          Measured snapshot
         </div>
       </div>
 
@@ -120,7 +120,10 @@ export function BrainGrowthMap({
         <p>
           Brighter, faster pathways indicate stronger current readiness—not a hidden intelligence score.
         </p>
-        <p>Measured {new Date(readiness.measuredAt).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short" })}</p>
+        <p>
+          Motion visualises measured readiness; it does not mean work is running. Measured{" "}
+          {new Date(readiness.measuredAt).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short" })}
+        </p>
       </div>
     </section>
   );

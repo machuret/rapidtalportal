@@ -15,6 +15,10 @@
       "schedule": "30 2 * * *"
     },
     {
+      "path": "/api/cron/brain-opportunities",
+      "schedule": "15 3 * * 1"
+    },
+    {
       "path": "/api/cron/error-alert",
       "schedule": "*/30 * * * *"
     },

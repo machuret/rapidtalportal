@@ -32,6 +32,7 @@ type BrainContextUsedResponse = {
     }>;
   };
   businessLibrary: {
+    availability: "available" | "degraded" | "unavailable" | "not_requested";
     coverage: "strong" | "partial" | "weak" | "none";
     retrievalMethod: string;
     sources: Array<{
@@ -73,6 +74,16 @@ type BrainContextUsedResponse = {
     relevantLessons: number;
     marketUpdatedAt: string | null;
   };
+  warnings: Array<{
+    code: string;
+    message: string;
+    severity: "info" | "warning" | "blocking";
+  }>;
+  recoverableWarnings: Array<{
+    code: string;
+    message: string;
+    severity: "info" | "warning" | "blocking";
+  }>;
 };
 
 export function BrainContextUsed({
@@ -146,6 +157,18 @@ export function BrainContextUsed({
           )}
           {data && (
             <div className="space-y-4">
+              {data.recoverableWarnings.length > 0 && (
+                <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+                  <p className="text-xs font-semibold text-amber-300">Recoverable context notice</p>
+                  <ul className="mt-1 space-y-1">
+                    {data.recoverableWarnings.map((warning) => (
+                      <li key={warning.code} className="text-xs leading-5 text-amber-200/80">
+                        {warning.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <dl className="grid grid-cols-2 gap-2 md:grid-cols-5">
                 <Readiness label="Channel" value={data.contextualReadiness.channel ?? "General"} />
                 <Readiness label="Readiness" value={data.contextualReadiness.channelReadiness} />
@@ -175,7 +198,7 @@ export function BrainContextUsed({
               <ContextSection
                 icon={LibraryBig}
                 title="Business Library"
-                subtitle={`${data.businessLibrary.coverage} guidance coverage · ${data.businessLibrary.sources.length} source${data.businessLibrary.sources.length === 1 ? "" : "s"}`}
+                subtitle={`${data.businessLibrary.availability.replace("_", " ")} · ${data.businessLibrary.coverage} guidance coverage · ${data.businessLibrary.sources.length} source${data.businessLibrary.sources.length === 1 ? "" : "s"}`}
               >
                 {data.businessLibrary.sources.length ? (
                   <ul className="space-y-2">
@@ -192,7 +215,13 @@ export function BrainContextUsed({
                       </li>
                     ))}
                   </ul>
-                ) : <Empty text="No published Library guidance was relevant to this task." />}
+                ) : (
+                  <Empty text={
+                    data.businessLibrary.availability === "unavailable"
+                      ? "Library temporarily unavailable. The answer used the remaining verified company context and can be retried."
+                      : "No published Library guidance was relevant to this task."
+                  } />
+                )}
               </ContextSection>
 
               <ContextSection

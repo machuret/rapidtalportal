@@ -1,0 +1,10 @@
+# RapidTal Portal Supabase project configuration.
+# Keeping the project root explicit prevents the CLI from inheriting an
+# unrelated config.toml from a parent workspace.
+project_id = "qzglxknorjrdnuklqrdq"
+
+[functions.content-generate]
+verify_jwt = true
+
+[functions.vault-ask]
+verify_jwt = true
