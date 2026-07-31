@@ -621,10 +621,10 @@ export const POST = withAuth(async (req, { user }) => {
       brainContextSnapshotId = snapshot.id;
     } catch (error) {
       console.error("[topics/generate] Brain context snapshot failed", error);
-      return NextResponse.json({
-        error: "The idea context could not be recorded safely. Please try again.",
-        code: "BRAIN_CONTEXT_SNAPSHOT_FAILED",
-      }, { status: 503 });
+      // Provenance enriches an idea, but it is not part of the generation
+      // transaction. A temporarily unavailable audit store must not prevent an
+      // editor from generating or saving useful ideas.
+      brainContextSnapshotId = null;
     }
   } else {
     // Rollback path while the per-client Phase 1 flag is disabled.
@@ -1325,15 +1325,20 @@ export const POST = withAuth(async (req, { user }) => {
     mode: parsed.data.mode,
     competitors: includedCompetitors,
     readiness: parsed.data.mode === "competitor_gap" ? readiness : undefined,
-    warning: topics.length < count
-      ? `Generated ${topics.length} of ${count} requested ideas. ${
+    warning: [
+      topics.length < count
+        ? `Generated ${topics.length} of ${count} requested ideas. ${
         parsed.data.mode === "competitor_gap"
           ? "Ideas without verified competitor evidence were left out."
           : "Incomplete model responses were left out."
       }${repairFailed ? " The repair attempt was unavailable." : ""}${
         rejectedIdeas > 0 ? ` ${rejectedIdeas} incomplete idea${rejectedIdeas === 1 ? " was" : "s were"} excluded.` : ""
       }`
-      : undefined,
+        : null,
+      useStructuredBrain && !brainContextSnapshotId
+        ? "Detailed Brain provenance is temporarily unavailable; the ideas remain fully saveable."
+        : null,
+    ].filter(Boolean).join(" ") || undefined,
     learnedFrom: { positives: brain.positives, negatives: brain.negatives, grounded: embFits !== null },
     brainContextSnapshotId,
   });
