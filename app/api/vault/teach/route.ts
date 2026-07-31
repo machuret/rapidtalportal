@@ -1,7 +1,7 @@
 /**
  * POST /api/vault/teach — capture knowledge at the moment a gap is found.
  *
- * When Ask the Vault can't answer, anyone on the team who knows the answer can
+ * When Ask the Brain can't answer, anyone on the team who knows the answer can
  * teach it inline. The answer becomes a pinned KB entry (category "Taught") so
  * the next person who asks gets it, and matching unanswered query-log rows are
  * marked answered so the gap closes.

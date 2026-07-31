@@ -4,7 +4,7 @@ import { AskVaultClient } from "@/components/vault/AskVaultClient";
 import { PageIntro } from "@/components/layout/PageIntro";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Ask the Vault — RapidTal" };
+export const metadata = { title: "Ask the Brain — RapidTal" };
 
 export default async function AskPage() {
   const ctx = await getCurrentUserAndClient();

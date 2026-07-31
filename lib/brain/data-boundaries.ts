@@ -1,5 +1,5 @@
 /**
- * Canonical Brain data boundaries. This is product policy as code: Phase 1
+ * Canonical Brain data boundaries. This is product policy as code: official
  * resolvers and tests use it to prevent facts, style, learning and competitor
  * inspiration from silently bleeding into one another.
  */
@@ -17,6 +17,13 @@ export const BRAIN_DATA_BOUNDARIES = {
     use: "Relevant company information retrieved for an answer or content task.",
     allowedContextSections: ["knowledge"],
     prohibitedUses: ["owned_style", "competitor_inspiration"],
+  },
+  business_library: {
+    label: "Business Library",
+    systemOfRecord: "business_library_versions",
+    use: "Versioned, admin-reviewed general business guidance. It is never authoritative company truth.",
+    allowedContextSections: ["library"],
+    prohibitedUses: ["company_knowledge", "owned_style", "tenant_learning"],
   },
   owned_style: {
     label: "Owned writing style",
@@ -67,6 +74,7 @@ export type BrainDataBoundary = keyof typeof BRAIN_DATA_BOUNDARIES;
 export const BRAIN_CONTEXT_SECTION_BOUNDARIES = {
   company: ["company_identity"],
   knowledge: ["company_knowledge"],
+  library: ["business_library"],
   style: ["owned_style", "editorial_rules"],
   memories: ["editorial_learning"],
   market: ["market_intelligence"],

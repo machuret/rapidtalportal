@@ -133,4 +133,6 @@ export const MIGRATIONS = [
   "125_brain_evaluation_activity.sql",
   "126_brain_context_snapshot_compatibility.sql",
   "127_competitor_strategic_market_model.sql",
+  "128_business_library_foundation.sql",
+  "129_business_library_brain_retrieval.sql",
 ] as const;

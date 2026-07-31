@@ -347,7 +347,7 @@ Rules:
   // ---------------------------------------------------------------- Vault
   {
     slug: "vault.ask.answer",
-    title: "Ask the Vault — standard answer",
+    title: "Ask the Brain — standard answer",
     group: "Vault",
     description: "Grounded Q&A over the Business Brain (standard mode). NOTE: served by the vault-ask edge function — edits apply after the function is redeployed once with override support; thereafter they're live.",
     model: "gpt-4o-mini",
@@ -367,7 +367,7 @@ Accuracy:
   },
   {
     slug: "vault.ask.deep",
-    title: "Ask the Vault — deep answer",
+    title: "Ask the Brain — deep answer",
     group: "Vault",
     description: "Grounded Q&A, thorough mode. Same edge-function note as the standard answer prompt.",
     model: "gpt-4o-mini",

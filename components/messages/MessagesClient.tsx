@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
 import { useMessages, type Message } from "@/hooks/useMessages";
+import {
+  ConversationPulse,
+  type ConversationConnection,
+} from "@/components/intelligence/ConversationPulse";
 
 interface MessagesClientProps {
   currentUserId: string;
@@ -45,6 +49,7 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
   } = useMessages(clientId, { refetchInterval: 25_000 });
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [connection, setConnection] = useState<ConversationConnection>("connecting");
   const didInitialScroll = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -92,9 +97,17 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
           setTimeout(() => scrollToBottom(), 50);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          setConnection("live");
+        } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+          setConnection("recovering");
+        }
+      });
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [clientId, supabase, scrollToBottom, appendMessage]);
 
   // ── Send ────────────────────────────────────────────────────────────────────
@@ -180,21 +193,20 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
     );
   }
 
+  const latestMessage = messages.at(-1) ?? null;
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] max-h-[calc(100vh-8rem)]">
-      {/* Header */}
-      <div className="flex items-center gap-3 pb-4 border-b border-zinc-800 shrink-0">
-        <MessageSquare className="w-5 h-5 text-zinc-400" />
-        <div>
-          <h1 className="font-semibold text-zinc-100 text-base">Messages</h1>
-          <p className="text-xs text-zinc-500">
-            {currentUserRole === "client_admin" ? "Chat with your team" : "Chat with your client"}
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-xs text-zinc-500">Live</span>
-        </div>
+      <div className="mb-4 shrink-0">
+        <ConversationPulse
+          connection={connection}
+          messageCount={messages.length}
+          activityKey={latestMessage?.id ?? "no-messages"}
+          reverse={Boolean(latestMessage && latestMessage.sender_id !== currentUserId)}
+          description={currentUserRole === "client_admin"
+            ? "A live, shared conversation with your team."
+            : "A live, shared conversation with your client."}
+        />
       </div>
 
       {/* Feed */}

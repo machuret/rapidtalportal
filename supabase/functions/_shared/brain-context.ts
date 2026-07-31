@@ -11,7 +11,7 @@ import {
 } from "./content-style.ts";
 
 export const BRAIN_CONTEXT_VERSION = "brain-context-v1" as const;
-export const BRAIN_RESOLVER_VERSION = "resolver-v2-task-memory" as const;
+export const BRAIN_RESOLVER_VERSION = "resolver-v3-business-library" as const;
 
 export type BrainSurface = "ask" | "content" | "compose" | "tool";
 export type BrainChannel =
@@ -49,6 +49,21 @@ export interface BrainKnowledgeSource {
   selectionReason: string;
 }
 
+export interface BrainLibrarySource {
+  entryId: string;
+  versionId: string;
+  chunkId: string | null;
+  versionNumber: number;
+  title: string;
+  excerpt: string;
+  category: string;
+  sourceUrl: string | null;
+  tags: string[];
+  selectionMethod: "full_text" | "lexical_recovery";
+  relevance: number | null;
+  selectionReason: string;
+}
+
 export interface BrainContextV1 {
   version: typeof BRAIN_CONTEXT_VERSION;
   clientId: string;
@@ -61,6 +76,12 @@ export interface BrainContextV1 {
     sources: BrainKnowledgeSource[];
     retrievalQuery: string;
     retrievalMethod: string;
+    coverage: "strong" | "partial" | "weak" | "none";
+  };
+  library: {
+    sources: BrainLibrarySource[];
+    retrievalQuery: string;
+    retrievalMethod: "full_text" | "lexical_recovery" | "none";
     coverage: "strong" | "partial" | "weak" | "none";
   };
   style: {
@@ -121,6 +142,9 @@ export interface BrainContextV1 {
     styleProfileVersion: number | null;
     vaultItemIds: string[];
     vaultChunkIds: string[];
+    libraryEntryIds: string[];
+    libraryVersionIds: string[];
+    libraryChunkIds: string[];
     memoryIds: string[];
     marketSnapshotIds: string[];
   };
@@ -141,6 +165,32 @@ interface ChunkRow {
   item_id: string;
   content: string;
   similarity: number;
+}
+
+interface LibrarySearchRow {
+  entry_id: string;
+  version_id: string;
+  chunk_id: string;
+  version_number: number;
+  title: string;
+  summary: string;
+  content: string;
+  category: string;
+  source_url: string | null;
+  tags: string[] | null;
+  rank: number | null;
+}
+
+interface LibraryVersionRow {
+  id: string;
+  entry_id: string;
+  version_number: number;
+  category_id: string;
+  title: string;
+  summary: string;
+  body: string;
+  source_url: string | null;
+  tags: string[] | null;
 }
 
 interface MemoryRow {
@@ -277,12 +327,156 @@ function lexicalScore(item: VaultItemRow, terms: string[]): number {
   return Math.min(1, matched / Math.max(2, Math.min(terms.length, 8)));
 }
 
-function coverageFor(sources: BrainKnowledgeSource[]): BrainContextV1["knowledge"]["coverage"] {
+function coverageFor(
+  sources: Array<{ excerpt: string }>,
+): "strong" | "partial" | "weak" | "none" {
   if (!sources.length) return "none";
   const chars = sources.reduce((sum, source) => sum + source.excerpt.length, 0);
   if (sources.length >= 4 && chars >= 2_500) return "strong";
   if (sources.length >= 2 && chars >= 900) return "partial";
   return "weak";
+}
+
+function libraryExcerpt(text: string, terms: string[], max = 4_000): string {
+  const compacted = compact(text, 100_000);
+  if (compacted.length <= max) return compacted;
+  const lower = compacted.toLocaleLowerCase();
+  const firstMatch = terms
+    .map((term) => lower.indexOf(term))
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right)[0];
+  if (firstMatch === undefined) return compacted.slice(0, max);
+  const start = Math.max(0, firstMatch - 500);
+  return compacted.slice(start, start + max);
+}
+
+async function retrieveBusinessLibrary(args: {
+  // deno-lint-ignore no-explicit-any
+  admin: any;
+  query: string;
+  channel?: BrainChannel;
+  audience?: string;
+  maxSources: number;
+  today: string;
+}): Promise<{
+  sources: BrainLibrarySource[];
+  method: BrainContextV1["library"]["retrievalMethod"];
+  warnings: BrainContextV1["warnings"];
+}> {
+  if (!args.query.trim()) return { sources: [], method: "none", warnings: [] };
+
+  try {
+    const { data, error } = await args.admin.rpc("match_business_library_chunks", {
+      p_query: args.query.slice(0, 4_000),
+      p_match_count: args.maxSources,
+      p_channel: args.channel ?? null,
+      p_audience: args.audience ?? null,
+    });
+    if (error) throw error;
+    const rows = (data ?? []) as LibrarySearchRow[];
+    return {
+      method: "full_text",
+      warnings: [],
+      sources: rows.slice(0, args.maxSources).map((row) => ({
+        entryId: row.entry_id,
+        versionId: row.version_id,
+        chunkId: row.chunk_id,
+        versionNumber: row.version_number,
+        title: safeTitle(row.title),
+        excerpt: compact(row.content, 4_000),
+        category: compact(row.category, 120) || "General",
+        sourceUrl: safeUrl(row.source_url),
+        tags: unique((row.tags ?? []).map((tag) => compact(tag, 100)).filter(Boolean)).slice(0, 30),
+        selectionMethod: "full_text" as const,
+        relevance: typeof row.rank === "number"
+          ? Math.max(0, Math.min(1, row.rank))
+          : null,
+        selectionReason: "Published Business Library guidance matched the current task.",
+      })).filter((source) => source.excerpt.length > 0),
+    };
+  } catch (primaryError) {
+    console.warn("brain-context: Business Library full-text retrieval unavailable", primaryError);
+  }
+
+  try {
+    const versionsResult = await args.admin
+      .from("business_library_versions")
+      .select("id,entry_id,version_number,category_id,title,summary,body,source_url,tags")
+      .eq("status", "published")
+      .or(`valid_from.is.null,valid_from.lte.${args.today}`)
+      .or(`valid_until.is.null,valid_until.gte.${args.today}`)
+      .or(`review_due_at.is.null,review_due_at.gt.${args.today}`)
+      .order("published_at", { ascending: false })
+      .limit(100);
+    if (versionsResult.error) throw versionsResult.error;
+    const versions = (versionsResult.data ?? []) as LibraryVersionRow[];
+    const categoryIds = unique(versions.map((version) => version.category_id));
+    const categoriesResult = categoryIds.length
+      ? await args.admin
+        .from("business_library_categories")
+        .select("id,name")
+        .in("id", categoryIds)
+      : { data: [], error: null };
+    if (categoriesResult.error) throw categoriesResult.error;
+    const categoryById = new Map(
+      ((categoriesResult.data ?? []) as Array<{ id: string; name: string }>)
+        .map((category) => [category.id, category.name]),
+    );
+    const terms = queryTerms(args.query);
+    const sources = versions
+      .map((version) => {
+        const text = `${version.title}\n${version.summary}\n${version.body}`;
+        const score = lexicalScore({
+          id: version.id,
+          title: version.title,
+          raw_content: version.body,
+          ai_summary: version.summary,
+          category: categoryById.get(version.category_id) ?? "General",
+          source_url: version.source_url,
+          updated_at: null,
+        }, terms);
+        return { version, text, score };
+      })
+      .filter(({ score }) => score > 0)
+      .sort((left, right) =>
+        right.score - left.score ||
+        left.version.id.localeCompare(right.version.id))
+      .slice(0, args.maxSources)
+      .map(({ version, text, score }) => ({
+        entryId: version.entry_id,
+        versionId: version.id,
+        chunkId: null,
+        versionNumber: version.version_number,
+        title: safeTitle(version.title),
+        excerpt: libraryExcerpt(text, terms),
+        category: categoryById.get(version.category_id) ?? "General",
+        sourceUrl: safeUrl(version.source_url),
+        tags: unique((version.tags ?? []).map((tag) => compact(tag, 100)).filter(Boolean)).slice(0, 30),
+        selectionMethod: "lexical_recovery" as const,
+        relevance: score,
+        selectionReason: "Recovered through verified published-release matching after primary Library search was unavailable.",
+      }));
+    return {
+      sources,
+      method: "lexical_recovery",
+      warnings: [{
+        code: "business_library_search_degraded",
+        message: "Business Library search recovered through its published-release fallback.",
+        severity: "warning",
+      }],
+    };
+  } catch (recoveryError) {
+    console.warn("brain-context: Business Library recovery unavailable", recoveryError);
+    return {
+      sources: [],
+      method: "none",
+      warnings: [{
+        code: "business_library_unavailable",
+        message: "Business Library guidance was temporarily unavailable; other verified Brain context was preserved.",
+        severity: "warning",
+      }],
+    };
+  }
 }
 
 /**
@@ -417,30 +611,6 @@ function styleFromFrozenSnapshot(
   };
 }
 
-export async function brainContextSurfaceEnabled(
-  // deno-lint-ignore no-explicit-any
-  admin: any,
-  clientId: string,
-  surface: "ask" | "content" | "topics" | "tools",
-): Promise<boolean> {
-  try {
-    const column = `${surface}_enabled`;
-    const query = admin
-      .from("brain_context_feature_flags")
-      .select(column)
-      .eq("client_id", clientId);
-    if (!query || typeof query.maybeSingle !== "function") return false;
-    const { data, error } = await query.maybeSingle();
-    // Safe deployment order: old databases keep the legacy path until migration
-    // 121 exists. Once it exists, absent rows mean the new resolver is enabled.
-    if (error) return false;
-    const value = data?.[column];
-    return typeof value === "boolean" ? value : true;
-  } catch {
-    return false;
-  }
-}
-
 export async function resolveBrainContext(args: {
   // deno-lint-ignore no-explicit-any
   admin: any;
@@ -453,6 +623,7 @@ export async function resolveBrainContext(args: {
   requestedTone?: string;
   lengthHint?: string;
   maxKnowledge?: number;
+  maxLibrary?: number;
   maxMemory?: number;
   /** Treat selectedVaultSourceIds as the complete allowed set, including []. */
   restrictToSelectedSources?: boolean;
@@ -471,6 +642,7 @@ export async function resolveBrainContext(args: {
   const generatedAt = args.createdAt ?? new Date().toISOString();
   const today = generatedAt.slice(0, 10);
   const maxKnowledge = Math.max(1, Math.min(args.maxKnowledge ?? 20, 100));
+  const maxLibrary = Math.max(0, Math.min(args.maxLibrary ?? 8, 30));
   const maxMemory = Math.max(0, Math.min(args.maxMemory ?? 30, 100));
   const retrievalQuery = queryText(request);
   const selectedIds = unique(request.selectedVaultSourceIds);
@@ -569,9 +741,38 @@ export async function resolveBrainContext(args: {
       .limit(1)
       .maybeSingle()
     : Promise.resolve({ data: null, error: null });
+  const libraryPromise = maxLibrary > 0
+    ? retrieveBusinessLibrary({
+      admin,
+      query: retrievalQuery,
+      channel: request.channel,
+      audience: request.audience,
+      maxSources: maxLibrary,
+      today,
+    })
+    : Promise.resolve({
+      sources: [] as BrainLibrarySource[],
+      method: "none" as const,
+      warnings: [] as BrainContextV1["warnings"],
+    });
 
-  const [dnaResult, styleResult, vaultResult, memoryResult, memoryConflictResult, marketResult] =
-    await Promise.all([dnaPromise, stylePromise, vaultQuery, memoryPromise, memoryConflictPromise, marketPromise]);
+  const [
+    dnaResult,
+    styleResult,
+    vaultResult,
+    memoryResult,
+    memoryConflictResult,
+    marketResult,
+    libraryResult,
+  ] = await Promise.all([
+    dnaPromise,
+    stylePromise,
+    vaultQuery,
+    memoryPromise,
+    memoryConflictPromise,
+    marketPromise,
+    libraryPromise,
+  ]);
   for (const [section, result] of [
     ["Company DNA", dnaResult],
     ["style", styleResult],
@@ -592,6 +793,7 @@ export async function resolveBrainContext(args: {
     id: string;
     analysis: Record<string, unknown>;
   } | null;
+  warnings.push(...libraryResult.warnings);
 
   if (explicitSelection && selectedIds.length) {
     const found = new Set(vaultItems.map((item) => item.id));
@@ -875,6 +1077,12 @@ export async function resolveBrainContext(args: {
           : "lexical_fallback",
       coverage: coverageFor(knowledgeSources),
     },
+    library: {
+      sources: libraryResult.sources,
+      retrievalQuery,
+      retrievalMethod: libraryResult.method,
+      coverage: coverageFor(libraryResult.sources),
+    },
     style,
     memories,
     market: {
@@ -893,6 +1101,11 @@ export async function resolveBrainContext(args: {
       styleProfileVersion: style.profileVersion,
       vaultItemIds,
       vaultChunkIds,
+      libraryEntryIds: unique(libraryResult.sources.map((source) => source.entryId)),
+      libraryVersionIds: unique(libraryResult.sources.map((source) => source.versionId)),
+      libraryChunkIds: unique(
+        libraryResult.sources.flatMap((source) => source.chunkId ? [source.chunkId] : []),
+      ),
       memoryIds: memories.map((memory) => memory.memoryId),
       marketSnapshotIds,
     },
@@ -911,6 +1124,15 @@ export function renderBrainContext(context: BrainContextV1): string {
       "=== COMPANY VAULT KNOWLEDGE ===\n" +
       context.knowledge.sources.map((source) =>
         `--- SOURCE ${source.itemId}${source.chunkId ? ` / CHUNK ${source.chunkId}` : ""} — ${source.title} ---\n${source.excerpt}`
+      ).join("\n\n"),
+    );
+  }
+  if (context.library.sources.length) {
+    sections.push(
+      "=== BUSINESS LIBRARY GUIDANCE (GENERAL GUIDANCE — NEVER COMPANY FACTS) ===\n" +
+      "Use this material for best-practice advice only. Adapt it to the company context, and never claim the company already follows it.\n" +
+      context.library.sources.map((source) =>
+        `--- LIBRARY ${source.entryId} / VERSION ${source.versionId}${source.chunkId ? ` / CHUNK ${source.chunkId}` : ""} — ${source.title} ---\n${source.excerpt}`
       ).join("\n\n"),
     );
   }

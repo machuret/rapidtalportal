@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  LibraryBig,
   MessageSquareText,
   Radar,
   RefreshCw,
@@ -26,6 +27,20 @@ type BrainContextUsedResponse = {
       itemId: string;
       title: string;
       excerpt: string;
+      sourceUrl: string | null;
+      selectionReason: string;
+    }>;
+  };
+  businessLibrary: {
+    coverage: "strong" | "partial" | "weak" | "none";
+    retrievalMethod: string;
+    sources: Array<{
+      entryId: string;
+      versionId: string;
+      versionNumber: number;
+      title: string;
+      excerpt: string;
+      category: string;
       sourceUrl: string | null;
       selectionReason: string;
     }>;
@@ -155,6 +170,29 @@ export function BrainContextUsed({
                     ))}
                   </ul>
                 ) : <Empty text="No Vault source was selected for this output." />}
+              </ContextSection>
+
+              <ContextSection
+                icon={LibraryBig}
+                title="Business Library"
+                subtitle={`${data.businessLibrary.coverage} guidance coverage · ${data.businessLibrary.sources.length} source${data.businessLibrary.sources.length === 1 ? "" : "s"}`}
+              >
+                {data.businessLibrary.sources.length ? (
+                  <ul className="space-y-2">
+                    {data.businessLibrary.sources.map((source) => (
+                      <li key={`${source.versionId}:${source.title}`} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                        <p className="text-xs font-medium text-zinc-200">
+                          {source.title} <span className="text-zinc-600">· v{source.versionNumber}</span>
+                        </p>
+                        <p className="mt-0.5 text-xs text-orange-300/70">
+                          {source.category} · General guidance, not a company fact
+                        </p>
+                        <p className="mt-1 line-clamp-3 text-xs leading-5 text-zinc-500">{source.excerpt}</p>
+                        <p className="mt-1 text-xs text-zinc-600">{source.selectionReason}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <Empty text="No published Library guidance was relevant to this task." />}
               </ContextSection>
 
               <ContextSection

@@ -29,14 +29,15 @@ describe("Vault competitor context boundary", () => {
     expect(resolveCompetitorTargets("What does x mean?", competitors).targets).toEqual([]);
   });
 
-  test("Client Vault exposes the existing tenant-scoped competitor workspace", () => {
+  test("Client Vault exposes competitors while Ask uses snapshot-backed market intelligence", () => {
     const root = path.resolve(__dirname, "..");
     const vault = readFileSync(path.join(root, "components/vault/VaultClient.tsx"), "utf8");
     const ask = readFileSync(path.join(root, "supabase/functions/vault-ask/index.ts"), "utf8");
     expect(vault).toContain('<CompetitorsTab');
     expect(vault).toContain('role === "client_admin" || role === "super_admin"');
-    expect(ask).toContain('.from("competitor_content_items")');
-    expect(ask).toContain('kind: "competitor"');
-    expect(ask).toContain("not the client company");
+    expect(ask).not.toContain('.from("competitor_content_items")');
+    expect(ask).toContain("includeMarketIntelligence:");
+    expect(ask).toContain('kind: "market"');
+    expect(ask).toContain("not a company fact or owned style");
   });
 });

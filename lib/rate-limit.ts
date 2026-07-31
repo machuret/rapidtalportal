@@ -54,7 +54,7 @@ export function tooManyRequests(retryAfterSeconds: number): NextResponse {
 }
 
 // ── Endpoint limiters ─────────────────────────────────────────────
-// Ask the Vault hits OpenRouter (real money per call). 20 questions per
+// Ask the Brain hits OpenRouter (real money per call). 20 questions per
 // 5 minutes per user is far above any honest usage.
 export const askVaultLimiter = new SlidingWindowLimiter(20, 5 * 60_000);
 

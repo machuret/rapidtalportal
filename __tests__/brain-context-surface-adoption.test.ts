@@ -5,7 +5,7 @@ function source(relativePath: string): string {
   return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
 }
 
-describe("Brain Context Phase 1 surface adoption", () => {
+describe("official Brain Context surface adoption", () => {
   it.each([
     ["Ask", "supabase/functions/vault-ask/index.ts"],
     ["Content", "supabase/functions/content-generate/index.ts"],
@@ -14,7 +14,8 @@ describe("Brain Context Phase 1 surface adoption", () => {
     expect(code).toContain('from "../_shared/brain-context.ts"');
     expect(code).toContain("resolveBrainContext({");
     expect(code).toContain("persistBrainContextSnapshot({");
-    expect(code).toContain("brainContextSurfaceEnabled(");
+    expect(code).not.toContain("brainContextSurfaceEnabled(");
+    expect(code).not.toContain("retrieveContentVault");
   });
 
   it("always gives the content Brain snapshot an explicit selected-source list", () => {
@@ -27,6 +28,7 @@ describe("Brain Context Phase 1 surface adoption", () => {
     expect(code).toContain("resolveNodeBrainContext({");
     expect(code).toContain("persistNodeBrainContextSnapshot({");
     expect(code).toContain("brain_context_snapshot_id: brainContextSnapshotId");
+    expect(code).toContain("BRAIN_SNAPSHOT_REQUIRED");
   });
 
   it("Tools persists and links the exact resolved context", () => {
@@ -34,5 +36,7 @@ describe("Brain Context Phase 1 surface adoption", () => {
     expect(code).toContain("resolveNodeBrainContext({");
     expect(code).toContain("persistNodeBrainContextSnapshot({");
     expect(code).toContain("brain_context_snapshot_id: brainContextSnapshotId");
+    expect(code).not.toContain("nodeBrainContextEnabled");
+    expect(code).not.toContain("toolGrounding");
   });
 });

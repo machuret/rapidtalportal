@@ -55,7 +55,7 @@ export function VaultClient(props: VaultClientProps) {
 function VaultClientInner({
   clientId, userId, role, canWrite,
   title = "Company Knowledge",
-  subtitle = "Approved company facts used by Ask the Vault and content generation.",
+  subtitle = "Approved company facts used by Ask the Brain and content generation.",
 }: VaultClientProps) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -99,7 +99,7 @@ function VaultClientInner({
   const hasFilters = debouncedSearch !== "" || typeFilter !== "all" || categoryFilter !== "all";
   const canReprocess = canWrite || role === "va";
 
-  // ── Backfill embeddings — index items so "Ask the Vault" can search them ────
+  // ── Backfill embeddings — index items so Ask the Brain can search them ──────
   const handleIndexAll = useCallback(async () => {
     try {
       const { itemIds } = await api.get<{ itemIds: string[] }>(

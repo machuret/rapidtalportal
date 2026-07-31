@@ -685,6 +685,196 @@ export interface Database {
         };
         Relationships: NoRelationships;
       };
+      business_library_categories: {
+        Row: {
+          id: string;
+          slug: string;
+          name: string;
+          description: string | null;
+          sort_order: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          slug: string;
+          name: string;
+          description?: string | null;
+          sort_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          slug?: string;
+          name?: string;
+          description?: string | null;
+          sort_order?: number;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Relationships: NoRelationships;
+      };
+      business_library_entries: {
+        Row: {
+          id: string;
+          slug: string;
+          current_version_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          retired_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          slug: string;
+          current_version_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          retired_at?: string | null;
+        };
+        Update: {
+          slug?: string;
+          current_version_id?: string | null;
+          updated_at?: string;
+          retired_at?: string | null;
+        };
+        Relationships: NoRelationships;
+      };
+      business_library_versions: {
+        Row: {
+          id: string;
+          entry_id: string;
+          version_number: number;
+          status: "draft" | "in_review" | "published" | "superseded" | "retired";
+          category_id: string;
+          title: string;
+          summary: string;
+          body: string;
+          source_url: string | null;
+          tags: string[];
+          industries: string[];
+          countries: string[];
+          audiences: string[];
+          lifecycle_stages: string[];
+          channels: string[];
+          time_sensitive: boolean;
+          valid_from: string | null;
+          valid_until: string | null;
+          review_due_at: string | null;
+          change_note: string | null;
+          content_hash: string;
+          created_by: string | null;
+          submitted_at: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          published_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          entry_id: string;
+          version_number: number;
+          status?: "draft" | "in_review" | "published" | "superseded" | "retired";
+          category_id: string;
+          title: string;
+          summary: string;
+          body: string;
+          source_url?: string | null;
+          tags?: string[];
+          industries?: string[];
+          countries?: string[];
+          audiences?: string[];
+          lifecycle_stages?: string[];
+          channels?: string[];
+          time_sensitive?: boolean;
+          valid_from?: string | null;
+          valid_until?: string | null;
+          review_due_at?: string | null;
+          change_note?: string | null;
+          content_hash?: string;
+          created_by?: string | null;
+          submitted_at?: string | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          published_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: "draft" | "in_review" | "published" | "superseded" | "retired";
+          category_id?: string;
+          title?: string;
+          summary?: string;
+          body?: string;
+          source_url?: string | null;
+          tags?: string[];
+          industries?: string[];
+          countries?: string[];
+          audiences?: string[];
+          lifecycle_stages?: string[];
+          channels?: string[];
+          time_sensitive?: boolean;
+          valid_from?: string | null;
+          valid_until?: string | null;
+          review_due_at?: string | null;
+          change_note?: string | null;
+          submitted_at?: string | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          published_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: NoRelationships;
+      };
+      business_library_chunks: {
+        Row: {
+          id: string;
+          entry_id: string;
+          version_id: string;
+          chunk_index: number;
+          content: string;
+          search_vector: unknown;
+          embedding: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          entry_id: string;
+          version_id: string;
+          chunk_index: number;
+          content: string;
+          embedding?: string | null;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: NoRelationships;
+      };
+      business_library_events: {
+        Row: {
+          id: string;
+          entry_id: string;
+          version_id: string | null;
+          action: string;
+          actor_id: string | null;
+          detail: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          entry_id: string;
+          version_id?: string | null;
+          action: string;
+          actor_id?: string | null;
+          detail?: Json;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: NoRelationships;
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -805,6 +995,36 @@ export interface Database {
           p_actor_id: string;
         };
         Returns: Database["public"]["Tables"]["content_style_analyses"]["Row"];
+      };
+      match_business_library_chunks: {
+        Args: {
+          p_query: string;
+          p_match_count?: number;
+          p_channel?: string | null;
+          p_audience?: string | null;
+        };
+        Returns: Array<{
+          entry_id: string;
+          version_id: string;
+          chunk_id: string;
+          version_number: number;
+          title: string;
+          summary: string;
+          content: string;
+          category: string;
+          source_url: string | null;
+          tags: string[];
+          rank: number;
+        }>;
+      };
+      transition_business_library_version: {
+        Args: {
+          p_entry_id: string;
+          p_version_id: string | null;
+          p_action: "submit_review" | "return_draft" | "publish" | "new_version" | "retire";
+          p_actor_id: string;
+        };
+        Returns: string;
       };
     };
     Enums: Record<string, never>;

@@ -1,5 +1,5 @@
 /**
- * POST /api/vault/ask-stream — streaming (SSE) variant of Ask the Vault.
+ * POST /api/vault/ask-stream — streaming (SSE) variant of Ask the Brain.
  * Pipes OpenRouter tokens through; the client falls back to /api/vault/ask
  * (non-streaming) if this ever fails or the gateway buffers.
  */

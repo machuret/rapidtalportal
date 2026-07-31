@@ -21,6 +21,8 @@ const CLIENT_B = "22222222-2222-4222-8222-222222222222";
 const SNAPSHOT_ID = "33333333-3333-4333-8333-333333333333";
 const ITEM_ID = "44444444-4444-4444-8444-444444444444";
 const MEMORY_ID = "55555555-5555-4555-8555-555555555555";
+const LIBRARY_ENTRY_ID = "66666666-6666-4666-8666-666666666666";
+const LIBRARY_VERSION_ID = "77777777-7777-4777-8777-777777777777";
 const routeCtx = { params: Promise.resolve({}) };
 
 function snapshot(): BrainContext {
@@ -51,6 +53,25 @@ function snapshot(): BrainContext {
       retrievalQuery: "Private credit",
       retrievalMethod: "hybrid-v1",
       coverage: "strong",
+    },
+    library: {
+      sources: [{
+        entryId: LIBRARY_ENTRY_ID,
+        versionId: LIBRARY_VERSION_ID,
+        chunkId: null,
+        versionNumber: 1,
+        title: "SEO foundations",
+        excerpt: "Match every page to a clear search intent.",
+        category: "SEO",
+        sourceUrl: null,
+        tags: ["seo"],
+        selectionMethod: "lexical_recovery",
+        relevance: 0.7,
+        selectionReason: "Recovered through published-release matching.",
+      }],
+      retrievalQuery: "Private credit",
+      retrievalMethod: "lexical_recovery",
+      coverage: "weak",
     },
     style: {
       source: "approved_channel_analysis",
@@ -95,6 +116,9 @@ function snapshot(): BrainContext {
       styleProfileVersion: null,
       vaultItemIds: [ITEM_ID],
       vaultChunkIds: [],
+      libraryEntryIds: [LIBRARY_ENTRY_ID],
+      libraryVersionIds: [LIBRARY_VERSION_ID],
+      libraryChunkIds: [],
       memoryIds: [MEMORY_ID],
       marketSnapshotIds: [],
     },
@@ -128,7 +152,7 @@ it("rejects a cross-tenant snapshot before any database read", async () => {
   expect(createAdminClient).not.toHaveBeenCalled();
 });
 
-it("returns four explicitly separated influence areas with contextual readiness", async () => {
+it("returns five explicitly separated influence areas with contextual readiness", async () => {
   const query = snapshotQuery({
     id: SNAPSHOT_ID,
     client_id: CLIENT_A,
@@ -148,6 +172,10 @@ it("returns four explicitly separated influence areas with contextual readiness"
 
   expect(response.status).toBe(200);
   expect(body.companyKnowledge.sources[0].title).toBe("Company private credit guide");
+  expect(body.businessLibrary.sources[0]).toMatchObject({
+    title: "SEO foundations",
+    versionNumber: 1,
+  });
   expect(body.companyVoice.instructions).toEqual(["Use direct founder observations."]);
   expect(body.learnedPreferences[0].reason).toContain("LinkedIn");
   expect(body.marketContext.insights[0].kind).toBe("positioning_gap");

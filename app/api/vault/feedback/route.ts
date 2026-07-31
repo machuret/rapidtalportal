@@ -1,5 +1,5 @@
 /**
- * POST  /api/vault/feedback — record 👍/👎 on an Ask the Vault answer (any member).
+ * POST  /api/vault/feedback — record 👍/👎 on an Ask the Brain answer (any member).
  *   Includes the sources that produced the answer, so a 👎 can be traced back
  *   to the offending document.
  * PATCH /api/vault/feedback — mark a feedback row resolved (admins; review queue).

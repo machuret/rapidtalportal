@@ -17,6 +17,9 @@ const CLIENT_ID = "11111111-1111-4111-8111-111111111111";
 const ITEM_ID = "22222222-2222-4222-8222-222222222222";
 const CHUNK_ID = "33333333-3333-4333-8333-333333333333";
 const MEMORY_ID = "44444444-4444-4444-8444-444444444444";
+const LIBRARY_ENTRY_ID = "55555555-5555-4555-8555-555555555555";
+const LIBRARY_VERSION_ID = "66666666-6666-4666-8666-666666666666";
+const LIBRARY_CHUNK_ID = "77777777-7777-4777-8777-777777777777";
 
 function context(): BrainContext {
   return {
@@ -49,6 +52,25 @@ function context(): BrainContext {
       retrievalQuery: "Private credit",
       retrievalMethod: "hybrid-v1",
       coverage: "strong",
+    },
+    library: {
+      sources: [{
+        entryId: LIBRARY_ENTRY_ID,
+        versionId: LIBRARY_VERSION_ID,
+        chunkId: LIBRARY_CHUNK_ID,
+        versionNumber: 2,
+        title: "SEO foundations",
+        excerpt: "Use descriptive page titles and match search intent.",
+        category: "SEO",
+        sourceUrl: null,
+        tags: ["seo"],
+        selectionMethod: "full_text",
+        relevance: 0.84,
+        selectionReason: "Published Business Library guidance matched the current task.",
+      }],
+      retrievalQuery: "Private credit",
+      retrievalMethod: "full_text",
+      coverage: "weak",
     },
     style: {
       source: "company_channel_style",
@@ -90,6 +112,9 @@ function context(): BrainContext {
       styleProfileVersion: null,
       vaultItemIds: [ITEM_ID],
       vaultChunkIds: [CHUNK_ID],
+      libraryEntryIds: [LIBRARY_ENTRY_ID],
+      libraryVersionIds: [LIBRARY_VERSION_ID],
+      libraryChunkIds: [LIBRARY_CHUNK_ID],
       memoryIds: [MEMORY_ID],
       marketSnapshotIds: [],
     },
@@ -102,6 +127,7 @@ describe("Brain Context v1 contract", () => {
     expect(parsed.version).toBe("brain-context-v1");
     expect(parsed.request.includeMarketIntelligence).toBe(false);
     expect(parsed.knowledge.sources[0].itemId).toBe(ITEM_ID);
+    expect(parsed.library.sources[0].versionId).toBe(LIBRARY_VERSION_ID);
   });
 
   test("requires provenance to match the exact selected context", () => {
@@ -164,6 +190,10 @@ describe("Brain data boundaries", () => {
     expect(boundaryAllowsSection("owned_style", "knowledge")).toBe(false);
     expect(boundaryAllowsSection("market_intelligence", "market")).toBe(true);
     expect(boundaryAllowsSection("market_intelligence", "knowledge")).toBe(false);
+    expect(boundaryAllowsSection("business_library", "library")).toBe(true);
+    expect(BRAIN_DATA_BOUNDARIES.business_library.allowedContextSections).toEqual(["library"]);
+    expect(BRAIN_DATA_BOUNDARIES.business_library.prohibitedUses)
+      .toContain("company_knowledge");
   });
 
   test("explicitly excludes published performance from Brain learning", () => {

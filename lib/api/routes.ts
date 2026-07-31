@@ -21,6 +21,9 @@ export const ROUTES = {
     expenses: () => "/api/admin/expenses",
     featureVideos: () => "/api/admin/feature-videos",
     guides: () => "/api/admin/guides",
+    library: () => "/api/admin/library",
+    libraryEntry: (id: string) => `/api/admin/library/${id}`,
+    libraryAction: (id: string) => `/api/admin/library/${id}/action`,
   },
   notebook: {
     pages: () => "/api/notebook/pages",

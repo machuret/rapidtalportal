@@ -12,7 +12,7 @@ export const metadata = { title: "Q&A Knowledge — RapidTal" };
 
 /**
  * The generated Q&A layer of the Business Brain — generated from Vault docs +
- * Company DNA, hand-editable, and retrieved by Ask the Vault at answer time.
+ * Company DNA, hand-editable, and retrieved by Ask the Brain at answer time.
  * Lives under /vault as a tab (formerly the standalone Knowledge Base page).
  */
 export default async function VaultKnowledgePage() {

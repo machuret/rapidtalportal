@@ -1,7 +1,7 @@
 /**
  * GET /api/vault/unindexed?clientId=... — list ready/error items that have NO
  * embeddings yet (no rows in vault_chunks). Used by the "Index for AI search"
- * backfill button so Ask the Vault has something to search. 'error' items are
+ * backfill button so Ask the Brain has something to search. 'error' items are
  * included so a previously-failed run can be retried in one click.
  */
 import { NextResponse } from "next/server";

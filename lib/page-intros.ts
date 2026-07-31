@@ -15,9 +15,9 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
     guide: "Vault",
   },
   ask: {
-    title: "What is Ask the Vault?",
-    body: "Ask questions in plain English and get answers from your Vault and Company DNA, with links showing which company sources were used. It's the fastest way to find a policy, product detail, or company fact without digging through files.",
-    guide: "Ask the Vault",
+    title: "What is Ask the Brain?",
+    body: "Ask questions in plain English and get grounded answers from the Company Brain. It resolves relevant Company DNA, Vault knowledge, approved answers and SOPs, then shows which company sources were used.",
+    guide: "Ask the Brain",
   },
   compose: {
     title: "What is Compose?",

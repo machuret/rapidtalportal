@@ -165,7 +165,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
         tip: "Start with your policies, pricing, FAQs and how-tos — that's what people ask about most, so you'll feel the benefit immediately.",
       },
       {
-        title: "Ask the Vault",
+        title: "Ask the Brain",
         what: "Ask any question about your business in plain English and get an answer built only from your own documents — with a link to where each fact came from.",
         why: "The goal is instant, trustworthy answers with zero digging and zero guessing. Because it only uses your real documents (and shows its sources), it won't make things up. It's like having someone who has read every document in your company, on call 24/7 — for you and for your VA.",
         can: [
@@ -174,7 +174,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
           "See the exact source behind every answer, so you can trust it.",
         ],
         how: [
-          "Open Ask the Vault from the menu.",
+          "Open Ask the Brain from the menu.",
           "Type a question (e.g. 'What's our refund policy?') and press Enter.",
           "Want more detail? Click 'Go deeper'.",
         ],

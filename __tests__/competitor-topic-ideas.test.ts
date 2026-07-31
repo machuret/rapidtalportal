@@ -22,7 +22,10 @@ jest.mock("@/lib/rate-limit", () => ({
 }));
 jest.mock("@/lib/supabase/admin", () => ({ createAdminClient: jest.fn() }));
 jest.mock("@/lib/prompts/server", () => ({ renderPrompt: jest.fn(async () => "System prompt") }));
-jest.mock("@/lib/brain/context", () => ({ buildBrainContext: jest.fn() }));
+jest.mock("@/lib/brain/resolver", () => ({
+  resolveNodeBrainContext: jest.fn(),
+  persistNodeBrainContextSnapshot: jest.fn(),
+}));
 jest.mock("@/lib/brain/embed", () => ({
   cosine: jest.fn(() => 0.5),
   embeddingFit: jest.fn(async () => null),
@@ -40,7 +43,10 @@ jest.mock("@/lib/brain/llm", () => ({
 
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildBrainContext } from "@/lib/brain/context";
+import {
+  persistNodeBrainContextSnapshot,
+  resolveNodeBrainContext,
+} from "@/lib/brain/resolver";
 import { POST } from "@/app/api/content/topics/generate/route";
 
 function fluent(result: { data: unknown; error: unknown }) {
@@ -62,22 +68,30 @@ function request(body: unknown): NextRequest {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (buildBrainContext as jest.Mock).mockResolvedValue({
-    text: "COMPANY PROFILE\nTrusted company facts and voice.",
-    hasProfile: true,
-    hasVault: true,
-    memories: 0,
-    positives: 0,
-    negatives: 0,
-    positiveExamples: [],
-    negativeExamples: [],
+  (resolveNodeBrainContext as jest.Mock).mockResolvedValue({
+    prompt: "COMPANY PROFILE\nTrusted company facts and voice.",
+    context: {
+      company: { fields: { company_name: "Example" } },
+      knowledge: { sources: [{ itemId: ITEM_ID }] },
+      library: { sources: [] },
+      memories: [],
+    },
+  });
+  (persistNodeBrainContextSnapshot as jest.Mock).mockResolvedValue({
+    id: "55555555-5555-4555-8555-555555555555",
+    snapshotHash: "a".repeat(64),
   });
 });
 
 describe("competitor-gap topic generation", () => {
   test("keeps only ideas citing verified tenant-scoped evidence and returns provenance", async () => {
     const from = jest.fn((table: string) => {
-      if (table === "vault_items" || table === "content_pieces") {
+      if (
+        table === "vault_items" ||
+        table === "content_pieces" ||
+        table === "content_topics" ||
+        table === "brain_signals"
+      ) {
         return fluent({ data: [], error: null });
       }
       if (table === "competitors") {

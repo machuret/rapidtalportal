@@ -1,5 +1,5 @@
 /**
- * POST /api/vault/ask — Ask the Vault (retrieval-augmented Q&A).
+ * POST /api/vault/ask — Ask the Brain (retrieval-augmented Q&A).
  * Proxies to the vault-ask edge function with the caller's verified JWT.
  * Auth: withAuth — any authenticated user with access to the client.
  */

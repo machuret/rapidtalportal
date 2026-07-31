@@ -5,9 +5,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderPrompt } from "@/lib/prompts/server";
-import { buildBrainContext } from "@/lib/brain/context";
 import {
-  nodeBrainContextEnabled,
   persistNodeBrainContextSnapshot,
   resolveNodeBrainContext,
 } from "@/lib/brain/resolver";
@@ -529,32 +527,46 @@ export const POST = withAuth(async (req, { user }) => {
   // These are service-role reads behind the authenticated tenant boundary.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any;
-  const useStructuredBrain = await nodeBrainContextEnabled(
-    admin,
-    parsed.data.client_id,
-    "topics",
-  );
   let brainContextSnapshotId: string | null = null;
   let structuredBrain: Awaited<ReturnType<typeof resolveNodeBrainContext>> | null = null;
-  let brain: Awaited<ReturnType<typeof buildBrainContext>>;
-  if (useStructuredBrain) {
-    structuredBrain = await resolveNodeBrainContext({
-      admin,
-      clientId: parsed.data.client_id,
-      request: {
-        surface: "content",
-        contentType: "content_ideas",
-        topic: parsed.data.mode === "competitor_gap"
-          ? "Competitor-informed content opportunities"
-          : "Company content opportunities",
-        selectedVaultSourceIds: [],
-        includeMarketIntelligence: parsed.data.mode === "competitor_gap",
-      },
-      model: chatModel("CONTENT_TOPICS_MODEL"),
-      promptVersion: "content.topics",
-      maxKnowledge: 20,
-      maxMemory: 30,
-    });
+  let brain: {
+    text: string;
+    hasProfile: boolean;
+    hasVault: boolean;
+    positives: number;
+    negatives: number;
+    memories: number;
+    positiveExamples: string[];
+    negativeExamples: string[];
+  };
+  {
+    try {
+      structuredBrain = await resolveNodeBrainContext({
+        admin,
+        clientId: parsed.data.client_id,
+        request: {
+          surface: "content",
+          contentType: "content_ideas",
+          topic: parsed.data.mode === "competitor_gap"
+            ? "Competitor-informed content opportunities"
+            : "Company content opportunities",
+          selectedVaultSourceIds: [],
+          includeMarketIntelligence: parsed.data.mode === "competitor_gap",
+        },
+        model: chatModel("CONTENT_TOPICS_MODEL"),
+        promptVersion: "content.topics",
+        maxKnowledge: 20,
+        maxLibrary: 8,
+        maxMemory: 30,
+      });
+    } catch (error) {
+      console.error("[topics/generate] required Brain context failed", error);
+      return NextResponse.json({
+        error: "The Brain could not prepare verified context. No ideas were generated; please try again.",
+        code: "BRAIN_CONTEXT_UNAVAILABLE",
+        recoverable: true,
+      }, { status: 503 });
+    }
     const [positiveResult, negativeResult, negativeSignalResult] = await Promise.all([
       db.from("content_topics")
         .select("title,description")
@@ -619,21 +631,18 @@ export const POST = withAuth(async (req, { user }) => {
       const snapshot = await persistNodeBrainContextSnapshot({
         admin,
         context: structuredBrain.context,
+        artifactKind: "content_topic",
         createdBy: user.id,
       });
       brainContextSnapshotId = snapshot.id;
     } catch (error) {
       console.error("[topics/generate] Brain context snapshot failed", error);
-      // Provenance enriches an idea, but it is not part of the generation
-      // transaction. A temporarily unavailable audit store must not prevent an
-      // editor from generating or saving useful ideas.
-      brainContextSnapshotId = null;
+      return NextResponse.json({
+        error: "The Brain context could not be captured safely. No ideas were generated.",
+        code: "BRAIN_SNAPSHOT_REQUIRED",
+        recoverable: true,
+      }, { status: 503 });
     }
-  } else {
-    // Rollback path while the per-client Phase 1 flag is disabled.
-    brain = await buildBrainContext(admin, parsed.data.client_id, {
-      surfaces: ["content", "email", "x", "social", "blog", "newsletter"],
-    });
   }
 
   if (!brain.hasProfile && !brain.hasVault) {
@@ -1337,9 +1346,6 @@ export const POST = withAuth(async (req, { user }) => {
       }${repairFailed ? " The repair attempt was unavailable." : ""}${
         rejectedIdeas > 0 ? ` ${rejectedIdeas} incomplete idea${rejectedIdeas === 1 ? " was" : "s were"} excluded.` : ""
       }`
-        : null,
-      useStructuredBrain && !brainContextSnapshotId
-        ? "Detailed Brain provenance is temporarily unavailable; the ideas remain fully saveable."
         : null,
     ].filter(Boolean).join(" ") || undefined,
     learnedFrom: { positives: brain.positives, negatives: brain.negatives, grounded: embFits !== null },

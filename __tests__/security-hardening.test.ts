@@ -90,13 +90,13 @@ describe("Brain surface scoping", () => {
     expect(distill).not.toContain('"vault_answer"');
   });
 
-  test("short-term signals and both Edge surfaces use the shared scope policy", () => {
+  test("legacy context stays isolated while both Edge surfaces use the official resolver", () => {
     expect(context).toContain('.in("surface", scopedSignalSurfaces)');
     expect(context).toContain("memoryAppliesToSurfaces");
-    expect(ask).toContain("memoryAppliesToSurfaces(m.scope, [memorySurface])");
-    expect(content).toContain(
-      'memoryAppliesToSurfaces(memory.scope, ["content", contentType])',
-    );
+    expect(ask).toContain("resolveBrainContext({");
+    expect(content).toContain("resolveBrainContext({");
+    expect(ask).not.toContain("memoryAppliesToSurfaces");
+    expect(content).not.toContain("memoryAppliesToSurfaces");
   });
 });
 
@@ -145,14 +145,14 @@ describe("content approval and style integrity", () => {
     expect(hardRulesMigration).toContain("REVOKE ALL ON FUNCTION enforce_content_piece_approval()");
   });
 
-  test("generation fails closed on DNA/Vault errors and critiques with the same style authority", () => {
-    const retrieval = read("supabase/functions/_shared/content-vault-retrieval.ts");
+  test("generation requires official Brain context and its immutable snapshot", () => {
     expect(generator).toContain("if (dnaError)");
     expect(generator).toContain("if (!dna)");
-    expect(generator).toContain("await retrieveContentVault");
-    expect(generator).toContain("Vault context is temporarily unavailable");
-    expect(retrieval).toContain("if (vaultError)");
-    expect(generator).toContain("if (memoryError)");
+    expect(generator).toContain("resolveBrainContext({");
+    expect(generator).toContain("persistBrainContextSnapshot({");
+    expect(generator).not.toContain("retrieveContentVault");
+    expect(generator).toContain("could not prepare and snapshot verified context");
+    expect(generator).toContain("recoverable: true");
     expect(orchestration).toContain("=== PLATFORM OUTPUT CONTRACT ===");
     expect(orchestration).toContain("=== STRUCTURED BRIEF ===");
   });
@@ -251,10 +251,12 @@ describe("admin company profile and LinkedIn style sources", () => {
   });
 
   test("style examples influence channel style but cannot become factual evidence", () => {
+    const brainResolver = read("supabase/functions/_shared/brain-context.ts");
     expect(migration).toContain("AND vi.evidence_role = 'factual'");
     expect(retrieval).toContain('.eq("evidence_role", "factual")');
     expect(retrieval).toContain('.eq("evidence_role", "style_example")');
     expect(retrieval).toContain("Never treat them as factual evidence");
-    expect(ask).toContain('.eq("evidence_role", "factual")');
+    expect(ask).toContain("resolveBrainContext({");
+    expect(brainResolver).toContain('.eq("evidence_role", "factual")');
   });
 });

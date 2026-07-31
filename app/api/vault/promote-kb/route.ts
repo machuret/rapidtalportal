@@ -1,5 +1,5 @@
 /**
- * POST /api/vault/promote-kb — promote a good Ask the Vault answer into the
+ * POST /api/vault/promote-kb — promote a good Ask the Brain answer into the
  * curated Knowledge Base, so it's reused and trusted. Pinned so KB regeneration
  * won't wipe it. Admins only (curation).
  */

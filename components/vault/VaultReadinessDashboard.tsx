@@ -22,6 +22,7 @@ import type {
 } from "@/lib/vault/readiness";
 import type { VaultCategory } from "@/types/database";
 import { Button } from "@/components/ui/button";
+import { VaultKnowledgeFlow } from "@/components/intelligence/VaultKnowledgeFlow";
 import { KnowledgeGaps } from "./KnowledgeGaps";
 
 interface Props {
@@ -173,7 +174,9 @@ export function VaultReadinessDashboard({
 
   return (
     <section className="mb-6 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <VaultKnowledgeFlow readiness={readiness} />
+
+      <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-4">
           <div className={`flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl border ${statusClasses[readiness.status]}`}>
             <span className="text-2xl font-bold">{readiness.score}</span>
@@ -350,7 +353,7 @@ export function VaultReadinessDashboard({
           <div className="mb-3 flex items-center justify-between">
             <div>
               <p className="font-medium text-zinc-200">Open knowledge gaps</p>
-              <p className="text-xs text-zinc-500">Answer a question to make it available to Ask the Vault.</p>
+              <p className="text-xs text-zinc-500">Answer a question to make it available to Ask the Brain.</p>
             </div>
             <button type="button" className="text-xs text-zinc-500 hover:text-zinc-300" onClick={() => setShowGaps(false)}>
               Hide

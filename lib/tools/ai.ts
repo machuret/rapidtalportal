@@ -9,9 +9,7 @@ import { assertClientAccess, type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { captureError } from "@/lib/error-tracking";
 import { salvageJson } from "@/lib/tools/json-salvage";
-import { buildBrainContext } from "@/lib/brain/context";
 import {
-  nodeBrainContextEnabled,
   persistNodeBrainContextSnapshot,
   resolveNodeBrainContext,
 } from "@/lib/brain/resolver";
@@ -84,33 +82,6 @@ export async function companyContext(clientId: string): Promise<CompanyContext> 
   }
 }
 
-// Brain grounding for tools: the company profile + Vault highlights + the
-// lessons the Brain has learned (scoped to the "tool"/"content" surfaces) so a
-// tool's output reflects what worked/was rejected here — i.e. the tools get
-// smarter from feedback, not just emit it. Cached per client (short TTL) because
-// tools are high-frequency and buildBrainContext does several reads. Trimmed
-// (smaller Vault slice, fewer lessons) so short-form tools aren't token-bloated.
-const GROUNDING_TTL_MS = 30_000;
-const groundingCache = new Map<string, { text: string; at: number }>();
-
-export async function toolGrounding(clientId: string): Promise<string> {
-  const hit = groundingCache.get(clientId);
-  if (hit && Date.now() - hit.at < GROUNDING_TTL_MS) return hit.text;
-  try {
-    const admin = createAdminClient();
-    const brain = await buildBrainContext(admin, clientId, {
-      surfaces: ["tool", "content"],
-      vaultCharLimit: 3500,
-      maxMemory: 15,
-    });
-    const text = brain.text ? `${brain.text}\n` : "";
-    groundingCache.set(clientId, { text, at: Date.now() });
-    return text;
-  } catch {
-    return ""; // grounding is best-effort — never block a tool on it
-  }
-}
-
 /** Fire-and-forget usage record — feeds /tools history + Supervision stats.
  *  Pass the response payload as `output` to make the run reopenable. */
 export function logToolRun(
@@ -166,40 +137,37 @@ export async function toolJson<T>(
   let grounding = "";
   if (groundingClientId) {
     const admin = createAdminClient();
-    const enabled = await nodeBrainContextEnabled(admin, groundingClientId, "tools");
-    if (enabled) {
-      try {
-        const resolved = await resolveNodeBrainContext({
-          admin,
-          clientId: groundingClientId,
-          request: {
-            surface: "tool",
-            topic: user.slice(0, 2_000),
-            intent: system.slice(0, 1_000),
-            selectedVaultSourceIds: [],
-            includeMarketIntelligence: false,
-          },
-          model,
-          promptVersion: "tool-json-v1",
-          maxKnowledge: 8,
-          maxMemory: 15,
-        });
-        grounding = resolved.prompt;
-        const snapshot = await persistNodeBrainContextSnapshot({
-          admin,
-          context: resolved.context,
-        });
-        brainContextSnapshotId = snapshot.id;
-      } catch (error) {
-        captureError("api", error, { url: "tools:brain-context" });
-        return {
-          data: null,
-          tokens: 0,
-          error: "The company context could not be prepared. Please try again.",
-        };
-      }
-    } else {
-      grounding = await toolGrounding(groundingClientId);
+    try {
+      const resolved = await resolveNodeBrainContext({
+        admin,
+        clientId: groundingClientId,
+        request: {
+          surface: "tool",
+          topic: user.slice(0, 2_000),
+          intent: system.slice(0, 1_000),
+          selectedVaultSourceIds: [],
+          includeMarketIntelligence: false,
+        },
+        model,
+        promptVersion: "tool-json-v1",
+        maxKnowledge: 8,
+        maxLibrary: 5,
+        maxMemory: 15,
+      });
+      grounding = resolved.prompt;
+      const snapshot = await persistNodeBrainContextSnapshot({
+        admin,
+        context: resolved.context,
+        artifactKind: "tool_run",
+      });
+      brainContextSnapshotId = snapshot.id;
+    } catch (error) {
+      captureError("api", error, { url: "tools:brain-context" });
+      return {
+        data: null,
+        tokens: 0,
+        error: "The company context could not be prepared. Please try again.",
+      };
     }
   }
   const userContent = `${grounding}${user}`;

@@ -56,6 +56,20 @@ export const GET = withAuth(async (req, { user }) => {
         selectionReason: source.selectionReason,
       })),
     },
+    businessLibrary: {
+      coverage: snapshot.library.coverage,
+      retrievalMethod: snapshot.library.retrievalMethod,
+      sources: snapshot.library.sources.map((source) => ({
+        entryId: source.entryId,
+        versionId: source.versionId,
+        versionNumber: source.versionNumber,
+        title: source.title,
+        excerpt: source.excerpt,
+        category: source.category,
+        sourceUrl: source.sourceUrl,
+        selectionReason: source.selectionReason,
+      })),
+    },
     companyVoice: {
       source: snapshot.style.source,
       channel: snapshot.style.channel,

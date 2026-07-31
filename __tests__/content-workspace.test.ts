@@ -10,19 +10,21 @@ const read = (file: string) => readFileSync(path.join(root, file), "utf8");
 describe("unified content engine", () => {
   const generator = read("supabase/functions/content-generate/index.ts");
   const orchestration = read("supabase/functions/_shared/content-generation-orchestration.ts");
-  const retrieval = read("supabase/functions/_shared/content-vault-retrieval.ts");
+  const retrieval = read("supabase/functions/_shared/brain-context.ts");
   const quality = read("supabase/functions/_shared/content-quality.ts");
   const compose = read("components/vault/ComposeClient.tsx");
   const generateRoute = read("app/api/content/generate/route.ts");
 
-  test("Content and Compose use one engine and one Vault retrieval implementation", () => {
+  test("Content and Compose use one engine and the official Brain resolver", () => {
     expect(compose).toContain('"/content/generate"');
     expect(compose).not.toContain("/vault/ask");
-    expect(generator).toContain('import { retrieveContentVault }');
-    expect(generator).toContain("await retrieveContentVault");
+    expect(generator).toContain("resolveBrainContext({");
+    expect(generator).toContain("persistBrainContextSnapshot({");
+    expect(generator).not.toContain("retrieveContentVault");
     expect(generator).not.toContain('.from("vault_items")');
     expect(retrieval).toContain('.from("vault_items")');
     expect(retrieval).toContain('admin.rpc("match_vault_chunks"');
+    expect(retrieval).toContain('admin.rpc("match_business_library_chunks"');
   });
 
   test("the public generation boundary requires a structured brief and one platform", () => {

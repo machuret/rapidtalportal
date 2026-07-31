@@ -196,7 +196,7 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
         <Info className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
         <p className="text-xs text-zinc-500">
           Strategic interpretation, not verified fact — industry and competitive points are informed analysis.
-          This is for your team to read; Ask the Vault still answers only from the grounded dossier.
+          This is for your team to read; Ask the Brain still answers only from grounded company context.
         </p>
       </div>
 

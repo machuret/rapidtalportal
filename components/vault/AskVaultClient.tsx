@@ -8,13 +8,18 @@ import { errorMessage } from "@/lib/error-message";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Brain, Send, Loader2, Sparkles, ChevronDown, ThumbsUp, ThumbsDown, BookmarkPlus, Check, GraduationCap } from "lucide-react";
+import { Send, Loader2, Sparkles, ChevronDown, ThumbsUp, ThumbsDown, BookmarkPlus, Check, GraduationCap } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
+import {
+  AskBrainFlow,
+  type AskFlowState,
+  type AskSourceKind,
+} from "@/components/intelligence/AskBrainFlow";
 
 interface Source {
   n: number;
-  kind: "dna" | "vault" | "kb" | "sop";
+  kind: AskSourceKind;
   kindLabel: string;
   title: string;
   itemId: string | null;
@@ -171,19 +176,27 @@ export function AskVaultClient({
     ask(question);
   }
 
+  const latestTurn = turns.at(-1) ?? null;
+  const visibleSources = interim?.sources.length
+    ? interim.sources
+    : latestTurn?.sources ?? [];
+  const flowState: AskFlowState = interim
+    ? interim.answer
+      ? "answering"
+      : "searching"
+    : latestTurn
+      ? "ready"
+      : "idle";
+
   return (
     <div className="flex flex-col min-h-[calc(100vh-8rem)]">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
-          <Brain className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Ask the Vault</h1>
-          <p className="text-zinc-400 text-sm mt-1">
-            Ask anything about {companyName} — answers come straight from your company brain.
-          </p>
-        </div>
+      <div className="mb-6">
+        <AskBrainFlow
+          companyName={companyName}
+          state={flowState}
+          activeKinds={[...new Set(visibleSources.map((source) => source.kind))]}
+          snapshotAvailable={Boolean(latestTurn?.brainContextSnapshotId)}
+        />
       </div>
 
       {/* Conversation / empty state */}
@@ -291,7 +304,7 @@ function ChatTurn({
       setTeaching(false);
       toast.success("Thanks — the brain learned it. Next person who asks gets your answer.");
     } catch (error) {
-      toast.error(errorMessage(error, "The answer could not be taught to the Vault."));
+      toast.error(errorMessage(error, "The answer could not be taught to the Brain."));
     } finally {
       setTeachBusy(false);
     }

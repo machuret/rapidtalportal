@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  brainContextSurfaceEnabled,
   persistBrainContextSnapshot,
   renderBrainContext,
   resolveBrainContext,
@@ -32,6 +31,7 @@ export async function resolveNodeBrainContext(args: {
   model?: string | null;
   promptVersion?: string | null;
   maxKnowledge?: number;
+  maxLibrary?: number;
   maxMemory?: number;
 }): Promise<ResolvedNodeBrainContext> {
   const raw = await resolveBrainContext({
@@ -48,14 +48,6 @@ export async function resolveNodeBrainContext(args: {
   });
   const context = brainContextSchema.parse(raw);
   return { context, prompt: renderBrainContext(context as BrainContextV1) };
-}
-
-export async function nodeBrainContextEnabled(
-  admin: Admin,
-  clientId: string,
-  surface: "ask" | "content" | "topics" | "tools",
-): Promise<boolean> {
-  return brainContextSurfaceEnabled(admin, clientId, surface);
 }
 
 export async function persistNodeBrainContextSnapshot(args: {

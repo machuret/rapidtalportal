@@ -9,6 +9,9 @@ const VAULT_ID = "22222222-2222-4222-8222-222222222222";
 const CHUNK_ID = "33333333-3333-4333-8333-333333333333";
 const MEMORY_ID = "44444444-4444-4444-8444-444444444444";
 const STYLE_ID = "55555555-5555-4555-8555-555555555555";
+const LIBRARY_ENTRY_ID = "66666666-6666-4666-8666-666666666666";
+const LIBRARY_VERSION_ID = "77777777-7777-4777-8777-777777777777";
+const LIBRARY_CHUNK_ID = "88888888-8888-4888-8888-888888888888";
 
 class FakeQuery {
   constructor(
@@ -30,7 +33,7 @@ class FakeQuery {
   }
 }
 
-function fakeAdmin() {
+function fakeAdmin(options: { librarySearchFails?: boolean } = {}) {
   const fixtures: Record<string, unknown[]> = {
     company_dna: [{
       company_name: "Example Co",
@@ -79,6 +82,21 @@ function fakeAdmin() {
       scope: { surfaces: ["content"] },
     }],
     competitor_intelligence_runs: [],
+    business_library_versions: [{
+      id: LIBRARY_VERSION_ID,
+      entry_id: LIBRARY_ENTRY_ID,
+      version_number: 1,
+      category_id: STYLE_ID,
+      title: "SEO search intent",
+      summary: "General guidance for matching a page to search intent.",
+      body: "Choose one clear search intent, answer it thoroughly and measure qualified actions.",
+      source_url: null,
+      tags: ["seo"],
+    }],
+    business_library_categories: [{
+      id: STYLE_ID,
+      name: "SEO",
+    }],
   };
   return {
     from(table: string) {
@@ -86,6 +104,30 @@ function fakeAdmin() {
       return new FakeQuery(rows);
     },
     rpc(name: string) {
+      if (name === "match_business_library_chunks") {
+        if (options.librarySearchFails) {
+          return Promise.resolve({
+            data: null,
+            error: { message: "temporary full-text failure" },
+          });
+        }
+        return Promise.resolve({
+          data: [{
+            entry_id: LIBRARY_ENTRY_ID,
+            version_id: LIBRARY_VERSION_ID,
+            chunk_id: LIBRARY_CHUNK_ID,
+            version_number: 1,
+            title: "Private credit marketing basics",
+            summary: "General guidance for marketing commercial finance.",
+            content: "Explain the audience, risks and next step in plain language.",
+            category: "Sales",
+            source_url: null,
+            tags: ["sales"],
+            rank: 0.74,
+          }],
+          error: null,
+        });
+      }
       expect(name).toBe("match_vault_chunks");
       return Promise.resolve({
         data: [{
@@ -134,6 +176,8 @@ describe("Brain Context Phase 1 resolver", () => {
     expect(context.provenance).toEqual(expect.objectContaining({
       vaultItemIds: [VAULT_ID],
       vaultChunkIds: [CHUNK_ID],
+      libraryVersionIds: [LIBRARY_VERSION_ID],
+      libraryChunkIds: [LIBRARY_CHUNK_ID],
       memoryIds: [MEMORY_ID],
     }));
   });
@@ -155,8 +199,35 @@ describe("Brain Context Phase 1 resolver", () => {
 
     expect(prompt).toContain("=== COMPANY CONTEXT ===");
     expect(prompt).toContain("=== COMPANY VAULT KNOWLEDGE ===");
+    expect(prompt).toContain("=== BUSINESS LIBRARY GUIDANCE");
+    expect(prompt).toContain("NEVER COMPANY FACTS");
     expect(prompt).toContain("=== APPLIED VOICE AND STYLE ===");
     expect(prompt).toContain("=== APPROVED EDITORIAL LESSONS ===");
     expect(prompt).not.toContain("MARKET INSPIRATION");
+  });
+
+  it("recovers Library retrieval from current published releases and reports degradation", async () => {
+    const context = await resolveBrainContext({
+      admin: fakeAdmin({ librarySearchFails: true }),
+      clientId: CLIENT_ID,
+      request: {
+        surface: "ask",
+        topic: "How should SEO pages match search intent?",
+        selectedVaultSourceIds: [],
+        includeMarketIntelligence: false,
+      },
+      createdAt: "2026-07-31T01:00:00.000Z",
+    });
+
+    expect(context.library).toEqual(expect.objectContaining({
+      retrievalMethod: "lexical_recovery",
+      sources: [expect.objectContaining({
+        versionId: LIBRARY_VERSION_ID,
+        selectionMethod: "lexical_recovery",
+      })],
+    }));
+    expect(context.warnings).toContainEqual(expect.objectContaining({
+      code: "business_library_search_degraded",
+    }));
   });
 });

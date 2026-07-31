@@ -193,7 +193,7 @@ export function CrawlJobPanel({ clientId, startedJob }: { clientId: string; star
           )}
           <p className="text-zinc-400 flex items-center gap-1">
             <Sparkles className="w-3 h-3" />
-            Spot-check it: open Ask the Vault and try &quot;What&apos;s the shipping policy?&quot;,
+            Spot-check it: open Ask the Brain and try &quot;What&apos;s the shipping policy?&quot;,
             &quot;What do they sell and at what prices?&quot;, &quot;How do returns work?&quot;
           </p>
         </div>

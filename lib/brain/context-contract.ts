@@ -1,12 +1,17 @@
 import { z } from "zod";
 
 /**
- * Brain Context is the versioned contract every AI surface will consume in
- * Phase 1. Phase 0 deliberately does not replace the current prompt builders;
- * it establishes the shape, validation and stable serialization first.
+ * Brain Context is the versioned contract every official AI surface consumes.
+ * New fields remain backward-compatible so historical immutable snapshots can
+ * still be inspected while current outputs use the latest resolver.
  */
 export const BRAIN_CONTEXT_VERSION = "brain-context-v1" as const;
-export const BRAIN_RESOLVER_VERSION = "resolver-v2-task-memory" as const;
+export const BRAIN_RESOLVER_VERSION = "resolver-v3-business-library" as const;
+export const BRAIN_RESOLVER_VERSIONS = [
+  "resolver-v1",
+  "resolver-v2-task-memory",
+  BRAIN_RESOLVER_VERSION,
+] as const;
 
 export const BRAIN_CONTEXT_SURFACES = ["ask", "content", "compose", "tool"] as const;
 export const BRAIN_CONTEXT_CHANNELS = [
@@ -48,6 +53,21 @@ export const brainKnowledgeSourceSchema = z.object({
   category: z.string().trim().max(120).nullable(),
   sourceUrl: z.url().nullable(),
   selectionMethod: z.enum(["semantic", "full_text", "selected", "fallback"]),
+  relevance: score.nullable(),
+  selectionReason: z.string().trim().min(1).max(1000),
+});
+
+export const brainLibrarySourceSchema = z.object({
+  entryId: z.uuid(),
+  versionId: z.uuid(),
+  chunkId: z.uuid().nullable(),
+  versionNumber: z.number().int().positive(),
+  title: z.string().trim().min(1).max(500),
+  excerpt: z.string().trim().min(1).max(12000),
+  category: z.string().trim().min(1).max(120),
+  sourceUrl: z.url().nullable(),
+  tags: z.array(z.string().trim().min(1).max(100)).max(30),
+  selectionMethod: z.enum(["full_text", "lexical_recovery"]),
   relevance: score.nullable(),
   selectionReason: z.string().trim().min(1).max(1000),
 });
@@ -137,6 +157,17 @@ export const brainContextSchema = z.object({
     retrievalMethod: z.string().trim().min(1).max(200),
     coverage: z.enum(["strong", "partial", "weak", "none"]),
   }),
+  library: z.object({
+    sources: z.array(brainLibrarySourceSchema).max(30),
+    retrievalQuery: z.string().trim().max(4000),
+    retrievalMethod: z.enum(["full_text", "lexical_recovery", "none"]),
+    coverage: z.enum(["strong", "partial", "weak", "none"]),
+  }).default({
+    sources: [],
+    retrievalQuery: "",
+    retrievalMethod: "none",
+    coverage: "none",
+  }),
   style: z.object({
     source: z.enum([
       "project_snapshot",
@@ -165,7 +196,7 @@ export const brainContextSchema = z.object({
     severity: z.enum(["info", "warning", "blocking"]),
   })).max(100),
   provenance: z.object({
-    resolverVersion: z.literal(BRAIN_RESOLVER_VERSION),
+    resolverVersion: z.enum(BRAIN_RESOLVER_VERSIONS),
     generatedAt: z.iso.datetime({ offset: true }),
     model: z.string().trim().min(1).max(200).nullable(),
     promptVersion: z.string().trim().min(1).max(200).nullable(),
@@ -174,6 +205,9 @@ export const brainContextSchema = z.object({
     styleProfileVersion: z.number().int().positive().nullable(),
     vaultItemIds: z.array(z.uuid()).max(100),
     vaultChunkIds: z.array(z.uuid()).max(200),
+    libraryEntryIds: z.array(z.uuid()).max(30).default([]),
+    libraryVersionIds: z.array(z.uuid()).max(30).default([]),
+    libraryChunkIds: z.array(z.uuid()).max(60).default([]),
     memoryIds: z.array(z.uuid()).max(100),
     marketSnapshotIds: z.array(z.uuid()).max(30),
   }),
@@ -188,6 +222,18 @@ export const brainContextSchema = z.object({
   const knowledgeSourceKeys = context.knowledge.sources.map((source) =>
     `${source.itemId}:${source.chunkId ?? "item"}`,
   );
+  const libraryEntryIds = Array.from(
+    new Set(context.library.sources.map((source) => source.entryId)),
+  );
+  const libraryVersionIds = Array.from(
+    new Set(context.library.sources.map((source) => source.versionId)),
+  );
+  const libraryChunkIds = context.library.sources.flatMap((source) =>
+    source.chunkId ? [source.chunkId] : [],
+  );
+  const librarySourceKeys = context.library.sources.map((source) =>
+    `${source.versionId}:${source.chunkId ?? "version"}`,
+  );
   const memoryIds = context.memories.map((memory) => memory.memoryId);
 
   if (!unique(context.request.selectedVaultSourceIds)) {
@@ -197,7 +243,13 @@ export const brainContextSchema = z.object({
       message: "Selected Vault source IDs must be unique.",
     });
   }
-  if (!unique(knowledgeSourceKeys) || !unique(knowledgeChunkIds) || !unique(memoryIds)) {
+  if (
+    !unique(knowledgeSourceKeys) ||
+    !unique(knowledgeChunkIds) ||
+    !unique(librarySourceKeys) ||
+    !unique(libraryChunkIds) ||
+    !unique(memoryIds)
+  ) {
     refinement.addIssue({
       code: "custom",
       path: ["provenance"],
@@ -216,6 +268,27 @@ export const brainContextSchema = z.object({
       code: "custom",
       path: ["provenance", "vaultChunkIds"],
       message: "Vault chunk provenance must match the selected knowledge sources.",
+    });
+  }
+  if (!sameSet(context.provenance.libraryEntryIds, libraryEntryIds)) {
+    refinement.addIssue({
+      code: "custom",
+      path: ["provenance", "libraryEntryIds"],
+      message: "Library entry provenance must match the selected guidance.",
+    });
+  }
+  if (!sameSet(context.provenance.libraryVersionIds, libraryVersionIds)) {
+    refinement.addIssue({
+      code: "custom",
+      path: ["provenance", "libraryVersionIds"],
+      message: "Library version provenance must match the selected guidance.",
+    });
+  }
+  if (!sameSet(context.provenance.libraryChunkIds, libraryChunkIds)) {
+    refinement.addIssue({
+      code: "custom",
+      path: ["provenance", "libraryChunkIds"],
+      message: "Library chunk provenance must match the selected guidance.",
     });
   }
   if (!sameSet(context.provenance.memoryIds, memoryIds)) {
@@ -268,6 +341,7 @@ export const brainContextSchema = z.object({
 export type BrainContext = z.infer<typeof brainContextSchema>;
 export type BrainContextRequest = z.infer<typeof brainContextRequestSchema>;
 export type BrainKnowledgeSource = z.infer<typeof brainKnowledgeSourceSchema>;
+export type BrainLibrarySource = z.infer<typeof brainLibrarySourceSchema>;
 export type BrainMemorySelection = z.infer<typeof brainMemorySelectionSchema>;
 
 function sameSet(left: string[], right: string[]): boolean {
