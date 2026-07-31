@@ -130,4 +130,5 @@ export const MIGRATIONS = [
   "122_task_aware_brain_memory.sql",
   "123_editorial_learning.sql",
   "124_brain_readiness_product.sql",
+  "125_brain_evaluation_activity.sql",
 ] as const;

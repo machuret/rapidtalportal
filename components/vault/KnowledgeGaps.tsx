@@ -23,6 +23,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import Link from "next/link";
 
 type GapInput = string | VaultKnowledgeGap;
 type SourceOption = { id: string; title: string };
@@ -186,6 +187,12 @@ export function KnowledgeGaps({ gaps, clientId, canCurate, onChanged }: {
 
             {canCurate && (
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                <Link
+                  href="/vault"
+                  className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-300"
+                >
+                  <Link2 className="h-3.5 w-3.5" /> Add document
+                </Link>
                 {!gap.ownerId && (
                   <button
                     type="button"

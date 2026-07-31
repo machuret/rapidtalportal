@@ -6,6 +6,10 @@ const migration = fs.readFileSync(
   path.join(process.cwd(), "db/migrations/124_brain_readiness_product.sql"),
   "utf8",
 );
+const evaluationActivityMigration = fs.readFileSync(
+  path.join(process.cwd(), "db/migrations/125_brain_evaluation_activity.sql"),
+  "utf8",
+);
 const cron = fs.readFileSync(
   path.join(process.cwd(), "app/api/cron/brain-distill/route.ts"),
   "utf8",
@@ -56,6 +60,8 @@ describe("Phase 4 Brain readiness product", () => {
     ]) {
       expect(migration).toContain(`'${event}'`);
     }
+    expect(evaluationActivityMigration).toContain("'evaluation_improved'");
+    expect(evaluationActivityMigration).toContain("NEW.assignment->>NEW.preferred_variant = 'conditioned'");
     expect(migration).toContain("meaningful BOOLEAN NOT NULL DEFAULT false");
     expect(migration).toContain("WHERE meaningful = true");
   });
