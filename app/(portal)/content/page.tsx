@@ -53,6 +53,7 @@ export default async function ContentPage() {
       .from("vault_queries")
       .select("question,answered,dismissed,created_at")
       .eq("client_id", user.client_id)
+      .neq("visibility", "private_coach")
       .eq("answered", false)
       .eq("dismissed", false)
       .order("created_at", { ascending: false })

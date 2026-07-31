@@ -132,7 +132,8 @@ export async function computeBrainReadiness(
       .eq("client_id", clientId).gte("created_at", recent).limit(5000),
     admin.from("vault_queries")
       .select("answered,created_at")
-      .eq("client_id", clientId).gte("created_at", recent).limit(5000),
+      .eq("client_id", clientId).neq("visibility", "private_coach")
+      .gte("created_at", recent).limit(5000),
     admin.from("competitors")
       .select("id,status").eq("client_id", clientId).eq("status", "active").limit(100),
     admin.from("competitor_content_items")

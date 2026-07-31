@@ -37,6 +37,9 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
+  const visibility = parsed.data.context?.visibility === "private_coach"
+    ? "private_coach"
+    : "team_learning";
 
   // Re-rating the same artifact updates the existing signal instead of inserting
   // a duplicate (which would inflate source_count and re-distil the same input).
@@ -61,6 +64,7 @@ export const POST = withAuth(async (req, { user }) => {
           channel:       parsed.data.channel ?? null,
           content_type:  parsed.data.content_type ?? null,
           learning_intent: "explicit_feedback",
+          visibility,
           distilled_at:  null,
           // Invalidate an in-flight distillation of the old judgement. Its
           // transactional commit will lose ownership and roll back.
@@ -95,6 +99,7 @@ export const POST = withAuth(async (req, { user }) => {
       channel:       parsed.data.channel ?? null,
       content_type:  parsed.data.content_type ?? null,
       learning_intent: "explicit_feedback",
+      visibility,
     })
     .select("id")
     .single();

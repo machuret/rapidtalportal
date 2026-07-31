@@ -29,7 +29,8 @@ export default async function BrainAnalyticsPage() {
 
   const [queriesRes, feedbackRes, memoryRes, topicsRes, signalsRes] = await Promise.all([
     admin.from("vault_queries").select("*")
-      .eq("client_id", clientId).gte("created_at", since).order("created_at", { ascending: false }).limit(2000),
+      .eq("client_id", clientId).neq("visibility", "private_coach")
+      .gte("created_at", since).order("created_at", { ascending: false }).limit(2000),
     admin.from("vault_feedback").select("*")
       .eq("client_id", clientId).gte("created_at", since).order("created_at", { ascending: false }).limit(1000),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

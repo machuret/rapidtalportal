@@ -96,7 +96,125 @@ const SOURCE_LABEL: Record<string, string> = {
   operation: "Current work",
 };
 
-type CoachMode = "private" | "message_client" | "message_va_team" | "create_task";
+type CoachMode = "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task";
+
+type CoachActionDraft =
+  | {
+    type: "create_task";
+    idempotencyKey: string;
+    title: string;
+    brief: string;
+    assigneeId: string | null;
+    priority: 1 | 2 | 3 | 4;
+    dueDate: string | null;
+  }
+  | {
+    type: "send_message";
+    idempotencyKey: string;
+    audience: "client" | "va_team";
+    message: string;
+  }
+  | { type: "update_task"; idempotencyKey: string; taskId: string; status: "todo" | "in_progress" | "review" | "done"; priority: 1 | 2 | 3 | 4; dueDate: string | null; note: string }
+  | { type: "submit_review"; idempotencyKey: string; taskId: string; note: string }
+  | { type: "review_task"; idempotencyKey: string; taskId: string; decision: "approve" | "changes"; note: string };
+
+function coachActionResponseFormat(mode: CoachMode) {
+  if (mode === "private") return undefined;
+  const action = mode === "create_task"
+    ? {
+      type: "object",
+      additionalProperties: false,
+      required: ["type", "title", "brief", "assigneeId", "priority", "dueDate"],
+      properties: {
+        type: { type: "string", const: "create_task" },
+        title: { type: "string", maxLength: 300 },
+        brief: { type: "string", maxLength: 10000 },
+        assigneeId: { type: ["string", "null"] },
+        priority: { type: "integer", minimum: 1, maximum: 4 },
+        dueDate: { type: ["string", "null"] },
+      },
+    }
+    : mode === "message_client" || mode === "message_va_team" ? {
+      type: "object",
+      additionalProperties: false,
+      required: ["type", "audience", "message"],
+      properties: {
+        type: { type: "string", const: "send_message" },
+        audience: { type: "string", const: mode === "message_client" ? "client" : "va_team" },
+        message: { type: "string", maxLength: 4000 },
+      },
+    } : mode === "update_task" ? {
+      type: "object", additionalProperties: false,
+      required: ["type", "taskId", "status", "priority", "dueDate", "note"],
+      properties: {
+        type: { type: "string", const: "update_task" }, taskId: { type: "string" },
+        status: { type: "string", enum: ["todo", "in_progress", "review", "done"] },
+        priority: { type: "integer", minimum: 1, maximum: 4 }, dueDate: { type: ["string", "null"] },
+        note: { type: "string", maxLength: 2000 },
+      },
+    } : mode === "submit_review" ? {
+      type: "object", additionalProperties: false, required: ["type", "taskId", "note"],
+      properties: { type: { type: "string", const: "submit_review" }, taskId: { type: "string" }, note: { type: "string", maxLength: 2000 } },
+    } : {
+      type: "object", additionalProperties: false, required: ["type", "taskId", "decision", "note"],
+      properties: { type: { type: "string", const: "review_task" }, taskId: { type: "string" }, decision: { type: "string", enum: ["approve", "changes"] }, note: { type: "string", maxLength: 2000 } },
+    };
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: "rapidtal_coach_action",
+      strict: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["answer", "action"],
+        properties: {
+          answer: { type: "string", maxLength: 12000 },
+          action,
+        },
+      },
+    },
+  };
+}
+
+function parseCoachActionDraft(value: unknown, mode: CoachMode): { answer: string; action: CoachActionDraft } | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const answer = typeof row.answer === "string" ? row.answer.trim() : "";
+  if (!answer || !row.action || typeof row.action !== "object") return null;
+  const action = row.action as Record<string, unknown>;
+  const idempotencyKey = crypto.randomUUID();
+  if (mode === "create_task") {
+    const title = typeof action.title === "string" ? action.title.trim().slice(0, 300) : "";
+    const brief = typeof action.brief === "string" ? action.brief.trim().slice(0, 10_000) : "";
+    const priority = Number(action.priority);
+    const assigneeId = typeof action.assigneeId === "string" && /^[0-9a-f-]{36}$/iu.test(action.assigneeId)
+      ? action.assigneeId
+      : null;
+    const dueDate = typeof action.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/u.test(action.dueDate)
+      ? action.dueDate
+      : null;
+    if (!title || !brief || ![1, 2, 3, 4].includes(priority)) return null;
+    return { answer, action: { type: "create_task", idempotencyKey, title, brief, assigneeId, priority: priority as 1 | 2 | 3 | 4, dueDate } };
+  }
+  if (mode === "message_client" || mode === "message_va_team") {
+    const message = typeof action.message === "string" ? action.message.trim().slice(0, 4_000) : "";
+    const audience = mode === "message_client" ? "client" : "va_team";
+    return message ? { answer, action: { type: "send_message", idempotencyKey, audience, message } } : null;
+  }
+  const taskId = typeof action.taskId === "string" && /^[0-9a-f-]{36}$/iu.test(action.taskId) ? action.taskId : "";
+  const note = typeof action.note === "string" ? action.note.trim().slice(0, 2_000) : "";
+  if (!taskId) return null;
+  if (mode === "update_task") {
+    const status = ["todo", "in_progress", "review", "done"].includes(String(action.status)) ? action.status as "todo" | "in_progress" | "review" | "done" : null;
+    const priority = Number(action.priority);
+    const dueDate = typeof action.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/u.test(action.dueDate) ? action.dueDate : null;
+    return status && [1, 2, 3, 4].includes(priority) ? { answer, action: { type: "update_task", idempotencyKey, taskId, status, priority: priority as 1 | 2 | 3 | 4, dueDate, note } } : null;
+  }
+  if (mode === "submit_review") return { answer, action: { type: "submit_review", idempotencyKey, taskId, note } };
+  const decision = action.decision === "approve" || action.decision === "changes" ? action.decision : null;
+  return decision ? { answer, action: { type: "review_task", idempotencyKey, taskId, decision, note } } : null;
+}
 
 function coachRolePolicy(
   coachRole: "client" | "va",
@@ -117,7 +235,10 @@ function coachRolePolicy(
     private: "MODE: PRIVATE WITH COACH. Answer privately. If another person should be contacted, suggest a draft but do not imply it has been shared.",
     message_client: "MODE: DRAFT FOR CLIENT. Write a concise ready-to-send message to the client. It remains private until the VA confirms Send to Client.",
     message_va_team: "MODE: DRAFT FOR VA TEAM. Write a concise ready-to-send message to the VA team. It remains private until the client confirms Send to VA Team.",
-    create_task: "MODE: DRAFT TASK. Return exactly two plain-text sections: TASK TITLE: followed by a short action title, then TASK BRIEF: followed by a clear brief with outcome, inputs, steps and definition of done. It remains private until the client confirms Create Task.",
+    create_task: "MODE: DRAFT TASK. Prepare a structured task preview with a short action title, clear brief, outcome, inputs, steps, definition of done, sensible priority, optional due date and an assignee only when supported by the supplied team data. It remains private until the client confirms Create Task.",
+    update_task: "MODE: UPDATE TASK. Select only a task visible in CURRENT OPERATIONAL DATA and prepare an editable status, priority, due date and optional note. Never invent a task ID.",
+    submit_review: "MODE: SUBMIT FOR REVIEW. Select only an assigned task visible to this VA and prepare a concise submission note. Never invent a task ID.",
+    review_task: "MODE: REVIEW TASK. Select only a task currently in review, prepare approve or request-changes, and include a clear note when requesting changes. Never invent a task ID.",
   };
   return `${roleRules}\n${actionRules[coachMode]}`;
 }
@@ -302,15 +423,18 @@ Deno.serve(async (req: Request) => {
     const question: string = (body.question ?? "").toString().trim();
     const deep = body.mode === "deep";
     const coachRole: "client" | "va" = role === "va" ? "va" : "client";
-    const requestedCoachMode: CoachMode = ["private", "message_client", "message_va_team", "create_task"]
+    const requestedCoachMode: CoachMode = ["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task"]
       .includes(body.coachMode)
       ? body.coachMode
       : "private";
-    if (coachRole === "va" && (requestedCoachMode === "message_va_team" || requestedCoachMode === "create_task")) {
+    if (coachRole === "va" && ["message_va_team", "create_task", "review_task"].includes(requestedCoachMode)) {
       return json({ error: "That Coach action is not available to a VA." }, 403);
     }
     if (coachRole === "client" && requestedCoachMode === "message_client") {
       return json({ error: "That Coach action is not available to a client." }, 403);
+    }
+    if (coachRole === "client" && requestedCoachMode === "submit_review") {
+      return json({ error: "Only a VA can submit assigned work for review." }, 403);
     }
     const coachPermissions = coachRole === "client"
       ? ["read_company_status", "create_tasks", "assign_tasks", "approve_work", "message_va_team"] as const
@@ -319,7 +443,7 @@ Deno.serve(async (req: Request) => {
       ? "client"
       : requestedCoachMode === "message_va_team"
         ? "va_team"
-        : requestedCoachMode === "create_task"
+        : ["create_task", "update_task", "submit_review", "review_task"].includes(requestedCoachMode)
           ? "task_board"
           : "private";
     const matchCount: number = deep ? 18 : 8;
@@ -355,7 +479,12 @@ Deno.serve(async (req: Request) => {
           mode: deep ? "deep" : "concise",
           sources_count: sourcesCount,
           answered: sourcesCount > 0,
+          visibility: "private_coach",
+          retention_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000).toISOString(),
         });
+        // Best-effort rolling retention. The function is service-only and only
+        // removes data whose explicit retention window has elapsed.
+        await admin.rpc("purge_expired_coach_private_data");
       } catch (_e) { /* table may not exist yet; ignore */ }
     };
 
@@ -567,6 +696,8 @@ Deno.serve(async (req: Request) => {
       : await promptOverride(admin, "vault.ask.answer", ANSWER_PROMPT);
     const systemPrompt = `${editablePrompt}\n\n${MANDATORY_BRAIN_POLICY}\n\n${coachRolePolicy(coachRole, requestedCoachMode)}`;
 
+    const responseFormat = coachActionResponseFormat(requestedCoachMode);
+    const effectiveStream = stream && requestedCoachMode === "private";
     const chatRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -582,7 +713,8 @@ Deno.serve(async (req: Request) => {
         model: deep ? DEEP_MODEL : CONCISE_MODEL,
         max_tokens: deep ? 3000 : 550,
         temperature: 0.4,
-        stream,
+        stream: effectiveStream,
+        ...(responseFormat ? { response_format: responseFormat } : {}),
         messages: [
           { role: "system", content: systemPrompt },
           ...history.flatMap((h) => {
@@ -596,7 +728,7 @@ Deno.serve(async (req: Request) => {
     });
 
     // ── Streaming: pipe OpenRouter's SSE straight through, sources in a header ────
-    if (stream) {
+    if (effectiveStream) {
       await logQuery(grounded.included.length);
       if (!chatRes.ok || !chatRes.body) {
         return json({
@@ -637,7 +769,27 @@ Deno.serve(async (req: Request) => {
       }, 502);
     }
 
-    const answer: string = chatJson.choices?.[0]?.message?.content?.trim() ?? "No answer generated.";
+    const rawAnswer: string = chatJson.choices?.[0]?.message?.content?.trim() ?? "";
+    let answer = rawAnswer || "No answer generated.";
+    let actionDraft: CoachActionDraft | null = null;
+    if (requestedCoachMode !== "private") {
+      try {
+        const parsed = parseCoachActionDraft(JSON.parse(rawAnswer), requestedCoachMode);
+        if (!parsed) throw new Error("invalid structured Coach action");
+        answer = parsed.answer;
+        actionDraft = parsed.action;
+      } catch (error) {
+        console.error("vault-ask: structured Coach action validation failed", error);
+        return json({
+          error: "The Coach could not prepare a safe action preview. Please retry.",
+          code: "coach_action_validation_failed",
+          recoverable: true,
+          brainContextSnapshotId,
+          libraryAvailability: brainContext.library.availability,
+          warnings: brainContext.warnings,
+        }, 502);
+      }
+    }
     const tokensUsed: number = chatJson.usage?.total_tokens ?? 0;
 
     await logQuery(grounded.included.length);
@@ -650,6 +802,7 @@ Deno.serve(async (req: Request) => {
       libraryAvailability: brainContext.library.availability,
       warnings: brainContext.warnings,
       suggestions,
+      actionDraft,
     });
   } catch (error) {
     console.error("❌ vault-ask error:", error);

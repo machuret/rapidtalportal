@@ -35,7 +35,8 @@ export const GET = withAuth(async (req, { user }) => {
     admin
       .from("vault_queries")
       .select("id", { count: "exact", head: true })
-      .eq("client_id", clientId),
+      .eq("client_id", clientId)
+      .neq("visibility", "private_coach"),
   ]);
   if (itemsResult.error) return serverError(itemsResult.error);
   if (gapsResult.error) return serverError(gapsResult.error);

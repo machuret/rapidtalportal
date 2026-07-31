@@ -6,12 +6,13 @@ import { z } from "zod";
  * still be inspected while current outputs use the latest resolver.
  */
 export const BRAIN_CONTEXT_VERSION = "brain-context-v1" as const;
-export const BRAIN_RESOLVER_VERSION = "resolver-v5-role-aware-coach" as const;
+export const BRAIN_RESOLVER_VERSION = "resolver-v6-coach-operations" as const;
 export const BRAIN_RESOLVER_VERSIONS = [
   "resolver-v1",
   "resolver-v2-task-memory",
   "resolver-v3-business-library",
   "resolver-v4-library-availability",
+  "resolver-v5-role-aware-coach",
   BRAIN_RESOLVER_VERSION,
 ] as const;
 
@@ -67,7 +68,7 @@ export const brainContextRequestSchema = z.object({
     conversationVisibility: z.literal("private_coach"),
     intendedAudience: z.enum(["private", "client", "va_team", "task_board"]),
   }).optional(),
-  actionMode: z.enum(["private", "message_client", "message_va_team", "create_task"]).optional(),
+  actionMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task"]).optional(),
   selectedVaultSourceIds: z.array(z.uuid()).max(100).default([]),
   includeMarketIntelligence: z.boolean().default(false),
 });
@@ -217,6 +218,26 @@ export const brainContextSchema = z.object({
       displayName: z.string().trim().min(1).max(300),
       role: z.enum(["client_admin", "va"]),
     })).max(100),
+    taskEvents: z.array(z.object({
+      eventId: z.uuid(), taskId: z.uuid(), kind: z.enum(["comment", "activity"]),
+      body: z.string().trim().min(1).max(2000), userId: z.uuid().nullable(),
+      userName: z.string().trim().min(1).max(300).nullable(), createdAt: nullableTimestamp,
+    })).max(100).default([]),
+    dailyLogs: z.array(z.object({
+      logId: z.uuid(), userId: z.uuid(), userName: z.string().trim().min(1).max(300).nullable(),
+      logDate: z.iso.date(), tasksDone: z.string().max(2000), positives: z.string().max(1000),
+      challenges: z.string().max(1000), goalsAchieved: z.string().max(1000), goalsTomorrow: z.string().max(1000),
+      mood: z.string().max(100).nullable(), adminFeedback: z.string().max(1000).nullable(),
+    })).max(30).default([]),
+    deliverables: z.array(z.object({
+      pieceId: z.uuid(), title: z.string().trim().min(1).max(300), contentType: z.string().max(120),
+      status: z.string().max(100), createdBy: z.uuid().nullable(), updatedAt: nullableTimestamp,
+    })).max(30).default([]),
+    communications: z.array(z.object({
+      messageId: z.uuid(), senderId: z.uuid(), senderName: z.string().trim().min(1).max(300),
+      senderRole: z.enum(["client_admin", "va"]), audience: z.enum(["company", "client", "va_team"]),
+      body: z.string().trim().min(1).max(2000), createdAt: nullableTimestamp,
+    })).max(50).default([]),
   }).optional(),
   style: z.object({
     source: z.enum([
@@ -262,6 +283,10 @@ export const brainContextSchema = z.object({
     marketSnapshotIds: z.array(z.uuid()).max(30),
     operationalTaskIds: z.array(z.uuid()).max(30).optional(),
     teamMemberIds: z.array(z.uuid()).max(100).optional(),
+    operationalEventIds: z.array(z.uuid()).max(100).optional(),
+    dailyLogIds: z.array(z.uuid()).max(30).optional(),
+    deliverableIds: z.array(z.uuid()).max(30).optional(),
+    communicationIds: z.array(z.uuid()).max(50).optional(),
   }),
 }).superRefine((context, refinement) => {
   const unique = (values: string[]) => new Set(values).size === values.length;
@@ -289,6 +314,10 @@ export const brainContextSchema = z.object({
   const memoryIds = context.memories.map((memory) => memory.memoryId);
   const operationalTaskIds = context.operations?.tasks.map((task) => task.taskId) ?? [];
   const teamMemberIds = context.operations?.team.map((member) => member.userId) ?? [];
+  const operationalEventIds = context.operations?.taskEvents.map((event) => event.eventId) ?? [];
+  const dailyLogIds = context.operations?.dailyLogs.map((log) => log.logId) ?? [];
+  const deliverableIds = context.operations?.deliverables.map((piece) => piece.pieceId) ?? [];
+  const communicationIds = context.operations?.communications.map((message) => message.messageId) ?? [];
 
   if (!unique(context.request.selectedVaultSourceIds)) {
     refinement.addIssue({
@@ -397,6 +426,20 @@ export const brainContextSchema = z.object({
       path: ["provenance", "teamMemberIds"],
       message: "Team provenance must match the role-scoped team context.",
     });
+  }
+  for (const [key, expected] of [
+    ["operationalEventIds", operationalEventIds],
+    ["dailyLogIds", dailyLogIds],
+    ["deliverableIds", deliverableIds],
+    ["communicationIds", communicationIds],
+  ] as const) {
+    if (!sameSet(context.provenance[key] ?? [], expected)) {
+      refinement.addIssue({
+        code: "custom",
+        path: ["provenance", key],
+        message: `${key} must match the role-scoped operational context.`,
+      });
+    }
   }
   if (!context.market.included && (context.market.snapshotIds.length || context.market.insights.length)) {
     refinement.addIssue({

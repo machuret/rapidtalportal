@@ -22,7 +22,7 @@ export const GET = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("brain_context_snapshots")
-    .select("id,client_id,snapshot_hash,snapshot,created_at,artifact_kind,artifact_id")
+    .select("id,client_id,snapshot_hash,snapshot,created_at,artifact_kind,artifact_id,created_by")
     .eq("id", parsed.data.snapshotId)
     .eq("client_id", parsed.data.clientId)
     .maybeSingle();
@@ -39,6 +39,12 @@ export const GET = withAuth(async (req, { user }) => {
     );
   }
   const snapshot = context.data;
+  if (
+    snapshot.request.actor?.conversationVisibility === "private_coach"
+    && data.created_by !== user.id
+  ) {
+    return NextResponse.json({ error: "Private Coach context belongs to another user." }, { status: 403 });
+  }
 
   return NextResponse.json({
     id: data.id,

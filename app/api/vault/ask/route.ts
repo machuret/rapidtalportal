@@ -22,12 +22,18 @@ const bodySchema = z.object({
   // silently dropped here (schema stripped them, the proxy forwarded only
   // clientId+question), so deep answers were really just concise re-asks.
   mode: z.enum(["concise", "deep"]).optional(),
-  coachMode: z.enum(["private", "message_client", "message_va_team", "create_task"]).optional(),
+  coachMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task"]).optional(),
   surface: z.enum(["vault_answer", "compose"]).optional(),
   history: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
 });
 
-export const POST = withAuth(async (req, { user }) => {
+export const POST = withAuth(async (req, { user, impersonating }) => {
+  if (impersonating) {
+    return NextResponse.json(
+      { error: "Coach is unavailable while an administrator is viewing as another user." },
+      { status: 409 },
+    );
+  }
   // Each question costs an OpenRouter call — throttle per user.
   const rl = askVaultLimiter.check(`ask:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);

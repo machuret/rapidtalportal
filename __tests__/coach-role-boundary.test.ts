@@ -21,7 +21,9 @@ describe("RapidTal Coach role boundary", () => {
     expect(resolver).toContain('.eq("client_id", clientId)');
     expect(resolver).toContain('.eq("assigned_to", request.actor.userId)');
     expect(resolver).toContain('scope: request.actor.coachRole === "va" ? "assigned_only"');
-    expect(resolver).not.toContain('from("messages")');
+    expect(resolver).toContain('from("messages")');
+    expect(resolver).toContain('audience.in.(company,va_team),sender_id.eq.${request.actor.userId}');
+    expect(resolver).toContain('audience.in.(company,client),sender_id.eq.${request.actor.userId}');
   });
 
   test("keeps actions private until an explicit interface confirmation", () => {

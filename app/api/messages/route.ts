@@ -23,11 +23,17 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("messages")
-    .select("id, client_id, sender_id, sender_name, sender_role, body, read_by, created_at")
+    .select("id, client_id, sender_id, sender_name, sender_role, body, audience, read_by, created_at")
     .eq("client_id", clientId)
     .order("created_at", { ascending: true });
+  if (user.role === "client_admin") {
+    query = query.or(`audience.in.(company,client),sender_id.eq.${user.id}`);
+  } else if (user.role === "va") {
+    query = query.or(`audience.in.(company,va_team),sender_id.eq.${user.id}`);
+  }
+  const { data, error } = await query;
 
   // Surface the real Postgres error (e.g. missing table) instead of a generic
   // string — it lands in /admin/errors via the withAuth wrapper if it throws,

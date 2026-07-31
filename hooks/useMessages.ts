@@ -11,6 +11,7 @@ export interface Message {
   sender_name: string;
   sender_role: string;
   body: string;
+  audience: "company" | "client" | "va_team";
   read_by: string[];
   created_at: string;
 }
@@ -25,6 +26,7 @@ export const messageKeys = {
 
 interface SendMessageInput {
   message: string;
+  audience?: "company" | "client" | "va_team";
 }
 
 // Fetch via the server API (admin client, scoped in code) rather than the

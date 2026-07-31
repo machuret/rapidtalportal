@@ -23,11 +23,10 @@ import {
   RotateCcw,
   Send,
   Sparkles,
-  ThumbsDown,
-  ThumbsUp,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
+import { CoachFeedback } from "@/components/brain/CoachFeedback";
 import {
   AskBrainFlow,
   type AskFlowState,
@@ -48,12 +47,13 @@ interface Source {
 }
 
 type CoachRole = "client" | "va";
-type CoachMode = "private" | "message_client" | "message_va_team" | "create_task";
+type CoachMode = "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task";
 
 export interface CoachTeamMember {
   id: string;
   name: string;
 }
+export interface CoachTaskOption { id: string; title: string; status: "todo" | "in_progress" | "review" | "done" }
 
 type LibraryAvailability = "available" | "degraded" | "unavailable" | "not_requested";
 type ContextWarning = {
@@ -71,7 +71,15 @@ interface AskResponse {
   libraryAvailability: LibraryAvailability;
   warnings: ContextWarning[];
   suggestions: string[];
+  actionDraft?: CoachActionDraft | null;
 }
+
+type CoachActionDraft =
+  | { type: "create_task"; idempotencyKey: string; title: string; brief: string; assigneeId: string | null; priority: 1 | 2 | 3 | 4; dueDate: string | null }
+  | { type: "send_message"; idempotencyKey: string; audience: "client" | "va_team"; message: string }
+  | { type: "update_task"; idempotencyKey: string; taskId: string; status: "todo" | "in_progress" | "review" | "done"; priority: 1 | 2 | 3 | 4; dueDate: string | null; note: string }
+  | { type: "submit_review"; idempotencyKey: string; taskId: string; note: string }
+  | { type: "review_task"; idempotencyKey: string; taskId: string; decision: "approve" | "changes"; note: string };
 
 interface Turn {
   question: string;
@@ -83,6 +91,8 @@ interface Turn {
   suggestions: string[];
   queriedKinds: AskSourceKind[];
   coachMode: CoachMode;
+  actionDraft?: CoachActionDraft | null;
+  actionStatus?: "none" | "draft" | "processing" | "completed" | "failed";
 }
 
 type AnswerEvidence = Pick<
@@ -91,19 +101,6 @@ type AnswerEvidence = Pick<
 >;
 
 type HistoryItem = { question: string; answer: string };
-
-function parseTaskDraft(answer: string, fallbackQuestion: string): { title: string; description: string } {
-  const titleMatch = answer.match(/^TASK TITLE:\s*(.+)$/imu);
-  const briefMatch = answer.match(/^TASK BRIEF:\s*([\s\S]+)$/imu);
-  const fallbackTitle = fallbackQuestion
-    .replace(/\b(?:can you|please|create|assign|give|make|a|the|task|to my va|for my va)\b/giu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return {
-    title: (titleMatch?.[1]?.trim() || fallbackTitle || "Coach-created task").slice(0, 300),
-    description: (briefMatch?.[1]?.trim() || answer.trim()).slice(0, 10_000),
-  };
-}
 
 const SUGGESTIONS = [
   "What services do we offer, based on our company evidence?",
@@ -129,6 +126,9 @@ function inferredCoachMode(
   if (role === "client" && /\b(?:create|assign|give|make)\b.{0,50}\btask\b/iu.test(question)) {
     return "create_task";
   }
+  if (role === "client" && /\b(?:approve|request changes|send back|review)\b/iu.test(question)) return "review_task";
+  if (role === "va" && /\b(?:submit|ready)\b.{0,50}\breview\b/iu.test(question)) return "submit_review";
+  if (/\b(?:update|change|move)\b.{0,50}\btask\b/iu.test(question)) return "update_task";
   if (role === "client" && /\b(?:send|tell|message|ask)\b.{0,60}\b(?:va|team)\b/iu.test(question)) {
     return "message_va_team";
   }
@@ -259,7 +259,9 @@ export function AskVaultClient({
   coachRole = "client",
   speakerName = "You",
   teamMembers = [],
+  taskOptions = [],
   actionsEnabled = true,
+  persistConversation = true,
   externalAsk,
 }: {
   clientId: string;
@@ -268,13 +270,17 @@ export function AskVaultClient({
   coachRole?: CoachRole;
   speakerName?: string;
   teamMembers?: CoachTeamMember[];
+  taskOptions?: CoachTaskOption[];
   actionsEnabled?: boolean;
+  persistConversation?: boolean;
   /** Lets a parent (e.g. golden questions panel) submit a question into this chat. */
   externalAsk?: { q: string; nonce: number } | null;
 }) {
   const [question, setQuestion] = useState("");
   const [coachMode, setCoachMode] = useState<CoachMode>("private");
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(persistConversation);
   const [loading, setLoading] = useState(false);
   const [interim, setInterim] = useState<Turn | null>(null);
   const [askFailure, setAskFailure] = useState<{ question: string; message: string; recoverable: boolean } | null>(null);
@@ -283,6 +289,88 @@ export function AskVaultClient({
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns, interim]);
+
+  useEffect(() => {
+    if (!persistConversation) {
+      setHistoryLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void api.get<{
+      thread: { id: string } | null;
+      turns: Array<{
+        question: string;
+        answer: string;
+        coach_mode: CoachMode;
+        brain_context_snapshot_id: string;
+        sources: Source[];
+        suggestions: string[];
+        library_availability: LibraryAvailability;
+        warnings: ContextWarning[];
+        action_draft: CoachActionDraft | null;
+        action_status: Turn["actionStatus"];
+      }>;
+    }>(ROUTES.coach.threadsForClient(clientId), { showErrorToast: false })
+      .then((result) => {
+        if (cancelled) return;
+        setThreadId(result.thread?.id ?? null);
+        setTurns((result.turns ?? []).map((turn) => ({
+          question: turn.question,
+          answer: turn.answer,
+          coachMode: turn.coach_mode,
+          brainContextSnapshotId: turn.brain_context_snapshot_id,
+          sources: turn.sources ?? [],
+          suggestions: turn.suggestions ?? [],
+          libraryAvailability: turn.library_availability ?? "not_requested",
+          warnings: turn.warnings ?? [],
+          actionDraft: turn.action_draft ?? null,
+          actionStatus: turn.action_status ?? "none",
+          queriedKinds: [...new Set((turn.sources ?? []).map((source) => source.kind))],
+        })));
+      })
+      .catch(() => { /* A new or temporarily unavailable history never blocks Coach. */ })
+      .finally(() => { if (!cancelled) setHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [clientId, persistConversation]);
+
+  async function persistTurn(turn: Turn) {
+    if (!persistConversation || !turn.brainContextSnapshotId) return false;
+    try {
+      const result = await api.post<{ threadId: string }>(ROUTES.coach.threads(), {
+        clientId,
+        threadId,
+        question: turn.question,
+        answer: turn.answer,
+        snapshotId: turn.brainContextSnapshotId,
+        coachMode: turn.coachMode,
+        sources: turn.sources,
+        suggestions: turn.suggestions,
+        libraryAvailability: turn.libraryAvailability,
+        warnings: turn.warnings,
+        actionDraft: turn.actionDraft ?? null,
+      }, { showErrorToast: false, idempotent: true });
+      setThreadId(result.threadId);
+      return true;
+    } catch {
+      toast.error("The answer is available, but Coach history could not be saved yet.");
+      return false;
+    }
+  }
+
+  async function newConversation() {
+    if (loading) return;
+    if (threadId) {
+      try {
+        await api.delete(ROUTES.coach.threads(), { clientId, threadId }, { showErrorToast: false });
+      } catch {
+        toast.error("The current Coach conversation could not be archived.");
+        return;
+      }
+    }
+    setThreadId(null);
+    setTurns([]);
+    setCoachMode("private");
+  }
 
   // A parent panel (golden questions) can push a question into the chat.
   useEffect(() => {
@@ -313,32 +401,15 @@ export function AskVaultClient({
       coachMode: resolvedMode,
     });
 
-    // Stream first; fall back to the non-streaming endpoint if anything fails.
-    const r = await askStream(clientId, trimmed, history, (answer, sources) =>
-      setInterim((current) => current ? { ...current, answer, sources } : null),
-      undefined,
-      resolvedMode,
-    );
-    if (r.ok) {
-      setTurns((prev) => [...prev, {
-        question: trimmed,
-        answer: r.answer,
-        sources: r.sources,
-        brainContextSnapshotId: r.brainContextSnapshotId,
-        libraryAvailability: r.libraryAvailability,
-        warnings: r.warnings,
-        suggestions: r.suggestions,
-        queriedKinds: requestedLayers,
-        coachMode: resolvedMode,
-      }]);
-    } else {
+    // Action requests use strict JSON-schema output. Keeping them off the SSE
+    // path means the UI never has to infer an executable action from prose.
+    if (resolvedMode !== "private") {
       try {
-        const res = await api.post<AskResponse>(
-          ROUTES.vault.ask(),
-          { clientId, question: trimmed, history, coachMode: resolvedMode },
-          { showErrorToast: false },
-        );
-        setTurns((prev) => [...prev, {
+        const res = await api.post<AskResponse>(ROUTES.vault.ask(), {
+          clientId, question: trimmed, history, coachMode: resolvedMode,
+        }, { showErrorToast: false });
+        if (!res.actionDraft) throw new Error("Coach returned no validated action preview.");
+        const completedTurn: Turn = {
           question: trimmed,
           answer: res.answer,
           sources: res.sources ?? [],
@@ -348,7 +419,69 @@ export function AskVaultClient({
           suggestions: res.suggestions ?? [],
           queriedKinds: requestedLayers,
           coachMode: resolvedMode,
-        }]);
+          actionDraft: res.actionDraft,
+          actionStatus: "draft",
+        };
+        if (!(await persistTurn(completedTurn))) {
+          throw new Error("The verified preview could not be saved for safe execution.");
+        }
+        setTurns((prev) => [...prev, completedTurn]);
+      } catch (error) {
+        setAskFailure({
+          question: trimmed,
+          message: errorMessage(error, "The Coach could not prepare a safe action preview."),
+          recoverable: true,
+        });
+      }
+      setInterim(null);
+      setLoading(false);
+      return;
+    }
+
+    // Stream first; fall back to the non-streaming endpoint if anything fails.
+    const r = await askStream(clientId, trimmed, history, (answer, sources) =>
+      setInterim((current) => current ? { ...current, answer, sources } : null),
+      undefined,
+      resolvedMode,
+    );
+    if (r.ok) {
+      const completedTurn: Turn = {
+        question: trimmed,
+        answer: r.answer,
+        sources: r.sources,
+        brainContextSnapshotId: r.brainContextSnapshotId,
+        libraryAvailability: r.libraryAvailability,
+        warnings: r.warnings,
+        suggestions: r.suggestions,
+        queriedKinds: requestedLayers,
+        coachMode: resolvedMode,
+        actionDraft: null,
+        actionStatus: "none",
+      };
+      setTurns((prev) => [...prev, completedTurn]);
+      void persistTurn(completedTurn);
+    } else {
+      try {
+        const res = await api.post<AskResponse>(
+          ROUTES.vault.ask(),
+          { clientId, question: trimmed, history, coachMode: resolvedMode },
+          { showErrorToast: false },
+        );
+        const completedTurn: Turn = {
+          question: trimmed,
+          answer: res.answer,
+          sources: res.sources ?? [],
+          brainContextSnapshotId: res.brainContextSnapshotId ?? null,
+          libraryAvailability: res.libraryAvailability ?? "not_requested",
+          warnings: res.warnings ?? [],
+          suggestions: res.suggestions ?? [],
+          queriedKinds: requestedLayers,
+          coachMode: resolvedMode,
+          actionDraft: res.actionDraft ?? null,
+          actionStatus: res.actionDraft ? "draft" : "none",
+        };
+        setTurns((prev) => [...prev, completedTurn]);
+        void persistTurn(completedTurn);
       } catch (error) {
         setAskFailure({
           question: trimmed,
@@ -390,6 +523,13 @@ export function AskVaultClient({
   return (
     <div className="flex flex-col min-h-[calc(100vh-8rem)]">
       <div className="mb-6">
+        {persistConversation && turns.length > 0 && (
+          <div className="mb-3 flex justify-end">
+            <Button type="button" size="sm" variant="outline" onClick={newConversation} disabled={loading} className="gap-1.5 border-zinc-700 text-xs">
+              <RotateCcw className="h-3.5 w-3.5" /> New conversation
+            </Button>
+          </div>
+        )}
         <AskBrainFlow
           companyName={companyName}
           coachRole={coachRole}
@@ -403,7 +543,12 @@ export function AskVaultClient({
 
       {/* Conversation / empty state */}
       <div className="flex-1 space-y-6 mb-4">
-        {turns.length === 0 && !interim && (
+        {historyLoading && turns.length === 0 && !interim && (
+          <div className="surface-card flex items-center justify-center gap-2 p-8 text-sm text-zinc-500">
+            <Loader2 className="h-4 w-4 animate-spin" /> Restoring your private Coach conversation…
+          </div>
+        )}
+        {!historyLoading && turns.length === 0 && !interim && (
           <div className="surface-card p-8 text-center">
             <Sparkles className="w-7 h-7 text-purple-400 mx-auto mb-3" />
             <p className="text-zinc-300 font-medium mb-1">What would you like to know?</p>
@@ -433,6 +578,7 @@ export function AskVaultClient({
             coachRole={coachRole}
             speakerName={speakerName}
             teamMembers={teamMembers}
+            taskOptions={taskOptions}
             actionsEnabled={actionsEnabled}
             history={turns.slice(Math.max(0, i - 4), i).map((p) => ({ question: p.question, answer: p.answer }))}
             onAsk={(value) => ask(value, "private")}
@@ -494,9 +640,11 @@ export function AskVaultClient({
             Private with Coach
           </CoachModeButton>
           {actionsEnabled && coachRole === "va" && (
-            <CoachModeButton active={coachMode === "message_client"} onClick={() => setCoachMode("message_client")} icon={MessageSquare}>
-              Send to Client
-            </CoachModeButton>
+            <>
+              <CoachModeButton active={coachMode === "message_client"} onClick={() => setCoachMode("message_client")} icon={MessageSquare}>Send to Client</CoachModeButton>
+              <CoachModeButton active={coachMode === "update_task"} onClick={() => setCoachMode("update_task")} icon={ListTodo}>Update Task</CoachModeButton>
+              <CoachModeButton active={coachMode === "submit_review"} onClick={() => setCoachMode("submit_review")} icon={Check}>Submit for Review</CoachModeButton>
+            </>
           )}
           {actionsEnabled && coachRole === "client" && (
             <>
@@ -506,12 +654,14 @@ export function AskVaultClient({
               <CoachModeButton active={coachMode === "create_task"} onClick={() => setCoachMode("create_task")} icon={ListTodo}>
                 Create Task
               </CoachModeButton>
+              <CoachModeButton active={coachMode === "update_task"} onClick={() => setCoachMode("update_task")} icon={ListTodo}>Update Task</CoachModeButton>
+              <CoachModeButton active={coachMode === "review_task"} onClick={() => setCoachMode("review_task")} icon={Check}>Review Work</CoachModeButton>
             </>
           )}
         </div>
         <p className="mb-2 text-xs text-zinc-500">
           {coachMode === "private"
-            ? "Private with RapidTal Coach. Nothing is shared."
+            ? "Only you can open this Coach conversation. Conversation history is kept for 12 months; short-lived diagnostic prompts expire after 30 days."
             : "The Coach will prepare a preview. Nothing is shared until you confirm."}
         </p>
         <div className="flex gap-2">
@@ -566,6 +716,7 @@ function CoachModeButton({
 function ChatTurn({
   turn, clientId, history, canCurate, coachRole, speakerName,
   teamMembers, actionsEnabled, onAsk,
+  taskOptions,
 }: {
   turn: Turn;
   clientId: string;
@@ -574,6 +725,7 @@ function ChatTurn({
   coachRole: CoachRole;
   speakerName: string;
   teamMembers: CoachTeamMember[];
+  taskOptions: CoachTaskOption[];
   actionsEnabled: boolean;
   onAsk: (question: string) => Promise<void>;
 }) {
@@ -581,15 +733,14 @@ function ChatTurn({
   const [deepAnswer, setDeepAnswer] = useState<string | null>(null);
   const [deepEvidence, setDeepEvidence] = useState<AnswerEvidence | null>(null);
   const [deepLoading, setDeepLoading] = useState(false);
-  const [rated, setRated] = useState<1 | -1 | null>(null);
   const [saved, setSaved] = useState(false);
   const [teaching, setTeaching] = useState(false);
   const [teachText, setTeachText] = useState("");
   const [teachBusy, setTeachBusy] = useState(false);
   const [taught, setTaught] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
-  const [actionComplete, setActionComplete] = useState(false);
-  const [assigneeId, setAssigneeId] = useState(teamMembers.length === 1 ? teamMembers[0].id : "");
+  const [actionComplete, setActionComplete] = useState(turn.actionStatus === "completed");
+  const [actionDraft, setActionDraft] = useState<CoachActionDraft | null>(turn.actionDraft ?? null);
 
   const unanswered = turn.sources.length === 0;
 
@@ -648,25 +799,6 @@ function ChatTurn({
     setDeepLoading(false);
   }
 
-  async function rate(r: 1 | -1) {
-    if (rated || deepLoading) return;
-    setRated(r);
-    try {
-      await api.post(ROUTES.vault.feedback(), {
-        clientId,
-        question: turn.question,
-        answer: deepAnswer ?? turn.answer,
-        rating: r,
-        sources: (deepEvidence?.sources ?? turn.sources)
-          .map((s) => ({ kind: s.kind, title: s.title, itemId: s.itemId })),
-      }, { showErrorToast: false });
-      toast.success("Thanks for the feedback.");
-    } catch (error) {
-      setRated(null);
-      toast.error(errorMessage(error, "Your feedback could not be saved."));
-    }
-  }
-
   async function saveToKb() {
     if (saved || deepLoading) return;
     try {
@@ -680,29 +812,27 @@ function ChatTurn({
     }
   }
 
-  const taskDraft = parseTaskDraft(turn.answer, turn.question);
-
   async function confirmCoachAction() {
-    if (actionBusy || actionComplete || turn.coachMode === "private") return;
+    if (actionBusy || actionComplete || turn.coachMode === "private" || !actionDraft || !turn.brainContextSnapshotId) return;
     setActionBusy(true);
     try {
-      if (turn.coachMode === "create_task") {
-        await api.post(ROUTES.tasks(), {
-          clientId,
-          title: taskDraft.title,
-          description: taskDraft.description,
-          assignedTo: assigneeId || null,
-          status: "todo",
-          priority: 2,
-        }, { showErrorToast: false });
+      await api.post(ROUTES.coach.actions(), {
+        clientId,
+        snapshotId: turn.brainContextSnapshotId,
+        action: actionDraft,
+      }, { showErrorToast: false, idempotent: true });
+      if (actionDraft.type === "create_task") {
         toast.success("Task created. The assigned VA can now see it.");
-      } else {
-        await api.post(ROUTES.messages.send(), {
-          message: turn.answer.trim(),
-        }, { showErrorToast: false });
-        toast.success(turn.coachMode === "message_client"
+      } else if (actionDraft.type === "send_message") {
+        toast.success(actionDraft.audience === "client"
           ? "Message sent to the client."
           : "Message sent to the VA team.");
+      } else if (actionDraft.type === "submit_review") {
+        toast.success("Work submitted for client review.");
+      } else if (actionDraft.type === "review_task") {
+        toast.success(actionDraft.decision === "approve" ? "Work approved." : "Changes requested.");
+      } else {
+        toast.success("Task updated.");
       }
       setActionComplete(true);
     } catch (error) {
@@ -736,52 +866,117 @@ function ChatTurn({
         </div>
         <p className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">{turn.answer}</p>
 
-        {actionsEnabled && turn.coachMode !== "private" && (
+        {actionsEnabled && turn.coachMode !== "private" && actionDraft && (
           <div className="mt-4 rounded-xl border border-purple-500/25 bg-purple-500/5 p-4">
             <div className="flex items-start gap-3">
-              {turn.coachMode === "create_task"
-                ? <ListTodo className="mt-0.5 h-4 w-4 shrink-0 text-purple-300" />
-                : <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-purple-300" />}
+              {actionDraft.type === "send_message"
+                ? <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-purple-300" />
+                : <ListTodo className="mt-0.5 h-4 w-4 shrink-0 text-purple-300" />}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-purple-100">
-                  {turn.coachMode === "create_task"
-                    ? "Task preview"
-                    : turn.coachMode === "message_client"
-                      ? "Message preview — Client"
-                      : "Message preview — VA Team"}
+                  {actionDraft.type === "create_task" ? "Create task preview"
+                    : actionDraft.type === "send_message" ? `Message preview — ${actionDraft.audience === "client" ? "Client" : "VA Team"}`
+                      : actionDraft.type === "update_task" ? "Task update preview"
+                        : actionDraft.type === "submit_review" ? "Review submission preview"
+                          : "Client review preview"}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-zinc-500">
                   Nothing has been shared yet. Review the Coach draft, then confirm below.
                 </p>
-                {turn.coachMode === "create_task" && teamMembers.length > 0 && !actionComplete && (
-                  <label className="mt-3 block text-xs text-zinc-400">
-                    Assign to
-                    <select
-                      value={assigneeId}
-                      onChange={(event) => setAssigneeId(event.target.value)}
-                      className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200"
-                    >
-                      <option value="">Leave unassigned</option>
-                      {teamMembers.map((member) => (
-                        <option key={member.id} value={member.id}>{member.name}</option>
-                      ))}
-                    </select>
+                {!actionComplete && actionDraft.type === "create_task" && (
+                  <div className="mt-3 grid gap-3">
+                    <label className="text-xs text-zinc-400">Task title
+                      <Input value={actionDraft.title} maxLength={300}
+                        onChange={(event) => setActionDraft({ ...actionDraft, title: event.target.value })}
+                        className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                    </label>
+                    <label className="text-xs text-zinc-400">Task brief
+                      <Textarea value={actionDraft.brief} maxLength={10000} rows={5}
+                        onChange={(event) => setActionDraft({ ...actionDraft, brief: event.target.value })}
+                        className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                    </label>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <label className="text-xs text-zinc-400">Assign to
+                        <select value={actionDraft.assigneeId ?? ""}
+                          onChange={(event) => setActionDraft({ ...actionDraft, assigneeId: event.target.value || null })}
+                          className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
+                          <option value="">Leave unassigned</option>
+                          {teamMembers.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+                        </select>
+                      </label>
+                      <label className="text-xs text-zinc-400">Priority
+                        <select value={actionDraft.priority}
+                          onChange={(event) => setActionDraft({ ...actionDraft, priority: Number(event.target.value) as 1 | 2 | 3 | 4 })}
+                          className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
+                          <option value={1}>Urgent</option><option value={2}>High</option><option value={3}>Normal</option><option value={4}>Low</option>
+                        </select>
+                      </label>
+                      <label className="text-xs text-zinc-400">Due date
+                        <Input type="date" value={actionDraft.dueDate ?? ""}
+                          onChange={(event) => setActionDraft({ ...actionDraft, dueDate: event.target.value || null })}
+                          className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                      </label>
+                    </div>
+                  </div>
+                )}
+                {!actionComplete && actionDraft.type === "send_message" && (
+                  <label className="mt-3 block text-xs text-zinc-400">Message
+                    <Textarea value={actionDraft.message} maxLength={4000} rows={5}
+                      onChange={(event) => setActionDraft({ ...actionDraft, message: event.target.value })}
+                      className="mt-1.5 bg-zinc-900 text-zinc-100" />
                   </label>
+                )}
+                {!actionComplete && actionDraft.type !== "create_task" && actionDraft.type !== "send_message" && (
+                  <div className="mt-3 grid gap-3">
+                    <label className="text-xs text-zinc-400">Task
+                      <select value={actionDraft.taskId} onChange={(event) => setActionDraft({ ...actionDraft, taskId: event.target.value })}
+                        className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
+                        {taskOptions.filter((task) => actionDraft.type !== "review_task" || task.status === "review").map((task) => <option key={task.id} value={task.id}>{task.title} — {task.status.replaceAll("_", " ")}</option>)}
+                      </select>
+                    </label>
+                    {actionDraft.type === "update_task" && (
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <label className="text-xs text-zinc-400">Status
+                          <select value={actionDraft.status} onChange={(event) => setActionDraft({ ...actionDraft, status: event.target.value as "todo" | "in_progress" | "review" | "done" })} className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
+                            <option value="todo">To do</option><option value="in_progress">In progress</option><option value="review">Review</option><option value="done">Done</option>
+                          </select>
+                        </label>
+                        <label className="text-xs text-zinc-400">Priority
+                          <select value={actionDraft.priority} onChange={(event) => setActionDraft({ ...actionDraft, priority: Number(event.target.value) as 1 | 2 | 3 | 4 })} className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
+                            <option value={1}>Urgent</option><option value={2}>High</option><option value={3}>Normal</option><option value={4}>Low</option>
+                          </select>
+                        </label>
+                        <label className="text-xs text-zinc-400">Due date
+                          <Input type="date" value={actionDraft.dueDate ?? ""} onChange={(event) => setActionDraft({ ...actionDraft, dueDate: event.target.value || null })} className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                        </label>
+                      </div>
+                    )}
+                    {actionDraft.type === "review_task" && (
+                      <label className="text-xs text-zinc-400">Decision
+                        <select value={actionDraft.decision} onChange={(event) => setActionDraft({ ...actionDraft, decision: event.target.value as "approve" | "changes" })} className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
+                          <option value="approve">Approve</option><option value="changes">Request changes</option>
+                        </select>
+                      </label>
+                    )}
+                    <label className="text-xs text-zinc-400">{actionDraft.type === "submit_review" ? "Submission note" : actionDraft.type === "review_task" ? "Review note" : "Update note"}
+                      <Textarea value={actionDraft.note} maxLength={2000} rows={3} onChange={(event) => setActionDraft({ ...actionDraft, note: event.target.value })} className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                    </label>
+                  </div>
                 )}
                 <Button
                   size="sm"
                   onClick={confirmCoachAction}
-                  disabled={actionBusy || actionComplete}
+                  disabled={actionBusy || actionComplete || (actionDraft.type === "create_task" ? !actionDraft.title.trim() || !actionDraft.brief.trim() : actionDraft.type === "send_message" ? !actionDraft.message.trim() : !actionDraft.taskId)}
                   className="mt-3 gap-1.5"
                 >
-                  {actionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : actionComplete ? <Check className="h-3.5 w-3.5" /> : turn.coachMode === "create_task" ? <ListTodo className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+                  {actionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : actionComplete ? <Check className="h-3.5 w-3.5" /> : actionDraft.type === "send_message" ? <Send className="h-3.5 w-3.5" /> : <ListTodo className="h-3.5 w-3.5" />}
                   {actionComplete
                     ? "Confirmed"
                     : turn.coachMode === "create_task"
                       ? "Create Task"
                       : turn.coachMode === "message_client"
                         ? "Send to Client"
-                        : "Send to VA Team"}
+                        : turn.coachMode === "message_va_team" ? "Send to VA Team" : turn.coachMode === "submit_review" ? "Submit for Review" : turn.coachMode === "review_task" ? "Confirm Review" : "Update Task"}
                 </Button>
               </div>
             </div>
@@ -908,26 +1103,18 @@ function ChatTurn({
 
           {/* Feedback */}
           <div className="flex items-center gap-1 ml-auto">
-            <button
-              onClick={() => rate(1)}
-              disabled={rated !== null || deepLoading}
-              title="Good answer"
-              aria-label="Rate this as a good answer"
-              className={cn("p-1 rounded transition-colors disabled:cursor-default",
-                rated === 1 ? "text-green-400" : "text-zinc-500 hover:text-green-400 disabled:hover:text-zinc-500")}
-            >
-              <ThumbsUp className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => rate(-1)}
-              disabled={rated !== null || deepLoading}
-              title="Needs work"
-              aria-label="Rate this answer as needing work"
-              className={cn("p-1 rounded transition-colors disabled:cursor-default",
-                rated === -1 ? "text-red-400" : "text-zinc-500 hover:text-red-400 disabled:hover:text-zinc-500")}
-            >
-              <ThumbsDown className="w-3.5 h-3.5" />
-            </button>
+            <CoachFeedback
+              clientId={clientId}
+              question={turn.question}
+              answer={deepAnswer ?? turn.answer}
+              snapshotId={deepEvidence?.brainContextSnapshotId ?? turn.brainContextSnapshotId}
+              coachRole={coachRole}
+              sources={(deepEvidence?.sources ?? turn.sources).map((source) => ({
+                kind: source.kind,
+                title: source.title,
+                itemId: source.itemId,
+              }))}
+            />
             {canCurate && (
               <button
                 onClick={saveToKb}

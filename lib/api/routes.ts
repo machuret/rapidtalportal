@@ -120,6 +120,11 @@ export const ROUTES = {
       `/api/brain/opportunities?clientId=${clientId}`,
     opportunity: (id: string) => `/api/brain/opportunities/${id}`,
   },
+  coach: {
+    threads: () => "/api/coach/threads",
+    threadsForClient: (clientId: string) => `/api/coach/threads?clientId=${clientId}`,
+    actions: () => "/api/coach/actions",
+  },
   tasks: () => "/api/tasks",
   taskEvents: () => "/api/tasks/events",
   taskReview: () => "/api/tasks/review",

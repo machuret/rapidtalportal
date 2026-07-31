@@ -1,0 +1,154 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess } from "@/lib/api-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { serverError } from "@/lib/api/errors";
+
+const sourceSchema = z.object({
+  n: z.number().int().optional(),
+  kind: z.string().max(30),
+  kindLabel: z.string().max(100),
+  title: z.string().max(300),
+  itemId: z.string().uuid().nullable(),
+  sourceUrl: z.string().url().nullable(),
+  versionId: z.string().uuid().nullable(),
+  versionNumber: z.number().int().nullable(),
+  chunkId: z.string().uuid().nullable(),
+  category: z.string().max(200).nullable(),
+});
+
+const saveSchema = z.object({
+  clientId: z.string().uuid(),
+  threadId: z.string().uuid().optional().nullable(),
+  question: z.string().trim().min(3).max(8000),
+  answer: z.string().trim().min(1).max(30000),
+  snapshotId: z.string().uuid(),
+  coachMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task"]),
+  sources: z.array(sourceSchema).max(30).default([]),
+  suggestions: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
+  libraryAvailability: z.enum(["available", "degraded", "unavailable", "not_requested"]),
+  warnings: z.array(z.object({
+    code: z.string().max(100),
+    message: z.string().max(1000),
+    severity: z.enum(["info", "warning", "blocking"]),
+  })).max(20).default([]),
+  actionDraft: z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("create_task"), idempotencyKey: z.string().uuid(),
+      title: z.string().max(300), brief: z.string().max(10000),
+      assigneeId: z.string().uuid().nullable(), priority: z.number().int().min(1).max(4),
+      dueDate: z.iso.date().nullable(),
+    }),
+    z.object({
+      type: z.literal("send_message"), idempotencyKey: z.string().uuid(),
+      audience: z.enum(["client", "va_team"]), message: z.string().max(4000),
+    }),
+    z.object({ type: z.literal("update_task"), idempotencyKey: z.string().uuid(), taskId: z.string().uuid(), status: z.enum(["todo", "in_progress", "review", "done"]), priority: z.number().int().min(1).max(4), dueDate: z.iso.date().nullable(), note: z.string().max(2000) }),
+    z.object({ type: z.literal("submit_review"), idempotencyKey: z.string().uuid(), taskId: z.string().uuid(), note: z.string().max(2000) }),
+    z.object({ type: z.literal("review_task"), idempotencyKey: z.string().uuid(), taskId: z.string().uuid(), decision: z.enum(["approve", "changes"]), note: z.string().max(2000) }),
+  ]).nullable().default(null),
+});
+
+export const GET = withAuth(async (req, { user, impersonating }) => {
+  if (impersonating) return NextResponse.json({ error: "Coach history is unavailable while viewing as another user." }, { status: 409 });
+  const clientId = req.nextUrl.searchParams.get("clientId");
+  if (!clientId) return NextResponse.json({ error: "Missing clientId." }, { status: 400 });
+  const denied = assertClientAccess(user, clientId);
+  if (denied) return denied;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration follows generated schema snapshot
+  const db = createAdminClient() as any;
+  const { data: thread, error: threadError } = await db.from("coach_threads")
+    .select("id,title,status,retention_days,created_at,updated_at")
+    .eq("client_id", clientId).eq("owner_id", user.id).eq("status", "active")
+    .maybeSingle();
+  if (threadError) return serverError(threadError);
+  if (!thread) return NextResponse.json({ thread: null, turns: [] });
+
+  const { data: turns, error } = await db.from("coach_turns")
+    .select("id,question,answer,coach_mode,brain_context_snapshot_id,sources,suggestions,library_availability,warnings,action_draft,action_status,created_at")
+    .eq("thread_id", thread.id).eq("owner_id", user.id)
+    .order("created_at", { ascending: true }).limit(100);
+  if (error) return serverError(error);
+  return NextResponse.json({ thread, turns: turns ?? [] });
+});
+
+export const POST = withAuth(async (req, { user, impersonating }) => {
+  if (impersonating) return NextResponse.json({ error: "Coach history is unavailable while viewing as another user." }, { status: 409 });
+  let body: unknown;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
+  const parsed = saveSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid Coach turn." }, { status: 422 });
+  const denied = assertClientAccess(user, parsed.data.clientId);
+  if (denied) return denied;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration follows generated schema snapshot
+  const db = createAdminClient() as any;
+  const { data: snapshot, error: snapshotError } = await db.from("brain_context_snapshots")
+    .select("id").eq("id", parsed.data.snapshotId).eq("client_id", parsed.data.clientId)
+    .eq("created_by", user.id).maybeSingle();
+  if (snapshotError) return serverError(snapshotError);
+  if (!snapshot) return NextResponse.json({ error: "Verified Brain snapshot not found." }, { status: 409 });
+
+  let thread: { id: string } | null = null;
+  if (parsed.data.threadId) {
+    const result = await db.from("coach_threads").select("id")
+      .eq("id", parsed.data.threadId).eq("client_id", parsed.data.clientId)
+      .eq("owner_id", user.id).eq("status", "active").maybeSingle();
+    if (result.error) return serverError(result.error);
+    thread = result.data;
+  }
+  if (!thread) {
+    const existing = await db.from("coach_threads").select("id")
+      .eq("client_id", parsed.data.clientId).eq("owner_id", user.id).eq("status", "active").maybeSingle();
+    if (existing.error) return serverError(existing.error);
+    thread = existing.data;
+  }
+  if (!thread) {
+    const created = await db.from("coach_threads").insert({
+      client_id: parsed.data.clientId,
+      owner_id: user.id,
+      title: parsed.data.question.slice(0, 200),
+    }).select("id").single();
+    if (created.error) return serverError(created.error);
+    thread = created.data;
+  }
+
+  const { data: turn, error } = await db.from("coach_turns").upsert({
+    thread_id: thread!.id,
+    client_id: parsed.data.clientId,
+    owner_id: user.id,
+    question: parsed.data.question,
+    answer: parsed.data.answer,
+    coach_mode: parsed.data.coachMode,
+    brain_context_snapshot_id: parsed.data.snapshotId,
+    sources: parsed.data.sources,
+    suggestions: parsed.data.suggestions,
+    library_availability: parsed.data.libraryAvailability,
+    warnings: parsed.data.warnings,
+    action_draft: parsed.data.actionDraft,
+    action_status: parsed.data.actionDraft ? "draft" : "none",
+  }, { onConflict: "owner_id,brain_context_snapshot_id" })
+    .select("id,created_at").single();
+  if (error) return serverError(error);
+  await db.from("coach_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread!.id).eq("owner_id", user.id);
+  return NextResponse.json({ threadId: thread!.id, turn }, { status: 201 });
+});
+
+const archiveSchema = z.object({ clientId: z.string().uuid(), threadId: z.string().uuid() });
+export const DELETE = withAuth(async (req, { user, impersonating }) => {
+  if (impersonating) return NextResponse.json({ error: "Coach history is unavailable while viewing as another user." }, { status: 409 });
+  let body: unknown;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
+  const parsed = archiveSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid Coach thread." }, { status: 422 });
+  const denied = assertClientAccess(user, parsed.data.clientId);
+  if (denied) return denied;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration follows generated schema snapshot
+  const db = createAdminClient() as any;
+  const { error } = await db.from("coach_threads").update({ status: "archived", updated_at: new Date().toISOString() })
+    .eq("id", parsed.data.threadId).eq("client_id", parsed.data.clientId).eq("owner_id", user.id);
+  if (error) return serverError(error);
+  return NextResponse.json({ success: true });
+});

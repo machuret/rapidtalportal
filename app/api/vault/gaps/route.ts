@@ -76,6 +76,7 @@ export const POST = withAuth(
         .from("vault_queries")
         .select("id")
         .eq("client_id", parsed.data.clientId)
+        .neq("visibility", "private_coach")
         .eq("brain_gap_id", gap.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -127,6 +128,7 @@ export const POST = withAuth(
       .from("vault_queries")
       .update(queryUpdates)
       .eq("client_id", parsed.data.clientId)
+      .neq("visibility", "private_coach")
       .eq("brain_gap_id", gap.id);
     if (queryUpdateError) return serverError(queryUpdateError);
     return NextResponse.json({ success: true });

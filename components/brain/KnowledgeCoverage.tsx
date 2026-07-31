@@ -54,6 +54,7 @@ export async function KnowledgeCoverage({
       .from("vault_queries")
       .select("*")
       .eq("client_id", clientId)
+      .neq("visibility", "private_coach")
       .order("created_at", { ascending: false })
       .limit(300),
     admin

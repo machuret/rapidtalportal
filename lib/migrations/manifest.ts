@@ -139,4 +139,7 @@ export const MIGRATIONS = [
   "131_brain_opportunity_outcome_integrity.sql",
   "132_brain_onboarding_official_context.sql",
   "133_role_aware_coach_context.sql",
+  "134_coach_privacy_and_recipient_boundaries.sql",
+  "135_coach_structured_actions.sql",
+  "136_coach_operational_context.sql",
 ] as const;

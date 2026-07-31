@@ -92,7 +92,10 @@ Deno.serve(async (req: Request) => {
 
     // ── Parse + validate body ─────────────────────────────────────────────────
     const body = await req.json();
-    const { message } = body as { message?: string };
+    const { message, audience: requestedAudience } = body as {
+      message?: string;
+      audience?: "company" | "client" | "va_team";
+    };
 
     if (!message || typeof message !== "string") {
       return new Response(JSON.stringify({ error: "Missing message body." }), {
@@ -115,6 +118,26 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const audience = requestedAudience ?? "company";
+    if (!["company", "client", "va_team"].includes(audience)) {
+      return new Response(JSON.stringify({ error: "Invalid message audience." }), {
+        status: 422,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (role === "va" && audience === "va_team") {
+      return new Response(JSON.stringify({ error: "A VA cannot send a VA-team-only message." }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (role === "client_admin" && audience === "client") {
+      return new Response(JSON.stringify({ error: "A client cannot send a client-only message." }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── Insert message ────────────────────────────────────────────────────────
     const { data: msg, error: insertError } = await admin
       .from("messages")
@@ -124,6 +147,7 @@ Deno.serve(async (req: Request) => {
         sender_name: fullName,
         sender_role: role,
         body: trimmed,
+        audience,
         read_by: [authUser.id],
       })
       .select()
@@ -144,10 +168,16 @@ Deno.serve(async (req: Request) => {
     try {
       const { data: teammates } = await admin
         .from("users")
-        .select("id")
+        .select("id,role")
         .eq("client_id", userClientId)
         .neq("id", authUser.id);
-      const recipientIds = ((teammates ?? []) as { id: string }[]).map((u) => u.id);
+      const recipientIds = ((teammates ?? []) as { id: string; role: string }[])
+        .filter((user) =>
+          audience === "company"
+          || (audience === "client" && user.role === "client_admin")
+          || (audience === "va_team" && user.role === "va")
+        )
+        .map((user) => user.id);
 
       if (recipientIds.length > 0) {
         const { data: alreadyUnread } = await admin

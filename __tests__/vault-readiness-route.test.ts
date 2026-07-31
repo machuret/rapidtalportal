@@ -19,7 +19,7 @@ const routeCtx = { params: Promise.resolve({}) };
 function chain(result: { data: unknown; error: unknown; count?: number | null }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const builder: Record<string, any> = {};
-  for (const method of ["select", "eq", "in", "or", "order", "limit"]) {
+  for (const method of ["select", "eq", "neq", "in", "or", "order", "limit"]) {
     builder[method] = jest.fn(() => builder);
   }
   builder.then = (resolve: (value: unknown) => unknown) =>

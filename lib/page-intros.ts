@@ -16,7 +16,7 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
   },
   ask: {
     title: "What is RapidTal Coach?",
-    body: "Your private role-aware Coach combines Company DNA, current permitted work, Vault evidence and published Business Library guidance. It can prepare messages and tasks, but nothing is shared until you approve the preview.",
+    body: "Your role-aware Coach combines Company DNA, current permitted work, Vault evidence and published Business Library guidance. Your Coach history is visible only to you and retained for 12 months; short-lived diagnostic prompts expire after 30 days. Messages and tasks are never shared until you approve the preview.",
     guide: "RapidTal Coach",
   },
   compose: {

@@ -18,6 +18,7 @@ export function AdminAskClient({ clientId, companyName }: { clientId: string; co
         coachRole="client"
         speakerName="Super Admin"
         actionsEnabled={false}
+        persistConversation={false}
         externalAsk={externalAsk}
       />
     </>
