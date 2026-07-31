@@ -73,6 +73,11 @@ interface Turn {
   queriedKinds: AskSourceKind[];
 }
 
+type AnswerEvidence = Pick<
+  Turn,
+  "sources" | "brainContextSnapshotId" | "libraryAvailability" | "warnings" | "suggestions"
+>;
+
 type HistoryItem = { question: string; answer: string };
 
 const SUGGESTIONS = [
@@ -286,7 +291,10 @@ export function AskVaultClient({
       } catch (error) {
         setAskFailure({
           question: trimmed,
-          message: r.error ?? errorMessage(error, "The Brain could not answer that question."),
+          message: errorMessage(
+            error,
+            r.error ?? "The Brain could not answer that question.",
+          ),
           recoverable: r.recoverable,
         });
       }
@@ -413,6 +421,7 @@ export function AskVaultClient({
           <Input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
+            maxLength={4_000}
             placeholder="Ask a question about your company…"
             disabled={loading}
             className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
@@ -439,6 +448,7 @@ function ChatTurn({
 }) {
   const [showSources, setShowSources] = useState(true);
   const [deepAnswer, setDeepAnswer] = useState<string | null>(null);
+  const [deepEvidence, setDeepEvidence] = useState<AnswerEvidence | null>(null);
   const [deepLoading, setDeepLoading] = useState(false);
   const [rated, setRated] = useState<1 | -1 | null>(null);
   const [saved, setSaved] = useState(false);
@@ -472,7 +482,15 @@ function ChatTurn({
     // Stream the deep answer so the long (gpt-4o) generation shows progress as it
     // arrives; fall back to the non-streaming endpoint if streaming fails.
     const r = await askStream(clientId, turn.question, history, (a) => setDeepAnswer(a), "deep");
-    if (!r.ok) {
+    if (r.ok) {
+      setDeepEvidence({
+        sources: r.sources,
+        brainContextSnapshotId: r.brainContextSnapshotId,
+        libraryAvailability: r.libraryAvailability,
+        warnings: r.warnings,
+        suggestions: r.suggestions,
+      });
+    } else {
       try {
         const res = await api.post<AskResponse>(ROUTES.vault.ask(), {
           clientId,
@@ -481,6 +499,13 @@ function ChatTurn({
           history,
         }, { showErrorToast: false });
         setDeepAnswer(res.answer);
+        setDeepEvidence({
+          sources: res.sources ?? [],
+          brainContextSnapshotId: res.brainContextSnapshotId ?? null,
+          libraryAvailability: res.libraryAvailability ?? "not_requested",
+          warnings: res.warnings ?? [],
+          suggestions: res.suggestions ?? [],
+        });
       } catch (error) {
         toast.error(errorMessage(error, "The deeper answer could not be generated."));
       }
@@ -489,7 +514,7 @@ function ChatTurn({
   }
 
   async function rate(r: 1 | -1) {
-    if (rated) return;
+    if (rated || deepLoading) return;
     setRated(r);
     try {
       await api.post(ROUTES.vault.feedback(), {
@@ -497,7 +522,8 @@ function ChatTurn({
         question: turn.question,
         answer: deepAnswer ?? turn.answer,
         rating: r,
-        sources: turn.sources.map((s) => ({ kind: s.kind, title: s.title, itemId: s.itemId })),
+        sources: (deepEvidence?.sources ?? turn.sources)
+          .map((s) => ({ kind: s.kind, title: s.title, itemId: s.itemId })),
       }, { showErrorToast: false });
       toast.success("Thanks for the feedback.");
     } catch (error) {
@@ -507,7 +533,7 @@ function ChatTurn({
   }
 
   async function saveToKb() {
-    if (saved) return;
+    if (saved || deepLoading) return;
     try {
       await api.post(ROUTES.vault.promoteKb(), {
         clientId, question: turn.question, answer: deepAnswer ?? turn.answer,
@@ -564,6 +590,25 @@ function ChatTurn({
               {deepAnswer}
               {deepLoading && <span className="ml-0.5 animate-pulse">▍</span>}
             </p>
+            {deepEvidence?.libraryAvailability === "unavailable" && (
+              <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/80">
+                The deeper answer used its own verified company snapshot while the Library was temporarily unavailable.
+              </p>
+            )}
+            {deepEvidence && (
+              <>
+                <CitationList
+                  sources={deepEvidence.sources}
+                  label="Citations for the deeper answer"
+                />
+                <div className="mt-3">
+                  <BrainContextUsed
+                    clientId={clientId}
+                    snapshotId={deepEvidence.brainContextSnapshotId}
+                  />
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -635,7 +680,7 @@ function ChatTurn({
           <div className="flex items-center gap-1 ml-auto">
             <button
               onClick={() => rate(1)}
-              disabled={rated !== null}
+              disabled={rated !== null || deepLoading}
               title="Good answer"
               aria-label="Rate this as a good answer"
               className={cn("p-1 rounded transition-colors disabled:cursor-default",
@@ -645,7 +690,7 @@ function ChatTurn({
             </button>
             <button
               onClick={() => rate(-1)}
-              disabled={rated !== null}
+              disabled={rated !== null || deepLoading}
               title="Needs work"
               aria-label="Rate this answer as needing work"
               className={cn("p-1 rounded transition-colors disabled:cursor-default",
@@ -656,7 +701,7 @@ function ChatTurn({
             {canCurate && (
               <button
                 onClick={saveToKb}
-                disabled={saved}
+                disabled={saved || deepLoading}
                 title="Save this answer to the Knowledge Base"
                 className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-blue-400 transition-colors disabled:text-green-400 ml-1"
               >
@@ -668,39 +713,10 @@ function ChatTurn({
         </div>
 
         {showSources && turn.sources.length > 0 && (
-          <ol className="mt-3 grid gap-2 sm:grid-cols-2">
-            {turn.sources.map((s) => (
-              <li
-                key={s.n}
-                className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 text-xs text-zinc-300"
-              >
-                <div className="flex items-start gap-2">
-                  <span className="font-mono text-orange-300">[{s.n}]</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-3xs uppercase tracking-wide text-zinc-500">{s.kindLabel}</p>
-                    {s.sourceUrl ? (
-                      <a
-                        href={s.sourceUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-0.5 inline-flex max-w-full items-center gap-1 font-medium text-zinc-200 hover:text-white"
-                      >
-                        <span className="truncate">{s.title}</span>
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                    ) : (
-                      <p className="mt-0.5 truncate font-medium text-zinc-200">{s.title}</p>
-                    )}
-                    {s.kind === "library" && s.versionNumber && (
-                      <p className="mt-1 text-3xs text-orange-300/70">
-                        Version {s.versionNumber} · General guidance, not a company fact
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ol>
+          <CitationList
+            sources={turn.sources}
+            label={deepAnswer ? "Citations for the original answer" : "Citations"}
+          />
         )}
         <div className="mt-3">
           <BrainContextUsed
@@ -727,6 +743,54 @@ function ChatTurn({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function CitationList({
+  sources,
+  label,
+}: {
+  sources: Source[];
+  label: string;
+}) {
+  if (!sources.length) return null;
+  return (
+    <div className="mt-3">
+      <p className="mb-2 text-xs font-medium text-zinc-400">{label}</p>
+      <ol className="grid gap-2 sm:grid-cols-2">
+        {sources.map((source) => (
+          <li
+            key={`${source.n}:${source.kind}:${source.itemId ?? source.title}:${source.chunkId ?? "whole"}`}
+            className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 text-xs text-zinc-300"
+          >
+            <div className="flex items-start gap-2">
+              <span className="font-mono text-orange-300">[{source.n}]</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-3xs uppercase tracking-wide text-zinc-500">{source.kindLabel}</p>
+                {source.sourceUrl ? (
+                  <a
+                    href={source.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-0.5 inline-flex max-w-full items-center gap-1 font-medium text-zinc-200 hover:text-white"
+                  >
+                    <span className="truncate">{source.title}</span>
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                ) : (
+                  <p className="mt-0.5 truncate font-medium text-zinc-200">{source.title}</p>
+                )}
+                {source.kind === "library" && source.versionNumber && (
+                  <p className="mt-1 text-3xs text-orange-300/70">
+                    Version {source.versionNumber} · General guidance, not a company fact
+                  </p>
+                )}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

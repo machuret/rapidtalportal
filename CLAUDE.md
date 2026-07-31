@@ -190,8 +190,8 @@ resolver versions and invariants aligned.
   else works. Models: `BRAIN_DISTILL_MODEL`, `BRAIN_EMBED_MODEL`. The edge
   functions use `OPENROUTER_API_KEY`. `/admin/health` shows both rows.
 - **Core migration ranges:** 070–077 (learning loop), 125–129 (official context
-  and Library), and 130 (`brain_diagnostic_runs`, `brain_opportunities`,
-  `brain_opportunity_events`).
+  and Library), 130 (`brain_diagnostic_runs`, `brain_opportunities`,
+  `brain_opportunity_events`), and 131 (outcome measurement integrity).
 
 ## Cron
 

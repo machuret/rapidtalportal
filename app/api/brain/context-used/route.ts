@@ -50,6 +50,7 @@ export const GET = withAuth(async (req, { user }) => {
       retrievalMethod: snapshot.knowledge.retrievalMethod,
       sources: snapshot.knowledge.sources.map((source) => ({
         itemId: source.itemId,
+        chunkId: source.chunkId,
         title: source.title,
         excerpt: source.excerpt,
         sourceUrl: source.sourceUrl,
@@ -63,6 +64,7 @@ export const GET = withAuth(async (req, { user }) => {
       sources: snapshot.library.sources.map((source) => ({
         entryId: source.entryId,
         versionId: source.versionId,
+        chunkId: source.chunkId,
         versionNumber: source.versionNumber,
         title: source.title,
         excerpt: source.excerpt,

@@ -25,6 +25,7 @@ type BrainContextUsedResponse = {
     coverage: "strong" | "partial" | "weak" | "none";
     sources: Array<{
       itemId: string;
+      chunkId: string | null;
       title: string;
       excerpt: string;
       sourceUrl: string | null;
@@ -38,6 +39,7 @@ type BrainContextUsedResponse = {
     sources: Array<{
       entryId: string;
       versionId: string;
+      chunkId: string | null;
       versionNumber: number;
       title: string;
       excerpt: string;
@@ -185,7 +187,7 @@ export function BrainContextUsed({
                 {data.companyKnowledge.sources.length ? (
                   <ul className="space-y-2">
                     {data.companyKnowledge.sources.map((source) => (
-                      <li key={source.itemId} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                      <li key={`${source.itemId}:${source.chunkId ?? "item"}`} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
                         <p className="text-xs font-medium text-zinc-200">{source.title}</p>
                         <p className="mt-1 line-clamp-3 text-xs leading-5 text-zinc-500">{source.excerpt}</p>
                         <p className="mt-1 text-xs text-zinc-600">{source.selectionReason}</p>
@@ -203,7 +205,7 @@ export function BrainContextUsed({
                 {data.businessLibrary.sources.length ? (
                   <ul className="space-y-2">
                     {data.businessLibrary.sources.map((source) => (
-                      <li key={`${source.versionId}:${source.title}`} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                      <li key={`${source.versionId}:${source.chunkId ?? "version"}`} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
                         <p className="text-xs font-medium text-zinc-200">
                           {source.title} <span className="text-zinc-600">· v{source.versionNumber}</span>
                         </p>

@@ -107,6 +107,17 @@ const EFFORT_BY_KIND: Record<BrainOpportunityKind, Candidate["effort"]> = {
   growth: "medium",
 };
 
+function availableSourceLayers(context: BrainContext): Set<string> {
+  return new Set([
+    ...(Object.keys(context.company?.fields ?? {}).length ? ["company_dna"] : []),
+    ...(context.knowledge?.sources?.length ? ["vault"] : []),
+    ...(context.memories?.length ? ["memory"] : []),
+    ...(context.market?.included && context.market.insights.length ? ["market"] : []),
+    ...(context.library?.sources?.length ? ["library"] : []),
+    "runtime",
+  ]);
+}
+
 function bounded(value: string, max: number): string {
   return value.trim().replace(/\s+/gu, " ").slice(0, max);
 }
@@ -133,6 +144,7 @@ export function diagnosticCandidates(
   readiness: BrainReadiness,
   context: BrainContext,
 ): Candidate[] {
+  const availableLayers = availableSourceLayers(context);
   const candidates: Candidate[] = readiness.dimensions
     .filter((dimension) => dimension.score < 80 && dimension.actions.length > 0)
     .map((dimension) => {
@@ -150,13 +162,17 @@ export function diagnosticCandidates(
         impact: impactFor(dimension.score),
         effort,
         priorityScore: priorityFor(dimension.score, effort),
-        sourceLayers: LAYERS_BY_DIMENSION[dimension.key],
+        sourceLayers: LAYERS_BY_DIMENSION[dimension.key]
+          .filter((layer) => availableLayers.has(layer)),
         libraryProvenance: [],
       };
     });
 
   const librarySource = context.library.sources[0];
   if (librarySource && context.library.availability !== "unavailable") {
+    const companyLayers = ["company_dna", "vault", "memory"]
+      .filter((layer) => availableLayers.has(layer));
+    const hasCompanyEvidence = companyLayers.length > 0;
     candidates.push({
       kind: "growth",
       title: bounded(`Review how ${librarySource.title} applies to the business`, 240),
@@ -165,7 +181,9 @@ export function diagnosticCandidates(
         2_000,
       ),
       rationale: bounded(
-        "This is general guidance, not a statement about current company practice. It should be approved only after comparing it with the company evidence in the same snapshot.",
+        hasCompanyEvidence
+          ? "This is general guidance, not a statement about current company practice. It should be approved only after comparing it with the company evidence in the same snapshot."
+          : "This is general guidance, not a statement about current company practice. Company evidence is currently limited, so it requires owner verification before approval.",
         4_000,
       ),
       recommendedAction: bounded(
@@ -175,7 +193,7 @@ export function diagnosticCandidates(
       impact: "medium",
       effort: "medium",
       priorityScore: Math.round(55 + (librarySource.relevance ?? 0) * 20),
-      sourceLayers: ["company_dna", "vault", "library"],
+      sourceLayers: [...companyLayers, "library"],
       libraryProvenance: [{
         entryId: librarySource.entryId,
         versionId: librarySource.versionId,
@@ -351,6 +369,14 @@ export async function runBrainDiagnostic(args: {
       libraryAvailability: context.library.availability,
     };
   } catch (error) {
+    const { error: cleanupError } = await args.admin
+      .from("brain_opportunities")
+      .delete()
+      .eq("diagnostic_run_id", run.id)
+      .eq("client_id", args.clientId);
+    if (cleanupError) {
+      console.error("[brain diagnostic] failed opportunity cleanup", cleanupError);
+    }
     await args.admin
       .from("brain_diagnostic_runs")
       .update({

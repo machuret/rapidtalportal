@@ -80,9 +80,11 @@ export default async function BrainPage({
 
   const events = (eventsRes.data ?? []) as BrainEventRow[];
   let opportunities: BrainOpportunity[] = [];
+  let opportunitiesLoadFailed = false;
   try {
     opportunities = await listBrainOpportunities(admin, clientId);
   } catch (error) {
+    opportunitiesLoadFailed = true;
     console.error("[brain] proactive opportunities unavailable", error);
   }
 
@@ -114,6 +116,7 @@ export default async function BrainPage({
         clientId={clientId}
         canManage={user.role === "client_admin" || user.role === "super_admin"}
         initialOpportunities={opportunities}
+        initialLoadFailed={opportunitiesLoadFailed}
       />
       {/* "What the Vault knows" — folded in from the retired Company Report nav
           entry so client admins have one Company Brain home, not three. */}

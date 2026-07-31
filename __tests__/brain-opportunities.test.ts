@@ -8,6 +8,10 @@ const migration = readFileSync(
   join(process.cwd(), "db/migrations/130_brain_opportunities.sql"),
   "utf8",
 );
+const outcomeIntegrityMigration = readFileSync(
+  join(process.cwd(), "db/migrations/131_brain_opportunity_outcome_integrity.sql"),
+  "utf8",
+);
 const cron = readFileSync(
   join(process.cwd(), "app/api/cron/brain-opportunities/route.ts"),
   "utf8",
@@ -18,6 +22,10 @@ const actionRoute = readFileSync(
 );
 const opportunityEngine = readFileSync(
   join(process.cwd(), "lib/brain/opportunities.ts"),
+  "utf8",
+);
+const opportunityUi = readFileSync(
+  join(process.cwd(), "components/brain/BrainOpportunities.tsx"),
   "utf8",
 );
 const vercel = readFileSync(join(process.cwd(), "vercel.json"), "utf8");
@@ -51,6 +59,10 @@ function readiness(): BrainReadiness {
 
 function context(availability: BrainContext["library"]["availability"]): BrainContext {
   return {
+    company: { fields: { company_name: "Example Co" } },
+    knowledge: { sources: [{ itemId: "vault-source" }] },
+    memories: [],
+    market: { included: false, insights: [] },
     library: {
       availability,
       coverage: availability === "unavailable" ? "none" : "weak",
@@ -71,7 +83,7 @@ function context(availability: BrainContext["library"]["availability"]): BrainCo
         selectionReason: "Relevant published guidance.",
       }],
     },
-  } as BrainContext;
+  } as unknown as BrainContext;
 }
 
 describe("proactive Brain opportunities", () => {
@@ -100,6 +112,23 @@ describe("proactive Brain opportunities", () => {
     expect(candidates.some((candidate) => candidate.sourceLayers.includes("library"))).toBe(false);
   });
 
+  test("reports only source layers that were actually present", () => {
+    const thinContext = {
+      ...context("available"),
+      company: { fields: {} },
+      knowledge: { sources: [] },
+      memories: [],
+      market: { included: false, insights: [] },
+    } as unknown as BrainContext;
+    const candidates = diagnosticCandidates(readiness(), thinContext);
+    expect(candidates.find((candidate) => candidate.kind === "knowledge_gap")?.sourceLayers)
+      .toEqual(["runtime"]);
+    expect(candidates.find((candidate) => candidate.kind === "growth")?.sourceLayers)
+      .toEqual(["library"]);
+    expect(candidates.find((candidate) => candidate.kind === "growth")?.rationale)
+      .toContain("requires owner verification");
+  });
+
   test("requires immutable snapshots, tenant scope and approval transitions", () => {
     expect(migration).toContain("brain_context_snapshot_id UUID NOT NULL");
     expect(migration).toContain("REFERENCES brain_context_snapshots(id, client_id) ON DELETE RESTRICT");
@@ -115,6 +144,10 @@ describe("proactive Brain opportunities", () => {
     expect(actionRoute).toContain("p_client_id: parsed.data.clientId");
     expect(opportunityEngine).toContain("brain_diagnostic_timed_out");
     expect(opportunityEngine).toContain("recoverable: true");
+    expect(opportunityEngine).toContain('.from("brain_opportunities")');
+    expect(opportunityEngine).toContain(".delete()");
+    expect(opportunityUi).toContain("Opportunities temporarily unavailable");
+    expect(opportunityUi).toContain("Retry the load");
   });
 
   test("runs diagnostics on a bounded weekly schedule", () => {
@@ -122,5 +155,14 @@ describe("proactive Brain opportunities", () => {
     expect(cron).toContain("MAX_CLIENTS_PER_RUN = 10");
     expect(cron).toContain("DIAGNOSTIC_INTERVAL_MS = 7");
     expect(cron).toContain("CRON_SECRET");
+    expect(cron).toContain('.order("id", { ascending: true })');
+  });
+
+  test("preserves completion evidence when effectiveness is measured later", () => {
+    expect(outcomeIntegrityMigration).toContain(
+      "current_row.outcome || coalesce(p_outcome, '{}'::JSONB)",
+    );
+    expect(outcomeIntegrityMigration).toContain("event_name := 'measured'");
+    expect(outcomeIntegrityMigration).toContain("FROM PUBLIC, anon, authenticated");
   });
 });

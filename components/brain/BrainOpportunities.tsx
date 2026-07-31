@@ -58,10 +58,12 @@ export function BrainOpportunities({
   clientId,
   canManage,
   initialOpportunities,
+  initialLoadFailed,
 }: {
   clientId: string;
   canManage: boolean;
   initialOpportunities: BrainOpportunity[];
+  initialLoadFailed: boolean;
 }) {
   const [opportunities, setOpportunities] = useState(initialOpportunities);
   const [view, setView] = useState<View>("active");
@@ -70,6 +72,8 @@ export function BrainOpportunities({
   const [outcomeId, setOutcomeId] = useState<string | null>(null);
   const [outcomeNote, setOutcomeNote] = useState("");
   const [effectiveness, setEffectiveness] = useState<BrainEffectivenessStatus>("effective");
+  const [loadFailed, setLoadFailed] = useState(initialLoadFailed);
+  const [refreshing, setRefreshing] = useState(false);
 
   const visible = useMemo(() => opportunities.filter((opportunity) => {
     if (view === "all") return true;
@@ -77,12 +81,23 @@ export function BrainOpportunities({
     return !["completed", "dismissed"].includes(opportunity.status);
   }), [opportunities, view]);
 
-  async function refresh() {
-    const response = await api.get<{ opportunities: BrainOpportunity[] }>(
-      ROUTES.brain.opportunitiesForClient(clientId),
-      { showErrorToast: false },
-    );
-    setOpportunities(response.opportunities);
+  async function refresh(): Promise<boolean> {
+    if (refreshing) return false;
+    setRefreshing(true);
+    try {
+      const response = await api.get<{ opportunities: BrainOpportunity[] }>(
+        ROUTES.brain.opportunitiesForClient(clientId),
+        { showErrorToast: false },
+      );
+      setOpportunities(response.opportunities);
+      setLoadFailed(false);
+      return true;
+    } catch {
+      setLoadFailed(true);
+      return false;
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   async function runDiagnostic() {
@@ -93,12 +108,15 @@ export function BrainOpportunities({
         created: number;
         libraryAvailability: string;
       }>(ROUTES.brain.opportunities(), { clientId }, { showErrorToast: false });
-      await refresh();
+      const refreshed = await refresh();
       toast.success(
         result.created
           ? `${result.created} new Brain opportunit${result.created === 1 ? "y" : "ies"} found.`
           : "Diagnostic complete. No new opportunities were needed.",
       );
+      if (!refreshed) {
+        toast.warning("The diagnostic completed, but the opportunity list needs to be reloaded.");
+      }
     } catch (error) {
       toast.error(errorMessage(error, "The Brain diagnostic could not be completed. Please retry."));
     } finally {
@@ -176,6 +194,28 @@ export function BrainOpportunities({
           </button>
         ))}
       </div>
+
+      {loadFailed && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-4" role="alert">
+          <div>
+            <p className="text-sm font-medium text-amber-200">Opportunities temporarily unavailable</p>
+            <p className="mt-1 text-xs text-amber-200/70">
+              Existing opportunity data was not replaced or hidden permanently. Retry the load.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void refresh()}
+            disabled={refreshing}
+          >
+            {refreshing
+              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+            Retry
+          </Button>
+        </div>
+      )}
 
       {visible.length === 0 ? (
         <div className="surface-card p-6">

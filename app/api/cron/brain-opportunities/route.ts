@@ -18,7 +18,11 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
   const cutoff = new Date(Date.now() - DIAGNOSTIC_INTERVAL_MS).toISOString();
   const [{ data: clients, error: clientsError }, { data: recent, error: recentError }] = await Promise.all([
-    admin.from("clients").select("id").is("archived_at", null).limit(500),
+    admin.from("clients")
+      .select("id")
+      .is("archived_at", null)
+      .order("id", { ascending: true })
+      .limit(500),
     admin.from("brain_diagnostic_runs")
       .select("client_id")
       .eq("status", "completed")

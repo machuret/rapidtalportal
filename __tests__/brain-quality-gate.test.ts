@@ -21,6 +21,14 @@ const askEngine = readFileSync(
   join(process.cwd(), "supabase/functions/vault-ask/index.ts"),
   "utf8",
 );
+const conversationPulse = readFileSync(
+  join(process.cwd(), "components/intelligence/ConversationPulse.tsx"),
+  "utf8",
+);
+const messagesClient = readFileSync(
+  join(process.cwd(), "components/messages/MessagesClient.tsx"),
+  "utf8",
+);
 
 describe("Brain Phase 6 quality gate", () => {
   test("keeps tenant company evidence isolated and snapshots every Ask answer", () => {
@@ -31,7 +39,7 @@ describe("Brain Phase 6 quality gate", () => {
   });
 
   test("shows versioned Library citations and visible recoverable failures", () => {
-    expect(askUi).toContain("Version {s.versionNumber}");
+    expect(askUi).toContain("Version {source.versionNumber}");
     expect(askUi).toContain("Library temporarily unavailable");
     expect(askUi).toContain("Retry with Library");
     expect(askUi).toContain("brainContextSnapshotId");
@@ -45,6 +53,8 @@ describe("Brain Phase 6 quality gate", () => {
     expect(vaultPosition).toBeGreaterThan(0);
     expect(libraryPosition).toBeGreaterThan(vaultPosition);
     expect(askEngine).toContain("company-specific source wins");
+    expect(askEngine).toContain("NON-OVERRIDABLE BRAIN EVIDENCE POLICY");
+    expect(askEngine).toContain("`${editablePrompt}\\n\\n${MANDATORY_BRAIN_POLICY}`");
   });
 
   test("animates only layers that were actually queried", () => {
@@ -53,6 +63,16 @@ describe("Brain Phase 6 quality gate", () => {
     expect(flow).not.toContain("active.has(source.kind) || working");
     expect(motion).toContain(".working .pathActive");
     expect(motion).toContain("animation: messageTravel 2.6s ease-in-out 1");
+    expect(conversationPulse).toContain("messageCount > 0 && activityActive");
+    expect(messagesClient).toContain("latestMessage?.id !== initialMessageId");
+  });
+
+  test("cites only evidence supplied to each exact answer", () => {
+    expect(askEngine).toContain("buildGroundedContext(ranked, MAX_CONTEXT)");
+    expect(askEngine).toContain("grounded.included.map");
+    expect(askEngine).not.toContain("context = context.slice(0, MAX_CONTEXT)");
+    expect(askUi).toContain("Citations for the deeper answer");
+    expect(askUi).toContain("snapshotId={deepEvidence.brainContextSnapshotId}");
   });
 
   test("supports reduced motion and mobile layouts", () => {

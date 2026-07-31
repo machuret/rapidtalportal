@@ -50,6 +50,7 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [connection, setConnection] = useState<ConversationConnection>("connecting");
+  const [initialMessageId, setInitialMessageId] = useState<string | null | undefined>(undefined);
   const didInitialScroll = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -76,9 +77,10 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
   useEffect(() => {
     if (!loading && !didInitialScroll.current) {
       didInitialScroll.current = true;
+      setInitialMessageId(messages.at(-1)?.id ?? null);
       setTimeout(() => scrollToBottom("instant"), 100);
     }
-  }, [loading, scrollToBottom]);
+  }, [loading, messages, scrollToBottom]);
 
   // ── Realtime subscription ───────────────────────────────────────────────────
   useEffect(() => {
@@ -202,6 +204,11 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
           connection={connection}
           messageCount={messages.length}
           activityKey={latestMessage?.id ?? "no-messages"}
+          activityActive={
+            initialMessageId !== undefined &&
+            Boolean(latestMessage) &&
+            latestMessage?.id !== initialMessageId
+          }
           reverse={Boolean(latestMessage && latestMessage.sender_id !== currentUserId)}
           description={currentUserRole === "client_admin"
             ? "A live, shared conversation with your team."

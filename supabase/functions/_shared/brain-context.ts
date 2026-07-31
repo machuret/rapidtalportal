@@ -359,6 +359,7 @@ async function retrieveBusinessLibrary(args: {
   audience?: string;
   maxSources: number;
   today: string;
+  now: string;
 }): Promise<{
   sources: BrainLibrarySource[];
   method: BrainContextV1["library"]["retrievalMethod"];
@@ -410,25 +411,45 @@ async function retrieveBusinessLibrary(args: {
       .eq("status", "published")
       .or(`valid_from.is.null,valid_from.lte.${args.today}`)
       .or(`valid_until.is.null,valid_until.gte.${args.today}`)
-      .or(`review_due_at.is.null,review_due_at.gt.${args.today}`)
+      .or(`review_due_at.is.null,review_due_at.gt.${args.now}`)
       .order("published_at", { ascending: false })
       .limit(100);
     if (versionsResult.error) throw versionsResult.error;
     const versions = (versionsResult.data ?? []) as LibraryVersionRow[];
+    const entryIds = unique(versions.map((version) => version.entry_id));
     const categoryIds = unique(versions.map((version) => version.category_id));
-    const categoriesResult = categoryIds.length
-      ? await args.admin
-        .from("business_library_categories")
-        .select("id,name")
-        .in("id", categoryIds)
-      : { data: [], error: null };
+    const [entriesResult, categoriesResult] = await Promise.all([
+      entryIds.length
+        ? args.admin
+          .from("business_library_entries")
+          .select("id,current_version_id")
+          .in("id", entryIds)
+          .is("retired_at", null)
+        : Promise.resolve({ data: [], error: null }),
+      categoryIds.length
+        ? args.admin
+          .from("business_library_categories")
+          .select("id,name")
+          .in("id", categoryIds)
+          .eq("is_active", true)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (entriesResult.error) throw entriesResult.error;
     if (categoriesResult.error) throw categoriesResult.error;
+    const currentVersionByEntry = new Map(
+      ((entriesResult.data ?? []) as Array<{ id: string; current_version_id: string }>)
+        .map((entry) => [entry.id, entry.current_version_id]),
+    );
     const categoryById = new Map(
       ((categoriesResult.data ?? []) as Array<{ id: string; name: string }>)
         .map((category) => [category.id, category.name]),
     );
     const terms = queryTerms(args.query);
     const sources = versions
+      .filter((version) =>
+        currentVersionByEntry.get(version.entry_id) === version.id &&
+        categoryById.has(version.category_id)
+      )
       .map((version) => {
         const text = `${version.title}\n${version.summary}\n${version.body}`;
         const score = lexicalScore({
@@ -756,6 +777,7 @@ export async function resolveBrainContext(args: {
       audience: request.audience,
       maxSources: maxLibrary,
       today,
+      now: generatedAt,
     })
     : Promise.resolve({
       sources: [] as BrainLibrarySource[],

@@ -14,12 +14,14 @@ export function ConversationPulse({
   connection,
   messageCount,
   activityKey,
+  activityActive,
   reverse = false,
   description = "A live, shared conversation between the client and their team.",
 }: {
   connection: ConversationConnection;
   messageCount: number;
   activityKey: string;
+  activityActive: boolean;
   reverse?: boolean;
   description?: string;
 }) {
@@ -69,7 +71,7 @@ export function ConversationPulse({
           <strong>Team</strong>
         </div>
 
-        {messageCount > 0 && (
+        {messageCount > 0 && activityActive && (
           <span
             key={activityKey}
             className={cn(styles.messagePacket, reverse && styles.messagePacketReverse)}

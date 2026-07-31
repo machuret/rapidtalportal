@@ -21,6 +21,7 @@ class FakeQuery {
   ) {}
   select() { return this; }
   eq() { return this; }
+  is() { return this; }
   or() { return this; }
   in() { return this; }
   order() { return this; }
@@ -37,6 +38,7 @@ class FakeQuery {
 function fakeAdmin(options: {
   librarySearchFails?: boolean;
   libraryRecoveryFails?: boolean;
+  libraryCurrentVersionId?: string;
 } = {}) {
   const fixtures: Record<string, unknown[]> = {
     company_dna: [{
@@ -96,6 +98,10 @@ function fakeAdmin(options: {
       body: "Choose one clear search intent, answer it thoroughly and measure qualified actions.",
       source_url: null,
       tags: ["seo"],
+    }],
+    business_library_entries: [{
+      id: LIBRARY_ENTRY_ID,
+      current_version_id: options.libraryCurrentVersionId ?? LIBRARY_VERSION_ID,
     }],
     business_library_categories: [{
       id: STYLE_ID,
@@ -238,6 +244,27 @@ describe("Brain Context Phase 1 resolver", () => {
     expect(context.warnings).toContainEqual(expect.objectContaining({
       code: "business_library_search_degraded",
     }));
+  });
+
+  it("never recovers a superseded Library release", async () => {
+    const context = await resolveBrainContext({
+      admin: fakeAdmin({
+        librarySearchFails: true,
+        libraryCurrentVersionId: "99999999-9999-4999-8999-999999999999",
+      }),
+      clientId: CLIENT_ID,
+      request: {
+        surface: "ask",
+        topic: "How should SEO pages match search intent?",
+        selectedVaultSourceIds: [],
+        includeMarketIntelligence: false,
+      },
+      createdAt: "2026-07-31T01:00:00.000Z",
+    });
+
+    expect(context.library.availability).toBe("degraded");
+    expect(context.library.sources).toEqual([]);
+    expect(context.provenance.libraryVersionIds).toEqual([]);
   });
 
   it("preserves company context in a valid snapshot when the Library is temporarily unavailable", async () => {
