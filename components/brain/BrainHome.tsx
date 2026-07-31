@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { BrainGrowthMap } from "@/components/brain/BrainGrowthMap";
 import type {
   BrainReadiness,
   BrainReadinessDimensionKey,
@@ -91,6 +92,8 @@ export function BrainHome({ clientName, readiness, events }: BrainHomeProps) {
           </p>
         </div>
       </div>
+
+      <BrainGrowthMap clientName={clientName} readiness={readiness} />
 
       <section className="surface-card mb-6 p-6">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">

@@ -14,6 +14,14 @@ const cron = fs.readFileSync(
   path.join(process.cwd(), "app/api/cron/brain-distill/route.ts"),
   "utf8",
 );
+const brainPage = fs.readFileSync(
+  path.join(process.cwd(), "app/(portal)/brain/page.tsx"),
+  "utf8",
+);
+const sidebar = fs.readFileSync(
+  path.join(process.cwd(), "components/layout/Sidebar.tsx"),
+  "utf8",
+);
 
 describe("Phase 4 Brain readiness product", () => {
   it("uses transparent capability bands instead of genius levels", () => {
@@ -64,5 +72,13 @@ describe("Phase 4 Brain readiness product", () => {
     expect(evaluationActivityMigration).toContain("NEW.assignment->>NEW.preferred_variant = 'conditioned'");
     expect(migration).toContain("meaningful BOOLEAN NOT NULL DEFAULT false");
     expect(migration).toContain("WHERE meaningful = true");
+  });
+
+  it("keeps the live Brain discoverable for client and super admins", () => {
+    expect(brainPage).toContain('user.role === "super_admin"');
+    expect(brainPage).toContain('.from("clients")');
+    expect(brainPage).not.toContain('if (!user.client_id) redirect("/dashboard")');
+    expect(sidebar).toContain('{ href: "/brain",');
+    expect(sidebar).toContain('label: "Company Brains"');
   });
 });

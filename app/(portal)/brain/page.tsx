@@ -1,22 +1,66 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeBrainReadiness } from "@/lib/brain/readiness";
 import { BrainHome, type BrainEventRow } from "@/components/brain/BrainHome";
 import { KnowledgeCoverage } from "@/components/brain/KnowledgeCoverage";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Company Brain — RapidTal" };
 
-export default async function BrainPage() {
+export default async function BrainPage({
+  searchParams: searchParamsPromise,
+}: {
+  searchParams: Promise<{ client?: string }>;
+}) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user, client } = ctx;
   if (!["client_admin", "super_admin"].includes(user.role)) redirect("/dashboard");
-  if (!user.client_id) redirect("/dashboard");
 
   const admin = createAdminClient();
-  const clientId = user.client_id;
+  let clientId = user.client_id;
+  let clientName = client?.name ?? "your business";
+  let clientOptions: { id: string; name: string }[] = [];
+
+  // A super-admin normally has no client_id. Let them inspect any active
+  // company Brain directly instead of silently redirecting /brain away.
+  if (user.role === "super_admin") {
+    const { data: clients, error: clientsError } = await admin
+      .from("clients")
+      .select("id, name")
+      .is("archived_at", null)
+      .order("name");
+
+    if (clientsError) {
+      throw new Error(`Company Brains could not be loaded: ${clientsError.message}`);
+    }
+
+    clientOptions = (clients ?? []) as { id: string; name: string }[];
+    const selected = clientOptions.find((option) => option.id === searchParams.client)
+      ?? clientOptions[0];
+    clientId = selected?.id ?? null;
+    clientName = selected?.name ?? "your business";
+  }
+
+  if (!clientId) {
+    return (
+      <div className="surface-card rounded-xl p-10 text-center">
+        <h1 className="text-2xl font-bold text-white">No Company Brain yet</h1>
+        <p className="mt-2 text-sm text-zinc-400">
+          Create an active client first, then its live Brain will appear here.
+        </p>
+        {user.role === "super_admin" && (
+          <Link href="/admin/clients" className="mt-5 inline-flex text-sm font-medium text-orange-400 hover:text-orange-300">
+            Go to clients
+          </Link>
+        )}
+      </div>
+    );
+  }
 
   const readiness = await computeBrainReadiness(admin, clientId);
 
@@ -33,13 +77,34 @@ export default async function BrainPage() {
 
   return (
     <>
-      <BrainHome clientName={client?.name ?? "your business"} readiness={readiness} events={events} />
+      {clientOptions.length > 0 && (
+        <div className="mb-6">
+          <p className="label-section mb-2">Viewing company Brain</p>
+          <div className="flex flex-wrap gap-2">
+            {clientOptions.map((option) => (
+              <Link
+                key={option.id}
+                href={`/brain?client=${option.id}`}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  option.id === clientId
+                    ? "border-orange-500/50 bg-orange-500/15 text-orange-300"
+                    : "border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white",
+                )}
+              >
+                {option.name}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+      <BrainHome clientName={clientName} readiness={readiness} events={events} />
       {/* "What the Vault knows" — folded in from the retired Company Report nav
           entry so client admins have one Company Brain home, not three. */}
       <div className="mt-10 pt-8 border-t border-zinc-800">
         <h2 className="text-xl font-bold text-white tracking-tight mb-1">What your brain knows</h2>
         <p className="text-zinc-400 text-sm mb-6">Coverage, gaps and the documents behind every answer — the more you add, the more complete it gets.</p>
-        <KnowledgeCoverage clientId={clientId} clientName={client?.name ?? ""} canCurate={user.role === "client_admin" || user.role === "super_admin"} />
+        <KnowledgeCoverage clientId={clientId} clientName={clientName} canCurate={user.role === "client_admin" || user.role === "super_admin"} />
       </div>
     </>
   );

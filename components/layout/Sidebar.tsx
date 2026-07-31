@@ -111,6 +111,7 @@ const clientAdminLinks: NavItem[] = [
 
 const adminLinks: NavItem[] = [
   { href: "/admin",            label: "Overview",    icon: LayoutDashboard },
+  { href: "/brain",            label: "Company Brains", icon: Brain },
   { href: "/admin/clients",    label: "Clients",     icon: Building2 },
   { href: "/admin/users",      label: "All Users",   icon: Users },
   { href: "/admin/leads",      label: "Leads",       icon: TrendingUp },

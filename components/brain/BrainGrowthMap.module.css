@@ -1,0 +1,561 @@
+.shell {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  border: 1px solid rgb(var(--zinc-700) / 0.85);
+  border-radius: var(--radius-xl);
+  color: rgb(var(--zinc-50));
+  background:
+    radial-gradient(circle at 50% 48%, rgb(var(--orange-500) / 0.14), transparent 18rem),
+    radial-gradient(circle at 12% 12%, rgb(var(--violet-400) / 0.08), transparent 16rem),
+    rgb(var(--zinc-950));
+  box-shadow: var(--shadow-lg);
+}
+
+.header,
+.footer {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1.5rem 1.75rem;
+}
+
+.header {
+  border-bottom: 1px solid rgb(var(--zinc-700) / 0.65);
+}
+
+.eyebrow {
+  color: rgb(var(--orange-400));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin-top: 0.35rem;
+  color: rgb(var(--zinc-50));
+  font-size: clamp(1.35rem, 1rem + 1.2vw, 1.9rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.subtitle {
+  margin-top: 0.35rem;
+  color: rgb(var(--zinc-400));
+  font-size: var(--text-xs);
+}
+
+.observing {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid rgb(var(--orange-500) / 0.28);
+  border-radius: var(--radius-full);
+  padding: 0.45rem 0.75rem;
+  color: rgb(var(--zinc-300));
+  background: rgb(var(--orange-500) / 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.liveDot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: rgb(var(--orange-400));
+  animation: livePulse 2s ease-out infinite;
+}
+
+.stage {
+  position: relative;
+  min-height: 25.6rem;
+  isolation: isolate;
+}
+
+.stage::before {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  content: "";
+  opacity: 0.24;
+  background-image:
+    linear-gradient(rgb(var(--zinc-700) / 0.28) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--zinc-700) / 0.28) 1px, transparent 1px);
+  background-size: 3.25rem 3.25rem;
+  mask-image: radial-gradient(circle at center, black, transparent 74%);
+}
+
+.ambient {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: -1;
+  width: 25rem;
+  height: 20rem;
+  border: 1px solid rgb(var(--orange-500) / 0.08);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2.5rem rgb(var(--orange-500) / 0.025),
+    0 0 0 5rem rgb(var(--orange-500) / 0.018);
+  transform: translate(-50%, -50%);
+  animation: ambientBreathe 5s ease-in-out infinite;
+}
+
+.connections {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.connection {
+  fill: none;
+  stroke: rgb(var(--orange-400));
+  stroke-linecap: round;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 10;
+  animation: signalFlow 2.8s linear infinite;
+}
+
+.connection.strengthStrong {
+  opacity: 0.88;
+  stroke-width: 2.5;
+  animation-duration: 1.5s;
+}
+
+.connection.strengthDeveloping {
+  opacity: 0.68;
+  stroke-width: 2;
+  animation-duration: 2s;
+}
+
+.connection.strengthLimited {
+  opacity: 0.42;
+  animation-duration: 2.5s;
+}
+
+.connection.strengthQuiet {
+  opacity: 0.2;
+  animation-duration: 3.3s;
+}
+
+.brainWrap {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  width: 19rem;
+  height: 19rem;
+  place-items: center;
+  transform: translate(-50%, -50%);
+}
+
+.brainHalo {
+  position: absolute;
+  inset: 12%;
+  border: 1px solid rgb(var(--orange-500) / 0.2);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(var(--orange-500) / 0.13), transparent 68%);
+  filter: blur(0.25rem);
+  animation: brainBreathe 4s ease-in-out infinite;
+}
+
+.brainOutline {
+  position: relative;
+  z-index: 2;
+  width: 16rem;
+  height: 16rem;
+  color: rgb(var(--orange-400));
+  filter:
+    drop-shadow(0 0 0.5rem rgb(var(--orange-500) / 0.72))
+    drop-shadow(0 0 1.8rem rgb(var(--orange-500) / 0.22));
+  animation: outlineDrift 5s ease-in-out infinite;
+}
+
+.brainOutline path {
+  stroke-dasharray: 3 2;
+  animation: outlineSignal 10s linear infinite;
+}
+
+.core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 5;
+  display: grid;
+  width: 6.6rem;
+  height: 6.6rem;
+  place-content: center;
+  justify-items: center;
+  border: 1px solid rgb(var(--orange-400) / 0.5);
+  border-radius: 50%;
+  background: rgb(var(--zinc-950) / 0.9);
+  box-shadow:
+    0 0 0 0.5rem rgb(var(--orange-500) / 0.08),
+    0 0 2.5rem rgb(var(--orange-500) / 0.28);
+  transform: translate(-50%, -50%);
+  animation: coreBreathe 4s ease-in-out infinite;
+}
+
+.core span,
+.core small {
+  color: rgb(var(--orange-400));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.core strong {
+  color: rgb(var(--zinc-50));
+  font-size: var(--text-xl);
+  line-height: 1.1;
+}
+
+.spark {
+  position: absolute;
+  z-index: 3;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: rgb(var(--orange-300));
+  box-shadow: 0 0 1rem rgb(var(--orange-400));
+  animation: spark 3.6s ease-in-out infinite;
+}
+
+.sparkOne {
+  top: 25%;
+  left: 27%;
+}
+
+.sparkTwo {
+  top: 20%;
+  right: 30%;
+  animation-delay: -0.8s;
+}
+
+.sparkThree {
+  right: 24%;
+  bottom: 31%;
+  animation-delay: -1.6s;
+}
+
+.sparkFour {
+  bottom: 25%;
+  left: 31%;
+  animation-delay: -2.4s;
+}
+
+.sparkFive {
+  top: 44%;
+  left: 20%;
+  animation-delay: -3.1s;
+}
+
+.node {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  min-width: 10.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid rgb(var(--zinc-700) / 0.9);
+  border-radius: var(--radius-lg);
+  padding: 0.8rem 0.9rem;
+  background: rgb(var(--zinc-900) / 0.9);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(0.75rem);
+}
+
+.nodePulse {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgb(var(--orange-400));
+  box-shadow: 0 0 0.8rem rgb(var(--orange-400) / 0.55);
+  animation: nodePulse 2.4s ease-in-out infinite;
+}
+
+.node.strengthStrong {
+  border-color: rgb(var(--emerald-400) / 0.5);
+  box-shadow: 0 0 1.8rem rgb(var(--emerald-400) / 0.11);
+}
+
+.node.strengthStrong .nodePulse {
+  background: rgb(var(--emerald-400));
+  box-shadow: 0 0 1rem rgb(var(--emerald-400) / 0.68);
+  animation-duration: 1.4s;
+}
+
+.node.strengthDeveloping {
+  border-color: rgb(var(--orange-400) / 0.48);
+  box-shadow: 0 0 1.5rem rgb(var(--orange-500) / 0.12);
+}
+
+.node.strengthLimited .nodePulse {
+  opacity: 0.62;
+  animation-duration: 2.8s;
+}
+
+.node.strengthQuiet .nodePulse {
+  opacity: 0.3;
+  animation: none;
+}
+
+.nodeLabel,
+.node strong {
+  display: block;
+}
+
+.nodeLabel {
+  max-width: 8.5rem;
+  overflow: hidden;
+  color: rgb(var(--zinc-400));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.node strong {
+  margin-top: 0.15rem;
+  color: rgb(var(--zinc-50));
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.knowledge {
+  top: 2.5rem;
+  left: 1.5rem;
+}
+
+.voice {
+  top: 2.5rem;
+  right: 1.5rem;
+}
+
+.personalisation {
+  top: 11.8rem;
+  left: 0.75rem;
+}
+
+.reliability {
+  top: 11.8rem;
+  right: 0.75rem;
+}
+
+.market {
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.footer {
+  border-top: 1px solid rgb(var(--zinc-700) / 0.65);
+  color: rgb(var(--zinc-500));
+  font-size: var(--text-3xs);
+}
+
+@keyframes signalFlow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+@keyframes livePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(var(--orange-400) / 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 0.45rem rgb(var(--orange-400) / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--orange-400) / 0);
+  }
+}
+
+@keyframes ambientBreathe {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+}
+
+@keyframes brainBreathe {
+  0%,
+  100% {
+    transform: scale(0.96);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes outlineDrift {
+  0%,
+  100% {
+    transform: rotate(-1deg) scale(0.985);
+  }
+  50% {
+    transform: rotate(1deg) scale(1.025);
+  }
+}
+
+@keyframes outlineSignal {
+  to {
+    stroke-dashoffset: -30;
+  }
+}
+
+@keyframes coreBreathe {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(0.97);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.035);
+  }
+}
+
+@keyframes spark {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: scale(0.7);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes nodePulse {
+  0%,
+  100% {
+    transform: scale(0.78);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+}
+
+@media (max-width: 760px) {
+  .stage {
+    display: grid;
+    min-height: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    padding: 19rem 1rem 1rem;
+  }
+
+  .brainWrap {
+    top: 9.5rem;
+    width: 17rem;
+    height: 17rem;
+  }
+
+  .brainOutline {
+    width: 14rem;
+    height: 14rem;
+  }
+
+  .core {
+    top: 9.5rem;
+  }
+
+  .ambient {
+    top: 9.5rem;
+    width: 18rem;
+    height: 14rem;
+  }
+
+  .connections {
+    display: none;
+  }
+
+  .node {
+    position: relative;
+    inset: auto;
+    min-width: 0;
+    transform: none;
+  }
+
+  .market {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .header,
+  .footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem;
+  }
+
+  .stage {
+    grid-template-columns: 1fr;
+    padding-top: 17rem;
+  }
+
+  .brainWrap {
+    top: 8.5rem;
+    width: 15rem;
+    height: 15rem;
+  }
+
+  .brainOutline {
+    width: 12.5rem;
+    height: 12.5rem;
+  }
+
+  .core,
+  .ambient {
+    top: 8.5rem;
+  }
+
+  .core {
+    width: 5.8rem;
+    height: 5.8rem;
+  }
+
+  .market {
+    grid-column: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liveDot,
+  .ambient,
+  .connection,
+  .brainHalo,
+  .brainOutline,
+  .brainOutline path,
+  .core,
+  .spark,
+  .nodePulse {
+    animation: none;
+  }
+}
