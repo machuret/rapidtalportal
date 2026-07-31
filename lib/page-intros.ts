@@ -15,9 +15,9 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
     guide: "Vault",
   },
   ask: {
-    title: "What is Ask the Brain?",
-    body: "Ask questions in plain English and get grounded answers from the Company Brain. It resolves relevant Company DNA, Vault knowledge, approved answers and SOPs, then shows which company sources were used.",
-    guide: "Ask the Brain",
+    title: "What is RapidTal Coach?",
+    body: "Your private role-aware Coach combines Company DNA, current permitted work, Vault evidence and published Business Library guidance. It can prepare messages and tasks, but nothing is shared until you approve the preview.",
+    guide: "RapidTal Coach",
   },
   compose: {
     title: "What is Compose?",

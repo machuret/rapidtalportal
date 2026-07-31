@@ -180,7 +180,7 @@ export interface Database {
           id: string;
           client_id: string;
           version: "brain-context-v1";
-          resolver_version: "resolver-v1" | "resolver-v2-task-memory" | "resolver-v3-business-library" | "resolver-v4-library-availability";
+          resolver_version: "resolver-v1" | "resolver-v2-task-memory" | "resolver-v3-business-library" | "resolver-v4-library-availability" | "resolver-v5-role-aware-coach";
           surface: "ask" | "content" | "compose" | "tool" | "diagnostic" | "onboard";
           channel: string | null;
           artifact_kind: string | null;
@@ -197,7 +197,7 @@ export interface Database {
           id?: string;
           client_id: string;
           version: "brain-context-v1";
-          resolver_version: "resolver-v1" | "resolver-v2-task-memory" | "resolver-v3-business-library" | "resolver-v4-library-availability";
+          resolver_version: "resolver-v1" | "resolver-v2-task-memory" | "resolver-v3-business-library" | "resolver-v4-library-availability" | "resolver-v5-role-aware-coach";
           surface: "ask" | "content" | "compose" | "tool" | "diagnostic" | "onboard";
           channel?: string | null;
           artifact_kind?: string | null;

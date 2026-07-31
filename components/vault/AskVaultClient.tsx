@@ -16,7 +16,10 @@ import {
   ExternalLink,
   GraduationCap,
   LibraryBig,
+  ListTodo,
+  LockKeyhole,
   Loader2,
+  MessageSquare,
   RotateCcw,
   Send,
   Sparkles,
@@ -42,6 +45,14 @@ interface Source {
   versionNumber: number | null;
   chunkId: string | null;
   category: string | null;
+}
+
+type CoachRole = "client" | "va";
+type CoachMode = "private" | "message_client" | "message_va_team" | "create_task";
+
+export interface CoachTeamMember {
+  id: string;
+  name: string;
 }
 
 type LibraryAvailability = "available" | "degraded" | "unavailable" | "not_requested";
@@ -71,6 +82,7 @@ interface Turn {
   warnings: ContextWarning[];
   suggestions: string[];
   queriedKinds: AskSourceKind[];
+  coachMode: CoachMode;
 }
 
 type AnswerEvidence = Pick<
@@ -80,6 +92,19 @@ type AnswerEvidence = Pick<
 
 type HistoryItem = { question: string; answer: string };
 
+function parseTaskDraft(answer: string, fallbackQuestion: string): { title: string; description: string } {
+  const titleMatch = answer.match(/^TASK TITLE:\s*(.+)$/imu);
+  const briefMatch = answer.match(/^TASK BRIEF:\s*([\s\S]+)$/imu);
+  const fallbackTitle = fallbackQuestion
+    .replace(/\b(?:can you|please|create|assign|give|make|a|the|task|to my va|for my va)\b/giu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return {
+    title: (titleMatch?.[1]?.trim() || fallbackTitle || "Coach-created task").slice(0, 300),
+    description: (briefMatch?.[1]?.trim() || answer.trim()).slice(0, 10_000),
+  };
+}
+
 const SUGGESTIONS = [
   "What services do we offer, based on our company evidence?",
   "Which SEO basics should our business apply first?",
@@ -87,12 +112,30 @@ const SUGGESTIONS = [
   "What knowledge is missing from our Brain?",
 ];
 
-const DEFAULT_QUERIED_KINDS: AskSourceKind[] = ["dna", "vault", "library", "memory"];
+const DEFAULT_QUERIED_KINDS: AskSourceKind[] = ["dna", "vault", "operation", "library", "memory"];
 
 function queriedKinds(question: string): AskSourceKind[] {
   return /\b(competitor|competition|market|industry|rival|benchmark)\b/iu.test(question)
     ? [...DEFAULT_QUERIED_KINDS, "market"]
     : DEFAULT_QUERIED_KINDS;
+}
+
+function inferredCoachMode(
+  question: string,
+  role: CoachRole,
+  selected: CoachMode,
+): CoachMode {
+  if (selected !== "private") return selected;
+  if (role === "client" && /\b(?:create|assign|give|make)\b.{0,50}\btask\b/iu.test(question)) {
+    return "create_task";
+  }
+  if (role === "client" && /\b(?:send|tell|message|ask)\b.{0,60}\b(?:va|team)\b/iu.test(question)) {
+    return "message_va_team";
+  }
+  if (role === "va" && /\b(?:send|tell|message|ask|clarif)\w*\b.{0,60}\bclient\b/iu.test(question)) {
+    return "message_client";
+  }
+  return "private";
 }
 
 function decodeHeader<T>(value: string | null, fallback: T): T {
@@ -115,6 +158,7 @@ async function askStream(
   history: HistoryItem[],
   onProgress: (answer: string, sources: Source[]) => void,
   mode?: "deep",
+  coachMode: CoachMode = "private",
 ): Promise<{
   ok: boolean;
   answer: string;
@@ -132,7 +176,7 @@ async function askStream(
     const res = await fetch("/api/vault/ask-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId, question, history, ...(mode ? { mode } : {}) }),
+      body: JSON.stringify({ clientId, question, history, coachMode, ...(mode ? { mode } : {}) }),
     });
     if (!res.ok || !res.body) {
       let message = "The Brain could not complete that answer.";
@@ -212,15 +256,24 @@ export function AskVaultClient({
   clientId,
   companyName,
   canCurate,
+  coachRole = "client",
+  speakerName = "You",
+  teamMembers = [],
+  actionsEnabled = true,
   externalAsk,
 }: {
   clientId: string;
   companyName: string;
   canCurate: boolean;
+  coachRole?: CoachRole;
+  speakerName?: string;
+  teamMembers?: CoachTeamMember[];
+  actionsEnabled?: boolean;
   /** Lets a parent (e.g. golden questions panel) submit a question into this chat. */
   externalAsk?: { q: string; nonce: number } | null;
 }) {
   const [question, setQuestion] = useState("");
+  const [coachMode, setCoachMode] = useState<CoachMode>("private");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [loading, setLoading] = useState(false);
   const [interim, setInterim] = useState<Turn | null>(null);
@@ -237,7 +290,7 @@ export function AskVaultClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalAsk?.nonce]);
 
-  async function ask(q: string) {
+  async function ask(q: string, requestedMode: CoachMode = coachMode) {
     const trimmed = q.trim();
     if (trimmed.length < 3 || loading) return;
     setQuestion("");
@@ -245,6 +298,9 @@ export function AskVaultClient({
     setAskFailure(null);
     const history: HistoryItem[] = turns.slice(-4).map((t) => ({ question: t.question, answer: t.answer }));
     const requestedLayers = queriedKinds(trimmed);
+    const resolvedMode = actionsEnabled
+      ? inferredCoachMode(trimmed, coachRole, requestedMode)
+      : "private";
     setInterim({
       question: trimmed,
       answer: "",
@@ -254,11 +310,14 @@ export function AskVaultClient({
       warnings: [],
       suggestions: [],
       queriedKinds: requestedLayers,
+      coachMode: resolvedMode,
     });
 
     // Stream first; fall back to the non-streaming endpoint if anything fails.
     const r = await askStream(clientId, trimmed, history, (answer, sources) =>
       setInterim((current) => current ? { ...current, answer, sources } : null),
+      undefined,
+      resolvedMode,
     );
     if (r.ok) {
       setTurns((prev) => [...prev, {
@@ -270,12 +329,13 @@ export function AskVaultClient({
         warnings: r.warnings,
         suggestions: r.suggestions,
         queriedKinds: requestedLayers,
+        coachMode: resolvedMode,
       }]);
     } else {
       try {
         const res = await api.post<AskResponse>(
           ROUTES.vault.ask(),
-          { clientId, question: trimmed, history },
+          { clientId, question: trimmed, history, coachMode: resolvedMode },
           { showErrorToast: false },
         );
         setTurns((prev) => [...prev, {
@@ -287,6 +347,7 @@ export function AskVaultClient({
           warnings: res.warnings ?? [],
           suggestions: res.suggestions ?? [],
           queriedKinds: requestedLayers,
+          coachMode: resolvedMode,
         }]);
       } catch (error) {
         setAskFailure({
@@ -331,6 +392,7 @@ export function AskVaultClient({
       <div className="mb-6">
         <AskBrainFlow
           companyName={companyName}
+          coachRole={coachRole}
           state={flowState}
           activeKinds={[...new Set(visibleSources.map((source) => source.kind))]}
           queriedKinds={visibleQueriedKinds}
@@ -346,13 +408,13 @@ export function AskVaultClient({
             <Sparkles className="w-7 h-7 text-purple-400 mx-auto mb-3" />
             <p className="text-zinc-300 font-medium mb-1">What would you like to know?</p>
             <p className="text-zinc-500 text-sm mb-5">
-              I combine verified company evidence with published Business Library guidance, then save the exact context before answering.
+              RapidTal Coach combines verified company evidence, current permitted work and published Business Library guidance, then saves the exact context before answering.
             </p>
             <div className="flex flex-wrap gap-2 justify-center">
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
-                  onClick={() => ask(s)}
+                  onClick={() => ask(s, "private")}
                   className="text-xs px-3 py-1.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
                 >
                   {s}
@@ -368,19 +430,29 @@ export function AskVaultClient({
             turn={t}
             clientId={clientId}
             canCurate={canCurate}
+            coachRole={coachRole}
+            speakerName={speakerName}
+            teamMembers={teamMembers}
+            actionsEnabled={actionsEnabled}
             history={turns.slice(Math.max(0, i - 4), i).map((p) => ({ question: p.question, answer: p.answer }))}
-            onAsk={ask}
+            onAsk={(value) => ask(value, "private")}
           />
         ))}
 
         {interim && (
           <div className="space-y-3">
             <div className="flex justify-end">
-              <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-orange-500 text-zinc-950 px-4 py-2.5 text-sm">
-                {interim.question}
+              <div className="max-w-[85%]">
+                <p className="mb-1 text-right text-3xs font-medium text-zinc-500">
+                  {speakerName} — {coachRole === "client" ? "Client" : "VA"}
+                </p>
+                <div className="rounded-2xl rounded-br-sm bg-orange-500 px-4 py-2.5 text-sm text-zinc-950">
+                  {interim.question}
+                </div>
               </div>
             </div>
             <div className="surface-card p-4">
+              <p className="mb-2 text-3xs font-semibold uppercase tracking-wide text-purple-300">RapidTal Coach</p>
               {interim.answer ? (
                 <p className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">
                   {interim.answer}
@@ -417,12 +489,37 @@ export function AskVaultClient({
 
       {/* Composer */}
       <form onSubmit={onSubmit} className="sticky bottom-0 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent pt-3 pb-2">
+        <div className="mb-2 flex flex-wrap gap-2" aria-label="Coach conversation audience">
+          <CoachModeButton active={coachMode === "private"} onClick={() => setCoachMode("private")} icon={LockKeyhole}>
+            Private with Coach
+          </CoachModeButton>
+          {actionsEnabled && coachRole === "va" && (
+            <CoachModeButton active={coachMode === "message_client"} onClick={() => setCoachMode("message_client")} icon={MessageSquare}>
+              Send to Client
+            </CoachModeButton>
+          )}
+          {actionsEnabled && coachRole === "client" && (
+            <>
+              <CoachModeButton active={coachMode === "message_va_team"} onClick={() => setCoachMode("message_va_team")} icon={MessageSquare}>
+                Send to VA Team
+              </CoachModeButton>
+              <CoachModeButton active={coachMode === "create_task"} onClick={() => setCoachMode("create_task")} icon={ListTodo}>
+                Create Task
+              </CoachModeButton>
+            </>
+          )}
+        </div>
+        <p className="mb-2 text-xs text-zinc-500">
+          {coachMode === "private"
+            ? "Private with RapidTal Coach. Nothing is shared."
+            : "The Coach will prepare a preview. Nothing is shared until you confirm."}
+        </p>
         <div className="flex gap-2">
           <Input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             maxLength={4_000}
-            placeholder="Ask a question about your company…"
+            placeholder={coachMode === "private" ? "Ask your Coach about the business or current work…" : "Tell the Coach what you want prepared…"}
             disabled={loading}
             className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
           />
@@ -436,14 +533,48 @@ export function AskVaultClient({
   );
 }
 
+function CoachModeButton({
+  active,
+  onClick,
+  icon: Icon,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: typeof LockKeyhole;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors",
+        active
+          ? "border-purple-400/45 bg-purple-500/10 text-purple-200"
+          : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300",
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {children}
+    </button>
+  );
+}
+
 /** One Q&A exchange — clean answer by default, with optional "Go deeper" + sources. */
 function ChatTurn({
-  turn, clientId, history, canCurate, onAsk,
+  turn, clientId, history, canCurate, coachRole, speakerName,
+  teamMembers, actionsEnabled, onAsk,
 }: {
   turn: Turn;
   clientId: string;
   history: HistoryItem[];
   canCurate: boolean;
+  coachRole: CoachRole;
+  speakerName: string;
+  teamMembers: CoachTeamMember[];
+  actionsEnabled: boolean;
   onAsk: (question: string) => Promise<void>;
 }) {
   const [showSources, setShowSources] = useState(true);
@@ -456,6 +587,9 @@ function ChatTurn({
   const [teachText, setTeachText] = useState("");
   const [teachBusy, setTeachBusy] = useState(false);
   const [taught, setTaught] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionComplete, setActionComplete] = useState(false);
+  const [assigneeId, setAssigneeId] = useState(teamMembers.length === 1 ? teamMembers[0].id : "");
 
   const unanswered = turn.sources.length === 0;
 
@@ -481,7 +615,7 @@ function ChatTurn({
     setDeepLoading(true);
     // Stream the deep answer so the long (gpt-4o) generation shows progress as it
     // arrives; fall back to the non-streaming endpoint if streaming fails.
-    const r = await askStream(clientId, turn.question, history, (a) => setDeepAnswer(a), "deep");
+    const r = await askStream(clientId, turn.question, history, (a) => setDeepAnswer(a), "deep", turn.coachMode);
     if (r.ok) {
       setDeepEvidence({
         sources: r.sources,
@@ -497,6 +631,7 @@ function ChatTurn({
           question: turn.question,
           mode: "deep",
           history,
+          coachMode: turn.coachMode,
         }, { showErrorToast: false });
         setDeepAnswer(res.answer);
         setDeepEvidence({
@@ -545,18 +680,113 @@ function ChatTurn({
     }
   }
 
+  const taskDraft = parseTaskDraft(turn.answer, turn.question);
+
+  async function confirmCoachAction() {
+    if (actionBusy || actionComplete || turn.coachMode === "private") return;
+    setActionBusy(true);
+    try {
+      if (turn.coachMode === "create_task") {
+        await api.post(ROUTES.tasks(), {
+          clientId,
+          title: taskDraft.title,
+          description: taskDraft.description,
+          assignedTo: assigneeId || null,
+          status: "todo",
+          priority: 2,
+        }, { showErrorToast: false });
+        toast.success("Task created. The assigned VA can now see it.");
+      } else {
+        await api.post(ROUTES.messages.send(), {
+          message: turn.answer.trim(),
+        }, { showErrorToast: false });
+        toast.success(turn.coachMode === "message_client"
+          ? "Message sent to the client."
+          : "Message sent to the VA team.");
+      }
+      setActionComplete(true);
+    } catch (error) {
+      toast.error(errorMessage(error, "The Coach action could not be completed."));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
       {/* Question */}
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-orange-500 text-zinc-950 px-4 py-2.5 text-sm">
-          {turn.question}
+        <div className="max-w-[85%]">
+          <p className="mb-1 text-right text-3xs font-medium text-zinc-500">
+            {speakerName} — {coachRole === "client" ? "Client" : "VA"}
+          </p>
+          <div className="rounded-2xl rounded-br-sm bg-orange-500 px-4 py-2.5 text-sm text-zinc-950">
+            {turn.question}
+          </div>
         </div>
       </div>
 
       {/* Answer */}
       <div className="surface-card p-4">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-3xs font-semibold uppercase tracking-wide text-purple-300">RapidTal Coach</p>
+          <span className="inline-flex items-center gap-1 text-3xs text-zinc-500">
+            <LockKeyhole className="h-3 w-3" /> Private until you approve
+          </span>
+        </div>
         <p className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">{turn.answer}</p>
+
+        {actionsEnabled && turn.coachMode !== "private" && (
+          <div className="mt-4 rounded-xl border border-purple-500/25 bg-purple-500/5 p-4">
+            <div className="flex items-start gap-3">
+              {turn.coachMode === "create_task"
+                ? <ListTodo className="mt-0.5 h-4 w-4 shrink-0 text-purple-300" />
+                : <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-purple-300" />}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-purple-100">
+                  {turn.coachMode === "create_task"
+                    ? "Task preview"
+                    : turn.coachMode === "message_client"
+                      ? "Message preview — Client"
+                      : "Message preview — VA Team"}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-zinc-500">
+                  Nothing has been shared yet. Review the Coach draft, then confirm below.
+                </p>
+                {turn.coachMode === "create_task" && teamMembers.length > 0 && !actionComplete && (
+                  <label className="mt-3 block text-xs text-zinc-400">
+                    Assign to
+                    <select
+                      value={assigneeId}
+                      onChange={(event) => setAssigneeId(event.target.value)}
+                      className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200"
+                    >
+                      <option value="">Leave unassigned</option>
+                      {teamMembers.map((member) => (
+                        <option key={member.id} value={member.id}>{member.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <Button
+                  size="sm"
+                  onClick={confirmCoachAction}
+                  disabled={actionBusy || actionComplete}
+                  className="mt-3 gap-1.5"
+                >
+                  {actionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : actionComplete ? <Check className="h-3.5 w-3.5" /> : turn.coachMode === "create_task" ? <ListTodo className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+                  {actionComplete
+                    ? "Confirmed"
+                    : turn.coachMode === "create_task"
+                      ? "Create Task"
+                      : turn.coachMode === "message_client"
+                        ? "Send to Client"
+                        : "Send to VA Team"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {turn.libraryAvailability === "unavailable" && (
           <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
@@ -656,7 +886,7 @@ function ChatTurn({
 
         {/* Actions */}
         <div className="mt-3 flex items-center gap-4 flex-wrap">
-          {!deepAnswer && !unanswered && (
+          {!deepAnswer && !unanswered && turn.coachMode === "private" && (
             <button
               onClick={goDeeper}
               disabled={deepLoading}

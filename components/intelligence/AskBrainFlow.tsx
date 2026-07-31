@@ -5,13 +5,14 @@ import {
   FileQuestion,
   LibraryBig,
   Lightbulb,
+  ListTodo,
   MessageSquareText,
   Radar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import styles from "./IntelligenceMotion.module.css";
 
-export type AskSourceKind = "dna" | "vault" | "library" | "memory" | "market";
+export type AskSourceKind = "dna" | "vault" | "operation" | "library" | "memory" | "market";
 export type AskFlowState = "idle" | "searching" | "answering" | "ready";
 
 const SOURCE_NODES: Array<{
@@ -23,6 +24,7 @@ const SOURCE_NODES: Array<{
 }> = [
   { kind: "dna", label: "Company DNA", detail: "Identity and goals", icon: Dna, position: styles.sourceDna },
   { kind: "vault", label: "Vault", detail: "Company evidence", icon: Archive, position: styles.sourceVault },
+  { kind: "operation", label: "Current work", detail: "Permitted tasks", icon: ListTodo, position: styles.sourceOperations },
   { kind: "library", label: "Library", detail: "General guidance", icon: LibraryBig, position: styles.sourceKnowledge },
   { kind: "memory", label: "Learning", detail: "Approved preferences", icon: Lightbulb, position: styles.sourceSop },
   { kind: "market", label: "Market", detail: "External intelligence", icon: Radar, position: styles.sourceMarket },
@@ -37,6 +39,7 @@ const STATE_COPY: Record<AskFlowState, { label: string; tone: "active" | "ready"
 
 export function AskBrainFlow({
   companyName,
+  coachRole,
   state,
   activeKinds,
   queriedKinds,
@@ -44,6 +47,7 @@ export function AskBrainFlow({
   libraryAvailability,
 }: {
   companyName: string;
+  coachRole: "client" | "va";
   state: AskFlowState;
   activeKinds: AskSourceKind[];
   queriedKinds: AskSourceKind[];
@@ -58,14 +62,16 @@ export function AskBrainFlow({
   return (
     <section
       className={cn(styles.shell, working && styles.working)}
-      aria-label={`Ask the Brain for ${companyName}. ${copy.label}.`}
+      aria-label={`RapidTal Coach for ${companyName}. ${copy.label}.`}
     >
       <div className={styles.topbar}>
         <div>
           <p className={styles.eyebrow}>Live grounded retrieval</p>
-          <h1 className={styles.title}>Ask the Brain</h1>
+          <h1 className={styles.title}>RapidTal Coach</h1>
           <p className={styles.subtitle}>
-            Ask anything about {companyName}. The Brain resolves relevant company context before it answers.
+            {coachRole === "client"
+              ? `Strategic guidance and company-wide work visibility for ${companyName}.`
+              : `Practical guidance grounded in ${companyName} and your assigned work.`}
           </p>
         </div>
         <div className={styles.status} data-tone={copy.tone}>
@@ -85,6 +91,7 @@ export function AskBrainFlow({
           <path className={working ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 142 132 C 225 132, 235 132, 322 132" />
           <path className={active.has("dna") || (working && queried.has("dna")) ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 220 55 C 300 55, 295 105, 333 116" />
           <path className={active.has("vault") || (working && queried.has("vault")) ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 220 210 C 300 210, 295 160, 333 148" />
+          <path className={active.has("operation") || (working && queried.has("operation")) ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 220 132 C 275 132, 295 132, 322 132" />
           <path className={active.has("library") || (working && queried.has("library")) ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 540 55 C 460 55, 465 105, 427 116" />
           <path className={active.has("memory") || (working && queried.has("memory")) ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 540 210 C 460 210, 465 160, 427 148" />
           <path className={state === "answering" || state === "ready" ? `${styles.path} ${styles.pathActive}` : styles.pathMuted} d="M 438 132 C 525 132, 535 132, 618 132" />

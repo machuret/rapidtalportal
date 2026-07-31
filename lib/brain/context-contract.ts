@@ -6,11 +6,12 @@ import { z } from "zod";
  * still be inspected while current outputs use the latest resolver.
  */
 export const BRAIN_CONTEXT_VERSION = "brain-context-v1" as const;
-export const BRAIN_RESOLVER_VERSION = "resolver-v4-library-availability" as const;
+export const BRAIN_RESOLVER_VERSION = "resolver-v5-role-aware-coach" as const;
 export const BRAIN_RESOLVER_VERSIONS = [
   "resolver-v1",
   "resolver-v2-task-memory",
   "resolver-v3-business-library",
+  "resolver-v4-library-availability",
   BRAIN_RESOLVER_VERSION,
 ] as const;
 
@@ -49,6 +50,24 @@ export const brainContextRequestSchema = z.object({
   audience: optionalText(1000),
   objective: optionalText(2000),
   intent: optionalText(1000),
+  actor: z.object({
+    userId: z.uuid(),
+    accountRole: z.enum(["client_admin", "va", "super_admin"]),
+    coachRole: z.enum(["client", "va"]),
+    permissions: z.array(z.enum([
+      "read_company_status",
+      "read_assigned_work",
+      "create_tasks",
+      "assign_tasks",
+      "approve_work",
+      "message_client",
+      "message_va_team",
+      "update_assigned_tasks",
+    ])).max(20),
+    conversationVisibility: z.literal("private_coach"),
+    intendedAudience: z.enum(["private", "client", "va_team", "task_board"]),
+  }).optional(),
+  actionMode: z.enum(["private", "message_client", "message_va_team", "create_task"]).optional(),
   selectedVaultSourceIds: z.array(z.uuid()).max(100).default([]),
   includeMarketIntelligence: z.boolean().default(false),
 });
@@ -178,6 +197,27 @@ export const brainContextSchema = z.object({
     coverage: "none",
     availability: "not_requested",
   }),
+  operations: z.object({
+    availability: z.enum(["available", "unavailable", "not_requested"]),
+    scope: z.enum(["company", "assigned_only", "none"]),
+    tasks: z.array(z.object({
+      taskId: z.uuid(),
+      title: z.string().trim().min(1).max(300),
+      description: z.string().trim().max(4000),
+      status: z.enum(["todo", "in_progress", "review", "done"]),
+      dueDate: z.iso.date().nullable(),
+      priority: z.number().int().min(1).max(4),
+      assignedTo: z.uuid().nullable(),
+      assignedName: z.string().trim().min(1).max(300).nullable(),
+      updatedAt: nullableTimestamp,
+      selectionReason: z.string().trim().min(1).max(1000),
+    })).max(30),
+    team: z.array(z.object({
+      userId: z.uuid(),
+      displayName: z.string().trim().min(1).max(300),
+      role: z.enum(["client_admin", "va"]),
+    })).max(100),
+  }).optional(),
   style: z.object({
     source: z.enum([
       "project_snapshot",
@@ -220,6 +260,8 @@ export const brainContextSchema = z.object({
     libraryChunkIds: z.array(z.uuid()).max(60).default([]),
     memoryIds: z.array(z.uuid()).max(100),
     marketSnapshotIds: z.array(z.uuid()).max(30),
+    operationalTaskIds: z.array(z.uuid()).max(30).optional(),
+    teamMemberIds: z.array(z.uuid()).max(100).optional(),
   }),
 }).superRefine((context, refinement) => {
   const unique = (values: string[]) => new Set(values).size === values.length;
@@ -245,6 +287,8 @@ export const brainContextSchema = z.object({
     `${source.versionId}:${source.chunkId ?? "version"}`,
   );
   const memoryIds = context.memories.map((memory) => memory.memoryId);
+  const operationalTaskIds = context.operations?.tasks.map((task) => task.taskId) ?? [];
+  const teamMemberIds = context.operations?.team.map((member) => member.userId) ?? [];
 
   if (!unique(context.request.selectedVaultSourceIds)) {
     refinement.addIssue({
@@ -338,6 +382,20 @@ export const brainContextSchema = z.object({
       code: "custom",
       path: ["provenance", "marketSnapshotIds"],
       message: "Market provenance must match the selected intelligence snapshots.",
+    });
+  }
+  if (!sameSet(context.provenance.operationalTaskIds ?? [], operationalTaskIds)) {
+    refinement.addIssue({
+      code: "custom",
+      path: ["provenance", "operationalTaskIds"],
+      message: "Operational task provenance must match the role-scoped task context.",
+    });
+  }
+  if (!sameSet(context.provenance.teamMemberIds ?? [], teamMemberIds)) {
+    refinement.addIssue({
+      code: "custom",
+      path: ["provenance", "teamMemberIds"],
+      message: "Team provenance must match the role-scoped team context.",
     });
   }
   if (!context.market.included && (context.market.snapshotIds.length || context.market.insights.length)) {

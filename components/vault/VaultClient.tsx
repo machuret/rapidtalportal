@@ -55,7 +55,7 @@ export function VaultClient(props: VaultClientProps) {
 function VaultClientInner({
   clientId, userId, role, canWrite,
   title = "Company Knowledge",
-  subtitle = "Approved company facts used by Ask the Brain and content generation.",
+  subtitle = "Approved company facts used by RapidTal Coach and content generation.",
 }: VaultClientProps) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");

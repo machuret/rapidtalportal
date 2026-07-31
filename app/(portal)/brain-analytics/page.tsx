@@ -159,7 +159,7 @@ export default async function BrainAnalyticsPage() {
       {asked === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-12 text-center">
           <p className="text-zinc-300 font-semibold mb-1">No questions yet</p>
-          <p className="text-zinc-500 text-sm">Once your team starts using Ask the Brain, usage shows up here.</p>
+          <p className="text-zinc-500 text-sm">Once your team starts using RapidTal Coach, usage shows up here.</p>
         </div>
       ) : (
         <>

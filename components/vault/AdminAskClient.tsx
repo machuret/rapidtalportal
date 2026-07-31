@@ -11,7 +11,15 @@ export function AdminAskClient({ clientId, companyName }: { clientId: string; co
   return (
     <>
       <GoldenQuestions clientId={clientId} onAsk={(q) => setExternalAsk({ q, nonce: Date.now() })} />
-      <AskVaultClient clientId={clientId} companyName={companyName} canCurate externalAsk={externalAsk} />
+      <AskVaultClient
+        clientId={clientId}
+        companyName={companyName}
+        canCurate
+        coachRole="client"
+        speakerName="Super Admin"
+        actionsEnabled={false}
+        externalAsk={externalAsk}
+      />
     </>
   );
 }

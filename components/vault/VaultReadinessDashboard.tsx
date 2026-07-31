@@ -353,7 +353,7 @@ export function VaultReadinessDashboard({
           <div className="mb-3 flex items-center justify-between">
             <div>
               <p className="font-medium text-zinc-200">Open knowledge gaps</p>
-              <p className="text-xs text-zinc-500">Answer a question to make it available to Ask the Brain.</p>
+              <p className="text-xs text-zinc-500">Answer a question to make it available to RapidTal Coach.</p>
             </div>
             <button type="button" className="text-xs text-zinc-500 hover:text-zinc-300" onClick={() => setShowGaps(false)}>
               Hide

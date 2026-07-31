@@ -8,6 +8,7 @@ import {
   ChevronUp,
   Loader2,
   LibraryBig,
+  ListTodo,
   MessageSquareText,
   Radar,
   RefreshCw,
@@ -47,6 +48,25 @@ type BrainContextUsedResponse = {
       sourceUrl: string | null;
       selectionReason: string;
     }>;
+  };
+  roleBoundary: {
+    coachRole: "client" | "va";
+    conversationVisibility: "private_coach";
+    intendedAudience: "private" | "client" | "va_team" | "task_board";
+    permissions: string[];
+  } | null;
+  currentWork: {
+    availability: "available" | "unavailable" | "not_requested";
+    scope: "company" | "assigned_only" | "none";
+    tasks: Array<{
+      taskId: string;
+      title: string;
+      status: string;
+      dueDate: string | null;
+      assignedName: string | null;
+      selectionReason: string;
+    }>;
+    team: Array<{ userId: string; displayName: string; role: string }>;
   };
   companyVoice: {
     source: string;
@@ -179,6 +199,17 @@ export function BrainContextUsed({
                 <Readiness label="Lessons" value={String(data.contextualReadiness.relevantLessons)} />
               </dl>
 
+              {data.roleBoundary && (
+                <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-3">
+                  <p className="text-xs font-semibold text-purple-200">
+                    Authenticated {data.roleBoundary.coachRole === "client" ? "Client" : "VA"} boundary
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">
+                    Conversation: private with Coach · Intended audience: {data.roleBoundary.intendedAudience.replaceAll("_", " ")} · Permissions came from the signed-in account.
+                  </p>
+                </div>
+              )}
+
               <ContextSection
                 icon={BookOpen}
                 title="Company knowledge"
@@ -224,6 +255,26 @@ export function BrainContextUsed({
                       : "No published Library guidance was relevant to this task."
                   } />
                 )}
+              </ContextSection>
+
+              <ContextSection
+                icon={ListTodo}
+                title="Current permitted work"
+                subtitle={`${data.currentWork.availability.replaceAll("_", " ")} · ${data.currentWork.scope.replaceAll("_", " ")} · ${data.currentWork.tasks.length} task${data.currentWork.tasks.length === 1 ? "" : "s"}`}
+              >
+                {data.currentWork.tasks.length ? (
+                  <ul className="space-y-2">
+                    {data.currentWork.tasks.map((task) => (
+                      <li key={task.taskId} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                        <p className="text-xs font-medium text-zinc-200">{task.title}</p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {task.status.replaceAll("_", " ")} · {task.assignedName ?? "Unassigned"} · Due {task.dueDate ?? "not set"}
+                        </p>
+                        <p className="mt-1 text-xs text-zinc-600">{task.selectionReason}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <Empty text={data.currentWork.availability === "unavailable" ? "Current work is temporarily unavailable and can be retried." : "No permitted task matched this Coach turn."} />}
               </ContextSection>
 
               <ContextSection

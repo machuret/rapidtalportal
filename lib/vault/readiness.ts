@@ -312,7 +312,7 @@ export function evaluateVaultReadiness(args: {
     recommendations.push({
       id: "unsearchable",
       title: `Finish preparing ${unsearchable} source${unsearchable === 1 ? "" : "s"}`,
-      detail: "These sources were saved but are not yet available to Ask the Brain or content generation.",
+      detail: "These sources were saved but are not yet available to RapidTal Coach or content generation.",
       action: "index",
       priority: "high",
     });

@@ -130,7 +130,7 @@ export const VA_GUIDE: GuideGroup[] = [
     blurb: "This is your unfair advantage. The AI already knows your client's business — let it do the heavy lifting so you deliver faster and sharper.",
     items: [
       {
-        title: "Ask the Brain",
+        title: "RapidTal Coach",
         what: "Ask any question about the client's business in plain English and get an answer built only from their own documents — with a link to where each fact came from.",
         why: "The goal is to make you instantly knowledgeable about a business you may be new to. Instead of interrupting your client with questions, you ask the Brain and get a trustworthy, sourced answer in seconds. It's like having read every document the company owns — so you sound informed from day one.",
         can: [
@@ -139,7 +139,7 @@ export const VA_GUIDE: GuideGroup[] = [
           "See the exact source behind every answer, so you can trust it.",
         ],
         how: [
-          "Open Ask the Brain from the menu.",
+          "Open RapidTal Coach from the menu.",
           "Type a question (e.g. 'What's our refund policy?') and press Enter.",
           "Want more detail? Click 'Go deeper'.",
         ],
@@ -194,7 +194,7 @@ export const VA_GUIDE: GuideGroup[] = [
       {
         title: "Vault",
         what: "The client's knowledge base — every document, web page, and note the AI reads to answer questions.",
-        why: "The goal is to make every AI tool you use smarter. Everything in the Vault feeds Ask the Brain, Compose, Content and Tools — so when you add useful information here, all of those get better at helping you. It's worth keeping it current.",
+        why: "The goal is to make every AI tool you use smarter. Everything in the Vault feeds RapidTal Coach, Compose, Content and Tools — so when you add useful information here, all of those get better at helping you. It's worth keeping it current.",
         can: [
           "Add files (PDFs, Word docs), web links, or pasted text.",
           "Make new information instantly searchable by the AI.",

@@ -18,6 +18,7 @@ const bodySchema = z.object({
   clientId: z.string().uuid(),
   question: z.string().min(3).max(8000),
   mode: z.enum(["concise", "deep"]).optional(),
+  coachMode: z.enum(["private", "message_client", "message_va_team", "create_task"]).optional(),
   surface: z.enum(["vault_answer", "compose"]).optional(),
   history: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
 });
@@ -41,6 +42,7 @@ export const POST = withAuth(async (req, { user }) => {
     clientId: parsed.data.clientId,
     question: parsed.data.question,
     mode: parsed.data.mode ?? "concise",
+    coachMode: parsed.data.coachMode ?? "private",
     surface: parsed.data.surface ?? "vault_answer",
     history: parsed.data.history ?? [],
     stream: true,

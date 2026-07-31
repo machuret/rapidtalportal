@@ -11,7 +11,7 @@ import {
 } from "./content-style.ts";
 
 export const BRAIN_CONTEXT_VERSION = "brain-context-v1" as const;
-export const BRAIN_RESOLVER_VERSION = "resolver-v4-library-availability" as const;
+export const BRAIN_RESOLVER_VERSION = "resolver-v5-role-aware-coach" as const;
 
 export type BrainSurface =
   | "ask"
@@ -39,6 +39,24 @@ export interface BrainContextRequest {
   audience?: string;
   objective?: string;
   intent?: string;
+  actor?: {
+    userId: string;
+    accountRole: "client_admin" | "va" | "super_admin";
+    coachRole: "client" | "va";
+    permissions: Array<
+      | "read_company_status"
+      | "read_assigned_work"
+      | "create_tasks"
+      | "assign_tasks"
+      | "approve_work"
+      | "message_client"
+      | "message_va_team"
+      | "update_assigned_tasks"
+    >;
+    conversationVisibility: "private_coach";
+    intendedAudience: "private" | "client" | "va_team" | "task_board";
+  };
+  actionMode?: "private" | "message_client" | "message_va_team" | "create_task";
   selectedVaultSourceIds: string[];
   includeMarketIntelligence: boolean;
 }
@@ -90,6 +108,27 @@ export interface BrainContextV1 {
     retrievalMethod: "full_text" | "lexical_recovery" | "none";
     coverage: "strong" | "partial" | "weak" | "none";
     availability: "available" | "degraded" | "unavailable" | "not_requested";
+  };
+  operations: {
+    availability: "available" | "unavailable" | "not_requested";
+    scope: "company" | "assigned_only" | "none";
+    tasks: Array<{
+      taskId: string;
+      title: string;
+      description: string;
+      status: "todo" | "in_progress" | "review" | "done";
+      dueDate: string | null;
+      priority: number;
+      assignedTo: string | null;
+      assignedName: string | null;
+      updatedAt: string | null;
+      selectionReason: string;
+    }>;
+    team: Array<{
+      userId: string;
+      displayName: string;
+      role: "client_admin" | "va";
+    }>;
   };
   style: {
     source:
@@ -154,7 +193,27 @@ export interface BrainContextV1 {
     libraryChunkIds: string[];
     memoryIds: string[];
     marketSnapshotIds: string[];
+    operationalTaskIds: string[];
+    teamMemberIds: string[];
   };
+}
+
+interface OperationalTaskRow {
+  id: string;
+  title: string;
+  description: string | null;
+  status: "todo" | "in_progress" | "review" | "done";
+  due_date: string | null;
+  priority: number;
+  assigned_to: string | null;
+  updated_at: string | null;
+}
+
+interface OperationalTeamRow {
+  id: string;
+  full_name: string | null;
+  email: string;
+  role: "client_admin" | "va";
 }
 
 interface VaultItemRow {
@@ -342,6 +401,16 @@ function coverageFor(
   if (sources.length >= 4 && chars >= 2_500) return "strong";
   if (sources.length >= 2 && chars >= 900) return "partial";
   return "weak";
+}
+
+function operationalTaskScore(task: OperationalTaskRow, terms: string[]): number {
+  const text = `${task.title} ${task.description ?? ""}`.toLocaleLowerCase();
+  const relevance = terms.length
+    ? terms.filter((term) => text.includes(term)).length / terms.length
+    : 0;
+  const active = task.status === "done" ? 0 : 0.35;
+  const due = task.due_date ? 0.15 : 0;
+  return relevance + active + due + (5 - task.priority) * 0.02;
 }
 
 function libraryExcerpt(text: string, terms: string[], max = 4_000): string {
@@ -775,6 +844,56 @@ export async function resolveBrainContext(args: {
       .limit(1)
       .maybeSingle()
     : Promise.resolve({ data: null, error: null });
+  const operationsPromise = (async () => {
+    if (!request.actor) {
+      return {
+        availability: "not_requested" as const,
+        scope: "none" as const,
+        tasks: [] as OperationalTaskRow[],
+        team: [] as OperationalTeamRow[],
+        error: null,
+      };
+    }
+    try {
+      let tasksQuery = admin
+        .from("tasks")
+        .select("id,title,description,status,due_date,priority,assigned_to,updated_at")
+        .eq("client_id", clientId)
+        .order("updated_at", { ascending: false })
+        .limit(100);
+      if (request.actor.coachRole === "va") {
+        tasksQuery = tasksQuery.eq("assigned_to", request.actor.userId);
+      }
+      let teamQuery = admin
+        .from("users")
+        .select("id,full_name,email,role")
+        .eq("client_id", clientId)
+        .in("role", ["client_admin", "va"])
+        .order("full_name", { ascending: true });
+      if (request.actor.coachRole === "va") {
+        teamQuery = teamQuery.or(`role.eq.client_admin,id.eq.${request.actor.userId}`);
+      }
+      const [tasksResult, teamResult] = await Promise.all([tasksQuery, teamQuery]);
+      if (tasksResult.error) throw tasksResult.error;
+      if (teamResult.error) throw teamResult.error;
+      return {
+        availability: "available" as const,
+        scope: request.actor.coachRole === "va" ? "assigned_only" as const : "company" as const,
+        tasks: (tasksResult.data ?? []) as OperationalTaskRow[],
+        team: (teamResult.data ?? []) as OperationalTeamRow[],
+        error: null,
+      };
+    } catch (error) {
+      console.warn("brain-context: role-scoped operations unavailable", error);
+      return {
+        availability: "unavailable" as const,
+        scope: request.actor.coachRole === "va" ? "assigned_only" as const : "company" as const,
+        tasks: [] as OperationalTaskRow[],
+        team: [] as OperationalTeamRow[],
+        error,
+      };
+    }
+  })();
   const libraryPromise = maxLibrary > 0
     ? retrieveBusinessLibrary({
       admin,
@@ -800,6 +919,7 @@ export async function resolveBrainContext(args: {
     memoryConflictResult,
     marketResult,
     libraryResult,
+    operationsResult,
   ] = await Promise.all([
     dnaPromise,
     stylePromise,
@@ -808,6 +928,7 @@ export async function resolveBrainContext(args: {
     memoryConflictPromise,
     marketPromise,
     libraryPromise,
+    operationsPromise,
   ]);
   for (const [section, result] of [
     ["Company DNA", dnaResult],
@@ -830,6 +951,13 @@ export async function resolveBrainContext(args: {
     analysis: Record<string, unknown>;
   } | null;
   warnings.push(...libraryResult.warnings);
+  if (operationsResult.availability === "unavailable") {
+    warnings.push({
+      code: "operational_context_unavailable",
+      message: "Current work status is temporarily unavailable. This answer can still use verified company and Library context, but task claims should be retried.",
+      severity: "warning",
+    });
+  }
 
   if (explicitSelection && selectedIds.length) {
     const found = new Set(vaultItems.map((item) => item.id));
@@ -1091,6 +1219,36 @@ export async function resolveBrainContext(args: {
     knowledgeSources.flatMap((source) => source.chunkId ? [source.chunkId] : []),
   );
   const marketSnapshotIds = marketRun && request.includeMarketIntelligence ? [marketRun.id] : [];
+  const operationalTerms = queryTerms(retrievalQuery);
+  const operationalNameById = new Map(
+    operationsResult.team.map((member) => [member.id, compact(member.full_name || member.email, 300)]),
+  );
+  const operationalTasks = operationsResult.tasks
+    .sort((left, right) =>
+      operationalTaskScore(right, operationalTerms) - operationalTaskScore(left, operationalTerms) ||
+      String(right.updated_at ?? "").localeCompare(String(left.updated_at ?? "")) ||
+      left.id.localeCompare(right.id))
+    .slice(0, 30)
+    .map((task) => ({
+      taskId: task.id,
+      title: compact(task.title, 300),
+      description: compact(task.description, 4_000),
+      status: task.status,
+      dueDate: task.due_date,
+      priority: Math.max(1, Math.min(4, task.priority)),
+      assignedTo: task.assigned_to,
+      assignedName: task.assigned_to ? operationalNameById.get(task.assigned_to) ?? null : null,
+      updatedAt: task.updated_at,
+      selectionReason: request.actor?.coachRole === "va"
+        ? "Assigned to the authenticated VA and relevant to the current request."
+        : "Current company work visible to the authenticated client.",
+    }))
+    .filter((task) => task.title.length > 0);
+  const operationalTeam = operationsResult.team.map((member) => ({
+    userId: member.id,
+    displayName: compact(member.full_name || member.email, 300),
+    role: member.role,
+  })).filter((member) => member.displayName.length > 0);
 
   return {
     version: BRAIN_CONTEXT_VERSION,
@@ -1120,6 +1278,12 @@ export async function resolveBrainContext(args: {
       coverage: coverageFor(libraryResult.sources),
       availability: libraryResult.availability,
     },
+    operations: {
+      availability: operationsResult.availability,
+      scope: operationsResult.scope,
+      tasks: operationalTasks,
+      team: operationalTeam,
+    },
     style,
     memories,
     market: {
@@ -1145,6 +1309,8 @@ export async function resolveBrainContext(args: {
       ),
       memoryIds: memories.map((memory) => memory.memoryId),
       marketSnapshotIds,
+      operationalTaskIds: operationalTasks.map((task) => task.taskId),
+      teamMemberIds: operationalTeam.map((member) => member.userId),
     },
   };
 }
@@ -1170,6 +1336,14 @@ export function renderBrainContext(context: BrainContextV1): string {
       "Use this material for best-practice advice only. Adapt it to the company context, and never claim the company already follows it.\n" +
       context.library.sources.map((source) =>
         `--- LIBRARY ${source.entryId} / VERSION ${source.versionId}${source.chunkId ? ` / CHUNK ${source.chunkId}` : ""} — ${source.title} ---\n${source.excerpt}`
+      ).join("\n\n"),
+    );
+  }
+  if (context.operations.tasks.length) {
+    sections.push(
+      `=== CURRENT OPERATIONAL DATA (${context.operations.scope === "assigned_only" ? "AUTHENTICATED VA'S ASSIGNED WORK ONLY" : "COMPANY-WIDE"}) ===\n` +
+      context.operations.tasks.map((task) =>
+        `--- TASK ${task.taskId} — ${task.title} ---\nStatus: ${task.status}; Due: ${task.dueDate ?? "not set"}; Priority: ${task.priority}; Assigned to: ${task.assignedName ?? "unassigned"}\n${task.description}`
       ).join("\n\n"),
     );
   }

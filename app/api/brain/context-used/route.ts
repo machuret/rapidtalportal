@@ -73,6 +73,18 @@ export const GET = withAuth(async (req, { user }) => {
         selectionReason: source.selectionReason,
       })),
     },
+    roleBoundary: snapshot.request.actor ? {
+      coachRole: snapshot.request.actor.coachRole,
+      conversationVisibility: snapshot.request.actor.conversationVisibility,
+      intendedAudience: snapshot.request.actor.intendedAudience,
+      permissions: snapshot.request.actor.permissions,
+    } : null,
+    currentWork: snapshot.operations ?? {
+      availability: "not_requested",
+      scope: "none",
+      tasks: [],
+      team: [],
+    },
     companyVoice: {
       source: snapshot.style.source,
       channel: snapshot.style.channel,
@@ -101,7 +113,8 @@ export const GET = withAuth(async (req, { user }) => {
     recoverableWarnings: snapshot.warnings.filter((warning) =>
       warning.code === "business_library_unavailable" ||
       warning.code === "business_library_search_degraded" ||
-      warning.code === "semantic_retrieval_unavailable"
+      warning.code === "semantic_retrieval_unavailable" ||
+      warning.code === "operational_context_unavailable"
     ),
     contextualReadiness: {
       channel: snapshot.request.channel ?? null,

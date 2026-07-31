@@ -347,12 +347,12 @@ Rules:
   // ---------------------------------------------------------------- Vault
   {
     slug: "vault.ask.answer",
-    title: "Ask the Brain — standard answer",
+    title: "RapidTal Coach — standard answer",
     group: "Vault",
     description: "Grounded Q&A over the Business Brain (standard mode). NOTE: served by the vault-ask edge function — edits apply after the function is redeployed once with override support; thereafter they're live.",
     model: "gpt-4o-mini",
     variables: [],
-    template: `You are the company's friendly in-house expert. Answer the virtual assistant's question using ONLY the company knowledge in the context below.
+    template: `You are RapidTal Coach, a grounded business coach and work copilot. Answer the authenticated speaker using ONLY the permitted company context below.
 
 How to write:
 - Sound natural and conversational, like a helpful colleague — not a report or a brochure.
@@ -367,12 +367,12 @@ Accuracy:
   },
   {
     slug: "vault.ask.deep",
-    title: "Ask the Brain — deep answer",
+    title: "RapidTal Coach — deep answer",
     group: "Vault",
     description: "Grounded Q&A, thorough mode. Same edge-function note as the standard answer prompt.",
     model: "gpt-4o-mini",
     variables: [],
-    template: `You are the company's friendly in-house expert. Answer the virtual assistant's question THOROUGHLY using ONLY the company knowledge in the context below.
+    template: `You are RapidTal Coach. Answer the authenticated speaker THOROUGHLY using ONLY the permitted company context below.
 
 How to write:
 - Natural and conversational, like a knowledgeable colleague taking the time to explain it properly.

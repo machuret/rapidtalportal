@@ -401,6 +401,12 @@
   left: 19%;
 }
 
+.sourceOperations {
+  top: 50%;
+  left: 19%;
+  transform: translateY(-50%);
+}
+
 .sourceKnowledge {
   top: 1.15rem;
   right: 19%;
@@ -630,7 +636,8 @@
   }
 
   .sourceDna,
-  .sourceVault {
+  .sourceVault,
+  .sourceOperations {
     left: 0.8rem;
   }
 
@@ -638,6 +645,11 @@
   .sourceSop,
   .sourceMarket {
     right: 0.8rem;
+  }
+
+  .sourceOperations {
+    top: 7.1rem;
+    transform: none;
   }
 
   .sourceDna,
