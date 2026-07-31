@@ -17,6 +17,11 @@ describe("Brain Context Phase 1 surface adoption", () => {
     expect(code).toContain("brainContextSurfaceEnabled(");
   });
 
+  it("always gives the content Brain snapshot an explicit selected-source list", () => {
+    const code = source("supabase/functions/content-generate/index.ts");
+    expect(code).toContain("projectId ? (selectedVaultSourceIds ?? []) : []");
+  });
+
   it("Ideas uses the validated Node wrapper and returns provenance with each idea", () => {
     const code = source("app/api/content/topics/generate/route.ts");
     expect(code).toContain("resolveNodeBrainContext({");

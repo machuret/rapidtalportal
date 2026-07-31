@@ -841,7 +841,7 @@ export async function handleContentGenerateRequest(
             intent: typeof contentBrief.additionalGuidance === "string"
               ? contentBrief.additionalGuidance
               : undefined,
-            selectedVaultSourceIds: projectId ? selectedVaultSourceIds : [],
+            selectedVaultSourceIds: projectId ? (selectedVaultSourceIds ?? []) : [],
             includeMarketIntelligence: Boolean(contentBrief.marketIntelligence),
           },
           model: contentModel,
