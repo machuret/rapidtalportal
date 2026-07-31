@@ -2,6 +2,14 @@
   "name": "portal",
   "version": "0.1.0",
   "private": true,
+  "pnpm": {
+    "overrides": {
+      "linkify-it": "5.0.2",
+      "postcss": "8.5.18",
+      "sharp": "0.35.0",
+      "ws": "8.21.0"
+    }
+  },
   "engines": {
     "node": ">=20.9.0"
   },
