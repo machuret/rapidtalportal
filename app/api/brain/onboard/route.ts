@@ -1,9 +1,9 @@
 /**
  * POST /api/brain/onboard — effortless onboarding (Brain 2.0, Milestone F).
  *
- * Drafts values for the empty, draftable company-profile fields, grounded in the
- * client's own Vault documents, and returns them for review (no write — the
- * existing Company DNA form fills the empty fields and the admin saves as usual).
+ * Drafts values for empty, draftable company-profile fields from a required
+ * official Brain Context snapshot. The Library is deliberately excluded:
+ * generic guidance must never become a company fact.
  *
  * Admins only. Never invents: a field is omitted if the documents don't support it.
  */
@@ -15,8 +15,17 @@ import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { profileGaps } from "@/lib/brain/gaps";
 import { chatProvider, chatModel } from "@/lib/brain/llm";
+import {
+  persistNodeBrainContextSnapshot,
+  resolveNodeBrainContext,
+} from "@/lib/brain/resolver";
 
 const schema = z.object({ client_id: z.string().uuid() });
+const modelDraftSchema = z.object({
+  drafts: z.record(z.string(), z.string().trim().min(1).max(4_000)),
+});
+
+const PROMPT_VERSION = "brain-onboarding-v2-official-context";
 
 export const POST = withAuth(async (req, { user }) => {
   let raw: unknown;
@@ -36,73 +45,171 @@ export const POST = withAuth(async (req, { user }) => {
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   const llm = chatProvider();
-  if (!llm) return NextResponse.json({ error: "AI not configured (set OPENROUTER_API_KEY or OPENAI_API_KEY)." }, { status: 500 });
-
   const admin = createAdminClient();
   const clientId = parsed.data.client_id;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const a = admin as any;
-
-  const { data: dna } = await a.from("company_dna").select("*").eq("client_id", clientId).maybeSingle();
-  const targets = profileGaps(dna ?? null).draftableGaps;
-  if (targets.length === 0) return NextResponse.json({ drafts: {}, complete: true });
-
-  const { data: vaultRows } = await a
-    .from("vault_items")
-    .select("title, ai_summary, raw_content")
-    .eq("client_id", clientId)
-    .eq("status", "ready")
-    .order("created_at", { ascending: false })
-    .limit(20);
-  const vault = (vaultRows ?? []) as { title: string; ai_summary: string | null; raw_content: string | null }[];
-
-  let knowledge = "";
-  for (const v of vault) {
-    const snippet = v.ai_summary ?? v.raw_content?.slice(0, 1500) ?? "";
-    if (!snippet.trim()) continue;
-    const entry = `--- ${v.title} ---\n${snippet}\n\n`;
-    if (knowledge.length + entry.length > 12000) break;
-    knowledge += entry;
+  const model = llm ? chatModel("BRAIN_DISTILL_MODEL") : null;
+  let resolved: Awaited<ReturnType<typeof resolveNodeBrainContext>>;
+  try {
+    resolved = await resolveNodeBrainContext({
+      admin,
+      clientId,
+      request: {
+        surface: "onboard",
+        topic: "Complete missing Company DNA fields",
+        objective: "Draft missing company facts for administrator review",
+        intent: "Use only verified company evidence to draft missing Company DNA fields",
+        selectedVaultSourceIds: [],
+        includeMarketIntelligence: false,
+      },
+      model,
+      promptVersion: PROMPT_VERSION,
+      maxKnowledge: 20,
+      maxLibrary: 0,
+      maxMemory: 0,
+    });
+  } catch (error) {
+    console.error("[brain/onboard] context", error);
+    return NextResponse.json({
+      error: "The Brain could not retrieve company evidence. Please try again.",
+      code: "BRAIN_CONTEXT_UNAVAILABLE",
+      recoverable: true,
+    }, { status: 503 });
   }
-  if (!knowledge.trim()) return NextResponse.json({ drafts: {}, noVault: true });
 
-  const fieldList = targets.map((f) => `- ${f.key}: ${f.question}`).join("\n");
-  const prompt =
-    `From the company's own documents below, draft concise values for these company-profile fields. ` +
-    `Only use facts present in the documents. If the documents don't support a field, omit it entirely (don't guess).\n\n` +
-    `FIELDS TO DRAFT:\n${fieldList}\n\n=== COMPANY DOCUMENTS ===\n${knowledge}\n\n` +
-    `Return JSON: { "drafts": { "<field_key>": "<short value>", ... } }. Keep each value tight (1-3 sentences).`;
+  let brainContextSnapshotId: string;
+  try {
+    const snapshot = await persistNodeBrainContextSnapshot({
+      admin,
+      context: resolved.context,
+      artifactKind: "brain_onboarding_draft",
+      createdBy: user.id,
+    });
+    brainContextSnapshotId = snapshot.id;
+  } catch (error) {
+    console.error("[brain/onboard] snapshot", error);
+    return NextResponse.json({
+      error: "The Brain could not save its evidence snapshot. Please try again.",
+      code: "BRAIN_SNAPSHOT_REQUIRED",
+      recoverable: true,
+    }, { status: 503 });
+  }
 
-  const drafts: Record<string, string> = {};
+  const targets = profileGaps(resolved.context.company.fields).draftableGaps;
+  if (targets.length === 0) {
+    return NextResponse.json({
+      drafts: {},
+      complete: true,
+      brainContextSnapshotId,
+    });
+  }
+
+  if (resolved.context.knowledge.sources.length === 0) {
+    return NextResponse.json({
+      drafts: {},
+      noVault: true,
+      brainContextSnapshotId,
+    });
+  }
+
+  if (!llm || !model) {
+    return NextResponse.json({
+      error: "The Brain's drafting service is temporarily unavailable. Please try again.",
+      code: "BRAIN_ONBOARD_AI_UNAVAILABLE",
+      recoverable: true,
+      brainContextSnapshotId,
+    }, { status: 503 });
+  }
+
+  const fieldList = targets.map((field) => `- ${field.key}: ${field.question}`).join("\n");
+  const companyEvidence = resolved.context.knowledge.sources
+    .map((source, index) => `[V${index + 1}] ${source.title}\n${source.excerpt}`)
+    .join("\n\n");
+  const prompt = [
+    "Draft concise values for the missing Company DNA fields below.",
+    "Use only facts explicitly supported by COMPANY VAULT EVIDENCE.",
+    "Existing Company DNA may disambiguate names or terminology, but it does not support a missing fact by itself.",
+    "Omit any field the Vault evidence does not support. Never infer or guess.",
+    "",
+    "FIELDS TO DRAFT:",
+    fieldList,
+    "",
+    "=== EXISTING COMPANY DNA (REFERENCE ONLY) ===",
+    JSON.stringify(resolved.context.company.fields),
+    "",
+    "=== COMPANY VAULT EVIDENCE ===",
+    companyEvidence,
+    "",
+    'Return JSON: { "drafts": { "<field_key>": "<short value>", ... } }.',
+    "Keep each value to 1-3 sentences.",
+  ].join("\n");
+
+  let responseContent: string;
   try {
     const res = await fetch(llm.url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${llm.key}` },
       body: JSON.stringify({
-        model: chatModel("BRAIN_DISTILL_MODEL"), temperature: 0.3, max_tokens: 1500,
+        model, temperature: 0.3, max_tokens: 1500,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "You draft an accurate company profile strictly from the company's own documents. Never invent facts; omit fields the documents don't support." },
+          {
+            role: "system",
+            content: "Draft an accurate company profile strictly from the supplied Company Vault evidence. Never use generic knowledge, invent facts, or fill unsupported fields.",
+          },
           { role: "user", content: prompt },
         ],
       }),
     });
-    if (res.ok) {
-      const json = await res.json();
-      const out = (JSON.parse(json.choices?.[0]?.message?.content ?? "{}")?.drafts ?? {}) as Record<string, unknown>;
-      for (const f of targets) {
-        const v = out[f.key];
-        if (typeof v === "string" && v.trim()) drafts[f.key] = v.trim();
-      }
-    } else {
-      console.error("[brain/onboard]", llm.provider, res.status);
+    if (!res.ok) {
+      const providerBody = (await res.text()).slice(0, 1_000);
+      console.error("[brain/onboard] provider", llm.provider, res.status, providerBody);
+      return NextResponse.json({
+        error: "The Brain could not draft the profile right now. Please try again.",
+        code: "BRAIN_ONBOARD_PROVIDER_FAILED",
+        recoverable: true,
+        brainContextSnapshotId,
+      }, { status: 502 });
     }
+    const json = await res.json() as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+    };
+    const content = json.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      throw new Error("Provider returned no draft content.");
+    }
+    responseContent = content;
   } catch (e) {
-    console.error("[brain/onboard] fetch", e);
+    console.error("[brain/onboard] provider", e);
+    return NextResponse.json({
+      error: "The Brain could not draft the profile right now. Please try again.",
+      code: "BRAIN_ONBOARD_PROVIDER_FAILED",
+      recoverable: true,
+      brainContextSnapshotId,
+    }, { status: 502 });
+  }
+
+  let modelDrafts: Record<string, string>;
+  try {
+    modelDrafts = modelDraftSchema.parse(JSON.parse(responseContent)).drafts;
+  } catch (error) {
+    console.error("[brain/onboard] invalid response", error);
+    return NextResponse.json({
+      error: "The Brain returned an incomplete draft. Please retry.",
+      code: "BRAIN_ONBOARD_INVALID_RESPONSE",
+      recoverable: true,
+      brainContextSnapshotId,
+    }, { status: 502 });
+  }
+
+  const drafts: Record<string, string> = {};
+  for (const field of targets) {
+    const value = modelDrafts[field.key];
+    if (value?.trim()) drafts[field.key] = value.trim();
   }
 
   return NextResponse.json({
     drafts,
     fields: targets.filter((f) => drafts[f.key]).map((f) => ({ key: f.key, label: f.label })),
+    brainContextSnapshotId,
   });
 });

@@ -80,7 +80,6 @@ describe("atomic Brain distillation", () => {
 
 describe("Brain surface scoping", () => {
   const distill = read("lib/brain/distill.ts");
-  const context = read("lib/brain/context.ts");
   const ask = read("supabase/functions/vault-ask/index.ts");
   const content = read("supabase/functions/content-generate/index.ts");
 
@@ -90,9 +89,8 @@ describe("Brain surface scoping", () => {
     expect(distill).not.toContain('"vault_answer"');
   });
 
-  test("legacy context stays isolated while both Edge surfaces use the official resolver", () => {
-    expect(context).toContain('.in("surface", scopedSignalSurfaces)');
-    expect(context).toContain("memoryAppliesToSurfaces");
+  test("the legacy context builder is removed and both Edge surfaces use the official resolver", () => {
+    expect(existsSync(path.join(root, "lib/brain/context.ts"))).toBe(false);
     expect(ask).toContain("resolveBrainContext({");
     expect(content).toContain("resolveBrainContext({");
     expect(ask).not.toContain("memoryAppliesToSurfaces");

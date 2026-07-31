@@ -14,7 +14,14 @@ export const BRAIN_RESOLVER_VERSIONS = [
   BRAIN_RESOLVER_VERSION,
 ] as const;
 
-export const BRAIN_CONTEXT_SURFACES = ["ask", "content", "compose", "tool", "diagnostic"] as const;
+export const BRAIN_CONTEXT_SURFACES = [
+  "ask",
+  "content",
+  "compose",
+  "tool",
+  "diagnostic",
+  "onboard",
+] as const;
 export const BRAIN_CONTEXT_CHANNELS = [
   "linkedin",
   "facebook",

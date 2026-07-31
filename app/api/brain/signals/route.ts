@@ -9,7 +9,8 @@ import { EDITORIAL_DIMENSIONS } from "@/lib/brain/editorial-learning";
 /**
  * Brain signals — the learning input. Any AI surface posts a 👍 / 👎 (with an
  * optional reason) here; the Brain conditions future generations on them
- * (lib/brain/context.ts) and later distils them into curated memory.
+ * the official shared Brain Context resolver and later distils them into
+ * curated memory.
  */
 const createSchema = z.object({
   client_id:     z.string().uuid(),

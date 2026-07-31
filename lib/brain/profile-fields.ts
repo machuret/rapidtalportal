@@ -8,7 +8,7 @@
  *
  *   • onboarding   — shown as a gap/question the user can answer (gaps.ts)
  *   • completeness — counts toward the Brain Score profile % (score.ts)
- *   • prompt       — injected into the Brain context for generation (context.ts)
+ *   • prompt       — injected by the official shared Brain Context resolver
  *
  * To add/change a profile field, edit ONLY this list and set its flags
  * deliberately. The three consumers derive their views from `selectFields()`.

@@ -121,6 +121,7 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
         drafts: Record<string, string>;
         noVault?: boolean;
         complete?: boolean;
+        brainContextSnapshotId: string;
       }>(ROUTES.brain.onboard(), { client_id: clientId }, { showErrorToast: false });
 
       if (data.complete) { toast.message("Your profile already covers the key fields."); return; }

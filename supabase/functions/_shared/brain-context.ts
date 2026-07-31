@@ -13,7 +13,13 @@ import {
 export const BRAIN_CONTEXT_VERSION = "brain-context-v1" as const;
 export const BRAIN_RESOLVER_VERSION = "resolver-v4-library-availability" as const;
 
-export type BrainSurface = "ask" | "content" | "compose" | "tool" | "diagnostic";
+export type BrainSurface =
+  | "ask"
+  | "content"
+  | "compose"
+  | "tool"
+  | "diagnostic"
+  | "onboard";
 export type BrainChannel =
   | "linkedin"
   | "facebook"

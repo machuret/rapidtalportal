@@ -30,6 +30,15 @@ test("Ask lessons never affect content and legacy Ask vocabulary remains readabl
   });
 });
 
+test("onboarding is an isolated official Brain memory surface", () => {
+  expect(brainMemoryScopeMatches({ surfaces: ["onboard"] }, {
+    surface: "onboard",
+  })).toBe(true);
+  expect(brainMemoryScopeMatches({ surfaces: ["onboard"] }, {
+    surface: "content",
+  })).toBe(false);
+});
+
 test("topic-specific memory is retrieved only for the relevant task", () => {
   const scope = {
     surfaces: ["content"],

@@ -181,7 +181,7 @@ export interface Database {
           client_id: string;
           version: "brain-context-v1";
           resolver_version: "resolver-v1" | "resolver-v2-task-memory" | "resolver-v3-business-library" | "resolver-v4-library-availability";
-          surface: "ask" | "content" | "compose" | "tool" | "diagnostic";
+          surface: "ask" | "content" | "compose" | "tool" | "diagnostic" | "onboard";
           channel: string | null;
           artifact_kind: string | null;
           artifact_id: string | null;
@@ -198,7 +198,7 @@ export interface Database {
           client_id: string;
           version: "brain-context-v1";
           resolver_version: "resolver-v1" | "resolver-v2-task-memory" | "resolver-v3-business-library" | "resolver-v4-library-availability";
-          surface: "ask" | "content" | "compose" | "tool" | "diagnostic";
+          surface: "ask" | "content" | "compose" | "tool" | "diagnostic" | "onboard";
           channel?: string | null;
           artifact_kind?: string | null;
           artifact_id?: string | null;
@@ -1076,7 +1076,7 @@ export interface Database {
         Args: {
           p_client_id: string;
           p_query_embedding: string | number[] | null;
-          p_surface: "ask" | "content" | "compose" | "tool" | "diagnostic";
+          p_surface: "ask" | "content" | "compose" | "tool" | "diagnostic" | "onboard";
           p_channel?: string | null;
           p_content_type?: string | null;
           p_limit?: number;

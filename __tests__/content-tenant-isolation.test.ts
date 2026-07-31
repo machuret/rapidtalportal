@@ -8,7 +8,6 @@ jest.mock("@/lib/api-auth", () => {
 jest.mock("@/lib/edge-proxy", () => ({ proxyToEdgeFunction: jest.fn() }));
 jest.mock("@/lib/notifications", () => ({ notify: jest.fn() }));
 jest.mock("@/lib/prompts/server", () => ({ renderPrompt: jest.fn() }));
-jest.mock("@/lib/brain/context", () => ({ buildBrainContext: jest.fn() }));
 jest.mock("@/lib/brain/embed", () => ({ embeddingFit: jest.fn() }));
 jest.mock("@/lib/brain/events", () => ({ logBrainEvent: jest.fn() }));
 jest.mock("@/lib/brain/llm", () => ({
@@ -84,6 +83,7 @@ import {
   POST as createTopic,
 } from "@/app/api/content/topics/route";
 import { POST as validateContent } from "@/app/api/content/validate/route";
+import { POST as onboardBrain } from "@/app/api/brain/onboard/route";
 
 const CLIENT_A = "11111111-1111-4111-8111-111111111111";
 const CLIENT_B = "22222222-2222-4222-8222-222222222222";
@@ -536,5 +536,17 @@ describe("all content endpoint tenant boundaries", () => {
     expect(response.status).toBe(403);
     expect(createAdminClient).not.toHaveBeenCalled();
     expect(proxyToEdgeFunction).not.toHaveBeenCalled();
+  });
+});
+
+describe("Brain onboarding tenant boundary", () => {
+  test("rejects another tenant before resolving or snapshotting context", async () => {
+    const response = await onboardBrain(jsonRequest(
+      "https://portal.test/api/brain/onboard",
+      { client_id: CLIENT_B },
+    ), routeCtx);
+
+    expect(response.status).toBe(403);
+    expect(createAdminClient).not.toHaveBeenCalled();
   });
 });

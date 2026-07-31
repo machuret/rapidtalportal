@@ -191,7 +191,8 @@ resolver versions and invariants aligned.
   functions use `OPENROUTER_API_KEY`. `/admin/health` shows both rows.
 - **Core migration ranges:** 070–077 (learning loop), 125–129 (official context
   and Library), 130 (`brain_diagnostic_runs`, `brain_opportunities`,
-  `brain_opportunity_events`), and 131 (outcome measurement integrity).
+  `brain_opportunity_events`), 131 (outcome measurement integrity), and 132
+  (official snapshotted Brain onboarding).
 
 ## Cron
 

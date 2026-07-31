@@ -13,6 +13,10 @@ const opportunityMigration = readFileSync(
   join(process.cwd(), "db/migrations/130_brain_opportunities.sql"),
   "utf8",
 );
+const onboardingMigration = readFileSync(
+  join(process.cwd(), "db/migrations/132_brain_onboarding_official_context.sql"),
+  "utf8",
+);
 const topicsRoute = readFileSync(
   join(process.cwd(), "app/api/content/topics/generate/route.ts"),
   "utf8",
@@ -28,6 +32,8 @@ describe("Brain context snapshot compatibility", () => {
     expect(libraryMigration).toContain("'resolver-v3-business-library'");
     expect(opportunityMigration).toContain("'resolver-v4-library-availability'");
     expect(opportunityMigration).toContain("'diagnostic'");
+    expect(onboardingMigration).toContain("'onboard'");
+    expect(onboardingMigration).toContain("'brain_onboarding_draft'");
   });
 
   test("requires a snapshot before idea generation can continue", () => {
