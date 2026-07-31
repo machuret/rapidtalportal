@@ -47,6 +47,6 @@ export const POST = withTool(
       })),
     };
     logToolRun("ad-copy", data.clientId, user.id, data.offer.slice(0, 80), result.tokens, payload, result.brainContextSnapshotId);
-    return NextResponse.json(payload);
+    return NextResponse.json({ ...payload, _brainContextSnapshotId: result.brainContextSnapshotId ?? null });
   },
 );

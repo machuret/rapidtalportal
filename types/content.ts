@@ -154,6 +154,7 @@ export interface ContentPiece {
   project_id?: string | null;
   parent_piece_id?: string | null;
   generation_kind?: "original" | "reply" | "rewrite" | "duplicate" | "adaptation" | "manual";
+  brain_context_snapshot_id?: string | null;
   status: ContentStatus;
   created_at: string;
 }

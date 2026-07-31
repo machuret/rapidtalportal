@@ -48,12 +48,23 @@ export default async function ToolRunnerPage({
   if (searchParams.run && UUID_RE.test(searchParams.run)) {
     const { data: run } = await admin
       .from("tool_runs")
-      .select("tool, client_id, output")
+      .select("tool, client_id, output, brain_context_snapshot_id")
       .eq("id", searchParams.run)
       .maybeSingle();
-    const r = run as { tool: string; client_id: string; output: unknown } | null;
+    const r = run as {
+      tool: string;
+      client_id: string;
+      output: unknown;
+      brain_context_snapshot_id: string | null;
+    } | null;
     if (r && r.tool === params.tool && (r.client_id === user.client_id || user.role === "super_admin")) {
-      initial = r.output ?? null;
+      initial = r.output && typeof r.output === "object"
+        ? {
+            ...(r.output as Record<string, unknown>),
+            _brainContextSnapshotId: r.brain_context_snapshot_id,
+            _brainClientId: user.client_id,
+          }
+        : r.output ?? null;
     }
   }
 

@@ -35,8 +35,20 @@ export const POST = withAuth(async (req, { user }) => {
   // vault_queries is introduced after the checked-in generated schema snapshot.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any;
-  let gapId = parsed.data.gapId;
-  if (!gapId) {
+  const gapId = parsed.data.gapId;
+  let queryGapId: string | undefined;
+  if (gapId) {
+    const { data: query, error: queryError } = await db
+      .from("vault_queries")
+      .select("id")
+      .eq("client_id", parsed.data.clientId)
+      .eq("brain_gap_id", gapId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (queryError) return serverError(queryError);
+    queryGapId = query?.id;
+  } else {
     const { data: gap, error: gapError } = await db
       .from("vault_queries")
       .select("id")
@@ -47,15 +59,15 @@ export const POST = withAuth(async (req, { user }) => {
       .limit(1)
       .maybeSingle();
     if (gapError) return serverError(gapError);
-    gapId = gap?.id;
+    queryGapId = gap?.id;
   }
-  if (!gapId) {
+  if (!queryGapId) {
     return NextResponse.json({ error: "This knowledge gap is no longer open." }, { status: 409 });
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: kbEntryId, error } = await db.rpc("resolve_vault_gap_with_answer", {
-    p_gap_id: gapId,
+    p_gap_id: queryGapId,
     p_client_id: parsed.data.clientId,
     p_actor_id: user.id,
     p_answer: parsed.data.answer.trim(),

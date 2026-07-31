@@ -12,6 +12,7 @@ import { api } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { BrainFeedback } from "@/components/brain/BrainFeedback";
 import { Loader2, Copy, Check, Download } from "lucide-react";
+import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
 
 /**
  * Run a tool endpoint: loading state, result, error toast — one hook.
@@ -24,15 +25,29 @@ import { Loader2, Copy, Check, Download } from "lucide-react";
 export function useToolRun<T>(endpoint: string, initial?: T | null) {
   const [result, setResult] = useState<T | null>(initial ?? null);
   const [loading, setLoading] = useState(false);
-  const [clientId, setClientId] = useState<string | null>(null);
+  const initialContext = initial && typeof initial === "object"
+    ? (initial as { _brainContextSnapshotId?: string | null })._brainContextSnapshotId ?? null
+    : null;
+  const initialClientId = initial && typeof initial === "object"
+    ? (initial as { _brainClientId?: string | null })._brainClientId ?? null
+    : null;
+  const [clientId, setClientId] = useState<string | null>(initialClientId);
+  const [brainContextSnapshotId, setBrainContextSnapshotId] = useState<string | null>(initialContext);
 
   async function run(payload: Record<string, unknown>) {
     if (loading) return;
     if (typeof payload.clientId === "string") setClientId(payload.clientId);
     setLoading(true);
     setResult(null);
+    setBrainContextSnapshotId(null);
     try {
-      setResult(await api.post<T>(endpoint, payload, { showErrorToast: false }));
+      const response = await api.post<T & { _brainContextSnapshotId?: string | null }>(
+        endpoint,
+        payload,
+        { showErrorToast: false },
+      );
+      setBrainContextSnapshotId(response._brainContextSnapshotId ?? null);
+      setResult(response);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
@@ -45,10 +60,15 @@ export function useToolRun<T>(endpoint: string, initial?: T | null) {
   const artifactText = result ? (typeof result === "string" ? result : JSON.stringify(result)) : "";
   const feedback = result && clientId && artifactText
     ? (
-      <div className="mt-4 flex items-center gap-2">
-        <span className="text-xs text-zinc-500">Was this useful?</span>
-        <BrainFeedback clientId={clientId} surface="tool" artifactText={artifactText} context={{ tool: endpoint }} />
-      </div>
+      <>
+        <div className="mt-4">
+          <BrainContextUsed clientId={clientId} snapshotId={brainContextSnapshotId} />
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <span className="text-xs text-zinc-500">Was this useful?</span>
+          <BrainFeedback clientId={clientId} surface="tool" artifactText={artifactText} context={{ tool: endpoint }} />
+        </div>
+      </>
     )
     : null;
 

@@ -124,6 +124,7 @@ export async function streamEdgeFunction(
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
         "X-Vault-Sources": res.headers.get("X-Vault-Sources") ?? "",
+        "X-Brain-Context-Snapshot": res.headers.get("X-Brain-Context-Snapshot") ?? "",
       },
     });
   } catch (err) {

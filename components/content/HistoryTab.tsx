@@ -42,6 +42,7 @@ import {
   type EditorialLearningSuggestion,
 } from "./EditorialLearningPrompt";
 import { BrainFeedback } from "@/components/brain/BrainFeedback";
+import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
 
 /* ── Props ──────────────────────────────────────────────────────── */
 interface HistoryTabProps {
@@ -499,6 +500,11 @@ function PieceDetail({
       </div>
 
       {/* Brief */}
+      <BrainContextUsed
+        clientId={clientId}
+        snapshotId={piece.brain_context_snapshot_id}
+      />
+
       {piece.brief && (
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3">
           <p className="text-xs font-medium text-zinc-500 mb-1">Brief</p>

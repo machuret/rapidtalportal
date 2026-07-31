@@ -44,6 +44,6 @@ export const POST = withTool(
 
     const payload = { posts, hasContext: !!(ctx.location || ctx.services) };
     logToolRun("gbp", data.clientId, user.id, data.topic, result.tokens, payload, result.brainContextSnapshotId);
-    return NextResponse.json(payload);
+    return NextResponse.json({ ...payload, _brainContextSnapshotId: result.brainContextSnapshotId ?? null });
   },
 );

@@ -50,6 +50,6 @@ Page context: ${data.content.slice(0, 2000)}`, 400);
       .map((v) => ({ title: clampStr(v.title, 120), description: clampStr(v.description, 320), angle: clampStr(v.angle, 80) }));
 
     logToolRun("meta", data.clientId, user.id, data.keyword || "page content", result.tokens, { variants }, result.brainContextSnapshotId);
-    return NextResponse.json({ variants });
+    return NextResponse.json({ variants, _brainContextSnapshotId: result.brainContextSnapshotId ?? null });
   },
 );

@@ -42,6 +42,6 @@ export const POST = withTool(
       .map((r) => ({ style: clampStr(r.style, 60), text: clampStr(r.text, 800) }));
 
     logToolRun("reply-assistant", data.clientId, user.id, data.message.slice(0, 80), result.tokens, { replies }, result.brainContextSnapshotId);
-    return NextResponse.json({ replies });
+    return NextResponse.json({ replies, _brainContextSnapshotId: result.brainContextSnapshotId ?? null });
   },
 );

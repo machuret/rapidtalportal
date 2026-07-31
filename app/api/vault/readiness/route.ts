@@ -26,10 +26,10 @@ export const GET = withAuth(async (req, { user }) => {
       .or("evidence_role.eq.factual,evidence_role.is.null")
       .limit(5000),
     admin
-      .from("vault_queries")
-      .select("id,question,gap_key,gap_status,gap_importance,owner_id,recommended_source,created_at")
+      .from("brain_knowledge_gaps")
+      .select("id,example_questions,status,importance,owner_id,recommended_source,occurrence_count,created_at")
       .eq("client_id", clientId)
-      .in("gap_status", ["open", "in_review"])
+      .in("status", ["open", "in_review"])
       .order("created_at", { ascending: false })
       .limit(500),
     admin
@@ -43,12 +43,12 @@ export const GET = withAuth(async (req, { user }) => {
 
   type GapRow = {
     id: string;
-    question: string;
-    gap_key: string | null;
-    gap_status: "open" | "in_review";
-    gap_importance: VaultKnowledgeGap["importance"];
+    example_questions: string[];
+    status: "open" | "in_review";
+    importance: VaultKnowledgeGap["importance"];
     owner_id: string | null;
     recommended_source: string | null;
+    occurrence_count: number;
     created_at: string;
   };
   const gapRows = (gapsResult.data ?? []) as GapRow[];
@@ -67,27 +67,17 @@ export const GET = withAuth(async (req, { user }) => {
       ownerNames.set(owner.id, owner.full_name?.trim() || owner.email);
     }
   }
-  const grouped = new Map<string, VaultKnowledgeGap>();
-  for (const row of gapRows) {
-    const key = row.gap_key || row.question.trim().toLowerCase().replace(/\s+/g, " ");
-    const existing = grouped.get(key);
-    if (existing) {
-      existing.occurrences += 1;
-      continue;
-    }
-    grouped.set(key, {
+  const questions = gapRows.map((row): VaultKnowledgeGap => ({
       id: row.id,
-      question: row.question.trim(),
-      status: row.gap_status,
-      importance: row.gap_importance,
+      question: row.example_questions[0]?.trim() || "Unlabelled knowledge gap",
+      status: row.status,
+      importance: row.importance,
       ownerId: row.owner_id,
       ownerName: row.owner_id ? ownerNames.get(row.owner_id) ?? "Assigned" : null,
       recommendedSource: row.recommended_source,
-      occurrences: 1,
+      occurrences: row.occurrence_count,
       createdAt: row.created_at,
-    });
-  }
-  const questions = [...grouped.values()];
+  }));
   return NextResponse.json(evaluateVaultReadiness({
     items: (itemsResult.data ?? []) as VaultReadinessItem[],
     gaps: questions,

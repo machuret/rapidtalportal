@@ -1,204 +1,210 @@
-import { Brain, Sparkles, BookOpen, ShieldCheck, TrendingUp, GraduationCap, FileText, Lightbulb, PartyPopper, Activity, ArrowRight } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  BookOpen,
+  Brain,
+  CheckCircle2,
+  CircleAlert,
+  Gauge,
+  Lightbulb,
+  MessageSquareText,
+  Radar,
+  ShieldCheck,
+  Sparkles,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import type { BrainScore } from "@/lib/brain/score";
+import { LocalTime } from "@/components/ui/LocalTime";
+import type {
+  BrainReadiness,
+  BrainReadinessDimensionKey,
+  BrainReadinessStatus,
+} from "@/lib/brain/readiness";
 
-export interface BrainEventRow { id: string; kind: string; summary: string; created_at: string; meta?: Record<string, unknown> }
-export interface BrainHomeProps {
-  clientName: string;
-  score: BrainScore;
-  events: BrainEventRow[];
-  trend: { score: number }[];
-  lift: { baseline: number; recent: number; delta: number } | null;
+export interface BrainEventRow {
+  id: string;
+  kind: string;
+  summary: string;
+  created_at: string;
+  meta?: Record<string, unknown>;
 }
 
-const LEVEL_TINT: Record<string, string> = {
-  Newborn: "text-zinc-300 border-zinc-600 bg-zinc-700/30",
-  Learning: "text-sky-300 border-sky-500/40 bg-sky-500/10",
-  Sharp: "text-amber-300 border-amber-500/40 bg-amber-500/10",
-  Expert: "text-orange-300 border-orange-500/40 bg-orange-500/10",
-  Genius: "text-orange-200 border-orange-400/60 bg-orange-500/20",
+export interface BrainHomeProps {
+  clientName: string;
+  readiness: BrainReadiness;
+  events: BrainEventRow[];
+}
+
+const STATUS_STYLE: Record<BrainReadinessStatus, string> = {
+  strong: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+  developing: "border-blue-500/30 bg-blue-500/10 text-blue-300",
+  limited: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+  not_ready: "border-zinc-700 bg-zinc-800 text-zinc-400",
+};
+
+const DIMENSION_ICON: Record<BrainReadinessDimensionKey, typeof Brain> = {
+  knowledge: BookOpen,
+  voice: MessageSquareText,
+  personalisation: Users,
+  reliability: ShieldCheck,
+  market: Radar,
 };
 
 const EVENT_ICON: Record<string, typeof Brain> = {
-  learned: Lightbulb,
-  filtered: ShieldCheck,
-  read: FileText,
-  level_up: PartyPopper,
-  briefing: BookOpen,
-  feedback: Activity,
+  style_approved: MessageSquareText,
+  memory_approved: Lightbulb,
+  memory_conflict: CircleAlert,
+  gap_resolved: CheckCircle2,
+  market_refreshed: Radar,
+  sources_usable: BookOpen,
+  evaluation_improved: Gauge,
 };
 
-function ago(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  const m = Math.round(ms / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
+function label(status: BrainReadinessStatus) {
+  return status === "not_ready"
+    ? "Not ready"
+    : status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-/** Circular score gauge — SVG attributes only (no inline styles), token colours. */
-function ScoreRing({ score, level }: { score: number; level: string }) {
-  const r = 52;
-  const c = 2 * Math.PI * r;
-  const offset = c * (1 - Math.max(0, Math.min(100, score)) / 100);
-  return (
-    <div className="relative w-[140px] h-[140px] shrink-0">
-      <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
-        <circle cx="60" cy="60" r={r} fill="none" strokeWidth="10" className="text-zinc-800" stroke="currentColor" />
-        <circle
-          cx="60" cy="60" r={r} fill="none" strokeWidth="10" strokeLinecap="round"
-          className="text-orange-500" stroke="currentColor"
-          strokeDasharray={c} strokeDashoffset={offset}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-4xl font-bold text-white tabular leading-none">{score}</span>
-        <span className="text-2xs uppercase tracking-wider text-zinc-500 mt-1">{level}</span>
-      </div>
-    </div>
-  );
+function ago(date: string) {
+  const seconds = Math.max(0, (Date.now() - new Date(date).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86_400)}d ago`;
 }
 
-function Sparkline({ points }: { points: number[] }) {
-  if (points.length < 2) return null;
-  const w = 120, h = 32, max = 100, min = 0;
-  const step = w / (points.length - 1);
-  const coords = points.map((p, i) => `${(i * step).toFixed(1)},${(h - ((p - min) / (max - min)) * h).toFixed(1)}`).join(" ");
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-8" preserveAspectRatio="none">
-      <polyline points={coords} fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-500" strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-export function BrainHome({ clientName, score, events, trend, lift }: BrainHomeProps) {
-  const comp = score.components;
-  const bars: { label: string; value: number; max: number }[] = [
-    { label: "Knowledge", value: comp.knowledge, max: 25 },
-    { label: "Learning", value: comp.learning, max: 25 },
-    { label: "Accuracy", value: comp.accuracy, max: 35 },
-    { label: "Freshness", value: comp.freshness, max: 15 },
-  ];
-  const f = score.facts;
+export function BrainHome({ clientName, readiness, events }: BrainHomeProps) {
+  const contextual = readiness.contextual;
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
-          <Brain className="w-6 h-6 text-white" />
+      <div className="mb-6 flex items-center gap-4">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg shadow-orange-500/20">
+          <Brain className="h-6 w-6 text-white" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Your Company Brain</h1>
-          <p className="text-zinc-400 text-sm mt-1">How smart {clientName} has become — and what it&apos;s learning.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-white">Brain Readiness</h1>
+          <p className="mt-1 text-sm text-zinc-400">
+            What {clientName}&apos;s Brain can use today, where it is strong and what needs attention.
+          </p>
         </div>
       </div>
 
-      {/* Score + level + lift */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <section className="surface-card p-6 flex items-center gap-5">
-          <ScoreRing score={score.score} level={score.level} />
-          <div className="min-w-0">
-            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full border ${LEVEL_TINT[score.level] ?? LEVEL_TINT.Newborn}`}>
-              <GraduationCap className="w-3.5 h-3.5" /> {score.level}
-            </span>
-            <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
-              Brain learning score blends knowledge, feedback lessons, accuracy history and freshness.
-            </p>
-            <p className="text-xs text-zinc-600 mt-1">
-              This is different from Vault knowledge readiness and Company DNA completion.
-            </p>
-            {score.provisional && <p className="text-xs text-amber-400/90 mt-1.5">Still learning — accuracy firms up as you use it.</p>}
-            {trend.length >= 2 && <div className="mt-3"><Sparkline points={trend.map((t) => t.score)} /></div>}
+      <section className="surface-card mb-6 p-6">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <p className="label-section">Overall readiness</p>
+            <div className="mt-2 flex items-center gap-3">
+              <span className={`rounded-full border px-3 py-1 text-sm font-semibold ${STATUS_STYLE[readiness.overallStatus]}`}>
+                {label(readiness.overallStatus)}
+              </span>
+              <span className="text-xs text-zinc-500">
+                Measured from current Vault, voice, learning, runtime and competitor data
+              </span>
+            </div>
           </div>
-        </section>
+          <p className="max-w-lg text-sm leading-6 text-zinc-400">
+            There is no hidden “Genius” score. Each capability is shown separately so one
+            strong area cannot conceal a weak one.
+          </p>
+        </div>
+      </section>
 
-        {/* Lift */}
-        <section className="surface-card p-6 flex flex-col justify-center">
-          <div className="flex items-center gap-2 mb-1">
-            <TrendingUp className="w-4 h-4 text-orange-400" />
-            <span className="label-section">Acceptance lift</span>
-          </div>
-          {lift ? (
-            <>
-              <p className="stat-value text-white">{lift.delta >= 0 ? "+" : ""}{lift.delta} pts</p>
-              <p className="text-xs text-zinc-500 mt-1">From {lift.baseline}% at the start to {lift.recent}% now — the Brain is suggesting things you actually want.</p>
-            </>
-          ) : (
-            <p className="text-sm text-zinc-500">Approve or flag a few more suggestions and your improvement trend appears here.</p>
-          )}
-        </section>
-
-        {/* This week */}
-        <section className="surface-card p-6 flex flex-col justify-center">
-          <div className="flex items-center gap-2 mb-1">
-            <Sparkles className="w-4 h-4 text-orange-400" />
-            <span className="label-section">This week</span>
-          </div>
-          <WeekSummary events={events} />
-        </section>
-      </div>
-
-      {/* What it knows + component breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <section className="surface-card p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">What your Brain knows</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <Tile icon={FileText} label="Documents" value={`${f.docsReady}`} sub={`${f.docsIndexed} AI-indexed`} />
-            <Tile icon={ShieldCheck} label="Profile" value={`${f.profilePct}%`} sub="complete" />
-            <Tile icon={Lightbulb} label="Lessons" value={`${f.activeLessons}`} sub="learned & active" />
-            <Tile icon={Activity} label="Signals" value={`${f.signalsProcessed}`} sub="feedback processed" />
-          </div>
-        </section>
-
-        <section className="surface-card p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">What makes up the score</h2>
-          <div className="flex flex-col gap-3">
-            {bars.map((b) => (
-              <div key={b.label} className="flex items-center gap-3">
-                <span className="text-xs text-zinc-400 w-20 shrink-0">{b.label}</span>
-                <ProgressBar value={(b.value / b.max) * 100} min={2} trackClassName="h-2.5 flex-1" barClassName="bg-gradient-to-r from-orange-500 to-amber-500" />
-                <span className="text-xs text-zinc-500 w-12 shrink-0 text-right tabular">{b.value}/{b.max}</span>
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-5">
+        {readiness.dimensions.map((dimension) => {
+          const Icon = DIMENSION_ICON[dimension.key];
+          return (
+            <section key={dimension.key} className="surface-card p-5">
+              <div className="flex items-start justify-between gap-2">
+                <Icon className="h-5 w-5 text-orange-400" />
+                <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[dimension.status]}`}>
+                  {label(dimension.status)}
+                </span>
               </div>
-            ))}
-          </div>
-        </section>
+              <h2 className="mt-3 text-sm font-semibold text-white">{dimension.label}</h2>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-white">{dimension.score}%</p>
+              <ProgressBar
+                value={dimension.score}
+                trackClassName="mt-2 h-1.5 w-full"
+                barClassName="bg-gradient-to-r from-orange-500 to-amber-400"
+              />
+              <p className="mt-3 text-xs leading-5 text-zinc-400">{dimension.summary}</p>
+              <ul className="mt-3 space-y-1.5">
+                {dimension.evidence.slice(0, 3).map((item) => (
+                  <li key={item} className="text-xs leading-4 text-zinc-500">• {item}</li>
+                ))}
+              </ul>
+              {dimension.actions[0] && (
+                <p className="mt-3 border-t border-zinc-800 pt-3 text-xs leading-4 text-amber-300/90">
+                  Next: {dimension.actions[0]}
+                </p>
+              )}
+            </section>
+          );
+        })}
       </div>
 
-      {/* Journal */}
+      <section className="surface-card mb-6 p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-orange-400" />
+          <div>
+            <h2 className="text-lg font-semibold text-white">Contextual readiness</h2>
+            <p className="text-xs text-zinc-500">
+              The exact output view becomes more specific by channel and topic.
+            </p>
+          </div>
+        </div>
+        <dl className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+          <ReadinessFact label="Current task" value={contextual.channel ?? "All channels"} />
+          <ReadinessFact label="Channel readiness" value={label(contextual.channelReadiness)} />
+          <ReadinessFact label="Voice confidence" value={contextual.voiceConfidence.replace("_", " ")} />
+          <ReadinessFact label="Vault coverage" value={contextual.vaultCoverage} />
+          <ReadinessFact label="Relevant lessons" value={String(contextual.relevantLessons)} />
+          <ReadinessFact
+            label="Market intelligence"
+            value={contextual.marketUpdatedAt
+              ? <>Updated <LocalTime value={contextual.marketUpdatedAt} opts={{ day: "numeric", month: "short" }} /></>
+              : "Not available"}
+          />
+        </dl>
+      </section>
+
       <section className="surface-card p-6">
-        <h2 className="text-lg font-semibold text-white mb-1">Brain journal</h2>
-        <p className="text-xs text-zinc-500 mb-4">Everything your Brain has been doing for you, newest first.</p>
+        <h2 className="text-lg font-semibold text-white">Brain activity</h2>
+        <p className="mb-4 mt-1 text-xs text-zinc-500">
+          Meaningful capability changes only—not routine database activity.
+        </p>
         {events.length === 0 ? (
           <p className="text-sm text-zinc-500">
-            Nothing yet. As you add documents, generate ideas and give feedback, your Brain&apos;s activity shows up here.
+            No meaningful changes have been recorded yet. Approved styles, usable source
+            batches, resolved gaps and refreshed intelligence will appear here.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2.5">
-            {events.map((e) => {
-              const Icon = EVENT_ICON[e.kind] ?? Brain;
+          <ul className="space-y-3">
+            {events.map((event) => {
+              const Icon = EVENT_ICON[event.kind] ?? Activity;
               return (
-                <li key={e.id} className="flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
-                    <Icon className="w-3.5 h-3.5 text-orange-400" />
+                <li key={event.id} className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-800">
+                    <Icon className="h-4 w-4 text-orange-400" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-zinc-200 leading-snug">{e.summary}</p>
-                    <p className="text-xs text-zinc-600">{ago(e.created_at)}</p>
+                  <div>
+                    <p className="text-sm text-zinc-200">{event.summary}</p>
+                    <p className="mt-0.5 text-xs text-zinc-600">{ago(event.created_at)}</p>
                   </div>
                 </li>
               );
             })}
           </ul>
         )}
-        <div className="flex flex-wrap gap-4 mt-5 pt-4 border-t border-zinc-800 text-sm">
+        <div className="mt-5 flex flex-wrap gap-4 border-t border-zinc-800 pt-4 text-sm">
           <Link href="/brain-analytics" className="inline-flex items-center gap-1.5 text-orange-400 hover:text-orange-300">
-            See detailed analytics <ArrowRight className="w-3.5 h-3.5" />
+            Review learning and evaluations <ArrowRight className="h-3.5 w-3.5" />
           </Link>
           <Link href="/company-dna" className="inline-flex items-center gap-1.5 text-zinc-400 hover:text-white">
-            Improve the profile <ArrowRight className="w-3.5 h-3.5" />
+            Improve Company DNA <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
       </section>
@@ -206,31 +212,11 @@ export function BrainHome({ clientName, score, events, trend, lift }: BrainHomeP
   );
 }
 
-function Tile({ icon: Icon, label, value, sub }: { icon: typeof Brain; label: string; value: string; sub: string }) {
+function ReadinessFact({ label: factLabel, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
-      <div className="flex items-center gap-1.5 mb-1">
-        <Icon className="w-3.5 h-3.5 text-zinc-500" />
-        <span className="label-section">{label}</span>
-      </div>
-      <p className="stat-value text-white">{value}</p>
-      <p className="text-xs text-zinc-500 mt-0.5">{sub}</p>
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3">
+      <dt className="label-section">{factLabel}</dt>
+      <dd className="mt-1 text-sm font-medium capitalize text-zinc-200">{value}</dd>
     </div>
-  );
-}
-
-function WeekSummary({ events }: { events: BrainEventRow[] }) {
-  const weekAgo = Date.now() - 7 * 86_400_000;
-  const recent = events.filter((e) => new Date(e.created_at).getTime() >= weekAgo);
-  if (recent.length === 0) return <p className="text-sm text-zinc-500">A quiet week — generate ideas or add documents to wake it up.</p>;
-  const learned = recent.filter((e) => e.kind === "learned").length;
-  const filtered = recent.reduce((n, e) => n + (e.kind === "filtered" ? Number((e.meta as Record<string, unknown>)?.flagged ?? 0) : 0), 0);
-  const parts: string[] = [];
-  if (learned) parts.push(`learned ${learned} lesson${learned === 1 ? "" : "s"}`);
-  if (filtered) parts.push(`filtered ${filtered} weak idea${filtered === 1 ? "" : "s"}`);
-  return (
-    <p className="text-sm text-zinc-300 leading-relaxed">
-      {parts.length ? `Your Brain ${parts.join(" and ")} this week.` : `${recent.length} updates this week.`}
-    </p>
   );
 }

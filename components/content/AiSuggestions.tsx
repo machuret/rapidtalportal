@@ -8,6 +8,7 @@ import type { AiSuggestion } from "@/types/content";
 import { TYPE_ICON_COLORS, TYPE_ICONS } from "@/types/content";
 import type { BrainWhy } from "@/types/content";
 import { useBrainSignal } from "@/hooks/useBrainSignal";
+import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
 
 /** Build a plain-English "Why this?" line from the Brain provenance. */
 function whySentence(why: BrainWhy | null | undefined): string | null {
@@ -43,6 +44,7 @@ interface AiSuggestionsProps {
 // div container, not a single <button>.
 const SuggestionCard = memo(function SuggestionCard({
   suggestion,
+  clientId,
   isSelected,
   onToggle,
   onLike,
@@ -53,6 +55,7 @@ const SuggestionCard = memo(function SuggestionCard({
   index,
 }: {
   suggestion: AiSuggestion;
+  clientId: string;
   isSelected: boolean;
   onToggle: (index: number) => void;
   onLike: (index: number) => void;
@@ -176,6 +179,12 @@ const SuggestionCard = memo(function SuggestionCard({
             )}
           </div>
         </div>
+      </div>
+      <div className="px-4 pb-3">
+        <BrainContextUsed
+          clientId={clientId}
+          snapshotId={suggestion.brain_context_snapshot_id}
+        />
       </div>
       {/* Teach the Brain */}
       <div className="flex items-center justify-end gap-1 px-4 pb-2.5 -mt-1">
@@ -376,6 +385,7 @@ export const AiSuggestions = memo(function AiSuggestions({
                 <SuggestionCard
                   key={`${suggestion.content_type}-${suggestion.title.slice(0, 30)}-${index}`}
                   suggestion={suggestion}
+                  clientId={clientId}
                   isSelected={selectedIndices.has(index)}
                   onToggle={handleToggle}
                   onLike={handleLike}

@@ -84,6 +84,6 @@ export const POST = withTool(
       faqSchema,
     };
     logToolRun("keyword-brief", data.clientId, user.id, data.keyword, result.tokens, payload, result.brainContextSnapshotId);
-    return NextResponse.json(payload);
+    return NextResponse.json({ ...payload, _brainContextSnapshotId: result.brainContextSnapshotId ?? null });
   },
 );

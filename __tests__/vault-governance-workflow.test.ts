@@ -55,7 +55,7 @@ test("teaching a gap uses the atomic database operation", async () => {
     data: "55555555-5555-4555-8555-555555555555",
     error: null,
   });
-  const from = jest.fn();
+  const from = jest.fn(() => chain({ data: { id: GAP_ID }, error: null }));
   (createAdminClient as jest.Mock).mockReturnValue({ from, rpc });
 
   const response = await teach(request("/api/vault/teach", {
@@ -72,7 +72,7 @@ test("teaching a gap uses the atomic database operation", async () => {
     p_actor_id: USER_ID,
     p_answer: "Client administrators approve final content.",
   });
-  expect(from).not.toHaveBeenCalled();
+  expect(from).toHaveBeenCalledWith("vault_queries");
 });
 
 test("a VA cannot govern or resolve knowledge gaps", async () => {

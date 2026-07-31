@@ -36,6 +36,6 @@ export const POST = withTool(
       .map((h) => ({ hook: clampStr(h.hook, 160), technique: clampStr(h.technique, 60) }));
 
     logToolRun("hooks", data.clientId, user.id, data.content.split("\n").find(Boolean)?.slice(0, 80) ?? "post", result.tokens, { hooks }, result.brainContextSnapshotId);
-    return NextResponse.json({ hooks });
+    return NextResponse.json({ hooks, _brainContextSnapshotId: result.brainContextSnapshotId ?? null });
   },
 );

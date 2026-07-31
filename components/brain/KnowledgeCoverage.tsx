@@ -10,6 +10,7 @@ import {
 import { KnowledgeGaps } from "@/components/vault/KnowledgeGaps";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { HealthGroupActions } from "@/components/vault/VaultHealthActions";
+import type { VaultKnowledgeGap } from "@/lib/vault/readiness";
 
 type VaultItem = {
   id: string;
@@ -40,7 +41,7 @@ export async function KnowledgeCoverage({
   const admin = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
 
-  const [dnaResult, itemsResult, kbResult, queriesRes] = await Promise.all([
+  const [dnaResult, itemsResult, kbResult, queriesRes, gapsResult] = await Promise.all([
     admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
     admin
       .from("vault_items")
@@ -55,10 +56,17 @@ export async function KnowledgeCoverage({
       .eq("client_id", clientId)
       .order("created_at", { ascending: false })
       .limit(300),
+    admin
+      .from("brain_knowledge_gaps")
+      .select("id,example_questions,status,importance,owner_id,recommended_source,occurrence_count,created_at")
+      .eq("client_id", clientId)
+      .in("status", ["open", "in_review"])
+      .order("occurrence_count", { ascending: false })
+      .limit(20),
   ]);
 
   const loadError =
-    dnaResult.error ?? itemsResult.error ?? kbResult.error ?? queriesRes.error;
+    dnaResult.error ?? itemsResult.error ?? kbResult.error ?? queriesRes.error ?? gapsResult.error;
   if (loadError) {
     console.error("[KnowledgeCoverage] report load failed", loadError);
     throw new Error("Company Report could not load the latest Vault totals.");
@@ -80,16 +88,26 @@ export async function KnowledgeCoverage({
   const queries = (queriesRes.data ?? []) as { question: string; answered: boolean; dismissed?: boolean }[];
   const askedTotal = queries.length;
   const answeredTotal = queries.filter((q) => q.answered).length;
-  const knowledgeGaps: string[] = [];
-  const seenGap = new Set<string>();
-  for (const q of queries) {
-    if (q.answered || q.dismissed) continue;
-    const key = q.question.trim().toLowerCase();
-    if (!key || seenGap.has(key)) continue;
-    seenGap.add(key);
-    knowledgeGaps.push(q.question.trim());
-    if (knowledgeGaps.length >= 8) break;
-  }
+  const knowledgeGaps = ((gapsResult.data ?? []) as Array<{
+    id: string;
+    example_questions: string[];
+    status: "open" | "in_review";
+    importance: VaultKnowledgeGap["importance"];
+    owner_id: string | null;
+    recommended_source: string | null;
+    occurrence_count: number;
+    created_at: string;
+  }>).map((gap): VaultKnowledgeGap => ({
+    id: gap.id,
+    question: gap.example_questions[0] ?? "Unlabelled knowledge gap",
+    status: gap.status,
+    importance: gap.importance,
+    ownerId: gap.owner_id,
+    ownerName: gap.owner_id ? "Assigned" : null,
+    recommendedSource: gap.recommended_source,
+    occurrences: gap.occurrence_count,
+    createdAt: gap.created_at,
+  }));
 
   // Group ready items by (normalised) category
   const byCat: Record<string, VaultItem[]> = {};

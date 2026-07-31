@@ -60,6 +60,6 @@ export const POST = withTool(
       draft: stripDashes(String(result.data.draft ?? "")).slice(0, 2000),
     };
     logToolRun("reply-classifier", data.clientId, user.id, data.reply.slice(0, 80), result.tokens, payload, result.brainContextSnapshotId);
-    return NextResponse.json(payload);
+    return NextResponse.json({ ...payload, _brainContextSnapshotId: result.brainContextSnapshotId ?? null });
   },
 );

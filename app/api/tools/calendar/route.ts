@@ -63,6 +63,6 @@ export const POST = withTool(
       }));
 
     logToolRun("calendar", data.clientId, user.id, data.focus || "content calendar", result.tokens, { days }, result.brainContextSnapshotId);
-    return NextResponse.json({ days });
+    return NextResponse.json({ days, _brainContextSnapshotId: result.brainContextSnapshotId ?? null });
   },
 );

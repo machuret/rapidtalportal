@@ -55,13 +55,13 @@ export const POST = withAuth(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = admin as any;
     let lookup = db
-      .from("vault_queries")
-      .select("id,gap_key,question")
+      .from("brain_knowledge_gaps")
+      .select("id,normalized_topic,example_questions")
       .eq("client_id", parsed.data.clientId)
-      .in("gap_status", ["open", "in_review"]);
+      .in("status", ["open", "in_review"]);
     lookup = parsed.data.gapId
       ? lookup.eq("id", parsed.data.gapId)
-      : lookup.ilike("question", parsed.data.question!.trim());
+      : lookup.contains("example_questions", [parsed.data.question!.trim()]);
     const { data: gap, error: gapError } = await lookup
       .order("created_at", { ascending: false })
       .limit(1)
@@ -72,9 +72,21 @@ export const POST = withAuth(
     }
 
     if (parsed.data.action === "resolve") {
+      const { data: query, error: queryError } = await db
+        .from("vault_queries")
+        .select("id")
+        .eq("client_id", parsed.data.clientId)
+        .eq("brain_gap_id", gap.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (queryError) return serverError(queryError);
+      if (!query) {
+        return NextResponse.json({ error: "No source question is linked to this gap." }, { status: 409 });
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await db.rpc("resolve_vault_gap_with_item", {
-        p_gap_id: gap.id,
+        p_gap_id: query.id,
         p_client_id: parsed.data.clientId,
         p_actor_id: user.id,
         p_vault_item_id: parsed.data.vaultItemId,
@@ -84,6 +96,26 @@ export const POST = withAuth(
     }
 
     const updates = parsed.data.action === "dismiss"
+      ? { status: "dismissed" }
+      : parsed.data.action === "claim"
+        ? { status: "in_review", owner_id: user.id }
+        : {
+            importance: parsed.data.importance,
+            recommended_source: parsed.data.recommendedSource,
+          };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateQuery = db
+      .from("brain_knowledge_gaps")
+      .update(updates)
+      .eq("client_id", parsed.data.clientId)
+      .eq("id", gap.id);
+    const { error } = await updateQuery;
+
+    if (error) {
+      console.error("[vault/gaps]", error.message);
+      return serverError(error);
+    }
+    const queryUpdates = parsed.data.action === "dismiss"
       ? { gap_status: "dismissed", dismissed: true, answered: false }
       : parsed.data.action === "claim"
         ? { gap_status: "in_review", owner_id: user.id }
@@ -91,20 +123,12 @@ export const POST = withAuth(
             gap_importance: parsed.data.importance,
             recommended_source: parsed.data.recommendedSource,
           };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let updateQuery = db
+    const { error: queryUpdateError } = await db
       .from("vault_queries")
-      .update(updates)
-      .eq("client_id", parsed.data.clientId);
-    updateQuery = gap.gap_key
-      ? updateQuery.eq("gap_key", gap.gap_key)
-      : updateQuery.ilike("question", gap.question);
-    const { error } = await updateQuery;
-
-    if (error) {
-      console.error("[vault/gaps]", error.message);
-      return serverError(error);
-    }
+      .update(queryUpdates)
+      .eq("client_id", parsed.data.clientId)
+      .eq("brain_gap_id", gap.id);
+    if (queryUpdateError) return serverError(queryUpdateError);
     return NextResponse.json({ success: true });
   },
   { roles: ["client_admin", "super_admin"] },

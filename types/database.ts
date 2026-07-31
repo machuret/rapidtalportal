@@ -212,6 +212,42 @@ export interface Database {
         Update: never;
         Relationships: NoRelationships;
       };
+      brain_knowledge_gaps: {
+        Row: {
+          id: string;
+          client_id: string;
+          normalized_topic: string;
+          example_questions: string[];
+          occurrence_count: number;
+          affected_surfaces: Array<"ask" | "content" | "compose" | "tool">;
+          importance: "low" | "normal" | "high" | "critical";
+          status: "open" | "in_review" | "resolved" | "dismissed";
+          owner_id: string | null;
+          recommended_source: string | null;
+          resolved_by_vault_item_id: string | null;
+          created_at: string;
+          updated_at: string;
+          resolved_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          normalized_topic: string;
+          example_questions: string[];
+          occurrence_count?: number;
+          affected_surfaces?: Array<"ask" | "content" | "compose" | "tool">;
+          importance?: "low" | "normal" | "high" | "critical";
+          status?: "open" | "in_review" | "resolved" | "dismissed";
+          owner_id?: string | null;
+          recommended_source?: string | null;
+          resolved_by_vault_item_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          resolved_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["brain_knowledge_gaps"]["Insert"]>;
+        Relationships: NoRelationships;
+      };
       brain_evaluation_cases: {
         Row: {
           id: string;

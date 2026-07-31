@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Brain, Send, Loader2, Sparkles, ChevronDown, ThumbsUp, ThumbsDown, BookmarkPlus, Check, GraduationCap } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
 
 interface Source {
   n: number;
@@ -24,12 +25,14 @@ interface AskResponse {
   sources: Source[];
   chunksUsed: number;
   tokensUsed?: number;
+  brainContextSnapshotId?: string | null;
 }
 
 interface Turn {
   question: string;
   answer: string;
   sources: Source[];
+  brainContextSnapshotId?: string | null;
 }
 
 type HistoryItem = { question: string; answer: string };
@@ -52,7 +55,7 @@ async function askStream(
   history: HistoryItem[],
   onProgress: (answer: string, sources: Source[]) => void,
   mode?: "deep",
-): Promise<{ ok: boolean; answer: string; sources: Source[] }> {
+): Promise<{ ok: boolean; answer: string; sources: Source[]; brainContextSnapshotId: string | null }> {
   let answer = "";
   let sources: Source[] = [];
   try {
@@ -61,7 +64,8 @@ async function askStream(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clientId, question, history, ...(mode ? { mode } : {}) }),
     });
-    if (!res.ok || !res.body) return { ok: false, answer: "", sources: [] };
+    if (!res.ok || !res.body) return { ok: false, answer: "", sources: [], brainContextSnapshotId: null };
+    const brainContextSnapshotId = res.headers.get("X-Brain-Context-Snapshot") || null;
 
     const sh = res.headers.get("X-Vault-Sources");
     if (sh) {
@@ -88,9 +92,9 @@ async function askStream(
         } catch { /* partial JSON line; ignore */ }
       }
     }
-    return { ok: answer.length > 0, answer, sources };
+    return { ok: answer.length > 0, answer, sources, brainContextSnapshotId };
   } catch {
-    return { ok: false, answer: "", sources: [] };
+    return { ok: false, answer: "", sources: [], brainContextSnapshotId: null };
   }
 }
 
@@ -128,14 +132,19 @@ export function AskVaultClient({
     setQuestion("");
     setLoading(true);
     const history: HistoryItem[] = turns.slice(-4).map((t) => ({ question: t.question, answer: t.answer }));
-    setInterim({ question: trimmed, answer: "", sources: [] });
+    setInterim({ question: trimmed, answer: "", sources: [], brainContextSnapshotId: null });
 
     // Stream first; fall back to the non-streaming endpoint if anything fails.
     const r = await askStream(clientId, trimmed, history, (answer, sources) =>
-      setInterim({ question: trimmed, answer, sources }),
+      setInterim({ question: trimmed, answer, sources, brainContextSnapshotId: null }),
     );
     if (r.ok) {
-      setTurns((prev) => [...prev, { question: trimmed, answer: r.answer, sources: r.sources }]);
+      setTurns((prev) => [...prev, {
+        question: trimmed,
+        answer: r.answer,
+        sources: r.sources,
+        brainContextSnapshotId: r.brainContextSnapshotId,
+      }]);
     } else {
       try {
         const res = await api.post<AskResponse>(
@@ -143,7 +152,12 @@ export function AskVaultClient({
           { clientId, question: trimmed, history },
           { showErrorToast: false },
         );
-        setTurns((prev) => [...prev, { question: trimmed, answer: res.answer, sources: res.sources ?? [] }]);
+        setTurns((prev) => [...prev, {
+          question: trimmed,
+          answer: res.answer,
+          sources: res.sources ?? [],
+          brainContextSnapshotId: res.brainContextSnapshotId ?? null,
+        }]);
       } catch (error) {
         toast.error(errorMessage(error, "The Vault could not answer that question."));
       }
@@ -473,6 +487,12 @@ function ChatTurn({
             ))}
           </div>
         )}
+        <div className="mt-3">
+          <BrainContextUsed
+            clientId={clientId}
+            snapshotId={turn.brainContextSnapshotId}
+          />
+        </div>
       </div>
     </div>
   );

@@ -43,6 +43,6 @@ export const POST = withTool(
       note: clampStr(result.data.note, 300),
     };
     logToolRun("hashtags", data.clientId, user.id, data.topic.slice(0, 80), result.tokens, payload, result.brainContextSnapshotId);
-    return NextResponse.json(payload);
+    return NextResponse.json({ ...payload, _brainContextSnapshotId: result.brainContextSnapshotId ?? null });
   },
 );

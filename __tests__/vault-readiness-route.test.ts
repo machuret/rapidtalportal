@@ -69,21 +69,23 @@ test("returns deterministic readiness from tenant-scoped facts and query history
         error: null,
       });
     }
-    if (table === "vault_queries") {
+    if (table === "brain_knowledge_gaps") {
       return chain({
         data: [{
           id: "55555555-5555-4555-8555-555555555555",
-          question: "What is the approval policy?",
-          gap_key: "what is the approval policy?",
-          gap_status: "open",
-          gap_importance: "high",
+          example_questions: ["What is the approval policy?"],
+          status: "open",
+          importance: "high",
           owner_id: null,
           recommended_source: "Approvals policy",
+          occurrence_count: 1,
           created_at: "2026-07-25T00:00:00.000Z",
         }],
         error: null,
-        count: 1,
       });
+    }
+    if (table === "vault_queries") {
+      return chain({ data: null, error: null, count: 1 });
     }
     throw new Error(`Unexpected table ${table}`);
   });
@@ -108,5 +110,5 @@ test("returns deterministic readiness from tenant-scoped facts and query history
     gaps: ["What is the approval policy?"],
   });
   expect(from).toHaveBeenCalledWith("vault_items");
-  expect(from).toHaveBeenCalledWith("vault_queries");
+  expect(from).toHaveBeenCalledWith("brain_knowledge_gaps");
 });

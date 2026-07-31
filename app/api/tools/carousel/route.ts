@@ -40,6 +40,6 @@ export const POST = withTool(
       caption: clampStr(result.data.caption, 2200),
     };
     logToolRun("carousel", data.clientId, user.id, data.topic.slice(0, 80), result.tokens, payload, result.brainContextSnapshotId);
-    return NextResponse.json(payload);
+    return NextResponse.json({ ...payload, _brainContextSnapshotId: result.brainContextSnapshotId ?? null });
   },
 );
