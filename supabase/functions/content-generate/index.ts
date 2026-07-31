@@ -27,6 +27,7 @@ import {
 } from "../_shared/content-style.ts";
 import {
   CONTENT_TYPE_INSTRUCTIONS,
+  competitorSimilarityWarnings,
 } from "../_shared/content-quality.ts";
 import {
   CONTENT_LENGTH_HINTS,
@@ -645,6 +646,28 @@ export async function handleContentGenerateRequest(
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const competitorReferenceTexts: string[] = [];
+    const submittedMarket = record(contentBrief.marketIntelligence);
+    const submittedCompetitorSources = Array.isArray(submittedMarket?.competitorSources)
+      ? submittedMarket.competitorSources.map(record).filter(Boolean) as Record<string, unknown>[]
+      : [];
+    competitorReferenceTexts.push(...submittedCompetitorSources.flatMap((source) =>
+      typeof source.evidenceQuote === "string" ? [source.evidenceQuote] : []));
+    const captureVersionIds = submittedCompetitorSources.flatMap((source) =>
+      typeof source.captureVersionId === "string" ? [source.captureVersionId] : []);
+    if (captureVersionIds.length) {
+      const { data: captureRows, error: captureError } = await admin
+        .from("competitor_capture_versions")
+        .select("id,raw_content")
+        .eq("client_id", clientId)
+        .in("id", captureVersionIds);
+      if (captureError) {
+        console.warn("content-generate: competitor similarity corpus unavailable:", captureError);
+      } else {
+        competitorReferenceTexts.push(...(captureRows ?? []).flatMap((row) =>
+          typeof row.raw_content === "string" ? [row.raw_content] : []));
+      }
+    }
 
     let generationKind = contentBrief.mode === "reply" ? "reply" : "original";
     if (requestedGenerationKind === "adaptation") {
@@ -834,6 +857,7 @@ export async function handleContentGenerateRequest(
           restrictToSelectedSources: Boolean(projectId),
           embed: async (value) => {
             // deno-lint-ignore no-explicit-any
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const session = new (globalThis as any).Supabase.ai.Session("gte-small");
             return await session.run(value, { mean_pool: true, normalize: true }) as number[];
           },
@@ -963,6 +987,11 @@ export async function handleContentGenerateRequest(
             whyValuable: marketIntelligence.whyValuable,
             differentiation: marketIntelligence.differentiation,
             confidence: marketIntelligence.confidence,
+            marketConfidence: marketIntelligence.marketConfidence,
+            companyEvidenceStrength: marketIntelligence.companyEvidenceStrength,
+            companyRelevance: marketIntelligence.companyRelevance,
+            companyContentDifference: marketIntelligence.companyContentDifference,
+            opportunityHorizon: marketIntelligence.opportunityHorizon,
             novelty: marketIntelligence.novelty,
             competitorSourceCount: Array.isArray(marketIntelligence.competitorSources)
               ? marketIntelligence.competitorSources.length
@@ -1045,6 +1074,10 @@ export async function handleContentGenerateRequest(
       blockingWarnings,
       topicWarnings,
     } = orchestration;
+    const competitorWarnings = competitorSimilarityWarnings(
+      finalBody,
+      competitorReferenceTexts,
+    );
     const styleSnapshot = {
       ...createContentStyleSnapshot(
       style,
@@ -1197,7 +1230,7 @@ export async function handleContentGenerateRequest(
       styleSources: retrieval.styleSources,
       brainContextSnapshotId,
       contentType,
-      warnings: [...topicWarnings, ...qualityWarnings],
+      warnings: [...topicWarnings, ...qualityWarnings, ...competitorWarnings],
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -20,6 +20,11 @@ export const contentMarketIntelligenceSchema = z.object({
   whyValuable: z.string().trim().min(1).max(2000),
   differentiation: z.string().trim().min(1).max(2000),
   confidence: z.enum(["low", "medium", "high"]),
+  marketConfidence: z.enum(["low", "medium", "high"]).optional(),
+  companyEvidenceStrength: z.enum(["none", "weak", "partial", "strong"]).optional(),
+  companyRelevance: z.string().trim().min(1).max(2000).optional(),
+  companyContentDifference: z.string().trim().min(1).max(2000).optional(),
+  opportunityHorizon: z.enum(["current", "evergreen"]).optional(),
   novelty: z.enum(["new", "adjacent", "overlap"]),
   competitorIds: z.array(z.uuid()).min(1).max(12),
   competitorSources: z.array(z.object({

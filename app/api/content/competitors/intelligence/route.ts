@@ -23,6 +23,7 @@ import {
   type CompetitorIntelligenceRun,
   type CompetitorIntelligenceSource,
 } from "@/lib/competitors/intelligence";
+import { buildCompetitorMarketModel } from "@/lib/competitors/market-map";
 import {
   competitorSourceMatchesIdentity,
   competitorSourceIdentityWarnings,
@@ -317,7 +318,8 @@ function insightEvidenceText(value: Record<string, unknown>): string {
   const fields = [
     "label", "description", "summary", "name", "hook_pattern", "structure_pattern",
     "cta_pattern", "dimension", "opportunity", "title", "rationale", "objective",
-    "why_valuable", "differentiation", "suggested_hook",
+    "why_valuable", "company_relevance", "differentiation",
+    "difference_from_company_content", "suggested_hook",
   ];
   const lists = [
     "audience", "themes", "value_propositions", "tone", "suggested_angles",
@@ -393,6 +395,12 @@ function normalizeAnalysisItem(
   alias("suggested_hook", "suggestedHook", "hook");
   alias("key_points", "keyPoints");
   alias("overlap_warning", "overlapWarning");
+  alias("company_relevance", "companyRelevance");
+  alias(
+    "difference_from_company_content",
+    "differenceFromCompanyContent",
+    "company_content_difference",
+  );
   alias("recommended_channels", "recommendedChannels", "channels");
   alias("suggested_angles", "suggestedAngles", "angles");
   alias("signal_strength", "signalStrength");
@@ -574,6 +582,8 @@ function normalizeAnalysisItem(
     text("differentiation", 1200);
     text("suggested_hook", 500);
     text("overlap_warning", 600);
+    text("company_relevance", 1200);
+    text("difference_from_company_content", 1200);
     list("key_points", 10);
     identifiers("company_reference_ids");
     if (!Array.isArray(item.company_reference_ids)) item.company_reference_ids = [];
@@ -1005,6 +1015,9 @@ async function loadState(clientId: string): Promise<{
       fallback_date_count: savedRun.fallback_date_count,
       analysis,
       model: savedRun.model,
+      prompt_version: savedRun.prompt_version,
+      market_model_version: savedRun.market_model_version,
+      analysis_hash: savedRun.analysis_hash,
       created_at: savedRun.created_at,
       updated_at: savedRun.updated_at,
       sources,
@@ -1364,7 +1377,7 @@ Return JSON only. It must follow this structure:
   "positioning_profiles": [{ "competitor_id": "UUID", "summary": string, "audience": [string], "themes": [string], "value_propositions": [string], "tone": [string], "source_item_ids": ["UUID"], "evidence_quotes": [{ "source_item_id": "UUID", "quote": "exact contiguous quote" }] }],
   "comparisons": [{ "dimension": string, "observations": [{ "competitor_id": "UUID", "value": string }], "opportunity": string, "source_item_ids": ["UUID"], "evidence_quotes": [{ "source_item_id": "UUID", "quote": "exact contiguous quote" }] }],
   "positioning_gaps": [{ "title": string, "description": string, "gap_type": "topic"|"audience"|"format"|"proof"|"positioning"|"counter_position", "rationale": string, "company_fit": "low"|"medium"|"high", "competitor_ids": ["UUID"], "source_item_ids": ["UUID"], "evidence_quotes": [{ "source_item_id": "UUID", "quote": "exact contiguous quote" }], "recommended_channels": ["linkedin"|"facebook"|"instagram"|"x"|"email"|"blog"|"newsletter"], "suggested_angles": [string] }],
-  "recommended_ideas": [{ "title": string, "channel": "linkedin"|"facebook"|"instagram"|"x"|"email"|"blog"|"newsletter", "format": string, "objective": string, "why_valuable": string, "differentiation": string, "suggested_hook": string, "key_points": [string], "competitor_ids": ["UUID"], "source_item_ids": ["UUID"], "evidence_quotes": [{ "source_item_id": "UUID", "quote": "exact contiguous quote" }], "company_reference_ids": ["UUID"], "novelty": "new"|"adjacent"|"overlap", "overlap_warning": string, "confidence": "low"|"medium"|"high" }]
+  "recommended_ideas": [{ "title": string, "channel": "linkedin"|"facebook"|"instagram"|"x"|"email"|"blog"|"newsletter", "format": string, "objective": string, "why_valuable": string, "company_relevance": string, "differentiation": string, "difference_from_company_content": string, "suggested_hook": string, "key_points": [string], "competitor_ids": ["UUID"], "source_item_ids": ["UUID"], "evidence_quotes": [{ "source_item_id": "UUID", "quote": "exact contiguous quote" }], "company_reference_ids": ["UUID"], "novelty": "new"|"adjacent"|"overlap", "overlap_warning": string, "confidence": "low"|"medium"|"high" }]
 }
 Every source, competitor and company-reference ID must exactly match a supplied block.`,
           },
@@ -1579,12 +1592,23 @@ ${rendered.text}`,
       code: "INVALID_ANALYSIS",
     }, { status: 502 });
   }
-  const bounded = boundAnalysis(
+  const verifiedAnalysis = boundAnalysis(
     parsedAnalysis.data,
     new Map(rendered.rows.map((row) => [row.id, row])),
     new Set(competitors.map((competitor) => competitor.id)),
     new Set(companySources.map((source) => source.id)),
   );
+  const bounded = buildCompetitorMarketModel({
+    analysis: verifiedAnalysis,
+    evidence: rendered.rows.map((row) => ({
+      id: row.id,
+      competitor_id: row.competitor_id,
+      raw_content: row.raw_content,
+      effective_at: row.effective_at,
+      date_basis: row.date_basis,
+    })),
+    windowEnd: windowEnd.toISOString(),
+  });
   const verifiedInsightCount =
     bounded.topic_clusters.length +
     bounded.format_patterns.length +
@@ -1655,6 +1679,9 @@ ${rendered.text}`,
       fallback_date_count: savedRun.fallback_date_count,
       analysis: bounded,
       model: savedRun.model,
+      prompt_version: savedRun.prompt_version,
+      market_model_version: savedRun.market_model_version,
+      analysis_hash: savedRun.analysis_hash,
       created_at: savedRun.created_at,
       updated_at: savedRun.updated_at,
       sources: snapshots.map((source) => ({

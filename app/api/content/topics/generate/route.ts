@@ -340,7 +340,10 @@ async function requestGeneratedTopics(args: {
   count: number;
 }): Promise<GeneratedTopicBatch> {
   const controller = new AbortController();
-  const timeoutMs = Math.min(90_000, 40_000 + args.count * 2_500);
+  // OpenRouter may queue an otherwise healthy request for 40–60 seconds. Keep
+  // a hard bound below the route's 180-second ceiling, but do not discard a
+  // usable batch at the old 50-second interactive cutoff.
+  const timeoutMs = Math.min(110_000, 70_000 + args.count * 3_000);
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(args.llm.url, {
@@ -430,21 +433,21 @@ function renderCompetitorEvidence(items: CompetitorEvidence[]): string {
     `platform="${escapePromptXml(item.platform)}" content_type="${escapePromptXml(item.content_type)}" ` +
     `url="${escapePromptXml(item.canonical_url)}">\n` +
     `${escapePromptXml(item.raw_content.trim().slice(0, 2500))}\n</competitor_evidence>`
-  ).join("\n\n").slice(0, 30_000);
+  ).join("\n\n").slice(0, 22_000);
 }
 
 function renderIdeaEvidence(items: IdeaVaultEvidence[]): string {
   return items.map((item) =>
     `<vault_material id="${item.id}" title="${escapePromptXml(item.title.slice(0, 200))}">\n` +
     `${escapePromptXml((item.ai_summary || item.raw_content || "").trim().slice(0, 1400))}\n</vault_material>`
-  ).join("\n\n").slice(0, 24_000);
+  ).join("\n\n").slice(0, 14_000);
 }
 
 function renderExistingContent(items: ExistingCompanyContent[]): string {
   return items.map((item) =>
     `<company_content id="${item.id}" channel="${escapePromptXml(item.content_type)}" title="${escapePromptXml(item.title.slice(0, 200))}">\n` +
     `${escapePromptXml((item.body || "").trim().slice(0, 900))}\n</company_content>`
-  ).join("\n\n").slice(0, 20_000);
+  ).join("\n\n").slice(0, 12_000);
 }
 
 function tokenSet(value: string): Set<string> {

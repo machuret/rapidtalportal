@@ -68,6 +68,11 @@ export interface ContentMarketIntelligenceProvenance {
   whyValuable: string;
   differentiation: string;
   confidence: "low" | "medium" | "high";
+  marketConfidence?: "low" | "medium" | "high";
+  companyEvidenceStrength?: "none" | "weak" | "partial" | "strong";
+  companyRelevance?: string;
+  companyContentDifference?: string;
+  opportunityHorizon?: "current" | "evergreen";
   novelty: "new" | "adjacent" | "overlap";
   competitorIds: string[];
   competitorSources: ContentMarketIntelligenceSource[];

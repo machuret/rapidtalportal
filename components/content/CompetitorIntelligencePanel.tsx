@@ -10,6 +10,7 @@ import {
   Lightbulb,
   Loader2,
   RefreshCw,
+  Radar,
   Scale,
   Sparkles,
   Target,
@@ -35,16 +36,29 @@ interface Props {
   ) => void;
 }
 
-type Section = "overview" | "topics" | "formats" | "comparison" | "gaps" | "ideas";
+type Section = "overview" | "market-map" | "topics" | "formats" | "comparison" | "gaps" | "ideas";
 
 const sections: Array<{ id: Section; label: string; icon: typeof BarChart3 }> = [
   { id: "overview", label: "Overview", icon: BarChart3 },
+  { id: "market-map", label: "Market map", icon: Radar },
   { id: "topics", label: "Topic clusters", icon: BookOpen },
   { id: "formats", label: "Formats", icon: FileStack },
   { id: "comparison", label: "Comparison", icon: Scale },
   { id: "gaps", label: "Positioning gaps", icon: Target },
   { id: "ideas", label: "Recommended ideas", icon: Lightbulb },
 ];
+
+const EMPTY_MARKET_MAP = {
+  topic_ownership: [],
+  shared_narratives: [],
+  audience_segments: [],
+  cta_patterns: [],
+  recurring_vocabulary: [],
+  recent_changes: [],
+  saturated_topics: [],
+  weakly_covered_topics: [],
+  strategic_recommendations: [],
+} as const;
 
 function readableDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
@@ -143,6 +157,7 @@ export function CompetitorIntelligencePanel({
       competitor.readiness.latest_capture !== null &&
       new Date(competitor.readiness.latest_capture).getTime() > reportCreatedAt);
   }, [competitors, run]);
+  const marketMap = run?.analysis.market_map ?? EMPTY_MARKET_MAP;
   const incompleteSections = useMemo(() => {
     if (!run) return [];
     return [
@@ -469,6 +484,113 @@ export function CompetitorIntelligencePanel({
               </div>
             )}
 
+            {section === "market-map" && (
+              <div className="space-y-5">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    ["Shared narratives", marketMap.shared_narratives.length],
+                    ["Recent changes", marketMap.recent_changes.length],
+                    ["Saturated topics", marketMap.saturated_topics.length],
+                    ["Open opportunities", marketMap.weakly_covered_topics.length],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+                      <p className="text-xs text-zinc-500">{label}</p>
+                      <p className="mt-1 text-xl font-semibold text-zinc-100">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+                    <p className="text-sm font-semibold text-zinc-200">Topic ownership</p>
+                    <div className="mt-3 space-y-2">
+                      {marketMap.topic_ownership.length ? (
+                        marketMap.topic_ownership.map((ownership) => {
+                          const cluster = run.analysis.topic_clusters.find(
+                            (item) => item.id === ownership.topic_cluster_id,
+                          );
+                          return (
+                            <div
+                              key={`${ownership.topic_cluster_id}-${ownership.competitor_id}`}
+                              className="flex items-center justify-between gap-3 rounded border border-zinc-800 px-3 py-2 text-xs"
+                            >
+                              <span className="text-zinc-400">
+                                {cluster?.label ?? ownership.topic_cluster_id} ·{" "}
+                                {competitorById.get(ownership.competitor_id)?.name ?? "Competitor"}
+                              </span>
+                              <span className="font-medium text-orange-300">{ownership.source_share}%</span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-sm text-zinc-500">No topic ownership could be verified yet.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+                    <p className="text-sm font-semibold text-zinc-200">Recurring market vocabulary</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {marketMap.recurring_vocabulary.length ? (
+                        marketMap.recurring_vocabulary.map((entry) => (
+                          <span
+                            key={entry.term}
+                            title={`${entry.source_item_ids.length} verified captures`}
+                            className="rounded-full border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400"
+                          >
+                            {entry.term}
+                          </span>
+                        ))
+                      ) : (
+                        <p className="text-sm text-zinc-500">No recurring vocabulary could be verified yet.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {marketMap.recent_changes.length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-200">Recent market movement</p>
+                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                      {marketMap.recent_changes.map((change) => (
+                        <div key={`${change.kind}-${change.label}`} className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4">
+                          <p className="text-xs uppercase tracking-wide text-blue-300">
+                            {change.kind.replace(/_/gu, " ")} · {change.confidence} confidence
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-zinc-200">{change.label}</p>
+                          <p className="mt-2 text-sm leading-6 text-zinc-400">{change.summary}</p>
+                          {evidenceLinks(change.source_item_ids)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-sm font-semibold text-zinc-200">Strategic recommendations</p>
+                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                    {marketMap.strategic_recommendations.map((recommendation) => (
+                      <div key={recommendation.title} className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-sm font-semibold text-zinc-200">{recommendation.title}</p>
+                          <span className="rounded-full border border-zinc-700 px-2 py-1 text-xs capitalize text-zinc-400">
+                            {recommendation.opportunity_horizon}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-zinc-300">{recommendation.recommendation}</p>
+                        <p className="mt-2 text-xs leading-5 text-zinc-500">{recommendation.rationale}</p>
+                        <p className="mt-3 text-xs text-zinc-500">
+                          Market confidence: {recommendation.market_confidence} · Company evidence:{" "}
+                          {recommendation.company_evidence_strength}
+                        </p>
+                        {evidenceLinks(recommendation.source_item_ids)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {section === "topics" && (
               <div className="grid gap-3 lg:grid-cols-2">
                 {run.analysis.topic_clusters.map((cluster) => (
@@ -568,6 +690,15 @@ export function CompetitorIntelligencePanel({
                     </div>
                     <p className="mt-2 text-sm leading-6 text-zinc-400">{idea.why_valuable}</p>
                     <p className="mt-2 text-xs leading-5 text-zinc-500">
+                      Company relevance: {idea.company_relevance ?? idea.objective}
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-zinc-500">
+                      Different from existing company content:{" "}
+                      {idea.difference_from_company_content ??
+                        (idea.overlap_warning ||
+                          "No close overlap was identified in the compared company references.")}
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-zinc-500">
                       Differentiation: {idea.differentiation}
                     </p>
                     <p className="mt-2 text-xs leading-5 text-zinc-500">
@@ -576,6 +707,11 @@ export function CompetitorIntelligencePanel({
                     <p className="mt-2 text-xs leading-5 text-zinc-500">
                       Compared with company content/Vault: <span className="capitalize">{idea.novelty}</span>
                       {idea.overlap_warning ? ` · ${idea.overlap_warning}` : ""}
+                    </p>
+                    <p className="mt-2 text-xs text-zinc-500">
+                      Market confidence: {idea.market_confidence ?? idea.confidence} · Company evidence:{" "}
+                      {idea.company_evidence_strength ?? "none"} · Opportunity:{" "}
+                      {idea.opportunity_horizon ?? "evergreen"}
                     </p>
                     {idea.company_reference_ids.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">

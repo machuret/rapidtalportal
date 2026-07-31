@@ -133,6 +133,68 @@ function compact(value: string, limit = 180): string {
   return oneLine.length > limit ? `${oneLine.slice(0, limit - 1)}…` : oneLine;
 }
 
+function comparisonTokens(value: string): string[] {
+  return value.toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}'’-]+/gu, " ")
+    .split(/\s+/u)
+    .map((token) => token.replace(/[’]/gu, "'"))
+    .filter((token) => token.length >= 2);
+}
+
+function shingles(tokens: string[], size: number): Set<string> {
+  const values = new Set<string>();
+  for (let index = 0; index + size <= tokens.length; index++) {
+    values.add(tokens.slice(index, index + size).join(" "));
+  }
+  return values;
+}
+
+/**
+ * Warn when a generated draft is unusually close to immutable competitor
+ * captures. Market topics and formats may inspire a brief; competitor wording,
+ * hooks and positioning phrases must not survive into the finished draft.
+ */
+export function competitorSimilarityWarnings(
+  body: string,
+  competitorTexts: string[],
+): string[] {
+  const draftTokens = comparisonTokens(body);
+  if (draftTokens.length < 8) return [];
+  const draftShingles = shingles(draftTokens, 6);
+  const draftTrigrams = shingles(draftTokens, 3);
+  const draftHook = new Set(draftTokens.slice(0, 18));
+  const warnings: string[] = [];
+
+  for (const competitorText of competitorTexts.slice(0, 20)) {
+    const competitorTokens = comparisonTokens(competitorText);
+    if (competitorTokens.length < 8) continue;
+    const competitorShingles = shingles(competitorTokens, 6);
+    const copiedPhrases = [...draftShingles].filter((value) => competitorShingles.has(value));
+    if (copiedPhrases.length) {
+      warnings.push(
+        `Competitor phrase similarity: rewrite “${compact(copiedPhrases[0], 120)}”.`,
+      );
+      continue;
+    }
+
+    const competitorHook = new Set(competitorTokens.slice(0, 18));
+    const hookOverlap = [...draftHook].filter((token) => competitorHook.has(token)).length;
+    const hookRatio = hookOverlap / Math.max(1, Math.min(draftHook.size, competitorHook.size));
+    if (hookOverlap >= 6 && hookRatio >= 0.55) {
+      warnings.push("Competitor hook similarity: rewrite the opening in the company’s own voice.");
+      continue;
+    }
+
+    const competitorTrigrams = shingles(competitorTokens, 3);
+    const overlap = [...draftTrigrams].filter((value) => competitorTrigrams.has(value)).length;
+    const containment = overlap / Math.max(1, Math.min(draftTrigrams.size, competitorTrigrams.size));
+    if (overlap >= 5 && containment >= 0.35) {
+      warnings.push("Competitor post similarity: revise the structure and wording before approval.");
+    }
+  }
+  return [...new Set(warnings)].slice(0, 5);
+}
+
 function hasEmailSignOff(body: string): boolean {
   if (SIGN_OFF_PATTERN.test(body)) return true;
   const lines = body.split("\n").map((line) => line.trim()).filter(Boolean);

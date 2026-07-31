@@ -24,6 +24,71 @@ const channels = z.array(z.enum([
   "blog",
   "newsletter",
 ])).min(1).max(7);
+const confidence = z.enum(["low", "medium", "high"]);
+const evidenceStrength = z.enum(["none", "weak", "partial", "strong"]);
+
+export const competitorMarketMapSchema = z.object({
+  topic_ownership: z.array(z.object({
+    topic_cluster_id: z.string().trim().min(1).max(80),
+    competitor_id: z.string().uuid(),
+    source_share: z.number().int().min(0).max(100),
+    source_item_ids: sourceIds,
+  })).max(30).default([]),
+  shared_narratives: z.array(z.object({
+    topic_cluster_id: z.string().trim().min(1).max(80),
+    label: z.string().trim().min(1).max(180),
+    competitor_ids: z.array(z.string().uuid()).min(2).max(12),
+    source_item_ids: multiSourceIds,
+    confidence,
+  })).max(10).default([]),
+  audience_segments: z.array(z.object({
+    label: z.string().trim().min(1).max(180),
+    competitor_ids: competitorIds,
+    source_item_ids: sourceIds,
+  })).max(15).default([]),
+  cta_patterns: z.array(z.object({
+    label: z.string().trim().min(1).max(300),
+    competitor_ids: competitorIds,
+    source_item_ids: sourceIds,
+  })).max(12).default([]),
+  recurring_vocabulary: z.array(z.object({
+    term: z.string().trim().min(3).max(80),
+    competitor_ids: competitorIds,
+    source_item_ids: multiSourceIds,
+  })).max(15).default([]),
+  recent_changes: z.array(z.object({
+    kind: z.enum(["new_activity", "continued_activity", "accelerating_activity"]),
+    label: z.string().trim().min(1).max(180),
+    summary: concise,
+    competitor_ids: competitorIds,
+    source_item_ids: sourceIds,
+    confidence,
+  })).max(12).default([]),
+  saturated_topics: z.array(z.object({
+    topic_cluster_id: z.string().trim().min(1).max(80),
+    label: z.string().trim().min(1).max(180),
+    competitor_ids: competitorIds,
+    source_item_ids: multiSourceIds,
+    reason: concise,
+  })).max(10).default([]),
+  weakly_covered_topics: z.array(z.object({
+    label: z.string().trim().min(1).max(180),
+    competitor_ids: competitorIds,
+    source_item_ids: multiSourceIds,
+    opportunity: concise,
+  })).max(10).default([]),
+  strategic_recommendations: z.array(z.object({
+    title: z.string().trim().min(1).max(220),
+    recommendation: concise,
+    rationale: concise,
+    opportunity_horizon: z.enum(["current", "evergreen"]),
+    competitor_ids: competitorIds,
+    source_item_ids: multiSourceIds,
+    company_reference_ids: companyReferenceIds,
+    market_confidence: confidence,
+    company_evidence_strength: evidenceStrength,
+  })).max(10).default([]),
+});
 
 export const competitorIntelligenceSchema = z.object({
   schema_version: z.literal(INTELLIGENCE_SCHEMA_VERSION),
@@ -37,6 +102,7 @@ export const competitorIntelligenceSchema = z.object({
     source_item_ids: multiSourceIds,
     evidence_quotes: evidenceQuotes.min(2),
     channels,
+    confidence: confidence.optional(),
   })).max(6),
   format_patterns: z.array(z.object({
     name: z.string().trim().min(1).max(120),
@@ -48,6 +114,7 @@ export const competitorIntelligenceSchema = z.object({
     source_item_ids: multiSourceIds,
     evidence_quotes: evidenceQuotes.min(2),
     channels,
+    confidence: confidence.optional(),
   })).max(5),
   positioning_profiles: z.array(z.object({
     competitor_id: z.string().uuid(),
@@ -58,6 +125,7 @@ export const competitorIntelligenceSchema = z.object({
     tone: shortList,
     source_item_ids: sourceIds,
     evidence_quotes: evidenceQuotes,
+    confidence: confidence.optional(),
   })).max(10),
   comparisons: z.array(z.object({
     dimension: z.string().trim().min(1).max(120),
@@ -68,6 +136,7 @@ export const competitorIntelligenceSchema = z.object({
     opportunity: concise,
     source_item_ids: multiSourceIds,
     evidence_quotes: evidenceQuotes.min(2),
+    confidence: confidence.optional(),
   })).max(5),
   positioning_gaps: z.array(z.object({
     title: z.string().trim().min(1).max(180),
@@ -87,6 +156,7 @@ export const competitorIntelligenceSchema = z.object({
     evidence_quotes: evidenceQuotes.min(2),
     recommended_channels: channels,
     suggested_angles: shortList,
+    confidence: confidence.optional(),
   })).max(6),
   recommended_ideas: z.array(z.object({
     title: z.string().trim().min(1).max(220),
@@ -112,7 +182,13 @@ export const competitorIntelligenceSchema = z.object({
     novelty: z.enum(["new", "adjacent", "overlap"]),
     overlap_warning: z.string().trim().max(600),
     confidence: z.enum(["low", "medium", "high"]),
+    market_confidence: confidence.optional(),
+    company_evidence_strength: evidenceStrength.optional(),
+    company_relevance: concise.optional(),
+    difference_from_company_content: concise.optional(),
+    opportunity_horizon: z.enum(["current", "evergreen"]).optional(),
   })).max(6),
+  market_map: competitorMarketMapSchema.optional(),
 });
 
 export type CompetitorIntelligence = z.infer<typeof competitorIntelligenceSchema>;
@@ -167,6 +243,9 @@ export interface CompetitorIntelligenceRun {
   fallback_date_count: number;
   analysis: CompetitorIntelligence;
   model: string;
+  prompt_version?: string;
+  market_model_version?: number;
+  analysis_hash?: string;
   created_at: string;
   updated_at: string;
   sources: CompetitorIntelligenceSource[];
@@ -190,6 +269,15 @@ export type CompetitorIdeaBriefResult =
 export function parseCompetitorIntelligence(value: unknown): CompetitorIntelligence | null {
   const parsed = competitorIntelligenceSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+function companyStrengthFromReferences(
+  count: number,
+): "none" | "weak" | "partial" | "strong" {
+  if (count >= 3) return "strong";
+  if (count === 2) return "partial";
+  if (count === 1) return "weak";
+  return "none";
 }
 
 export function competitorIdeaToBrief(
@@ -227,7 +315,10 @@ export function competitorIdeaToBrief(
       keyPoints: idea.key_points,
       additionalGuidance: [
         `Market opportunity: ${idea.why_valuable}`,
+        `Company relevance: ${idea.company_relevance ?? idea.objective}`,
         `Differentiated angle: ${idea.differentiation}`,
+        `Difference from existing company content: ${idea.difference_from_company_content ??
+          (idea.overlap_warning || "No close overlap was identified in the compared company references.")}`,
         `Suggested opening: ${idea.suggested_hook}`,
         `Novelty assessment: ${idea.novelty}.`,
         idea.overlap_warning ? `Overlap note: ${idea.overlap_warning}` : "",
@@ -241,6 +332,13 @@ export function competitorIdeaToBrief(
         whyValuable: idea.why_valuable,
         differentiation: idea.differentiation,
         confidence: idea.confidence,
+        marketConfidence: idea.market_confidence ?? idea.confidence,
+        companyEvidenceStrength: idea.company_evidence_strength ??
+          companyStrengthFromReferences(selectedCompanySources.length),
+        companyRelevance: idea.company_relevance ?? idea.objective,
+        companyContentDifference: idea.difference_from_company_content ??
+          (idea.overlap_warning || "No close overlap was identified in the compared company references."),
+        opportunityHorizon: idea.opportunity_horizon ?? "evergreen",
         novelty: idea.novelty,
         competitorIds: idea.competitor_ids,
         competitorSources: selectedSources.map((source) => ({
