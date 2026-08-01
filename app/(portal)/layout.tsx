@@ -16,16 +16,16 @@ export default async function PortalLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // First check if there is an auth session at all
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-
-  // No session → go to login
-  if (!authUser) redirect("/login");
-
-  // Has session but user row lookup fails → show debug error, don't loop
+  // One auth lookup on the happy path (cache()d, so pages calling it again are
+  // free). Previously the layout ran its own getUser AND getCurrentUserAndClient's
+  // — two remote auth round-trips before any page work, on top of middleware's.
   const ctx = await getCurrentUserAndClient();
   if (!ctx) {
+    // Rare path: either no session, or a session whose users row is missing.
+    // Distinguish with one raw auth check so the debug panel can name the email.
+    const supabase = await createClient();
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) redirect("/login");
     return (
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
         <div className="max-w-md text-center px-6">
