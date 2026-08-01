@@ -9,10 +9,9 @@ import { ROUTES } from "@/lib/api/routes";
 import { cn } from "@/lib/utils";
 import { RelativeTime } from "@/components/ui/RelativeTime";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { TaskDialog } from "@/components/tasks/TaskDialog";
 import {
   CheckCircle2, Clock, Inbox, Timer, Plus, Loader2, ThumbsUp, RotateCcw,
   Sparkles, ArrowRight, AlertTriangle, Dna, BookOpen,
@@ -64,7 +63,7 @@ export function ClientDashboard(props: ClientDashboardProps) {
   const [changesFor, setChangesFor] = useState<AwaitingTask | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  // router.refresh() (e.g. after RequestWorkDialog) delivers new server props;
+  // router.refresh() (e.g. after creating work) delivers new server props;
   // without this sync the lists kept showing the pre-refresh data forever.
   useEffect(() => { setAwaiting(props.awaiting); }, [props.awaiting]);
   useEffect(() => { setDelivered(props.recentDelivered); }, [props.recentDelivered]);
@@ -271,10 +270,16 @@ export function ClientDashboard(props: ClientDashboardProps) {
       </div>
 
       {requestOpen && (
-        <RequestWorkDialog
-          clientId={props.clientId} vas={vas} categories={categories}
+        <TaskDialog
+          mode="create"
+          status="todo"
+          clientId={props.clientId}
+          isAdmin
+          initialAssignedTo={vas.length === 1 ? vas[0].id : undefined}
+          members={vas}
+          categories={categories}
           onClose={() => setRequestOpen(false)}
-          onCreated={() => { setRequestOpen(false); toast.success("Request sent to your VA."); router.refresh(); }}
+          onSaved={() => { setRequestOpen(false); router.refresh(); }}
         />
       )}
 
@@ -319,85 +324,6 @@ function SetupRow({ done, label, desc, href, onClick, optional }: {
   if (onClick) return <button onClick={onClick} className="text-left w-full">{inner}</button>;
   if (href) return <Link href={href}>{inner}</Link>;
   return <div>{inner}</div>;
-}
-
-function RequestWorkDialog({ clientId, vas, categories, onClose, onCreated }: {
-  clientId: string; vas: ClientVA[]; categories: ClientCategory[]; onClose: () => void; onCreated: () => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [assignedTo, setAssignedTo] = useState(vas.length === 1 ? vas[0].id : "");
-  const [priority, setPriority] = useState(2);
-  const [dueDate, setDueDate] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [busy, setBusy] = useState(false);
-  const selectCls = "bg-zinc-800 border border-zinc-700 rounded-md px-3 h-9 text-sm text-zinc-300";
-
-  async function submit() {
-    if (title.trim().length < 1 || busy) return;
-    setBusy(true);
-    try {
-      await api.post(ROUTES.tasks(), {
-        clientId, title: title.trim(), description, status: "todo", priority,
-        assignedTo: assignedTo || null, dueDate: dueDate || null, categoryId: categoryId || null,
-      });
-      onCreated();
-    } catch { /* toasts */ } finally { setBusy(false); }
-  }
-
-  return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="bg-zinc-900 border-zinc-700">
-        <DialogHeader><DialogTitle>Request work</DialogTitle></DialogHeader>
-        <div className="flex flex-col gap-4 mt-2">
-          <div className="flex flex-col gap-1.5">
-            <Label>What do you need done?</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus
-              placeholder="e.g. Draft the June newsletter" className="bg-zinc-800 border-zinc-700" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Details</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4}
-              placeholder="Context, links, examples, anything that helps your VA get it right…" className="bg-zinc-800 border-zinc-700" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label>Assign to</Label>
-              <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className={selectCls}>
-                <option value="">Any available VA</option>
-                {vas.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Priority</Label>
-              <select value={priority} onChange={(e) => setPriority(Number(e.target.value))} className={selectCls}>
-                <option value={1}>Low</option><option value={2}>Normal</option><option value={3}>High</option><option value={4}>Urgent</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Needed by</Label>
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="bg-zinc-800 border-zinc-700" />
-            </div>
-            {categories.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <Label>Category</Label>
-                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={selectCls}>
-                  <option value="">None</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" size="sm" onClick={onClose} className="border-zinc-700">Cancel</Button>
-            <Button size="sm" onClick={submit} disabled={busy || title.trim().length < 1} className="gap-1.5">
-              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Send request
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 function ChangesDialog({ task, busy, onClose, onSubmit }: {

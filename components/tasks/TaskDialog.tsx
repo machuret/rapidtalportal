@@ -17,7 +17,7 @@ import type { TaskCategory } from "./CategoryManager";
 import type { Task, TaskStatus, BoardMember } from "./types";
 
 export function TaskDialog({
-  mode, task, status, clientId, isAdmin, canWrite = true, members, categories, onClose, onSaved, onDeleted, onCommented,
+  mode, task, status, clientId, isAdmin, canWrite = true, members, categories, initialAssignedTo, onClose, onSaved, onDeleted, onCommented,
 }: {
   mode: "create" | "edit";
   task?: Task;
@@ -27,6 +27,8 @@ export function TaskDialog({
   canWrite?: boolean;
   members: BoardMember[];
   categories: TaskCategory[];
+  /** Optional create-mode seed (e.g. the only VA on the team). */
+  initialAssignedTo?: string;
   onClose: () => void;
   onSaved: (t: Task) => void;
   onDeleted?: (id: string) => void;
@@ -34,7 +36,7 @@ export function TaskDialog({
 }) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
-  const [assignedTo, setAssignedTo] = useState(task?.assigned_to ?? "");
+  const [assignedTo, setAssignedTo] = useState(task?.assigned_to ?? initialAssignedTo ?? "");
   const [dueDate, setDueDate] = useState(task?.due_date ?? "");
   const [priority, setPriority] = useState(task?.priority ?? 2);
   const [categoryId, setCategoryId] = useState(task?.category_id ?? "");
