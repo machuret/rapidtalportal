@@ -98,6 +98,9 @@ export interface DbCompanyDna {
   channel_styles: Record<string, string>;
   social_links: Record<string, string>;
   hard_rules: ContentHardRule[];
+  /** Per-field auto-fill provenance (migration 146): source + timestamp.
+   *  Optional until the generated schema snapshot is refreshed. */
+  field_provenance?: Record<string, { source: "scrape" | "vault_draft"; at: string }>;
   extra: Record<string, unknown>;
   updated_at: string;
 }

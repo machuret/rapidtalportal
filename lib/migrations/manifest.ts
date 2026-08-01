@@ -151,4 +151,5 @@ export const MIGRATIONS = [
   "143_coach_checkin_messages.sql",
   "144_fix_multi_table_trigger_field_validation.sql",
   "145_vault_chunks_uniqueness.sql",
+  "146_company_dna_field_provenance.sql",
 ] as const;

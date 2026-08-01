@@ -63,6 +63,12 @@ const bodySchema = z.object({
   channel_styles:     z.record(z.string(), z.string().max(4000)).optional(),
   social_links:       z.record(z.string(), z.string().url().max(2000)).optional(),
   hard_rules:         z.array(hardRuleSchema).max(100).optional(),
+  // Per-field auto-fill provenance (migration 146) — written back verbatim;
+  // the form clears a field's entry as soon as a human edits it.
+  field_provenance:   z.record(z.string(), z.object({
+    source: z.enum(["scrape", "vault_draft"]),
+    at: z.string().max(40),
+  })).optional(),
   // extra is a NOT NULL JSONB column — must be present on first INSERT
   extra:              z.record(z.string(), z.unknown()).optional().default({}),
 });
@@ -107,7 +113,8 @@ export const POST = withAuth(async (req, { user }) => {
     // Row exists — update only the submitted fields
     ({ data, error } = await admin
       .from("company_dna")
-      .update({ ...fields, updated_at: updatedAt })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 146 precedes generated schema snapshot
+      .update({ ...fields, updated_at: updatedAt } as any)
       .eq("client_id", client_id)
       .select()
       .single());
@@ -115,7 +122,8 @@ export const POST = withAuth(async (req, { user }) => {
     // No row yet — insert with all required columns including extra
     ({ data, error } = await admin
       .from("company_dna")
-      .insert({ client_id, ...fields, extra: fields.extra ?? {}, updated_at: updatedAt })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 146 precedes generated schema snapshot
+      .insert({ client_id, ...fields, extra: fields.extra ?? {}, updated_at: updatedAt } as any)
       .select()
       .single());
   }
