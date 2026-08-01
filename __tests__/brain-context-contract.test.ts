@@ -20,6 +20,8 @@ const MEMORY_ID = "44444444-4444-4444-8444-444444444444";
 const LIBRARY_ENTRY_ID = "55555555-5555-4555-8555-555555555555";
 const LIBRARY_VERSION_ID = "66666666-6666-4666-8666-666666666666";
 const LIBRARY_CHUNK_ID = "77777777-7777-4777-8777-777777777777";
+const COACH_GOAL_ID = "88888888-8888-4888-8888-888888888888";
+const COACH_COMMITMENT_ID = "99999999-9999-4999-8999-999999999999";
 
 function context(): BrainContext {
   return {
@@ -73,6 +75,7 @@ function context(): BrainContext {
       coverage: "weak",
       availability: "available",
     },
+    coaching: { availability: "not_requested", goals: [], commitments: [] },
     style: {
       source: "company_channel_style",
       profileId: null,
@@ -118,6 +121,8 @@ function context(): BrainContext {
       libraryChunkIds: [LIBRARY_CHUNK_ID],
       memoryIds: [MEMORY_ID],
       marketSnapshotIds: [],
+      coachGoalIds: [],
+      coachCommitmentIds: [],
     },
   };
 }
@@ -137,6 +142,20 @@ describe("Brain Context v1 contract", () => {
     expect(() => brainContextSchema.parse(invalid)).toThrow(
       "Memory provenance must match the selected lessons.",
     );
+  });
+
+  test("freezes owner-private goals and commitments with exact provenance", () => {
+    const coached = context();
+    coached.coaching = {
+      availability: "available",
+      goals: [{ goalId: COACH_GOAL_ID, title: "Reach 50 qualified leads", outcome: "A stable monthly pipeline", status: "active", progress: 25, targetDate: "2026-12-31", updatedAt: "2026-08-01T00:00:00.000Z" }],
+      commitments: [{ commitmentId: COACH_COMMITMENT_ID, goalId: COACH_GOAL_ID, commitment: "Publish the lead magnet", status: "open", dueDate: "2026-08-15", nextCheckInAt: "2026-08-10T23:00:00.000Z", lastCheckInAt: null, reminderCount: 0, updatedAt: "2026-08-01T00:00:00.000Z" }],
+    };
+    coached.provenance.coachGoalIds = [COACH_GOAL_ID];
+    coached.provenance.coachCommitmentIds = [COACH_COMMITMENT_ID];
+    expect(brainContextSchema.parse(coached).coaching.goals[0].progress).toBe(25);
+    coached.provenance.coachCommitmentIds = [];
+    expect(() => brainContextSchema.parse(coached)).toThrow("Coach commitment provenance must match");
   });
 
   test("requires an unavailable Library to be visibly recoverable", () => {

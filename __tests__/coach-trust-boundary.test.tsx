@@ -74,8 +74,8 @@ describe("Coach trust boundary", () => {
     expect(engine).toContain("parseCoachActionDraft");
     expect(ui).not.toContain("parseTaskDraft");
     expect(ui).toContain("ROUTES.coach.actions()");
-    expect(actionRoute).toContain('from("coach_action_receipts")');
-    expect(actionRoute).toContain('error?.code === "23505"');
+    expect(engine).toContain('from("coach_action_previews").insert');
+    expect(actionRoute).toContain('progressAction ? "execute_coach_progress_action" : "execute_coach_action"');
     expect(resolver).toContain('from("task_events")');
     expect(resolver).toContain('from("daily_logs")');
     expect(resolver).toContain('from("content_pieces")');
@@ -83,8 +83,7 @@ describe("Coach trust boundary", () => {
     expect(engine).toContain('update_task: "MODE: UPDATE TASK');
     expect(engine).toContain('submit_review: "MODE: SUBMIT FOR REVIEW');
     expect(engine).toContain('review_task: "MODE: REVIEW TASK');
-    expect(actionRoute).toContain('type === "submit_review" && user.role !== "va"');
-    expect(actionRoute).toContain('type === "review_task" && user.role !== "client_admin"');
-    expect(actionRoute).toContain('task.assigned_to !== user.id');
+    expect(actionRoute).toContain("coachActionDenial(user.role, action)");
+    expect(actionRoute).toContain("va_terminal_status_forbidden");
   });
 });

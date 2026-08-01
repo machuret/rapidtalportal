@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
     .from("brain_signals")
     .select("client_id")
     .is("distilled_at", null)
+    .eq("visibility", "team_learning")
     .order("created_at", { ascending: true })
     .limit(2000);
 

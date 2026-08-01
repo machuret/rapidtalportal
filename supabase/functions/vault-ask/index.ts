@@ -96,7 +96,7 @@ const SOURCE_LABEL: Record<string, string> = {
   operation: "Current work",
 };
 
-type CoachMode = "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task";
+type CoachMode = "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task" | "create_goal" | "create_commitment";
 
 type CoachActionDraft =
   | {
@@ -116,11 +116,27 @@ type CoachActionDraft =
   }
   | { type: "update_task"; idempotencyKey: string; taskId: string; status: "todo" | "in_progress" | "review" | "done"; priority: 1 | 2 | 3 | 4; dueDate: string | null; note: string }
   | { type: "submit_review"; idempotencyKey: string; taskId: string; note: string }
-  | { type: "review_task"; idempotencyKey: string; taskId: string; decision: "approve" | "changes"; note: string };
+  | { type: "review_task"; idempotencyKey: string; taskId: string; decision: "approve" | "changes"; note: string }
+  | { type: "create_goal"; idempotencyKey: string; title: string; outcome: string; targetDate: string | null }
+  | { type: "create_commitment"; idempotencyKey: string; commitment: string; goalId: string | null; dueDate: string | null; checkInDate: string | null };
 
-function coachActionResponseFormat(mode: CoachMode) {
+function coachActionResponseFormat(mode: CoachMode, coachRole: "client" | "va") {
   if (mode === "private") return undefined;
-  const action = mode === "create_task"
+  const action = mode === "create_goal" ? {
+    type: "object", additionalProperties: false,
+    required: ["type", "title", "outcome", "targetDate"],
+    properties: {
+      type: { type: "string", const: "create_goal" }, title: { type: "string", maxLength: 300 },
+      outcome: { type: "string", maxLength: 4000 }, targetDate: { type: ["string", "null"] },
+    },
+  } : mode === "create_commitment" ? {
+    type: "object", additionalProperties: false,
+    required: ["type", "commitment", "goalId", "dueDate", "checkInDate"],
+    properties: {
+      type: { type: "string", const: "create_commitment" }, commitment: { type: "string", maxLength: 1000 },
+      goalId: { type: ["string", "null"] }, dueDate: { type: ["string", "null"] }, checkInDate: { type: ["string", "null"] },
+    },
+  } : mode === "create_task"
     ? {
       type: "object",
       additionalProperties: false,
@@ -148,7 +164,7 @@ function coachActionResponseFormat(mode: CoachMode) {
       required: ["type", "taskId", "status", "priority", "dueDate", "note"],
       properties: {
         type: { type: "string", const: "update_task" }, taskId: { type: "string" },
-        status: { type: "string", enum: ["todo", "in_progress", "review", "done"] },
+        status: { type: "string", enum: coachRole === "va" ? ["todo", "in_progress"] : ["todo", "in_progress", "review", "done"] },
         priority: { type: "integer", minimum: 1, maximum: 4 }, dueDate: { type: ["string", "null"] },
         note: { type: "string", maxLength: 2000 },
       },
@@ -177,13 +193,24 @@ function coachActionResponseFormat(mode: CoachMode) {
   };
 }
 
-function parseCoachActionDraft(value: unknown, mode: CoachMode): { answer: string; action: CoachActionDraft } | null {
+function parseCoachActionDraft(value: unknown, mode: CoachMode, coachRole: "client" | "va"): { answer: string; action: CoachActionDraft } | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   const answer = typeof row.answer === "string" ? row.answer.trim() : "";
   if (!answer || !row.action || typeof row.action !== "object") return null;
   const action = row.action as Record<string, unknown>;
   const idempotencyKey = crypto.randomUUID();
+  const dateOrNull = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/u.test(value) ? value : null;
+  if (mode === "create_goal") {
+    const title = typeof action.title === "string" ? action.title.trim().slice(0, 300) : "";
+    const outcome = typeof action.outcome === "string" ? action.outcome.trim().slice(0, 4_000) : "";
+    return title ? { answer, action: { type: "create_goal", idempotencyKey, title, outcome, targetDate: dateOrNull(action.targetDate) } } : null;
+  }
+  if (mode === "create_commitment") {
+    const commitment = typeof action.commitment === "string" ? action.commitment.trim().slice(0, 1_000) : "";
+    const goalId = typeof action.goalId === "string" && /^[0-9a-f-]{36}$/iu.test(action.goalId) ? action.goalId : null;
+    return commitment ? { answer, action: { type: "create_commitment", idempotencyKey, commitment, goalId, dueDate: dateOrNull(action.dueDate), checkInDate: dateOrNull(action.checkInDate) } } : null;
+  }
   if (mode === "create_task") {
     const title = typeof action.title === "string" ? action.title.trim().slice(0, 300) : "";
     const brief = typeof action.brief === "string" ? action.brief.trim().slice(0, 10_000) : "";
@@ -206,7 +233,8 @@ function parseCoachActionDraft(value: unknown, mode: CoachMode): { answer: strin
   const note = typeof action.note === "string" ? action.note.trim().slice(0, 2_000) : "";
   if (!taskId) return null;
   if (mode === "update_task") {
-    const status = ["todo", "in_progress", "review", "done"].includes(String(action.status)) ? action.status as "todo" | "in_progress" | "review" | "done" : null;
+    const allowedStatuses = coachRole === "va" ? ["todo", "in_progress"] : ["todo", "in_progress", "review", "done"];
+    const status = allowedStatuses.includes(String(action.status)) ? action.status as "todo" | "in_progress" | "review" | "done" : null;
     const priority = Number(action.priority);
     const dueDate = typeof action.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/u.test(action.dueDate) ? action.dueDate : null;
     return status && [1, 2, 3, 4].includes(priority) ? { answer, action: { type: "update_task", idempotencyKey, taskId, status, priority: priority as 1 | 2 | 3 | 4, dueDate, note } } : null;
@@ -239,8 +267,12 @@ function coachRolePolicy(
     update_task: "MODE: UPDATE TASK. Select only a task visible in CURRENT OPERATIONAL DATA and prepare an editable status, priority, due date and optional note. Never invent a task ID.",
     submit_review: "MODE: SUBMIT FOR REVIEW. Select only an assigned task visible to this VA and prepare a concise submission note. Never invent a task ID.",
     review_task: "MODE: REVIEW TASK. Select only a task currently in review, prepare approve or request-changes, and include a clear note when requesting changes. Never invent a task ID.",
+    create_goal: "MODE: TRACK PRIVATE GOAL. Prepare a concise, editable goal with a clear outcome and optional target date. It remains owner-private and is not saved until this person confirms Track Goal.",
+    create_commitment: "MODE: TRACK PRIVATE COMMITMENT. Prepare one concrete, editable commitment with optional linked goal, due date and Coach check-in date. It remains owner-private and is not saved until this person confirms Make Commitment. Never invent a goal ID.",
   };
-  return `${roleRules}\n${actionRules[coachMode]}`;
+  return `${roleRules}\n${actionRules[coachMode]}
+- OWNER-PRIVATE COACHING STATE contains only goals and commitments explicitly confirmed by this signed-in person. Use it for continuity and honest check-ins. Never present it as company-wide knowledge, and never disclose it in a message or task unless the user explicitly approves that preview.
+- Do not invent progress, completion or activity. If a commitment is overdue, ask a constructive follow-up; do not claim the person acted.`;
 }
 
 /**
@@ -374,6 +406,33 @@ function lexicalScore(question: string, text: string): number {
   return hits / terms.length;
 }
 
+function coachingCommitmentScore(
+  question: string,
+  commitment: { commitment: string; dueDate: string | null; nextCheckInAt: string | null },
+  timeZone: string,
+): number {
+  const now = Date.now();
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-AU", {
+      timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(new Date(now));
+  } catch {
+    parts = new Intl.DateTimeFormat("en-AU", {
+      timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(new Date(now));
+  }
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  const today = `${part("year")}-${part("month")}-${part("day")}`;
+  if (commitment.dueDate && commitment.dueDate <= today) return 1;
+  if (commitment.nextCheckInAt && Date.parse(commitment.nextCheckInAt) <= now) return 0.99;
+  if (commitment.dueDate) {
+    const daysUntilDue = (Date.parse(`${commitment.dueDate}T12:00:00Z`) - now) / 86_400_000;
+    if (daysUntilDue <= 7) return 0.95;
+  }
+  return Math.max(0.35, lexicalScore(question, commitment.commitment));
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
@@ -413,17 +472,18 @@ Deno.serve(async (req: Request) => {
     const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
     if (authError || !authUser) return json({ error: "Unauthorized." }, 401);
 
-    const { data: userRow } = await admin.from("users").select("role, client_id").eq("id", authUser.id).single();
+    const { data: userRow } = await admin.from("users").select("role, client_id, timezone").eq("id", authUser.id).single();
     if (!userRow) return json({ error: "User record not found." }, 403);
     const role = (userRow as { role: string }).role;
     const userClientId = (userRow as { client_id: string | null }).client_id;
+    const userTimeZone = (userRow as { timezone?: string | null }).timezone || "UTC";
 
     // ── Input ─────────────────────────────────────────────────────────────────
     const clientId = typeof body.clientId === "string" ? body.clientId : "";
     const question: string = (body.question ?? "").toString().trim();
     const deep = body.mode === "deep";
     const coachRole: "client" | "va" = role === "va" ? "va" : "client";
-    const requestedCoachMode: CoachMode = ["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task"]
+    const requestedCoachMode: CoachMode = ["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task", "create_goal", "create_commitment"]
       .includes(body.coachMode)
       ? body.coachMode
       : "private";
@@ -614,6 +674,26 @@ Deno.serve(async (req: Request) => {
         score: lexicalScore(question, `${task.title} ${task.description}`),
       });
     }
+    for (const goal of brainContext.coaching.goals) {
+      blocks.push({
+        kind: "operation",
+        title: `Private goal: ${goal.title}`,
+        text: `User-confirmed private coaching goal.\nStatus: ${goal.status}\nProgress: ${goal.progress}%\nTarget: ${goal.targetDate ?? "not set"}\nOutcome: ${goal.outcome || "not specified"}`,
+        itemId: goal.goalId,
+        category: "coach_goal",
+        score: lexicalScore(question, `${goal.title} ${goal.outcome}`),
+      });
+    }
+    for (const commitment of brainContext.coaching.commitments) {
+      blocks.push({
+        kind: "operation",
+        title: `Private commitment: ${commitment.commitment}`,
+        text: `User-confirmed private coaching commitment.\nStatus: ${commitment.status}\nDue: ${commitment.dueDate ?? "not set"}\nNext check-in: ${commitment.nextCheckInAt ?? "not set"}`,
+        itemId: commitment.commitmentId,
+        category: "coach_commitment",
+        score: coachingCommitmentScore(question, commitment, userTimeZone),
+      });
+    }
     for (const insight of brainContext.market.insights) {
       blocks.push({
         kind: "market",
@@ -662,7 +742,11 @@ Deno.serve(async (req: Request) => {
       ...blocks.filter((b) => b.kind === "vault")
         .sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
       ...blocks.filter((b) => b.kind === "operation")
-        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
+        .sort((a, b) => {
+          const aCommitment = a.category === "coach_commitment" ? 1 : 0;
+          const bCommitment = b.category === "coach_commitment" ? 1 : 0;
+          return bCommitment - aCommitment || (b.score ?? 0) - (a.score ?? 0);
+        }),
       ...blocks.filter((b) => b.kind === "memory"),
       ...blocks.filter((b) => b.kind === "library")
         .sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
@@ -696,7 +780,7 @@ Deno.serve(async (req: Request) => {
       : await promptOverride(admin, "vault.ask.answer", ANSWER_PROMPT);
     const systemPrompt = `${editablePrompt}\n\n${MANDATORY_BRAIN_POLICY}\n\n${coachRolePolicy(coachRole, requestedCoachMode)}`;
 
-    const responseFormat = coachActionResponseFormat(requestedCoachMode);
+    const responseFormat = coachActionResponseFormat(requestedCoachMode, coachRole);
     const effectiveStream = stream && requestedCoachMode === "private";
     const chatRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -774,10 +858,30 @@ Deno.serve(async (req: Request) => {
     let actionDraft: CoachActionDraft | null = null;
     if (requestedCoachMode !== "private") {
       try {
-        const parsed = parseCoachActionDraft(JSON.parse(rawAnswer), requestedCoachMode);
+        const parsed = parseCoachActionDraft(JSON.parse(rawAnswer), requestedCoachMode, coachRole);
         if (!parsed) throw new Error("invalid structured Coach action");
         answer = parsed.answer;
         actionDraft = parsed.action;
+        const { error: previewError } = await admin.from("coach_action_previews").insert({
+          idempotency_key: actionDraft.idempotencyKey,
+          brain_context_snapshot_id: brainContextSnapshotId,
+          client_id: clientId,
+          owner_id: authUser.id,
+          action_type: actionDraft.type,
+          generated_payload: actionDraft,
+          status: "draft",
+        });
+        if (previewError) {
+          console.error("vault-ask: immutable Coach preview persistence failed", previewError);
+          return json({
+            error: "The Coach preview could not be secured. Please retry.",
+            code: "coach_preview_persistence_failed",
+            recoverable: true,
+            brainContextSnapshotId,
+            libraryAvailability: brainContext.library.availability,
+            warnings: brainContext.warnings,
+          }, 503);
+        }
       } catch (error) {
         console.error("vault-ask: structured Coach action validation failed", error);
         return json({

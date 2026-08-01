@@ -19,6 +19,14 @@
       "schedule": "15 3 * * 1"
     },
     {
+      "path": "/api/cron/coach-retention",
+      "schedule": "45 2 * * *"
+    },
+    {
+      "path": "/api/cron/coach-check-ins",
+      "schedule": "15 * * * *"
+    },
+    {
       "path": "/api/cron/error-alert",
       "schedule": "*/30 * * * *"
     },

@@ -13,6 +13,7 @@ import {
   Radar,
   RefreshCw,
   Sparkles,
+  Target,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { errorMessage } from "@/lib/error-message";
@@ -67,6 +68,11 @@ type BrainContextUsedResponse = {
       selectionReason: string;
     }>;
     team: Array<{ userId: string; displayName: string; role: string }>;
+  };
+  privateCoaching: {
+    availability: "available" | "unavailable" | "not_requested";
+    goals: Array<{ goalId: string; title: string; status: string; progress: number; targetDate: string | null }>;
+    commitments: Array<{ commitmentId: string; commitment: string; status: string; dueDate: string | null; nextCheckInAt: string | null }>;
   };
   companyVoice: {
     source: string;
@@ -156,7 +162,7 @@ export function BrainContextUsed({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-orange-100">What the Brain used</p>
           <p className="text-xs text-zinc-500">
-            Company facts, voice, learned preferences and market context are shown separately.
+            Company facts, permitted work, private coaching, Library guidance and learned preferences are shown separately.
           </p>
         </div>
         {open ? <ChevronUp className="h-4 w-4 text-zinc-500" /> : <ChevronDown className="h-4 w-4 text-zinc-500" />}
@@ -275,6 +281,29 @@ export function BrainContextUsed({
                     ))}
                   </ul>
                 ) : <Empty text={data.currentWork.availability === "unavailable" ? "Current work is temporarily unavailable and can be retried." : "No permitted task matched this Coach turn."} />}
+              </ContextSection>
+
+              <ContextSection
+                icon={Target}
+                title="Your private coaching state"
+                subtitle={`${data.privateCoaching.availability.replaceAll("_", " ")} · ${data.privateCoaching.goals.length} goal${data.privateCoaching.goals.length === 1 ? "" : "s"} · ${data.privateCoaching.commitments.length} commitment${data.privateCoaching.commitments.length === 1 ? "" : "s"}`}
+              >
+                {data.privateCoaching.goals.length || data.privateCoaching.commitments.length ? (
+                  <div className="space-y-2">
+                    {data.privateCoaching.goals.map((goal) => (
+                      <div key={goal.goalId} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                        <p className="text-xs font-medium text-zinc-200">Goal: {goal.title}</p>
+                        <p className="mt-1 text-xs text-zinc-500">{goal.status} · {goal.progress}% · Target {goal.targetDate ?? "not set"}</p>
+                      </div>
+                    ))}
+                    {data.privateCoaching.commitments.map((commitment) => (
+                      <div key={commitment.commitmentId} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                        <p className="text-xs font-medium text-zinc-200">Commitment: {commitment.commitment}</p>
+                        <p className="mt-1 text-xs text-zinc-500">{commitment.status} · Due {commitment.dueDate ?? "not set"}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : <Empty text={data.privateCoaching.availability === "unavailable" ? "Private coaching progress was temporarily unavailable and can be retried." : "No confirmed private goals or commitments were used."} />}
               </ContextSection>
 
               <ContextSection

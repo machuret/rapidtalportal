@@ -24,7 +24,7 @@ const saveSchema = z.object({
   question: z.string().trim().min(3).max(8000),
   answer: z.string().trim().min(1).max(30000),
   snapshotId: z.string().uuid(),
-  coachMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task"]),
+  coachMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task", "create_goal", "create_commitment"]),
   sources: z.array(sourceSchema).max(30).default([]),
   suggestions: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
   libraryAvailability: z.enum(["available", "degraded", "unavailable", "not_requested"]),
@@ -47,6 +47,8 @@ const saveSchema = z.object({
     z.object({ type: z.literal("update_task"), idempotencyKey: z.string().uuid(), taskId: z.string().uuid(), status: z.enum(["todo", "in_progress", "review", "done"]), priority: z.number().int().min(1).max(4), dueDate: z.iso.date().nullable(), note: z.string().max(2000) }),
     z.object({ type: z.literal("submit_review"), idempotencyKey: z.string().uuid(), taskId: z.string().uuid(), note: z.string().max(2000) }),
     z.object({ type: z.literal("review_task"), idempotencyKey: z.string().uuid(), taskId: z.string().uuid(), decision: z.enum(["approve", "changes"]), note: z.string().max(2000) }),
+    z.object({ type: z.literal("create_goal"), idempotencyKey: z.string().uuid(), title: z.string().trim().min(1).max(300), outcome: z.string().max(4000), targetDate: z.iso.date().nullable() }),
+    z.object({ type: z.literal("create_commitment"), idempotencyKey: z.string().uuid(), commitment: z.string().trim().min(1).max(1000), goalId: z.string().uuid().nullable(), dueDate: z.iso.date().nullable(), checkInDate: z.iso.date().nullable() }),
   ]).nullable().default(null),
 });
 
@@ -69,9 +71,9 @@ export const GET = withAuth(async (req, { user, impersonating }) => {
   const { data: turns, error } = await db.from("coach_turns")
     .select("id,question,answer,coach_mode,brain_context_snapshot_id,sources,suggestions,library_availability,warnings,action_draft,action_status,created_at")
     .eq("thread_id", thread.id).eq("owner_id", user.id)
-    .order("created_at", { ascending: true }).limit(100);
+    .order("created_at", { ascending: false }).limit(100);
   if (error) return serverError(error);
-  return NextResponse.json({ thread, turns: turns ?? [] });
+  return NextResponse.json({ thread, turns: [...(turns ?? [])].reverse() });
 });
 
 export const POST = withAuth(async (req, { user, impersonating }) => {
@@ -90,6 +92,23 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
     .eq("created_by", user.id).maybeSingle();
   if (snapshotError) return serverError(snapshotError);
   if (!snapshot) return NextResponse.json({ error: "Verified Brain snapshot not found." }, { status: 409 });
+
+  // The Edge function, not the browser, authors executable previews. History
+  // stores that immutable original while the user may still edit the payload
+  // they explicitly confirms later.
+  let securedActionDraft = null;
+  if (parsed.data.actionDraft) {
+    const preview = await db.from("coach_action_previews")
+      .select("generated_payload")
+      .eq("idempotency_key", parsed.data.actionDraft.idempotencyKey)
+      .eq("brain_context_snapshot_id", parsed.data.snapshotId)
+      .eq("client_id", parsed.data.clientId)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (preview.error) return serverError(preview.error);
+    if (!preview.data) return NextResponse.json({ error: "Secured Coach preview not found." }, { status: 409 });
+    securedActionDraft = preview.data.generated_payload;
+  }
 
   let thread: { id: string } | null = null;
   if (parsed.data.threadId) {
@@ -115,7 +134,17 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
     thread = created.data;
   }
 
-  const { data: turn, error } = await db.from("coach_turns").upsert({
+  const existingTurn = await db.from("coach_turns")
+    .select("id,created_at")
+    .eq("owner_id", user.id)
+    .eq("brain_context_snapshot_id", parsed.data.snapshotId)
+    .maybeSingle();
+  if (existingTurn.error) return serverError(existingTurn.error);
+  if (existingTurn.data) {
+    return NextResponse.json({ threadId: thread!.id, turn: existingTurn.data, replayed: true });
+  }
+
+  const { data: turn, error } = await db.from("coach_turns").insert({
     thread_id: thread!.id,
     client_id: parsed.data.clientId,
     owner_id: user.id,
@@ -127,10 +156,19 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
     suggestions: parsed.data.suggestions,
     library_availability: parsed.data.libraryAvailability,
     warnings: parsed.data.warnings,
-    action_draft: parsed.data.actionDraft,
-    action_status: parsed.data.actionDraft ? "draft" : "none",
-  }, { onConflict: "owner_id,brain_context_snapshot_id" })
+    action_draft: securedActionDraft,
+    action_status: securedActionDraft ? "draft" : "none",
+  })
     .select("id,created_at").single();
+  if (error?.code === "23505") {
+    const replay = await db.from("coach_turns")
+      .select("id,created_at")
+      .eq("owner_id", user.id)
+      .eq("brain_context_snapshot_id", parsed.data.snapshotId)
+      .single();
+    if (replay.error) return serverError(replay.error);
+    return NextResponse.json({ threadId: thread!.id, turn: replay.data, replayed: true });
+  }
   if (error) return serverError(error);
   await db.from("coach_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread!.id).eq("owner_id", user.id);
   return NextResponse.json({ threadId: thread!.id, turn }, { status: 201 });

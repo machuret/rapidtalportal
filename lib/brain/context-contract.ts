@@ -6,13 +6,14 @@ import { z } from "zod";
  * still be inspected while current outputs use the latest resolver.
  */
 export const BRAIN_CONTEXT_VERSION = "brain-context-v1" as const;
-export const BRAIN_RESOLVER_VERSION = "resolver-v6-coach-operations" as const;
+export const BRAIN_RESOLVER_VERSION = "resolver-v7-coach-progress" as const;
 export const BRAIN_RESOLVER_VERSIONS = [
   "resolver-v1",
   "resolver-v2-task-memory",
   "resolver-v3-business-library",
   "resolver-v4-library-availability",
   "resolver-v5-role-aware-coach",
+  "resolver-v6-coach-operations",
   BRAIN_RESOLVER_VERSION,
 ] as const;
 
@@ -68,7 +69,7 @@ export const brainContextRequestSchema = z.object({
     conversationVisibility: z.literal("private_coach"),
     intendedAudience: z.enum(["private", "client", "va_team", "task_board"]),
   }).optional(),
-  actionMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task"]).optional(),
+  actionMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task", "create_goal", "create_commitment"]).optional(),
   selectedVaultSourceIds: z.array(z.uuid()).max(100).default([]),
   includeMarketIntelligence: z.boolean().default(false),
 });
@@ -239,6 +240,24 @@ export const brainContextSchema = z.object({
       body: z.string().trim().min(1).max(2000), createdAt: nullableTimestamp,
     })).max(50).default([]),
   }).optional(),
+  coaching: z.object({
+    availability: z.enum(["available", "unavailable", "not_requested"]),
+    goals: z.array(z.object({
+      goalId: z.uuid(), title: z.string().trim().min(1).max(300),
+      outcome: z.string().max(4000),
+      status: z.enum(["active", "paused", "achieved", "abandoned"]),
+      progress: z.number().int().min(0).max(100), targetDate: z.iso.date().nullable(),
+      updatedAt: nullableTimestamp,
+    })).max(30),
+    commitments: z.array(z.object({
+      commitmentId: z.uuid(), goalId: z.uuid().nullable(),
+      commitment: z.string().trim().min(1).max(1000),
+      status: z.enum(["open", "completed", "snoozed", "dismissed"]),
+      dueDate: z.iso.date().nullable(), nextCheckInAt: nullableTimestamp,
+      lastCheckInAt: nullableTimestamp, reminderCount: z.number().int().min(0).max(100),
+      updatedAt: nullableTimestamp,
+    })).max(50),
+  }).default({ availability: "not_requested", goals: [], commitments: [] }),
   style: z.object({
     source: z.enum([
       "project_snapshot",
@@ -287,6 +306,8 @@ export const brainContextSchema = z.object({
     dailyLogIds: z.array(z.uuid()).max(30).optional(),
     deliverableIds: z.array(z.uuid()).max(30).optional(),
     communicationIds: z.array(z.uuid()).max(50).optional(),
+    coachGoalIds: z.array(z.uuid()).max(30).default([]),
+    coachCommitmentIds: z.array(z.uuid()).max(50).default([]),
   }),
 }).superRefine((context, refinement) => {
   const unique = (values: string[]) => new Set(values).size === values.length;
@@ -318,6 +339,8 @@ export const brainContextSchema = z.object({
   const dailyLogIds = context.operations?.dailyLogs.map((log) => log.logId) ?? [];
   const deliverableIds = context.operations?.deliverables.map((piece) => piece.pieceId) ?? [];
   const communicationIds = context.operations?.communications.map((message) => message.messageId) ?? [];
+  const coachGoalIds = context.coaching.goals.map((goal) => goal.goalId);
+  const coachCommitmentIds = context.coaching.commitments.map((commitment) => commitment.commitmentId);
 
   if (!unique(context.request.selectedVaultSourceIds)) {
     refinement.addIssue({
@@ -440,6 +463,12 @@ export const brainContextSchema = z.object({
         message: `${key} must match the role-scoped operational context.`,
       });
     }
+  }
+  if (!sameSet(context.provenance.coachGoalIds, coachGoalIds)) {
+    refinement.addIssue({ code: "custom", path: ["provenance", "coachGoalIds"], message: "Coach goal provenance must match the owner-private coaching context." });
+  }
+  if (!sameSet(context.provenance.coachCommitmentIds, coachCommitmentIds)) {
+    refinement.addIssue({ code: "custom", path: ["provenance", "coachCommitmentIds"], message: "Coach commitment provenance must match the owner-private coaching context." });
   }
   if (!context.market.included && (context.market.snapshotIds.length || context.market.insights.length)) {
     refinement.addIssue({

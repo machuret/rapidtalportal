@@ -69,6 +69,7 @@ export default async function AskPage() {
         speakerName={user.full_name || user.email}
         teamMembers={teamMembers}
         taskOptions={(taskResult.data ?? []).map((task) => ({ id: task.id, title: task.title, status: task.status as "todo" | "in_progress" | "review" | "done" }))}
+        timeZone={user.timezone || "UTC"}
       />
     </div>
   );

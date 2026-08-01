@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ExternalLink,
   GraduationCap,
+  Flag,
   LibraryBig,
   ListTodo,
   LockKeyhole,
@@ -23,10 +24,12 @@ import {
   RotateCcw,
   Send,
   Sparkles,
+  Target,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
 import { CoachFeedback } from "@/components/brain/CoachFeedback";
+import { CoachProgressPanel } from "@/components/vault/CoachProgressPanel";
 import {
   AskBrainFlow,
   type AskFlowState,
@@ -47,7 +50,7 @@ interface Source {
 }
 
 type CoachRole = "client" | "va";
-type CoachMode = "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task";
+type CoachMode = "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task" | "create_goal" | "create_commitment";
 
 export interface CoachTeamMember {
   id: string;
@@ -79,7 +82,9 @@ type CoachActionDraft =
   | { type: "send_message"; idempotencyKey: string; audience: "client" | "va_team"; message: string }
   | { type: "update_task"; idempotencyKey: string; taskId: string; status: "todo" | "in_progress" | "review" | "done"; priority: 1 | 2 | 3 | 4; dueDate: string | null; note: string }
   | { type: "submit_review"; idempotencyKey: string; taskId: string; note: string }
-  | { type: "review_task"; idempotencyKey: string; taskId: string; decision: "approve" | "changes"; note: string };
+  | { type: "review_task"; idempotencyKey: string; taskId: string; decision: "approve" | "changes"; note: string }
+  | { type: "create_goal"; idempotencyKey: string; title: string; outcome: string; targetDate: string | null }
+  | { type: "create_commitment"; idempotencyKey: string; commitment: string; goalId: string | null; dueDate: string | null; checkInDate: string | null };
 
 interface Turn {
   question: string;
@@ -123,6 +128,8 @@ function inferredCoachMode(
   selected: CoachMode,
 ): CoachMode {
   if (selected !== "private") return selected;
+  if (/\b(?:track|save|remember|set|make|create)\b.{0,50}\bgoal\b/iu.test(question)) return "create_goal";
+  if (/\b(?:commit|commitment|hold me accountable|check in)\b/iu.test(question)) return "create_commitment";
   if (role === "client" && /\b(?:create|assign|give|make)\b.{0,50}\btask\b/iu.test(question)) {
     return "create_task";
   }
@@ -262,6 +269,7 @@ export function AskVaultClient({
   taskOptions = [],
   actionsEnabled = true,
   persistConversation = true,
+  timeZone = "UTC",
   externalAsk,
 }: {
   clientId: string;
@@ -273,6 +281,7 @@ export function AskVaultClient({
   taskOptions?: CoachTaskOption[];
   actionsEnabled?: boolean;
   persistConversation?: boolean;
+  timeZone?: string;
   /** Lets a parent (e.g. golden questions panel) submit a question into this chat. */
   externalAsk?: { q: string; nonce: number } | null;
 }) {
@@ -523,6 +532,7 @@ export function AskVaultClient({
   return (
     <div className="flex flex-col min-h-[calc(100vh-8rem)]">
       <div className="mb-6">
+        {persistConversation && <CoachProgressPanel clientId={clientId} timeZone={timeZone} />}
         {persistConversation && turns.length > 0 && (
           <div className="mb-3 flex justify-end">
             <Button type="button" size="sm" variant="outline" onClick={newConversation} disabled={loading} className="gap-1.5 border-zinc-700 text-xs">
@@ -639,6 +649,8 @@ export function AskVaultClient({
           <CoachModeButton active={coachMode === "private"} onClick={() => setCoachMode("private")} icon={LockKeyhole}>
             Private with Coach
           </CoachModeButton>
+          <CoachModeButton active={coachMode === "create_goal"} onClick={() => setCoachMode("create_goal")} icon={Target}>Track Goal</CoachModeButton>
+          <CoachModeButton active={coachMode === "create_commitment"} onClick={() => setCoachMode("create_commitment")} icon={Flag}>Make Commitment</CoachModeButton>
           {actionsEnabled && coachRole === "va" && (
             <>
               <CoachModeButton active={coachMode === "message_client"} onClick={() => setCoachMode("message_client")} icon={MessageSquare}>Send to Client</CoachModeButton>
@@ -831,6 +843,12 @@ function ChatTurn({
         toast.success("Work submitted for client review.");
       } else if (actionDraft.type === "review_task") {
         toast.success(actionDraft.decision === "approve" ? "Work approved." : "Changes requested.");
+      } else if (actionDraft.type === "create_goal") {
+        toast.success("Goal added to your private coaching plan.");
+        window.dispatchEvent(new Event("coach-progress-changed"));
+      } else if (actionDraft.type === "create_commitment") {
+        toast.success("Commitment saved. The Coach will follow up privately.");
+        window.dispatchEvent(new Event("coach-progress-changed"));
       } else {
         toast.success("Task updated.");
       }
@@ -866,6 +884,23 @@ function ChatTurn({
         </div>
         <p className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap">{turn.answer}</p>
 
+        {turn.warnings.filter((warning) => !warning.code.startsWith("business_library_")).map((warning) => (
+          <div key={warning.code} className="mt-3 flex items-start justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+              <div>
+                <p className="text-xs font-semibold text-amber-200">Context temporarily limited</p>
+                <p className="mt-0.5 text-xs leading-5 text-amber-200/70">{warning.message}</p>
+              </div>
+            </div>
+            {warning.code === "coach_progress_unavailable" && (
+              <button type="button" onClick={() => void onAsk(turn.question)} className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-amber-300 hover:text-amber-200">
+                <RotateCcw className="h-3 w-3" /> Retry
+              </button>
+            )}
+          </div>
+        ))}
+
         {actionsEnabled && turn.coachMode !== "private" && actionDraft && (
           <div className="mt-4 rounded-xl border border-purple-500/25 bg-purple-500/5 p-4">
             <div className="flex items-start gap-3">
@@ -878,7 +913,9 @@ function ChatTurn({
                     : actionDraft.type === "send_message" ? `Message preview — ${actionDraft.audience === "client" ? "Client" : "VA Team"}`
                       : actionDraft.type === "update_task" ? "Task update preview"
                         : actionDraft.type === "submit_review" ? "Review submission preview"
-                          : "Client review preview"}
+                          : actionDraft.type === "review_task" ? "Client review preview"
+                            : actionDraft.type === "create_goal" ? "Private goal preview"
+                              : "Private commitment preview"}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-zinc-500">
                   Nothing has been shared yet. Review the Coach draft, then confirm below.
@@ -926,7 +963,36 @@ function ChatTurn({
                       className="mt-1.5 bg-zinc-900 text-zinc-100" />
                   </label>
                 )}
-                {!actionComplete && actionDraft.type !== "create_task" && actionDraft.type !== "send_message" && (
+                {!actionComplete && actionDraft.type === "create_goal" && (
+                  <div className="mt-3 grid gap-3">
+                    <label className="text-xs text-zinc-400">Goal
+                      <Input value={actionDraft.title} maxLength={300} onChange={(event) => setActionDraft({ ...actionDraft, title: event.target.value })} className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                    </label>
+                    <label className="text-xs text-zinc-400">Success looks like
+                      <Textarea value={actionDraft.outcome} maxLength={4000} rows={3} onChange={(event) => setActionDraft({ ...actionDraft, outcome: event.target.value })} className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                    </label>
+                    <label className="text-xs text-zinc-400">Target date
+                      <Input type="date" value={actionDraft.targetDate ?? ""} onChange={(event) => setActionDraft({ ...actionDraft, targetDate: event.target.value || null })} className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                    </label>
+                  </div>
+                )}
+                {!actionComplete && actionDraft.type === "create_commitment" && (
+                  <div className="mt-3 grid gap-3">
+                    <label className="text-xs text-zinc-400">Commitment
+                      <Textarea value={actionDraft.commitment} maxLength={1000} rows={3} onChange={(event) => setActionDraft({ ...actionDraft, commitment: event.target.value })} className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                    </label>
+                    {actionDraft.goalId && <p className="text-xs text-zinc-500">Linked to a current private goal. <button type="button" onClick={() => setActionDraft({ ...actionDraft, goalId: null })} className="text-purple-300 hover:text-purple-200">Remove link</button></p>}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="text-xs text-zinc-400">Due date
+                        <Input type="date" value={actionDraft.dueDate ?? ""} onChange={(event) => setActionDraft({ ...actionDraft, dueDate: event.target.value || null })} className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                      </label>
+                      <label className="text-xs text-zinc-400">Coach check-in
+                        <Input type="date" value={actionDraft.checkInDate ?? ""} onChange={(event) => setActionDraft({ ...actionDraft, checkInDate: event.target.value || null })} className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                      </label>
+                    </div>
+                  </div>
+                )}
+                {!actionComplete && !["create_task", "send_message", "create_goal", "create_commitment"].includes(actionDraft.type) && "taskId" in actionDraft && (
                   <div className="mt-3 grid gap-3">
                     <label className="text-xs text-zinc-400">Task
                       <select value={actionDraft.taskId} onChange={(event) => setActionDraft({ ...actionDraft, taskId: event.target.value })}
@@ -938,7 +1004,8 @@ function ChatTurn({
                       <div className="grid gap-3 sm:grid-cols-3">
                         <label className="text-xs text-zinc-400">Status
                           <select value={actionDraft.status} onChange={(event) => setActionDraft({ ...actionDraft, status: event.target.value as "todo" | "in_progress" | "review" | "done" })} className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
-                            <option value="todo">To do</option><option value="in_progress">In progress</option><option value="review">Review</option><option value="done">Done</option>
+                            <option value="todo">To do</option><option value="in_progress">In progress</option>
+                            {coachRole === "client" && <><option value="review">Review</option><option value="done">Done</option></>}
                           </select>
                         </label>
                         <label className="text-xs text-zinc-400">Priority
@@ -966,17 +1033,17 @@ function ChatTurn({
                 <Button
                   size="sm"
                   onClick={confirmCoachAction}
-                  disabled={actionBusy || actionComplete || (actionDraft.type === "create_task" ? !actionDraft.title.trim() || !actionDraft.brief.trim() : actionDraft.type === "send_message" ? !actionDraft.message.trim() : !actionDraft.taskId)}
+                  disabled={actionBusy || actionComplete || (actionDraft.type === "create_task" ? !actionDraft.title.trim() || !actionDraft.brief.trim() : actionDraft.type === "send_message" ? !actionDraft.message.trim() : actionDraft.type === "create_goal" ? !actionDraft.title.trim() : actionDraft.type === "create_commitment" ? !actionDraft.commitment.trim() : !actionDraft.taskId)}
                   className="mt-3 gap-1.5"
                 >
-                  {actionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : actionComplete ? <Check className="h-3.5 w-3.5" /> : actionDraft.type === "send_message" ? <Send className="h-3.5 w-3.5" /> : <ListTodo className="h-3.5 w-3.5" />}
+                  {actionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : actionComplete ? <Check className="h-3.5 w-3.5" /> : actionDraft.type === "send_message" ? <Send className="h-3.5 w-3.5" /> : actionDraft.type === "create_goal" ? <Target className="h-3.5 w-3.5" /> : actionDraft.type === "create_commitment" ? <Flag className="h-3.5 w-3.5" /> : <ListTodo className="h-3.5 w-3.5" />}
                   {actionComplete
                     ? "Confirmed"
                     : turn.coachMode === "create_task"
                       ? "Create Task"
                       : turn.coachMode === "message_client"
                         ? "Send to Client"
-                        : turn.coachMode === "message_va_team" ? "Send to VA Team" : turn.coachMode === "submit_review" ? "Submit for Review" : turn.coachMode === "review_task" ? "Confirm Review" : "Update Task"}
+                        : turn.coachMode === "message_va_team" ? "Send to VA Team" : turn.coachMode === "submit_review" ? "Submit for Review" : turn.coachMode === "review_task" ? "Confirm Review" : turn.coachMode === "create_goal" ? "Track Goal" : turn.coachMode === "create_commitment" ? "Make Commitment" : "Update Task"}
                 </Button>
               </div>
             </div>

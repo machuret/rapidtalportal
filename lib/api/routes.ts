@@ -124,6 +124,8 @@ export const ROUTES = {
     threads: () => "/api/coach/threads",
     threadsForClient: (clientId: string) => `/api/coach/threads?clientId=${clientId}`,
     actions: () => "/api/coach/actions",
+    progress: () => "/api/coach/progress",
+    progressForClient: (clientId: string) => `/api/coach/progress?clientId=${clientId}`,
   },
   tasks: () => "/api/tasks",
   taskEvents: () => "/api/tasks/events",

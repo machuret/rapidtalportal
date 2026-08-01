@@ -91,6 +91,7 @@ export const GET = withAuth(async (req, { user }) => {
       tasks: [],
       team: [],
     },
+    privateCoaching: snapshot.coaching,
     companyVoice: {
       source: snapshot.style.source,
       channel: snapshot.style.channel,
@@ -120,7 +121,8 @@ export const GET = withAuth(async (req, { user }) => {
       warning.code === "business_library_unavailable" ||
       warning.code === "business_library_search_degraded" ||
       warning.code === "semantic_retrieval_unavailable" ||
-      warning.code === "operational_context_unavailable"
+      warning.code === "operational_context_unavailable" ||
+      warning.code === "coach_progress_unavailable"
     ),
     contextualReadiness: {
       channel: snapshot.request.channel ?? null,
