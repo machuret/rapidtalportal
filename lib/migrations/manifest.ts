@@ -145,4 +145,6 @@ export const MIGRATIONS = [
   "137_coach_action_integrity.sql",
   "138_coach_goals_and_commitments.sql",
   "139_coach_progress_action_integrity.sql",
+  "140_coach_intelligence_and_learning.sql",
+  "141_coach_release_quality_repairs.sql",
 ] as const;

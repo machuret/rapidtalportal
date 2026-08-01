@@ -75,7 +75,8 @@ describe("Coach trust boundary", () => {
     expect(ui).not.toContain("parseTaskDraft");
     expect(ui).toContain("ROUTES.coach.actions()");
     expect(engine).toContain('from("coach_action_previews").insert');
-    expect(actionRoute).toContain('progressAction ? "execute_coach_progress_action" : "execute_coach_action"');
+    expect(actionRoute).toContain('? "execute_coach_progress_action"');
+    expect(actionRoute).toContain('? "execute_coach_memory_action"');
     expect(resolver).toContain('from("task_events")');
     expect(resolver).toContain('from("daily_logs")');
     expect(resolver).toContain('from("content_pieces")');

@@ -8,3 +8,6 @@ verify_jwt = true
 
 [functions.vault-ask]
 verify_jwt = true
+
+[functions.business-library-index]
+verify_jwt = true

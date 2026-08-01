@@ -73,6 +73,8 @@ type BrainContextUsedResponse = {
     availability: "available" | "unavailable" | "not_requested";
     goals: Array<{ goalId: string; title: string; status: string; progress: number; targetDate: string | null }>;
     commitments: Array<{ commitmentId: string; commitment: string; status: string; dueDate: string | null; nextCheckInAt: string | null }>;
+    memories: Array<{ memoryId: string; kind: string; content: string; updatedAt: string | null }>;
+    feedback: Array<{ signalId: string; rating: 1 | -1; category: string; dimensions: string[]; createdAt: string | null }>;
   };
   companyVoice: {
     source: string;
@@ -286,9 +288,9 @@ export function BrainContextUsed({
               <ContextSection
                 icon={Target}
                 title="Your private coaching state"
-                subtitle={`${data.privateCoaching.availability.replaceAll("_", " ")} · ${data.privateCoaching.goals.length} goal${data.privateCoaching.goals.length === 1 ? "" : "s"} · ${data.privateCoaching.commitments.length} commitment${data.privateCoaching.commitments.length === 1 ? "" : "s"}`}
+                subtitle={`${data.privateCoaching.availability.replaceAll("_", " ")} · ${data.privateCoaching.goals.length} goal${data.privateCoaching.goals.length === 1 ? "" : "s"} · ${data.privateCoaching.commitments.length} commitment${data.privateCoaching.commitments.length === 1 ? "" : "s"} · ${data.privateCoaching.memories.length} memor${data.privateCoaching.memories.length === 1 ? "y" : "ies"} · ${data.privateCoaching.feedback.length} feedback pattern${data.privateCoaching.feedback.length === 1 ? "" : "s"}`}
               >
-                {data.privateCoaching.goals.length || data.privateCoaching.commitments.length ? (
+                {data.privateCoaching.goals.length || data.privateCoaching.commitments.length || data.privateCoaching.memories.length || data.privateCoaching.feedback.length ? (
                   <div className="space-y-2">
                     {data.privateCoaching.goals.map((goal) => (
                       <div key={goal.goalId} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
@@ -302,8 +304,20 @@ export function BrainContextUsed({
                         <p className="mt-1 text-xs text-zinc-500">{commitment.status} · Due {commitment.dueDate ?? "not set"}</p>
                       </div>
                     ))}
+                    {data.privateCoaching.memories.map((memory) => (
+                      <div key={memory.memoryId} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                        <p className="text-xs font-medium text-zinc-200">Remembered {memory.kind.replaceAll("_", " ")}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{memory.content}</p>
+                      </div>
+                    ))}
+                    {data.privateCoaching.feedback.map((signal) => (
+                      <div key={signal.signalId} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                        <p className="text-xs font-medium text-zinc-200">Private feedback: {signal.category}</p>
+                        <p className="mt-1 text-xs text-zinc-500">{signal.rating === 1 ? "Worked well" : "Needs improvement"} · Used only as a coaching pattern, never as a company fact.</p>
+                      </div>
+                    ))}
                   </div>
-                ) : <Empty text={data.privateCoaching.availability === "unavailable" ? "Private coaching progress was temporarily unavailable and can be retried." : "No confirmed private goals or commitments were used."} />}
+                ) : <Empty text={data.privateCoaching.availability === "unavailable" ? "Private coaching state was temporarily unavailable and can be retried." : "No confirmed private goals, commitments, memories or feedback patterns were used."} />}
               </ContextSection>
 
               <ContextSection

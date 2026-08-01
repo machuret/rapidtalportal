@@ -20,7 +20,10 @@ describe("Coach action integrity", () => {
     ["client_admin", { type: "send_message", audience: "client" }, "message_audience_forbidden"],
     ["client_admin", { type: "create_goal" }, null],
     ["va", { type: "create_commitment" }, null],
+    ["client_admin", { type: "create_memory" }, null],
+    ["va", { type: "create_memory" }, null],
     ["super_admin", { type: "create_goal" }, "coaching_progress_forbidden"],
+    ["super_admin", { type: "create_memory" }, "coaching_progress_forbidden"],
   ] as const)("authorizes %s %#", (role, action, expected) => {
     expect(coachActionDenial(role, action)).toBe(expected);
   });
@@ -30,7 +33,8 @@ describe("Coach action integrity", () => {
     const engine = read("supabase/functions/vault-ask/index.ts");
     const route = read("app/api/coach/actions/route.ts");
     expect(engine).toContain('from("coach_action_previews").insert');
-    expect(route).toContain('progressAction ? "execute_coach_progress_action" : "execute_coach_action"');
+    expect(route).toContain('? "execute_coach_progress_action"');
+    expect(route).toContain('? "execute_coach_memory_action"');
     expect(route).not.toContain('.from("tasks").update');
     expect(migration).toContain("FOR UPDATE");
     expect(migration).toContain("EXCEPTION WHEN OTHERS");

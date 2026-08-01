@@ -24,6 +24,8 @@ export const ROUTES = {
     library: () => "/api/admin/library",
     libraryEntry: (id: string) => `/api/admin/library/${id}`,
     libraryAction: (id: string) => `/api/admin/library/${id}/action`,
+    libraryIndex: () => "/api/admin/library/index",
+    libraryQuality: () => "/api/admin/library/quality",
   },
   notebook: {
     pages: () => "/api/notebook/pages",
@@ -126,6 +128,9 @@ export const ROUTES = {
     actions: () => "/api/coach/actions",
     progress: () => "/api/coach/progress",
     progressForClient: (clientId: string) => `/api/coach/progress?clientId=${clientId}`,
+    memories: () => "/api/coach/memories",
+    memoriesForClient: (clientId: string) => `/api/coach/memories?clientId=${clientId}`,
+    libraryGaps: () => "/api/coach/library-gaps",
   },
   tasks: () => "/api/tasks",
   taskEvents: () => "/api/tasks/events",

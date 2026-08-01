@@ -11,7 +11,7 @@ import {
 } from "./content-style.ts";
 
 export const BRAIN_CONTEXT_VERSION = "brain-context-v1" as const;
-export const BRAIN_RESOLVER_VERSION = "resolver-v7-coach-progress" as const;
+export const BRAIN_RESOLVER_VERSION = "resolver-v8-coach-intelligence" as const;
 
 export type BrainSurface =
   | "ask"
@@ -56,7 +56,7 @@ export interface BrainContextRequest {
     conversationVisibility: "private_coach";
     intendedAudience: "private" | "client" | "va_team" | "task_board";
   };
-  actionMode?: "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task";
+  actionMode?: "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task" | "create_goal" | "create_commitment" | "create_memory";
   selectedVaultSourceIds: string[];
   includeMarketIntelligence: boolean;
 }
@@ -83,7 +83,7 @@ export interface BrainLibrarySource {
   category: string;
   sourceUrl: string | null;
   tags: string[];
-  selectionMethod: "full_text" | "lexical_recovery";
+  selectionMethod: "semantic" | "hybrid" | "full_text" | "lexical_recovery";
   relevance: number | null;
   selectionReason: string;
 }
@@ -105,7 +105,7 @@ export interface BrainContextV1 {
   library: {
     sources: BrainLibrarySource[];
     retrievalQuery: string;
-    retrievalMethod: "full_text" | "lexical_recovery" | "none";
+    retrievalMethod: "semantic" | "hybrid" | "full_text" | "lexical_recovery" | "none";
     coverage: "strong" | "partial" | "weak" | "none";
     availability: "available" | "degraded" | "unavailable" | "not_requested";
   };
@@ -138,6 +138,8 @@ export interface BrainContextV1 {
     availability: "available" | "unavailable" | "not_requested";
     goals: Array<{ goalId: string; title: string; outcome: string; status: "active" | "paused" | "achieved" | "abandoned"; progress: number; targetDate: string | null; updatedAt: string | null }>;
     commitments: Array<{ commitmentId: string; goalId: string | null; commitment: string; status: "open" | "completed" | "snoozed" | "dismissed"; dueDate: string | null; nextCheckInAt: string | null; lastCheckInAt: string | null; reminderCount: number; updatedAt: string | null }>;
+    memories: Array<{ memoryId: string; kind: "preference" | "decision" | "context" | "challenge"; content: string; status: "active" | "muted"; updatedAt: string | null }>;
+    feedback: Array<{ signalId: string; rating: 1 | -1; category: string; dimensions: string[]; createdAt: string | null }>;
   };
   style: {
     source:
@@ -210,6 +212,8 @@ export interface BrainContextV1 {
     communicationIds: string[];
     coachGoalIds: string[];
     coachCommitmentIds: string[];
+    coachMemoryIds: string[];
+    coachFeedbackSignalIds: string[];
   };
 }
 
@@ -237,6 +241,8 @@ interface DeliverableRow { id: string; title: string; content_type: string; stat
 interface CommunicationRow { id: string; sender_id: string; sender_name: string; sender_role: "client_admin" | "va"; audience: "company" | "client" | "va_team"; body: string; created_at: string | null }
 interface CoachGoalRow { id: string; title: string; outcome: string; status: "active" | "paused" | "achieved" | "abandoned"; progress: number; target_date: string | null; updated_at: string | null }
 interface CoachCommitmentRow { id: string; goal_id: string | null; commitment: string; status: "open" | "completed" | "snoozed" | "dismissed"; due_date: string | null; next_check_in_at: string | null; last_check_in_at: string | null; reminder_count: number; updated_at: string | null }
+interface CoachMemoryRow { id: string; kind: "preference" | "decision" | "context" | "challenge"; content: string; status: "active" | "muted"; updated_at: string | null }
+interface CoachFeedbackRow { id: string; rating: 1 | -1; reason: string | null; dimensions: unknown; created_at: string | null }
 
 interface VaultItemRow {
   id: string;
@@ -267,6 +273,7 @@ interface LibrarySearchRow {
   source_url: string | null;
   tags: string[] | null;
   rank: number | null;
+  retrieval_method?: "semantic" | "hybrid" | "full_text" | "full_text_unindexed" | null;
 }
 
 interface LibraryVersionRow {
@@ -457,6 +464,8 @@ async function retrieveBusinessLibrary(args: {
   maxSources: number;
   today: string;
   now: string;
+  embedding?: number[];
+  coachRole?: "client" | "va";
 }): Promise<{
   sources: BrainLibrarySource[];
   method: BrainContextV1["library"]["retrievalMethod"];
@@ -467,19 +476,46 @@ async function retrieveBusinessLibrary(args: {
     return { sources: [], method: "none", availability: "not_requested", warnings: [] };
   }
 
+  let semanticUnavailable = false;
   try {
-    const { data, error } = await args.admin.rpc("match_business_library_chunks", {
-      p_query: args.query.slice(0, 4_000),
-      p_match_count: args.maxSources,
-      p_channel: args.channel ?? null,
-      p_audience: args.audience ?? null,
-    });
-    if (error) throw error;
+    const semanticResult = args.embedding?.length === 384
+      ? await args.admin.rpc("match_business_library_chunks_hybrid", {
+        p_query_embedding: args.embedding,
+        p_query: args.query.slice(0, 4_000), p_match_count: args.maxSources,
+        p_channel: args.channel ?? null, p_audience: args.audience ?? null,
+        p_coach_role: args.coachRole ?? null,
+      })
+      : { data: null, error: { message: "Library query embedding unavailable" } };
+    let data = semanticResult.data;
+    if (semanticResult.error) {
+      semanticUnavailable = true;
+      const lexicalResult = await args.admin.rpc("match_business_library_chunks", {
+        p_query: args.query.slice(0, 4_000), p_match_count: args.maxSources,
+        p_channel: args.channel ?? null, p_audience: args.audience ?? null,
+      });
+      if (lexicalResult.error) throw lexicalResult.error;
+      data = lexicalResult.data;
+    }
     const rows = (data ?? []) as LibrarySearchRow[];
+    const semanticIndexIncomplete = rows.some((row) => row.retrieval_method === "full_text_unindexed");
+    const degraded = semanticUnavailable || semanticIndexIncomplete;
+    const retrievalMethod = semanticUnavailable
+      ? "full_text" as const
+      : rows.some((row) => row.retrieval_method === "hybrid")
+        ? "hybrid" as const
+        : rows.some((row) => row.retrieval_method === "semantic")
+          ? "semantic" as const
+          : "full_text" as const;
     return {
-      method: "full_text",
-      availability: "available",
-      warnings: [],
+      method: retrievalMethod,
+      availability: degraded ? "degraded" : "available",
+      warnings: degraded ? [{
+        code: "business_library_semantic_degraded",
+        message: semanticUnavailable
+          ? "Semantic Library search was temporarily unavailable; verified full-text Library retrieval was used."
+          : "Relevant published guidance is still entering the semantic index; verified full-text Library retrieval was used and indexing can be retried.",
+        severity: "warning",
+      }] : [],
       sources: rows.slice(0, args.maxSources).map((row) => ({
         entryId: row.entry_id,
         versionId: row.version_id,
@@ -490,11 +526,18 @@ async function retrieveBusinessLibrary(args: {
         category: compact(row.category, 120) || "General",
         sourceUrl: safeUrl(row.source_url),
         tags: unique((row.tags ?? []).map((tag) => compact(tag, 100)).filter(Boolean)).slice(0, 30),
-        selectionMethod: "full_text" as const,
+        selectionMethod: (row.retrieval_method === "semantic" || row.retrieval_method === "hybrid"
+          ? row.retrieval_method : "full_text") as "semantic" | "hybrid" | "full_text",
         relevance: typeof row.rank === "number"
           ? Math.max(0, Math.min(1, row.rank))
           : null,
-        selectionReason: "Published Business Library guidance matched the current task.",
+        selectionReason: row.retrieval_method === "semantic"
+          ? "Published guidance matched the meaning of the current task and authenticated role."
+          : row.retrieval_method === "hybrid"
+            ? "Published guidance matched both the meaning and wording of the current task and authenticated role."
+            : row.retrieval_method === "full_text_unindexed"
+              ? "Published guidance matched the current task through verified full-text retrieval while semantic indexing completes."
+              : "Published Business Library guidance matched the current task.",
       })).filter((source) => source.excerpt.length > 0),
     };
   } catch (primaryError) {
@@ -959,10 +1002,10 @@ export async function resolveBrainContext(args: {
   })();
   const coachingPromise = (async () => {
     if (!request.actor) {
-      return { availability: "not_requested" as const, goals: [] as CoachGoalRow[], commitments: [] as CoachCommitmentRow[], error: null };
+      return { availability: "not_requested" as const, goals: [] as CoachGoalRow[], commitments: [] as CoachCommitmentRow[], memories: [] as CoachMemoryRow[], feedback: [] as CoachFeedbackRow[], error: null };
     }
     try {
-      const [goalsResult, commitmentsResult] = await Promise.all([
+      const [goalsResult, commitmentsResult, memoriesResult, feedbackResult] = await Promise.all([
         admin.from("coach_goals")
           .select("id,title,outcome,status,progress,target_date,updated_at")
           .eq("client_id", clientId).eq("owner_id", request.actor.userId)
@@ -973,9 +1016,21 @@ export async function resolveBrainContext(args: {
           .eq("client_id", clientId).eq("owner_id", request.actor.userId)
           .in("status", ["open", "snoozed"])
           .order("updated_at", { ascending: false }).limit(50),
+        admin.from("coach_memories")
+          .select("id,kind,content,status,updated_at")
+          .eq("client_id", clientId).eq("owner_id", request.actor.userId)
+          .eq("status", "active").order("updated_at", { ascending: false }).limit(100),
+        admin.from("brain_signals")
+          .select("id,rating,reason,dimensions,created_at")
+          .eq("client_id", clientId).eq("user_id", request.actor.userId)
+          .eq("visibility", "private_coach").eq("surface", "vault_answer")
+          .gt("retention_until", generatedAt)
+          .order("created_at", { ascending: false }).limit(20),
       ]);
       if (goalsResult.error) throw goalsResult.error;
       if (commitmentsResult.error) throw commitmentsResult.error;
+      if (memoriesResult.error) throw memoriesResult.error;
+      if (feedbackResult.error) throw feedbackResult.error;
       return {
         availability: "available" as const,
         goals: (goalsResult.data ?? []) as CoachGoalRow[],
@@ -994,23 +1049,28 @@ export async function resolveBrainContext(args: {
           return (a.due_date ?? a.next_check_in_at ?? a.updated_at ?? "")
             .localeCompare(b.due_date ?? b.next_check_in_at ?? b.updated_at ?? "");
         }),
+        memories: (memoriesResult.data ?? []) as CoachMemoryRow[],
+        feedback: (feedbackResult.data ?? []) as CoachFeedbackRow[],
         error: null,
       };
     } catch (error) {
       console.warn("brain-context: owner-private coaching state unavailable", error);
-      return { availability: "unavailable" as const, goals: [] as CoachGoalRow[], commitments: [] as CoachCommitmentRow[], error };
+      return { availability: "unavailable" as const, goals: [] as CoachGoalRow[], commitments: [] as CoachCommitmentRow[], memories: [] as CoachMemoryRow[], feedback: [] as CoachFeedbackRow[], error };
     }
   })();
   const libraryPromise = maxLibrary > 0
-    ? retrieveBusinessLibrary({
-      admin,
-      query: retrievalQuery,
-      channel: request.channel,
-      audience: request.audience,
-      maxSources: maxLibrary,
-      today,
-      now: generatedAt,
-    })
+    ? (async () => {
+      let libraryEmbedding: number[] | undefined;
+      if (args.embed && retrievalQuery) {
+        try { libraryEmbedding = await args.embed(retrievalQuery.slice(0, 1_500)); }
+        catch (error) { console.warn("brain-context: Library query embedding unavailable", error); }
+      }
+      return retrieveBusinessLibrary({
+        admin, query: retrievalQuery, channel: request.channel,
+        audience: request.audience, maxSources: maxLibrary, today, now: generatedAt,
+        embedding: libraryEmbedding, coachRole: request.actor?.coachRole,
+      });
+    })()
     : Promise.resolve({
       sources: [] as BrainLibrarySource[],
       method: "none" as const,
@@ -1429,6 +1489,22 @@ export async function resolveBrainContext(args: {
     reminderCount: Math.max(0, Math.min(100, commitment.reminder_count)),
     updatedAt: commitment.updated_at,
   })).filter((commitment) => commitment.commitment.length > 0);
+  const coachMemories = coachingResult.memories.map((memory) => ({
+    memoryId: memory.id,
+    kind: memory.kind,
+    content: compact(memory.content, 2_000),
+    status: memory.status,
+    updatedAt: memory.updated_at,
+  })).filter((memory) => memory.content.length >= 3);
+  const coachFeedback = coachingResult.feedback.map((signal) => ({
+    signalId: signal.id,
+    rating: signal.rating,
+    category: compact((signal.reason ?? "General feedback").split(" — ")[0], 120) || "General feedback",
+    dimensions: Array.isArray(signal.dimensions)
+      ? unique(signal.dimensions.filter((value): value is string => typeof value === "string").map((value) => compact(value, 100)).filter(Boolean)).slice(0, 20)
+      : [],
+    createdAt: signal.created_at,
+  }));
 
   return {
     version: BRAIN_CONTEXT_VERSION,
@@ -1472,6 +1548,8 @@ export async function resolveBrainContext(args: {
       availability: coachingResult.availability,
       goals: coachGoals,
       commitments: coachCommitments,
+      memories: coachMemories,
+      feedback: coachFeedback,
     },
     style,
     memories,
@@ -1506,6 +1584,8 @@ export async function resolveBrainContext(args: {
       communicationIds: operationalCommunications.map((message) => message.messageId),
       coachGoalIds: coachGoals.map((goal) => goal.goalId),
       coachCommitmentIds: coachCommitments.map((commitment) => commitment.commitmentId),
+      coachMemoryIds: coachMemories.map((memory) => memory.memoryId),
+      coachFeedbackSignalIds: coachFeedback.map((signal) => signal.signalId),
     },
   };
 }
@@ -1581,6 +1661,22 @@ export function renderBrainContext(context: BrainContextV1): string {
     sections.push(
       "=== OWNER-PRIVATE COACHING COMMITMENTS (USER-CONFIRMED) ===\n" + context.coaching.commitments.map((commitment) =>
         `• Commitment ${commitment.commitmentId}: ${commitment.commitment}; Status: ${commitment.status}; Due: ${commitment.dueDate ?? "not set"}; Next check-in: ${commitment.nextCheckInAt ?? "not set"}`
+      ).join("\n"),
+    );
+  }
+  if (context.coaching.memories.length) {
+    sections.push(
+      "=== OWNER-PRIVATE COACH MEMORY (EXPLICITLY CONFIRMED) ===\n" + context.coaching.memories.map((memory) =>
+        `• ${memory.kind}: ${memory.content}`
+      ).join("\n"),
+    );
+  }
+  if (context.coaching.feedback.length) {
+    sections.push(
+      "=== OWNER-PRIVATE COACH FEEDBACK PATTERNS (NOT COMPANY FACTS) ===\n" +
+      "Use these only to improve helpfulness, caution and communication style. Never treat feedback as verified company evidence.\n" +
+      context.coaching.feedback.map((signal) =>
+        `• ${signal.rating === 1 ? "Worked well" : "Needs improvement"}: ${signal.category}${signal.dimensions.length ? ` (${signal.dimensions.join(", ")})` : ""}`
       ).join("\n"),
     );
   }

@@ -96,7 +96,7 @@ describe("Coach Phase 3 progress loop", () => {
     expect(resolver).toContain('availability: "unavailable" as const, goals: []');
     expect(resolver).toContain("coachGoalIds: coachGoals.map");
     expect(resolver).toContain("coachCommitmentIds: coachCommitments.map");
-    expect(contract).toContain('BRAIN_RESOLVER_VERSION = "resolver-v7-coach-progress"');
+    expect(contract).toContain('BRAIN_RESOLVER_VERSION = "resolver-v8-coach-intelligence"');
     expect(contract).toContain("Coach goal provenance must match");
   });
 

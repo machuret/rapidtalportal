@@ -2,6 +2,7 @@ import { LibraryBig } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/auth";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { BusinessLibraryAdmin } from "@/components/admin/BusinessLibraryAdmin";
+import { BusinessLibraryQuality } from "@/components/admin/BusinessLibraryQuality";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Business Library — RapidTal" };
@@ -17,6 +18,7 @@ export default async function AdminBusinessLibraryPage() {
         title="Business Library"
         subtitle="Author, review and publish platform-wide business expertise. Published releases are immutable, versioned and prepared for official Brain retrieval."
       />
+      <BusinessLibraryQuality />
       <BusinessLibraryAdmin />
     </div>
   );

@@ -4,6 +4,7 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { serverError } from "@/lib/api/errors";
+import { evaluateCoachQuality } from "@/lib/brain/coach-quality-gate";
 
 const sourceSchema = z.object({
   n: z.number().int().optional(),
@@ -24,7 +25,7 @@ const saveSchema = z.object({
   question: z.string().trim().min(3).max(8000),
   answer: z.string().trim().min(1).max(30000),
   snapshotId: z.string().uuid(),
-  coachMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task", "create_goal", "create_commitment"]),
+  coachMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task", "create_goal", "create_commitment", "create_memory"]),
   sources: z.array(sourceSchema).max(30).default([]),
   suggestions: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
   libraryAvailability: z.enum(["available", "degraded", "unavailable", "not_requested"]),
@@ -49,6 +50,7 @@ const saveSchema = z.object({
     z.object({ type: z.literal("review_task"), idempotencyKey: z.string().uuid(), taskId: z.string().uuid(), decision: z.enum(["approve", "changes"]), note: z.string().max(2000) }),
     z.object({ type: z.literal("create_goal"), idempotencyKey: z.string().uuid(), title: z.string().trim().min(1).max(300), outcome: z.string().max(4000), targetDate: z.iso.date().nullable() }),
     z.object({ type: z.literal("create_commitment"), idempotencyKey: z.string().uuid(), commitment: z.string().trim().min(1).max(1000), goalId: z.string().uuid().nullable(), dueDate: z.iso.date().nullable(), checkInDate: z.iso.date().nullable() }),
+    z.object({ type: z.literal("create_memory"), idempotencyKey: z.string().uuid(), kind: z.enum(["preference", "decision", "context", "challenge"]), content: z.string().trim().min(3).max(2000) }),
   ]).nullable().default(null),
 });
 
@@ -84,6 +86,23 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid Coach turn." }, { status: 422 });
   const denied = assertClientAccess(user, parsed.data.clientId);
   if (denied) return denied;
+
+  const quality = evaluateCoachQuality({
+    role: user.role === "va" ? "va" : user.role === "client_admin" ? "client_admin" : "super_admin",
+    answer: parsed.data.answer,
+    snapshotId: parsed.data.snapshotId,
+    libraryAvailability: parsed.data.libraryAvailability,
+    warningCodes: parsed.data.warnings.map((warning) => warning.code),
+    sources: parsed.data.sources,
+    action: parsed.data.actionDraft,
+  });
+  if (!quality.passed) {
+    return NextResponse.json({
+      error: "The Coach answer did not pass the required evidence and role boundary checks.",
+      recoverable: true,
+      qualityIssues: quality.issues.map((issue) => issue.code),
+    }, { status: 409 });
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration follows generated schema snapshot
   const db = createAdminClient() as any;

@@ -74,7 +74,7 @@ function snapshot(): BrainContext {
       coverage: "weak",
       availability: "degraded",
     },
-    coaching: { availability: "not_requested", goals: [], commitments: [] },
+    coaching: { availability: "not_requested", goals: [], commitments: [], memories: [], feedback: [] },
     style: {
       source: "approved_channel_analysis",
       profileId: null,
@@ -129,6 +129,8 @@ function snapshot(): BrainContext {
       marketSnapshotIds: [],
       coachGoalIds: [],
       coachCommitmentIds: [],
+      coachMemoryIds: [],
+      coachFeedbackSignalIds: [],
     },
   };
 }

@@ -14,7 +14,6 @@ import {
   Check,
   ChevronDown,
   ExternalLink,
-  GraduationCap,
   Flag,
   LibraryBig,
   ListTodo,
@@ -30,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
 import { CoachFeedback } from "@/components/brain/CoachFeedback";
 import { CoachProgressPanel } from "@/components/vault/CoachProgressPanel";
+import { CoachMemoryPanel } from "@/components/vault/CoachMemoryPanel";
 import {
   AskBrainFlow,
   type AskFlowState,
@@ -50,7 +50,7 @@ interface Source {
 }
 
 type CoachRole = "client" | "va";
-type CoachMode = "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task" | "create_goal" | "create_commitment";
+type CoachMode = "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task" | "create_goal" | "create_commitment" | "create_memory";
 
 export interface CoachTeamMember {
   id: string;
@@ -84,7 +84,8 @@ type CoachActionDraft =
   | { type: "submit_review"; idempotencyKey: string; taskId: string; note: string }
   | { type: "review_task"; idempotencyKey: string; taskId: string; decision: "approve" | "changes"; note: string }
   | { type: "create_goal"; idempotencyKey: string; title: string; outcome: string; targetDate: string | null }
-  | { type: "create_commitment"; idempotencyKey: string; commitment: string; goalId: string | null; dueDate: string | null; checkInDate: string | null };
+  | { type: "create_commitment"; idempotencyKey: string; commitment: string; goalId: string | null; dueDate: string | null; checkInDate: string | null }
+  | { type: "create_memory"; idempotencyKey: string; kind: "preference" | "decision" | "context" | "challenge"; content: string };
 
 interface Turn {
   question: string;
@@ -128,6 +129,7 @@ function inferredCoachMode(
   selected: CoachMode,
 ): CoachMode {
   if (selected !== "private") return selected;
+  if (/\b(?:remember|keep in mind|don't forget|note that)\b/iu.test(question)) return "create_memory";
   if (/\b(?:track|save|remember|set|make|create)\b.{0,50}\bgoal\b/iu.test(question)) return "create_goal";
   if (/\b(?:commit|commitment|hold me accountable|check in)\b/iu.test(question)) return "create_commitment";
   if (role === "client" && /\b(?:create|assign|give|make)\b.{0,50}\btask\b/iu.test(question)) {
@@ -533,6 +535,7 @@ export function AskVaultClient({
     <div className="flex flex-col min-h-[calc(100vh-8rem)]">
       <div className="mb-6">
         {persistConversation && <CoachProgressPanel clientId={clientId} timeZone={timeZone} />}
+        {persistConversation && <CoachMemoryPanel clientId={clientId} />}
         {persistConversation && turns.length > 0 && (
           <div className="mb-3 flex justify-end">
             <Button type="button" size="sm" variant="outline" onClick={newConversation} disabled={loading} className="gap-1.5 border-zinc-700 text-xs">
@@ -651,6 +654,7 @@ export function AskVaultClient({
           </CoachModeButton>
           <CoachModeButton active={coachMode === "create_goal"} onClick={() => setCoachMode("create_goal")} icon={Target}>Track Goal</CoachModeButton>
           <CoachModeButton active={coachMode === "create_commitment"} onClick={() => setCoachMode("create_commitment")} icon={Flag}>Make Commitment</CoachModeButton>
+          <CoachModeButton active={coachMode === "create_memory"} onClick={() => setCoachMode("create_memory")} icon={BookmarkPlus}>Remember</CoachModeButton>
           {actionsEnabled && coachRole === "va" && (
             <>
               <CoachModeButton active={coachMode === "message_client"} onClick={() => setCoachMode("message_client")} icon={MessageSquare}>Send to Client</CoachModeButton>
@@ -746,30 +750,33 @@ function ChatTurn({
   const [deepEvidence, setDeepEvidence] = useState<AnswerEvidence | null>(null);
   const [deepLoading, setDeepLoading] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [teaching, setTeaching] = useState(false);
-  const [teachText, setTeachText] = useState("");
-  const [teachBusy, setTeachBusy] = useState(false);
-  const [taught, setTaught] = useState(false);
+  const [gapConsentOpen, setGapConsentOpen] = useState(false);
+  const [gapSuggesting, setGapSuggesting] = useState(false);
+  const [gapSuggested, setGapSuggested] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionComplete, setActionComplete] = useState(turn.actionStatus === "completed");
   const [actionDraft, setActionDraft] = useState<CoachActionDraft | null>(turn.actionDraft ?? null);
 
   const unanswered = turn.sources.length === 0;
 
-  async function teach() {
-    if (teachText.trim().length < 3 || teachBusy) return;
-    setTeachBusy(true);
+  async function suggestLibraryTopic() {
+    if (gapSuggesting || gapSuggested || !turn.brainContextSnapshotId) return;
+    setGapSuggesting(true);
     try {
-      await api.post(ROUTES.vault.teach(), {
-        clientId, question: turn.question, answer: teachText.trim(),
+      await api.post(ROUTES.coach.libraryGaps(), {
+        clientId,
+        snapshotId: turn.brainContextSnapshotId,
+        topic: turn.question,
+        detail: "No relevant published Business Library guidance was cited for this Coach answer.",
+        consent: true,
       }, { showErrorToast: false });
-      setTaught(true);
-      setTeaching(false);
-      toast.success("Thanks — the brain learned it. Next person who asks gets your answer.");
+      setGapSuggested(true);
+      setGapConsentOpen(false);
+      toast.success("Topic shared with the Library team. Your private conversation remains private.");
     } catch (error) {
-      toast.error(errorMessage(error, "The answer could not be taught to the Brain."));
+      toast.error(errorMessage(error, "The Library suggestion could not be shared."));
     } finally {
-      setTeachBusy(false);
+      setGapSuggesting(false);
     }
   }
 
@@ -849,6 +856,9 @@ function ChatTurn({
       } else if (actionDraft.type === "create_commitment") {
         toast.success("Commitment saved. The Coach will follow up privately.");
         window.dispatchEvent(new Event("coach-progress-changed"));
+      } else if (actionDraft.type === "create_memory") {
+        toast.success("Saved to your private Coach memory.");
+        window.dispatchEvent(new Event("coach-memory-changed"));
       } else {
         toast.success("Task updated.");
       }
@@ -859,6 +869,12 @@ function ChatTurn({
       setActionBusy(false);
     }
   }
+
+  const hasLibrarySource = turn.sources.some((source) => source.kind === "library");
+  const canSuggestLibraryGap = turn.coachMode === "private"
+    && Boolean(turn.brainContextSnapshotId)
+    && (turn.libraryAvailability === "available" || turn.libraryAvailability === "degraded")
+    && !hasLibrarySource;
 
   return (
     <div className="space-y-3">
@@ -915,7 +931,8 @@ function ChatTurn({
                         : actionDraft.type === "submit_review" ? "Review submission preview"
                           : actionDraft.type === "review_task" ? "Client review preview"
                             : actionDraft.type === "create_goal" ? "Private goal preview"
-                              : "Private commitment preview"}
+                              : actionDraft.type === "create_commitment" ? "Private commitment preview"
+                                : "Private memory preview"}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-zinc-500">
                   Nothing has been shared yet. Review the Coach draft, then confirm below.
@@ -986,13 +1003,25 @@ function ChatTurn({
                       <label className="text-xs text-zinc-400">Due date
                         <Input type="date" value={actionDraft.dueDate ?? ""} onChange={(event) => setActionDraft({ ...actionDraft, dueDate: event.target.value || null })} className="mt-1.5 bg-zinc-900 text-zinc-100" />
                       </label>
-                      <label className="text-xs text-zinc-400">Coach check-in
+                      <label className="text-xs text-zinc-400">Weekly Coach check-ins start
                         <Input type="date" value={actionDraft.checkInDate ?? ""} onChange={(event) => setActionDraft({ ...actionDraft, checkInDate: event.target.value || null })} className="mt-1.5 bg-zinc-900 text-zinc-100" />
                       </label>
                     </div>
                   </div>
                 )}
-                {!actionComplete && !["create_task", "send_message", "create_goal", "create_commitment"].includes(actionDraft.type) && "taskId" in actionDraft && (
+                {!actionComplete && actionDraft.type === "create_memory" && (
+                  <div className="mt-3 grid gap-3">
+                    <label className="text-xs text-zinc-400">Memory type
+                      <select value={actionDraft.kind} onChange={(event) => setActionDraft({ ...actionDraft, kind: event.target.value as "preference" | "decision" | "context" | "challenge" })} className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200">
+                        <option value="preference">Preference</option><option value="decision">Decision</option><option value="context">Context</option><option value="challenge">Recurring challenge</option>
+                      </select>
+                    </label>
+                    <label className="text-xs text-zinc-400">What the Coach should remember
+                      <Textarea value={actionDraft.content} maxLength={2000} rows={3} onChange={(event) => setActionDraft({ ...actionDraft, content: event.target.value })} className="mt-1.5 bg-zinc-900 text-zinc-100" />
+                    </label>
+                  </div>
+                )}
+                {!actionComplete && !["create_task", "send_message", "create_goal", "create_commitment", "create_memory"].includes(actionDraft.type) && "taskId" in actionDraft && (
                   <div className="mt-3 grid gap-3">
                     <label className="text-xs text-zinc-400">Task
                       <select value={actionDraft.taskId} onChange={(event) => setActionDraft({ ...actionDraft, taskId: event.target.value })}
@@ -1033,17 +1062,17 @@ function ChatTurn({
                 <Button
                   size="sm"
                   onClick={confirmCoachAction}
-                  disabled={actionBusy || actionComplete || (actionDraft.type === "create_task" ? !actionDraft.title.trim() || !actionDraft.brief.trim() : actionDraft.type === "send_message" ? !actionDraft.message.trim() : actionDraft.type === "create_goal" ? !actionDraft.title.trim() : actionDraft.type === "create_commitment" ? !actionDraft.commitment.trim() : !actionDraft.taskId)}
+                  disabled={actionBusy || actionComplete || (actionDraft.type === "create_task" ? !actionDraft.title.trim() || !actionDraft.brief.trim() : actionDraft.type === "send_message" ? !actionDraft.message.trim() : actionDraft.type === "create_goal" ? !actionDraft.title.trim() : actionDraft.type === "create_commitment" ? !actionDraft.commitment.trim() : actionDraft.type === "create_memory" ? actionDraft.content.trim().length < 3 : !actionDraft.taskId)}
                   className="mt-3 gap-1.5"
                 >
-                  {actionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : actionComplete ? <Check className="h-3.5 w-3.5" /> : actionDraft.type === "send_message" ? <Send className="h-3.5 w-3.5" /> : actionDraft.type === "create_goal" ? <Target className="h-3.5 w-3.5" /> : actionDraft.type === "create_commitment" ? <Flag className="h-3.5 w-3.5" /> : <ListTodo className="h-3.5 w-3.5" />}
+                  {actionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : actionComplete ? <Check className="h-3.5 w-3.5" /> : actionDraft.type === "send_message" ? <Send className="h-3.5 w-3.5" /> : actionDraft.type === "create_goal" ? <Target className="h-3.5 w-3.5" /> : actionDraft.type === "create_commitment" ? <Flag className="h-3.5 w-3.5" /> : actionDraft.type === "create_memory" ? <BookmarkPlus className="h-3.5 w-3.5" /> : <ListTodo className="h-3.5 w-3.5" />}
                   {actionComplete
                     ? "Confirmed"
                     : turn.coachMode === "create_task"
                       ? "Create Task"
                       : turn.coachMode === "message_client"
                         ? "Send to Client"
-                        : turn.coachMode === "message_va_team" ? "Send to VA Team" : turn.coachMode === "submit_review" ? "Submit for Review" : turn.coachMode === "review_task" ? "Confirm Review" : turn.coachMode === "create_goal" ? "Track Goal" : turn.coachMode === "create_commitment" ? "Make Commitment" : "Update Task"}
+                        : turn.coachMode === "message_va_team" ? "Send to VA Team" : turn.coachMode === "submit_review" ? "Submit for Review" : turn.coachMode === "review_task" ? "Confirm Review" : turn.coachMode === "create_goal" ? "Track Goal" : turn.coachMode === "create_commitment" ? "Make Commitment" : turn.coachMode === "create_memory" ? "Remember" : "Update Task"}
                 </Button>
               </div>
             </div>
@@ -1075,6 +1104,28 @@ function ChatTurn({
           </p>
         )}
 
+        {canSuggestLibraryGap && !gapSuggested && (
+          <div className="mt-3 rounded-lg border border-orange-500/20 bg-orange-500/5 p-3">
+            {!gapConsentOpen ? (
+              <button type="button" onClick={() => setGapConsentOpen(true)} className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-300 hover:text-orange-200">
+                <LibraryBig className="h-3.5 w-3.5" /> Suggest this topic for the Business Library
+              </button>
+            ) : (
+              <div>
+                <p className="text-xs font-medium text-orange-100">Share only this question as a Library topic?</p>
+                <p className="mt-1 text-xs leading-5 text-zinc-500">Your answer, private conversation and company context will not be shared. An admin will see the topic and whether it came from a Client or VA.</p>
+                <div className="mt-3 flex gap-2">
+                  <Button size="sm" onClick={() => void suggestLibraryTopic()} disabled={gapSuggesting} className="gap-1.5">
+                    {gapSuggesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} I agree — share topic
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setGapConsentOpen(false)} disabled={gapSuggesting} className="border-zinc-700">Keep private</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {gapSuggested && <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-emerald-400"><Check className="h-3.5 w-3.5" /> Topic shared by consent; conversation kept private.</p>}
+
         {deepAnswer && (
           <div className="mt-3 pt-3 border-t border-zinc-800">
             <p className="label-section mb-1.5">More detail</p>
@@ -1102,48 +1153,6 @@ function ChatTurn({
               </>
             )}
           </div>
-        )}
-
-        {/* Teach the brain — capture knowledge at the moment a gap is found */}
-        {unanswered && !taught && (
-          <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
-            {!teaching ? (
-              <button
-                onClick={() => setTeaching(true)}
-                className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 transition-colors"
-              >
-                <GraduationCap className="w-3.5 h-3.5" />
-                Know the answer? Teach the brain
-              </button>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs text-zinc-400">
-                  Type the answer — it&apos;s saved to the Knowledge Base and the next person who asks gets it.
-                </p>
-                <Textarea
-                  value={teachText}
-                  onChange={(e) => setTeachText(e.target.value)}
-                  rows={3}
-                  placeholder="The answer is…"
-                  className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600 text-sm"
-                />
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={teach} disabled={teachBusy || teachText.trim().length < 3} className="gap-1.5 h-7 text-xs">
-                    {teachBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <GraduationCap className="w-3 h-3" />}
-                    Teach it
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setTeaching(false)} className="h-7 text-xs border-zinc-700">
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {taught && (
-          <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-green-400">
-            <Check className="w-3.5 h-3.5" /> Learned — saved to the Knowledge Base.
-          </p>
         )}
 
         {/* Actions */}
@@ -1180,6 +1189,8 @@ function ChatTurn({
                 kind: source.kind,
                 title: source.title,
                 itemId: source.itemId,
+                versionId: source.versionId,
+                versionNumber: source.versionNumber,
               }))}
             />
             {canCurate && (

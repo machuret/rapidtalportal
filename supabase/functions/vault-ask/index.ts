@@ -96,7 +96,7 @@ const SOURCE_LABEL: Record<string, string> = {
   operation: "Current work",
 };
 
-type CoachMode = "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task" | "create_goal" | "create_commitment";
+type CoachMode = "private" | "message_client" | "message_va_team" | "create_task" | "update_task" | "submit_review" | "review_task" | "create_goal" | "create_commitment" | "create_memory";
 
 type CoachActionDraft =
   | {
@@ -118,11 +118,20 @@ type CoachActionDraft =
   | { type: "submit_review"; idempotencyKey: string; taskId: string; note: string }
   | { type: "review_task"; idempotencyKey: string; taskId: string; decision: "approve" | "changes"; note: string }
   | { type: "create_goal"; idempotencyKey: string; title: string; outcome: string; targetDate: string | null }
-  | { type: "create_commitment"; idempotencyKey: string; commitment: string; goalId: string | null; dueDate: string | null; checkInDate: string | null };
+  | { type: "create_commitment"; idempotencyKey: string; commitment: string; goalId: string | null; dueDate: string | null; checkInDate: string | null }
+  | { type: "create_memory"; idempotencyKey: string; kind: "preference" | "decision" | "context" | "challenge"; content: string };
 
 function coachActionResponseFormat(mode: CoachMode, coachRole: "client" | "va") {
   if (mode === "private") return undefined;
-  const action = mode === "create_goal" ? {
+  const action = mode === "create_memory" ? {
+    type: "object", additionalProperties: false,
+    required: ["type", "kind", "content"],
+    properties: {
+      type: { type: "string", const: "create_memory" },
+      kind: { type: "string", enum: ["preference", "decision", "context", "challenge"] },
+      content: { type: "string", maxLength: 2000 },
+    },
+  } : mode === "create_goal" ? {
     type: "object", additionalProperties: false,
     required: ["type", "title", "outcome", "targetDate"],
     properties: {
@@ -201,6 +210,12 @@ function parseCoachActionDraft(value: unknown, mode: CoachMode, coachRole: "clie
   const action = row.action as Record<string, unknown>;
   const idempotencyKey = crypto.randomUUID();
   const dateOrNull = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/u.test(value) ? value : null;
+  if (mode === "create_memory") {
+    const content = typeof action.content === "string" ? action.content.trim().slice(0, 2_000) : "";
+    const kind = ["preference", "decision", "context", "challenge"].includes(String(action.kind))
+      ? action.kind as "preference" | "decision" | "context" | "challenge" : null;
+    return kind && content.length >= 3 ? { answer, action: { type: "create_memory", idempotencyKey, kind, content } } : null;
+  }
   if (mode === "create_goal") {
     const title = typeof action.title === "string" ? action.title.trim().slice(0, 300) : "";
     const outcome = typeof action.outcome === "string" ? action.outcome.trim().slice(0, 4_000) : "";
@@ -269,6 +284,7 @@ function coachRolePolicy(
     review_task: "MODE: REVIEW TASK. Select only a task currently in review, prepare approve or request-changes, and include a clear note when requesting changes. Never invent a task ID.",
     create_goal: "MODE: TRACK PRIVATE GOAL. Prepare a concise, editable goal with a clear outcome and optional target date. It remains owner-private and is not saved until this person confirms Track Goal.",
     create_commitment: "MODE: TRACK PRIVATE COMMITMENT. Prepare one concrete, editable commitment with optional linked goal, due date and Coach check-in date. It remains owner-private and is not saved until this person confirms Make Commitment. Never invent a goal ID.",
+    create_memory: "MODE: REMEMBER PRIVATELY. Extract one concise preference, decision, relevant personal context or recurring challenge. It remains owner-private and is not remembered until this person confirms Remember. Never convert an assumption into memory.",
   };
   return `${roleRules}\n${actionRules[coachMode]}
 - OWNER-PRIVATE COACHING STATE contains only goals and commitments explicitly confirmed by this signed-in person. Use it for continuity and honest check-ins. Never present it as company-wide knowledge, and never disclose it in a message or task unless the user explicitly approves that preview.
@@ -483,7 +499,7 @@ Deno.serve(async (req: Request) => {
     const question: string = (body.question ?? "").toString().trim();
     const deep = body.mode === "deep";
     const coachRole: "client" | "va" = role === "va" ? "va" : "client";
-    const requestedCoachMode: CoachMode = ["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task", "create_goal", "create_commitment"]
+    const requestedCoachMode: CoachMode = ["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task", "create_goal", "create_commitment", "create_memory"]
       .includes(body.coachMode)
       ? body.coachMode
       : "private";
@@ -692,6 +708,16 @@ Deno.serve(async (req: Request) => {
         itemId: commitment.commitmentId,
         category: "coach_commitment",
         score: coachingCommitmentScore(question, commitment, userTimeZone),
+      });
+    }
+    for (const memory of brainContext.coaching.memories) {
+      blocks.push({
+        kind: "operation",
+        title: `Private Coach memory: ${memory.kind}`,
+        text: `Explicitly confirmed owner-private Coach memory.\n${memory.content}`,
+        itemId: memory.memoryId,
+        category: "coach_memory",
+        score: memory.kind === "preference" ? 0.9 : Math.max(0.45, lexicalScore(question, memory.content)),
       });
     }
     for (const insight of brainContext.market.insights) {

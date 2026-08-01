@@ -5,7 +5,10 @@ export type CoachActionIntent =
   | { type: "submit_review" }
   | { type: "review_task" }
   | { type: "create_goal" }
-  | { type: "create_commitment" };
+  | { type: "create_commitment" }
+  | { type: "create_memory" };
+
+export type CoachRole = "client_admin" | "va" | "super_admin";
 
 /**
  * Pure first-line authorization used before database execution. The database
@@ -16,7 +19,7 @@ export function coachActionDenial(
   role: string,
   action: CoachActionIntent,
 ): string | null {
-  if (action.type === "create_goal" || action.type === "create_commitment") {
+  if (action.type === "create_goal" || action.type === "create_commitment" || action.type === "create_memory") {
     return ["client_admin", "va"].includes(role) ? null : "coaching_progress_forbidden";
   }
   if (action.type === "create_task") {

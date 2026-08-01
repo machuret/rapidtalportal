@@ -117,6 +117,28 @@ function fakeAdmin(options: {
       return new FakeQuery(rows);
     },
     rpc(name: string) {
+      if (name === "match_business_library_chunks_hybrid") {
+        if (options.librarySearchFails) {
+          return Promise.resolve({ data: null, error: { message: "temporary semantic failure" } });
+        }
+        return Promise.resolve({
+          data: [{
+            entry_id: LIBRARY_ENTRY_ID,
+            version_id: LIBRARY_VERSION_ID,
+            chunk_id: LIBRARY_CHUNK_ID,
+            version_number: 1,
+            title: "Private credit marketing basics",
+            summary: "General guidance for marketing commercial finance.",
+            content: "Explain the audience, risks and next step in plain language.",
+            category: "Sales",
+            source_url: null,
+            tags: ["sales"],
+            rank: 0.82,
+            retrieval_method: "hybrid",
+          }],
+          error: null,
+        });
+      }
       if (name === "match_business_library_chunks") {
         if (options.librarySearchFails) {
           return Promise.resolve({
@@ -170,7 +192,7 @@ describe("Brain Context Phase 1 resolver", () => {
       model: "test-model",
       promptVersion: "test-prompt",
       createdAt: "2026-07-31T01:00:00.000Z",
-      embed: async () => [0.1, 0.2],
+      embed: async () => Array.from({ length: 384 }, () => 0.01),
     });
 
     expect(() => brainContextSchema.parse(context)).not.toThrow();

@@ -4,6 +4,7 @@ import { serverError } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { businessLibraryTransitionSchema } from "@/lib/business-library";
 import { loadBusinessLibraryEntry } from "@/lib/business-library-admin";
+import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -50,5 +51,18 @@ export const POST = withSuperAdmin<Params>(async (request, { user, params }) => 
   if (!entry) {
     return NextResponse.json({ error: "Library entry not found." }, { status: 404 });
   }
-  return NextResponse.json({ entry, versionId });
+  let indexing: "not_requested" | "complete" | "incomplete" | "recoverable_failure" = "not_requested";
+  if (parsed.data.action === "publish" && versionId) {
+    const indexResponse = await proxyToEdgeFunction("business-library-index", {
+      versionId, limit: 100,
+    });
+    let indexResult: { ok?: boolean; failed?: number; remaining?: number } = {};
+    try { indexResult = await indexResponse.json(); } catch { /* unexpected payload is recoverable */ }
+    indexing = !indexResponse.ok || (indexResult.failed ?? 0) > 0
+      ? "recoverable_failure"
+      : (indexResult.remaining ?? 0) > 0
+        ? "incomplete"
+        : indexResult.ok === true ? "complete" : "recoverable_failure";
+  }
+  return NextResponse.json({ entry, versionId, indexing });
 });

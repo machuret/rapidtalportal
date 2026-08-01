@@ -47,10 +47,15 @@ const createCommitmentAction = z.object({
   commitment: z.string().trim().min(1).max(1000), goalId: z.string().uuid().nullable(),
   dueDate: z.iso.date().nullable(), checkInDate: z.iso.date().nullable(),
 });
+const createMemoryAction = z.object({
+  type: z.literal("create_memory"), idempotencyKey: z.string().uuid(),
+  kind: z.enum(["preference", "decision", "context", "challenge"]),
+  content: z.string().trim().min(3).max(2000),
+});
 const schema = z.object({
   clientId: z.string().uuid(),
   snapshotId: z.string().uuid(),
-  action: z.discriminatedUnion("type", [taskAction, messageAction, updateTaskAction, submitReviewAction, reviewTaskAction, createGoalAction, createCommitmentAction]),
+  action: z.discriminatedUnion("type", [taskAction, messageAction, updateTaskAction, submitReviewAction, reviewTaskAction, createGoalAction, createCommitmentAction, createMemoryAction]),
 });
 
 type RpcOutcome = {
@@ -125,8 +130,12 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
   if (turnError) return serverError(turnError);
   if (!turn) return NextResponse.json({ error: "Save the Coach answer before confirming its action.", recoverable: true }, { status: 409 });
 
-  const progressAction = action.type === "create_goal" || action.type === "create_commitment";
-  const { data, error } = await db.rpc(progressAction ? "execute_coach_progress_action" : "execute_coach_action", {
+  const rpcName = action.type === "create_goal" || action.type === "create_commitment"
+    ? "execute_coach_progress_action"
+    : action.type === "create_memory"
+      ? "execute_coach_memory_action"
+      : "execute_coach_action";
+  const { data, error } = await db.rpc(rpcName, {
     p_idempotency_key: action.idempotencyKey,
     p_turn_id: turn.id,
     p_client_id: parsed.data.clientId,

@@ -49,6 +49,7 @@ export interface BusinessLibraryInitialData {
 interface EntryResponse {
   entry: BusinessLibraryEntryDetail;
   versionId?: string;
+  indexing?: "not_requested" | "complete" | "incomplete" | "recoverable_failure";
 }
 
 interface LibraryFormState {
@@ -201,6 +202,7 @@ export function BusinessLibraryAdmin({
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [saving, setSaving] = useState(false);
   const [runningAction, setRunningAction] = useState<LibraryTransition | null>(null);
+  const [indexing, setIndexing] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -363,10 +365,31 @@ export function BusinessLibraryAdmin({
         retire: "Library entry retired.",
       };
       toast.success(messages[action]);
+      if (action === "publish" && result.indexing === "recoverable_failure") {
+        toast.warning("Published successfully, but semantic indexing is temporarily unavailable. Use Reindex Library to retry.");
+      } else if (action === "publish" && result.indexing === "incomplete") {
+        toast.warning("Published successfully. Some Library chunks still need semantic indexing; use Reindex Library to continue.");
+      }
     } catch (error) {
       toast.error(errorMessage(error, "The Library workflow could not be updated."));
     } finally {
       setRunningAction(null);
+    }
+  }
+
+  async function reindexLibrary() {
+    if (indexing) return;
+    setIndexing(true);
+    try {
+      const result = await api.post<{ indexed: number; failed: number; remaining: number }>(
+        ROUTES.admin.libraryIndex(), {}, { showErrorToast: false },
+      );
+      if (result.failed) toast.warning(`Indexed ${result.indexed}; ${result.failed} failed and can be retried.`);
+      else toast.success(result.remaining ? `Indexed ${result.indexed}; ${result.remaining} remain for the next run.` : `Semantic Library index is complete (${result.indexed} updated).`);
+    } catch (error) {
+      toast.error(errorMessage(error, "Semantic Library indexing is temporarily unavailable."));
+    } finally {
+      setIndexing(false);
     }
   }
 
@@ -423,6 +446,9 @@ export function BusinessLibraryAdmin({
         </select>
         <Button onClick={beginCreate} className="gap-2">
           <FilePlus2 className="h-4 w-4" /> New entry
+        </Button>
+        <Button variant="outline" onClick={reindexLibrary} disabled={indexing} className="gap-2 border-zinc-700">
+          {indexing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Reindex Library
         </Button>
       </div>
 

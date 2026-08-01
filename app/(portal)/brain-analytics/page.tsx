@@ -43,7 +43,7 @@ export default async function BrainAnalyticsPage() {
       .eq("client_id", clientId).order("updated_at", { ascending: false }).limit(1000),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (admin as any).from("brain_signals")
-      .select("rating, surface, created_at, distilled_at").eq("client_id", clientId)
+      .select("rating, surface, visibility, created_at, distilled_at").eq("client_id", clientId)
       .gte("created_at", since).limit(3000),
   ]);
 
@@ -55,6 +55,7 @@ export default async function BrainAnalyticsPage() {
   const signals = (signalsRes.error ? [] : (signalsRes.data ?? [])) as {
     rating: number;
     surface: string;
+    visibility: "private_coach" | "team_learning";
     distilled_at: string | null;
   }[];
 
@@ -90,7 +91,13 @@ export default async function BrainAnalyticsPage() {
   const contentUp = contentSignals.filter((s) => s.rating === 1).length;
   const contentDown = contentSignals.filter((s) => s.rating === -1).length;
   const contentProcessed = contentSignals.filter((s) => !!s.distilled_at).length;
-  const pendingSignals = signals.filter((s) => !s.distilled_at).length;
+  const pendingSignals = signals.filter((s) => s.visibility !== "private_coach" && !s.distilled_at).length;
+  const coachSignals = signals.filter((s) => s.surface === "vault_answer" && s.visibility === "private_coach");
+  const coachUp = coachSignals.filter((s) => s.rating === 1).length;
+  const coachDown = coachSignals.filter((s) => s.rating === -1).length;
+  const coachSatisfaction = coachUp + coachDown
+    ? Math.round((coachUp / (coachUp + coachDown)) * 100)
+    : null;
   const overallAccept = decided.length ? Math.round((decided.filter((t) => t.status === "approved").length / decided.length) * 100) : null;
   const hasContentBrain = topics.length > 0 || contentSignals.length > 0;
 
@@ -257,6 +264,22 @@ export default async function BrainAnalyticsPage() {
           </div>
         </section>
       )}
+
+      <section className="surface-card mt-6 p-6">
+        <h2 className="text-lg font-semibold text-white">Private Coach quality</h2>
+        <p className="mt-1 text-xs text-zinc-500">Aggregate ratings only. Private questions, answers and feedback detail remain visible only to their owner.</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+            <p className="label-section mb-1">Satisfaction</p>
+            <p className="stat-value text-white">{coachSatisfaction === null ? "—" : `${coachSatisfaction}%`}</p>
+          </div>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+            <p className="label-section mb-1">Feedback received</p>
+            <p className="stat-value text-white">{coachUp + coachDown}</p>
+            <p className="mt-0.5 text-xs text-zinc-500">{coachUp}👍 {coachDown}👎</p>
+          </div>
+        </div>
+      </section>
 
       {/* Brain memory — learned lessons, independent of Ask-the-Vault usage */}
       <BrainLearningInbox clientId={clientId} memories={memory} />

@@ -118,7 +118,7 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
       }, { showErrorToast: false });
       setCommitment(""); setCommitmentGoal(""); setCommitmentDue(""); setCheckInDate(""); setForm("none");
       await load();
-      toast.success("Commitment saved. The Coach will remember it.");
+      toast.success(checkInDate ? "Commitment saved with weekly Coach check-ins until it is completed or dismissed." : "Commitment saved. The Coach will remember it.");
     } catch (error) {
       toast.error(errorMessage(error, "The commitment could not be saved."));
     } finally { setBusy(false); }
@@ -224,7 +224,7 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
                 <div className="mb-3 grid gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
                   <Textarea value={commitment} onChange={(event) => setCommitment(event.target.value)} maxLength={1000} rows={2} placeholder="What will you do next?" />
                   <select value={commitmentGoal} onChange={(event) => setCommitmentGoal(event.target.value)} className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"><option value="">No linked goal</option>{activeGoals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select>
-                  <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs text-zinc-500">Due date<Input type="date" value={commitmentDue} onChange={(event) => setCommitmentDue(event.target.value)} className="mt-1" /></label><label className="text-xs text-zinc-500">Coach check-in<Input type="date" value={checkInDate} onChange={(event) => setCheckInDate(event.target.value)} className="mt-1" /></label></div>
+                  <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs text-zinc-500">Due date<Input type="date" value={commitmentDue} onChange={(event) => setCommitmentDue(event.target.value)} className="mt-1" /></label><label className="text-xs text-zinc-500">Weekly Coach check-ins start<Input type="date" value={checkInDate} onChange={(event) => setCheckInDate(event.target.value)} className="mt-1" /></label></div>
                   <Button size="sm" onClick={createCommitment} disabled={busy || !commitment.trim()}>{busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}Save commitment</Button>
                 </div>
               )}

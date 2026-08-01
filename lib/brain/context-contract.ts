@@ -6,7 +6,7 @@ import { z } from "zod";
  * still be inspected while current outputs use the latest resolver.
  */
 export const BRAIN_CONTEXT_VERSION = "brain-context-v1" as const;
-export const BRAIN_RESOLVER_VERSION = "resolver-v7-coach-progress" as const;
+export const BRAIN_RESOLVER_VERSION = "resolver-v8-coach-intelligence" as const;
 export const BRAIN_RESOLVER_VERSIONS = [
   "resolver-v1",
   "resolver-v2-task-memory",
@@ -14,6 +14,7 @@ export const BRAIN_RESOLVER_VERSIONS = [
   "resolver-v4-library-availability",
   "resolver-v5-role-aware-coach",
   "resolver-v6-coach-operations",
+  "resolver-v7-coach-progress",
   BRAIN_RESOLVER_VERSION,
 ] as const;
 
@@ -69,7 +70,7 @@ export const brainContextRequestSchema = z.object({
     conversationVisibility: z.literal("private_coach"),
     intendedAudience: z.enum(["private", "client", "va_team", "task_board"]),
   }).optional(),
-  actionMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task", "create_goal", "create_commitment"]).optional(),
+  actionMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task", "create_goal", "create_commitment", "create_memory"]).optional(),
   selectedVaultSourceIds: z.array(z.uuid()).max(100).default([]),
   includeMarketIntelligence: z.boolean().default(false),
 });
@@ -96,7 +97,7 @@ export const brainLibrarySourceSchema = z.object({
   category: z.string().trim().min(1).max(120),
   sourceUrl: z.url().nullable(),
   tags: z.array(z.string().trim().min(1).max(100)).max(30),
-  selectionMethod: z.enum(["full_text", "lexical_recovery"]),
+  selectionMethod: z.enum(["semantic", "hybrid", "full_text", "lexical_recovery"]),
   relevance: score.nullable(),
   selectionReason: z.string().trim().min(1).max(1000),
 });
@@ -189,7 +190,7 @@ export const brainContextSchema = z.object({
   library: z.object({
     sources: z.array(brainLibrarySourceSchema).max(30),
     retrievalQuery: z.string().trim().max(4000),
-    retrievalMethod: z.enum(["full_text", "lexical_recovery", "none"]),
+    retrievalMethod: z.enum(["semantic", "hybrid", "full_text", "lexical_recovery", "none"]),
     coverage: z.enum(["strong", "partial", "weak", "none"]),
     availability: z.enum(["available", "degraded", "unavailable", "not_requested"]).default("available"),
   }).default({
@@ -257,7 +258,18 @@ export const brainContextSchema = z.object({
       lastCheckInAt: nullableTimestamp, reminderCount: z.number().int().min(0).max(100),
       updatedAt: nullableTimestamp,
     })).max(50),
-  }).default({ availability: "not_requested", goals: [], commitments: [] }),
+    memories: z.array(z.object({
+      memoryId: z.uuid(), kind: z.enum(["preference", "decision", "context", "challenge"]),
+      content: z.string().trim().min(3).max(2000), status: z.enum(["active", "muted"]),
+      updatedAt: nullableTimestamp,
+    })).max(100).default([]),
+    feedback: z.array(z.object({
+      signalId: z.uuid(), rating: z.union([z.literal(1), z.literal(-1)]),
+      category: z.string().trim().min(1).max(120),
+      dimensions: z.array(z.string().trim().min(1).max(100)).max(20),
+      createdAt: nullableTimestamp,
+    })).max(20).default([]),
+  }).default({ availability: "not_requested", goals: [], commitments: [], memories: [], feedback: [] }),
   style: z.object({
     source: z.enum([
       "project_snapshot",
@@ -308,6 +320,8 @@ export const brainContextSchema = z.object({
     communicationIds: z.array(z.uuid()).max(50).optional(),
     coachGoalIds: z.array(z.uuid()).max(30).default([]),
     coachCommitmentIds: z.array(z.uuid()).max(50).default([]),
+    coachMemoryIds: z.array(z.uuid()).max(100).default([]),
+    coachFeedbackSignalIds: z.array(z.uuid()).max(20).default([]),
   }),
 }).superRefine((context, refinement) => {
   const unique = (values: string[]) => new Set(values).size === values.length;
@@ -341,6 +355,8 @@ export const brainContextSchema = z.object({
   const communicationIds = context.operations?.communications.map((message) => message.messageId) ?? [];
   const coachGoalIds = context.coaching.goals.map((goal) => goal.goalId);
   const coachCommitmentIds = context.coaching.commitments.map((commitment) => commitment.commitmentId);
+  const coachMemoryIds = context.coaching.memories.map((memory) => memory.memoryId);
+  const coachFeedbackSignalIds = context.coaching.feedback.map((signal) => signal.signalId);
 
   if (!unique(context.request.selectedVaultSourceIds)) {
     refinement.addIssue({
@@ -413,6 +429,7 @@ export const brainContextSchema = z.object({
   if (context.library.availability === "degraded") {
     const visibleWarning = context.warnings.some((warning) =>
       warning.code === "business_library_search_degraded"
+      || warning.code === "business_library_semantic_degraded"
     );
     if (!visibleWarning) {
       refinement.addIssue({
@@ -469,6 +486,12 @@ export const brainContextSchema = z.object({
   }
   if (!sameSet(context.provenance.coachCommitmentIds, coachCommitmentIds)) {
     refinement.addIssue({ code: "custom", path: ["provenance", "coachCommitmentIds"], message: "Coach commitment provenance must match the owner-private coaching context." });
+  }
+  if (!sameSet(context.provenance.coachMemoryIds, coachMemoryIds)) {
+    refinement.addIssue({ code: "custom", path: ["provenance", "coachMemoryIds"], message: "Coach memory provenance must match the owner-private coaching context." });
+  }
+  if (!sameSet(context.provenance.coachFeedbackSignalIds, coachFeedbackSignalIds)) {
+    refinement.addIssue({ code: "custom", path: ["provenance", "coachFeedbackSignalIds"], message: "Coach feedback provenance must match the owner-private coaching context." });
   }
   if (!context.market.included && (context.market.snapshotIds.length || context.market.insights.length)) {
     refinement.addIssue({

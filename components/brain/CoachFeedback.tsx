@@ -55,7 +55,13 @@ export function CoachFeedback({
   answer: string;
   snapshotId?: string | null;
   coachRole: "client" | "va";
-  sources: Array<{ kind: string; title: string; itemId: string | null }>;
+  sources: Array<{
+    kind: string;
+    title: string;
+    itemId: string | null;
+    versionId?: string | null;
+    versionNumber?: number | null;
+  }>;
 }) {
   const { sendSignal, isSending } = useBrainSignal();
   const [rating, setRating] = useState<1 | -1 | null>(null);
@@ -85,7 +91,7 @@ export function CoachFeedback({
       });
       setDone(true);
       setRating(null);
-      toast.success("Feedback saved for governed Brain learning review.");
+      toast.success("Feedback saved. Your Coach can use the private pattern for 30 days; it will not become company truth.");
     } catch {
       // The shared API client reports the recoverable error and keeps this open.
     }
@@ -113,7 +119,7 @@ export function CoachFeedback({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-white">{rating === 1 ? "What worked?" : "What should change?"}</p>
-              <p className="mt-0.5 text-xs text-zinc-500">Feedback improves retrieval and enters review. It never becomes company truth automatically.</p>
+              <p className="mt-0.5 text-xs text-zinc-500">Your Coach can use the private pattern for 30 days. The question, answer and detail then expire and never become shared company truth.</p>
             </div>
             <button type="button" aria-label="Close Coach feedback" onClick={() => setRating(null)} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-white">
               <X className="h-4 w-4" />
