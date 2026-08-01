@@ -27,7 +27,7 @@ interface ClientsTableProps {
 }
 
 export function ClientsTable({ clients: initial, userCounts }: ClientsTableProps) {
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   const [clients, setClients] = useState(initial);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");

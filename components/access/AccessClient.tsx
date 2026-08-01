@@ -358,7 +358,10 @@ function AccessDialog({
   const restrictedTo = restrictMode === "some" ? Array.from(allowed) : null;
 
   const isEdit = !!entry;
-  const canSave = site.trim() && category.trim() && (isEdit || password.length > 0);
+  // An empty "specific people" selection must never save: the server
+  // normalizes [] to NULL = visible to EVERYONE — the opposite of the intent.
+  const restrictionEmpty = restrictMode === "some" && allowed.size === 0;
+  const canSave = site.trim() && category.trim() && (isEdit || password.length > 0) && !restrictionEmpty;
 
   async function save() {
     if (!canSave || busy) return;

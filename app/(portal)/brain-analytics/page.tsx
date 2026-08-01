@@ -16,15 +16,29 @@ export const metadata = { title: "Brain Analytics — RapidTal" };
 
 const WINDOW_DAYS = 30;
 
-export default async function BrainAnalyticsPage() {
+export default async function BrainAnalyticsPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ client?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user, client } = ctx;
   if (!["client_admin", "super_admin"].includes(user.role)) redirect("/dashboard");
-  if (!user.client_id) redirect("/dashboard");
 
   const admin = createAdminClient();
-  const clientId = user.client_id;
+  // A super-admin normally has no client_id — let them pick a Brain instead of
+  // hitting a redirect wall (the same pattern /brain uses).
+  let clientId = user.client_id;
+  let clientOptions: { id: string; name: string }[] = [];
+  let selectedClientName: string | null = null;
+  if (user.role === "super_admin") {
+    const { data: clients } = await admin
+      .from("clients").select("id, name").is("archived_at", null).order("name");
+    clientOptions = (clients ?? []) as { id: string; name: string }[];
+    const selected = clientOptions.find((option) => option.id === searchParams.client) ?? clientOptions[0];
+    clientId = selected?.id ?? null;
+    selectedClientName = selected?.name ?? null;
+  }
+  if (!clientId) redirect("/dashboard");
+
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
   const [queriesRes, feedbackRes, memoryRes, topicsRes, signalsRes] = await Promise.all([
@@ -157,12 +171,30 @@ export default async function BrainAnalyticsPage() {
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Brain Analytics</h1>
           <p className="text-zinc-400 text-sm mt-1">
-            How {client?.name ?? "your team"} is using the brain — last {WINDOW_DAYS} days.
+            How {selectedClientName ?? client?.name ?? "your team"} is using the brain — last {WINDOW_DAYS} days.
           </p>
         </div>
       </div>
 
       <PageIntro id="brain-analytics" />
+
+      {user.role === "super_admin" && clientOptions.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-8">
+          {clientOptions.map((option) => (
+            <a
+              key={option.id}
+              href={`/brain-analytics?client=${option.id}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                option.id === clientId
+                  ? "bg-zinc-700 border-zinc-600 text-white"
+                  : "border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600"
+              }`}
+            >
+              {option.name}
+            </a>
+          ))}
+        </div>
+      )}
 
       {asked === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-12 text-center">

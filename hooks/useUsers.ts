@@ -95,7 +95,6 @@ export function useUsers(initialUsers: AdminUserRow[]) {
       toast.success(`User "${user.full_name}" created`);
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to create");
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: key });
@@ -112,7 +111,6 @@ export function useUsers(initialUsers: AdminUserRow[]) {
       toast.success("User updated");
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to update");
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: key });
@@ -144,7 +142,6 @@ export function useUsers(initialUsers: AdminUserRow[]) {
       if (context?.previousUsers) {
         queryClient.setQueryData(key, context.previousUsers);
       }
-      toast.error(err instanceof Error ? err.message : "Failed to update");
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: key });
@@ -169,7 +166,6 @@ export function useUsers(initialUsers: AdminUserRow[]) {
       if (context?.previousUsers) {
         queryClient.setQueryData(key, context.previousUsers);
       }
-      toast.error(err instanceof Error ? err.message : "Failed to delete");
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: key });

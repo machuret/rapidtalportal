@@ -90,7 +90,7 @@ export function CrmDetailPanel({
       setEditing(false);
       toast.success("Contact updated.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Update failed.");
+      /* api-client surfaces the error toast */
     } finally {
       savingRef.current = false;
     }
@@ -103,7 +103,7 @@ export function CrmDetailPanel({
       onDeleted(contact.id);
       toast.success("Contact deleted.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Delete failed.");
+      /* api-client surfaces the error toast */
     }
   }
 
@@ -113,7 +113,7 @@ export function CrmDetailPanel({
       onUpdated(updated);
       toast.success(archive ? "Contact archived — recoverable from the Archived view." : "Contact restored.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed.");
+      /* api-client surfaces the error toast */
     }
   }
 
@@ -139,7 +139,7 @@ export function CrmDetailPanel({
       setNoteBody("");
       toast.success("Note saved.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save note.");
+      /* api-client surfaces the error toast */
     }
   }
 
@@ -150,7 +150,7 @@ export function CrmDetailPanel({
       await deleteNoteMutation({ id: noteId, clientId });
       onNoteDeleted(noteId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete note.");
+      /* api-client surfaces the error toast */
     } finally {
       deletingNotesRef.current.delete(noteId);
     }

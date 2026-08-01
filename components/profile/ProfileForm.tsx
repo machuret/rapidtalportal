@@ -15,7 +15,7 @@ interface Props {
 }
 
 export function ProfileForm({ user }: Props) {
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   const fileRef = useRef<HTMLInputElement>(null);
   const {
     updateProfile,

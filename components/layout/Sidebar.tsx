@@ -170,7 +170,7 @@ const adminLinks: NavItem[] = [
 export function Sidebar({ user, client, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
   const [confirmLogout, setConfirmLogout] = useState(false);
   // Groups start expanded for discoverability; toggling collapses per group.
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});

@@ -38,7 +38,9 @@ function DateDivider({ label }: { label: string }) {
 }
 
 export function MessagesClient({ currentUserId, currentUserRole, clientId }: MessagesClientProps) {
-  const supabase = createClient();
+  // Memoized: a fresh client per render used to tear down and reopen the
+  // realtime websocket channel on every keystroke.
+  const [supabase] = useState(() => createClient());
   const {
     messages,
     isLoading: loading,

@@ -74,18 +74,32 @@ export function useVaultList(clientId: string, filters: VaultListFilters = {}) {
   });
 
   // ── Realtime — invalidate (refetch) on any change to this client's items ────
+  // Trailing-debounced: during crawls/bulk indexing, vault-process writes rows
+  // continuously and an un-debounced invalidate refetches EVERY loaded page per
+  // event. Coalesce bursts into one refetch per 1.5s quiet window.
   const supabaseRef = useRef(createClient());
+  const invalidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const supabase = supabaseRef.current;
+    const scheduleInvalidate = () => {
+      if (invalidateTimer.current) clearTimeout(invalidateTimer.current);
+      invalidateTimer.current = setTimeout(() => {
+        invalidateTimer.current = null;
+        queryClient.invalidateQueries({ queryKey: vaultListKeys.all(clientId) });
+      }, 1500);
+    };
     const channel = supabase
       .channel(`vault-list:${clientId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "vault_items", filter: `client_id=eq.${clientId}` },
-        () => { queryClient.invalidateQueries({ queryKey: vaultListKeys.all(clientId) }); }
+        scheduleInvalidate
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (invalidateTimer.current) clearTimeout(invalidateTimer.current);
+      supabase.removeChannel(channel);
+    };
   }, [clientId, queryClient]);
 
   // ── Mutations — invalidate the list on settle ───────────────────────────────
@@ -93,14 +107,14 @@ export function useVaultList(clientId: string, filters: VaultListFilters = {}) {
 
   const deleteMutation = useMutation({
     mutationFn: (input: { itemIds: string[]; clientId: string }) =>
-      api.post<{ deleted?: number }>(ROUTES.vault.delete(), input),
+      api.post<{ deleted?: number }>(ROUTES.vault.delete(), input, { showErrorToast: false }),
     onSettled: invalidate,
   });
 
   const reprocessMutation = useMutation({
     mutationFn: (input: { id: string; clientId: string }) =>
       // Manual "re-run AI" → rebuild (refresh summary + re-embed from scratch).
-      api.post(ROUTES.vault.reprocess(input.id), { clientId: input.clientId, rebuild: true }),
+      api.post(ROUTES.vault.reprocess(input.id), { clientId: input.clientId, rebuild: true }, { showErrorToast: false }),
     onSettled: invalidate,
   });
 

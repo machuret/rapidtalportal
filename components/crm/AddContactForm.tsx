@@ -75,7 +75,7 @@ export function AddContactForm({ clientId }: AddContactFormProps) {
       toast.success("Contact added successfully!");
       router.push("/crm");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add contact.");
+      /* api-client surfaces the error toast */
     }
   };
 

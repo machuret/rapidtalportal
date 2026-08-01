@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
@@ -41,7 +42,7 @@ async function fetchMessages(clientId: string): Promise<Message[]> {
 
 // Send message via API
 async function sendMessage(input: SendMessageInput): Promise<unknown> {
-  return api.post(ROUTES.messages.send(), input);
+  return api.post(ROUTES.messages.send(), input, { showErrorToast: false });
 }
 
 interface UseMessagesOptions {
@@ -71,13 +72,15 @@ export function useMessages(clientId: string, options: UseMessagesOptions = {}) 
   });
 
   // Append a message into the query cache (used by realtime inserts), de-duped by id.
-  function appendMessage(message: Message) {
+  // useCallback: an unstable reference here forces the realtime effect to
+  // resubscribe on every render (every keystroke, previously).
+  const appendMessage = useCallback((message: Message) => {
     queryClient.setQueryData<Message[]>(messageKeys.byClient(clientId), (prev) => {
       const list = prev ?? [];
       if (list.some((m) => m.id === message.id)) return list;
       return [...list, message];
     });
-  }
+  }, [queryClient, clientId]);
 
   return {
     messages: messagesQuery.data ?? [],

@@ -387,6 +387,9 @@ function TaskDialog({
   const [dueDate, setDueDate] = useState(task?.due_date ?? "");
   const [priority, setPriority] = useState(task?.priority ?? 2);
   const [categoryId, setCategoryId] = useState(task?.category_id ?? "");
+  // Status is editable here too — drag-and-drop doesn't work on touch
+  // devices, so the dialog must not be the only way to move a card.
+  const [taskStatus, setTaskStatus] = useState<TaskStatus>(task?.status ?? status);
   const [busy, setBusy] = useState(false);
   const [reviewNote, setReviewNote] = useState("");
 
@@ -430,6 +433,7 @@ function TaskDialog({
           id: task!.id,
           title: title.trim(),
           description,
+          status: taskStatus,
           priority,
           categoryId: categoryId || null,
           ...(isAdmin ? { assignedTo: assignedTo || null } : {}),
@@ -495,6 +499,19 @@ function TaskDialog({
               rows={4} placeholder="Anything the VA needs to do this well…" className="bg-zinc-800 border-zinc-700" />
           </div>
           <div className="grid grid-cols-2 gap-4">
+            {mode === "edit" && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Status</Label>
+                <select value={taskStatus} onChange={(e) => setTaskStatus(e.target.value as TaskStatus)} disabled={!canWrite}
+                  aria-label="Task status"
+                  className="bg-zinc-800 border border-zinc-700 rounded-md px-3 h-9 text-sm text-zinc-300">
+                  <option value="todo">To Do</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="review">Review</option>
+                  {isAdmin && <option value="done">Done</option>}
+                </select>
+              </div>
+            )}
             {isAdmin && (
               <div className="flex flex-col gap-1.5">
                 <Label>Assignee</Label>
