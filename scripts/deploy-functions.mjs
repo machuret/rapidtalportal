@@ -21,9 +21,10 @@ import { dirname, join } from "node:path";
 
 const FUNCTIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "supabase", "functions");
 
-// Each function is a subdirectory; non-directory entries (e.g. deno.json) are skipped.
+// Each function is a subdirectory; non-directory entries (e.g. deno.json) and
+// underscore-prefixed shared-module dirs (e.g. _shared) are not functions.
 const allFunctions = readdirSync(FUNCTIONS_DIR)
-  .filter((name) => statSync(join(FUNCTIONS_DIR, name)).isDirectory())
+  .filter((name) => statSync(join(FUNCTIONS_DIR, name)).isDirectory() && !name.startsWith("_"))
   .sort();
 
 const requested = process.argv.slice(2);
