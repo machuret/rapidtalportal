@@ -35,6 +35,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { FieldTip } from "@/components/ui/tooltip";
 import { CompetitorIntelligencePanel } from "@/components/content/CompetitorIntelligencePanel";
 
 interface CompetitorsTabProps {
@@ -665,15 +666,17 @@ export function CompetitorsTab({
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
-                      <span className="rounded-full border border-emerald-500/30 px-2.5 py-1 text-emerald-300">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 px-2.5 py-1 text-emerald-300">
                         {competitor.readiness.positioning_readiness_score}/100 positioning
+                        <FieldTip text="Positioning readiness: enough captured content (5+ items, 3,000+ characters) for the engine to map this competitor's market position against yours. Higher = more evidence." />
                       </span>
-                      <span className={`rounded-full border px-2.5 py-1 ${
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${
                         competitor.readiness.content_strategy_ready
                           ? "border-emerald-500/30 text-emerald-300"
                           : "border-amber-500/30 text-amber-300"
                       }`}>
                         {competitor.readiness.editorial_readiness_score}/100 editorial
+                        <FieldTip text="Editorial readiness: how much article and social content has been captured for content-strategy analysis — topics, formats and cadence. Amber means collect more sources." />
                       </span>
                     </div>
                   </div>

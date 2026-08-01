@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Copy, Check, Globe, Loader2, Brain, Sparkles } from "lucide-react";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { FieldTip } from "@/components/ui/tooltip";
 import { HardRulesEditor } from "./HardRulesEditor";
 import type { ContentHardRule } from "@/supabase/functions/_shared/content-style";
 
@@ -27,7 +28,7 @@ interface DnaFormProps {
 // disallowed by the styles guard). Mirrors the dashboard setup meter.
 const PCT_WIDTH = ["w-0", "w-[10%]", "w-[20%]", "w-[30%]", "w-[40%]", "w-[50%]", "w-[60%]", "w-[70%]", "w-[80%]", "w-[90%]", "w-full"];
 
-const FACT_FIELDS: { key: keyof DbCompanyDna; label: string; multiline?: boolean; hint?: string }[] = [
+const FACT_FIELDS: { key: keyof DbCompanyDna; label: string; multiline?: boolean; hint?: string; tip?: string }[] = [
   { key: "company_name", label: "Company Name" },
   { key: "company_description", label: "Company Description", multiline: true },
   { key: "founders", label: "Founders" },
@@ -36,29 +37,29 @@ const FACT_FIELDS: { key: keyof DbCompanyDna; label: string; multiline?: boolean
   { key: "phone", label: "Phone" },
   { key: "email", label: "Email" },
   { key: "website", label: "Website" },
-  { key: "client_type", label: "Client Type" },
-  { key: "target_demographic", label: "Target Demographic" },
+  { key: "client_type", label: "Client Type", tip: "Who you sell to (e.g. property investors, dental practices). Shapes the examples, tone and benefits the AI leads with." },
+  { key: "target_demographic", label: "Target Demographic", tip: "The audience profile behind your marketing. Drafts are written for these people, not a generic reader." },
   { key: "values", label: "Company Values", multiline: true },
   { key: "services", label: "Services Offered", multiline: true },
   { key: "business_goals", label: "Business Goals", multiline: true },
   { key: "marketing_goals", label: "Marketing Goals", multiline: true },
   { key: "team", label: "Team", multiline: true },
-  { key: "tools_used", label: "Tools the Company Uses", multiline: true },
-  { key: "website_content", label: "Website Content", multiline: true },
+  { key: "tools_used", label: "Tools the Company Uses", multiline: true, tip: "Your real stack (CRM, ad platforms, analytics…). The AI references the tools you actually use instead of generic software." },
+  { key: "website_content", label: "Website Content", multiline: true, tip: "Key text from your website — about, services, pricing. Long-form facts the Brain can quote when the Vault has gaps." },
 ];
 
-const VOICE_FIELDS: { key: keyof DbCompanyDna; label: string; multiline?: boolean; hint?: string }[] = [
+const VOICE_FIELDS: { key: keyof DbCompanyDna; label: string; multiline?: boolean; hint?: string; tip?: string }[] = [
   { key: "brand_voice", label: "Brand Voice & Tone", multiline: true },
   { key: "content_style", label: "Content Tone & Style", multiline: true },
   { key: "internal_rules", label: "Priority Editorial Guidance", multiline: true, hint: "Guidance that needs human judgement. Use Deterministic hard rules for requirements the system must enforce automatically." },
   { key: "preferred_terms", label: "Preferred Words & Phrases", multiline: true },
   { key: "prohibited_terms", label: "Words & Phrases to Avoid", multiline: true, hint: "Enter one term per line. Commas and semicolons are also supported for existing lists." },
-  { key: "emoji_policy", label: "Emoji Policy", multiline: true },
-  { key: "humour_policy", label: "Humour Policy", multiline: true },
-  { key: "spelling_locale", label: "Language & Spelling Standard" },
+  { key: "emoji_policy", label: "Emoji Policy", multiline: true, tip: "How and when the brand uses emoji. The style engine follows this before any per-draft request." },
+  { key: "humour_policy", label: "Humour Policy", multiline: true, tip: "Where humour is welcome, where it isn't, and how dry it can be. Applied to every draft." },
+  { key: "spelling_locale", label: "Language & Spelling Standard", tip: "e.g. Australian English (colour, organise) vs US English. Applied to every draft and tool output." },
   { key: "default_cta_style", label: "Default Call-to-Action Style", multiline: true },
-  { key: "approved_claims", label: "Approved Claims & Proof Points", multiline: true },
-  { key: "prohibited_claims", label: "Prohibited Claims", multiline: true, hint: "Enter one complete claim per line. These are checked before approval." },
+  { key: "approved_claims", label: "Approved Claims & Proof Points", multiline: true, tip: "Claims the AI may make verbatim — numbers, results, guarantees you can prove. Drafts are grounded in these instead of inventing proof." },
+  { key: "prohibited_claims", label: "Prohibited Claims", multiline: true, hint: "Enter one complete claim per line. These are checked before approval.", tip: "Claims the AI must never make. Checked deterministically before any draft is approved." },
   { key: "sign_off", label: "Default Sign-off" },
 ];
 
@@ -490,11 +491,12 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {FACT_FIELDS.map(({ key, label, multiline, hint }) => (
+          {FACT_FIELDS.map(({ key, label, multiline, hint, tip }) => (
             <div key={key} className={cn("flex flex-col gap-1.5", multiline && "sm:col-span-2")}>
               <Label>
                 {label}
                 <ProvenanceBadge entry={provenance[key as string]} />
+                {tip && <FieldTip text={tip} />}
               </Label>
               {hint && <p className="text-xs text-zinc-500">{hint}</p>}
               {multiline ? (
@@ -527,6 +529,7 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
           <div className="flex items-center gap-2 mb-1">
             <Sparkles className="w-4 h-4 text-purple-400" />
             <h3 className="text-sm font-semibold text-white">Channel Writing Styles</h3>
+            <FieldTip text="Per-channel overrides for quirks only — hook style, length, hashtag policy. Your DNA voice and approved style analysis always win over anything written here." />
           </div>
           <p className="text-xs text-zinc-400 mb-4">
             Optional channel overrides. Company guidance and the global brand voice still take priority.
@@ -556,11 +559,12 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
         </div>
 
         <div className="grid grid-cols-1 gap-4">
-          {VOICE_FIELDS.map(({ key, label, multiline, hint }) => (
+          {VOICE_FIELDS.map(({ key, label, multiline, hint, tip }) => (
             <div key={key} className="flex flex-col gap-1.5">
               <Label>
                 {label}
                 <ProvenanceBadge entry={provenance[key as string]} />
+                {tip && <FieldTip text={tip} />}
               </Label>
               {hint && <p className="text-xs text-zinc-500">{hint}</p>}
               {multiline ? (

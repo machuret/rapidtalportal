@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldTip } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -82,7 +83,10 @@ export function HardRulesEditor({
     <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-4">
       <div className="flex items-start gap-3 mb-4">
         <div className="flex-1">
-          <h3 className="text-sm font-semibold text-white">Deterministic hard rules</h3>
+          <h3 className="text-sm font-semibold text-white">
+            Deterministic hard rules
+            <FieldTip text="Rules enforced by code — never by model judgement. 'Must/must-not contain' checks the draft text; prefix/suffix pins how it opens or closes; word and emoji limits are numeric. Anything that needs nuance belongs in Priority Editorial Guidance instead." />
+          </h3>
           <p className="text-xs text-zinc-400 mt-1">
             These rules are checked by code after generation and again before approval. Use Internal Rules below for guidance that still requires editorial judgement.
           </p>

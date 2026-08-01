@@ -163,16 +163,17 @@ export const VA_GUIDE: GuideGroup[] = [
       },
       {
         title: "Content",
-        what: "A studio that generates marketing drafts — blogs, posts, emails — grounded in the client's Vault and brand. Create a draft, refine it, and an admin approves it before it goes out.",
+        what: "A studio that generates marketing drafts — blogs, posts, emails — grounded in the client's Vault and brand. It lives in sections under the Content menu: Quick Draft, Ideas, Competitor Ideas, Projects, Drafts & Approved, and Content Style. You create and refine; an admin approves before anything goes out.",
         why: "The goal is to let you produce real marketing work without being a professional copywriter. It handles the first draft on-brand and on-topic; you shape it. The approval step means there's always a safety net before anything is published.",
         can: [
-          "Generate blog posts, social posts, and marketing emails.",
-          "Work from suggested topics or your own brief.",
-          "Refine drafts; an admin reviews before they go live.",
+          "Quick Draft: generate posts, blogs and emails from a topic and channel.",
+          "Ideas: work from AI-suggested topics or your own brief.",
+          "Competitor Ideas: turn market analysis into draft opportunities.",
+          "Projects: continue saved work; Drafts & Approved: refine and submit for approval.",
         ],
         how: [
-          "Open Content from the menu.",
-          "Pick a topic or describe what you want, generate a draft, and refine it.",
+          "Open the Content group in the menu and pick a section.",
+          "Describe what you want (or pick an idea), generate a draft, and refine it.",
           "Submit it for admin approval.",
         ],
         tip: "Feed it a clear, specific brief — the more direction you give, the less editing you'll do afterwards.",

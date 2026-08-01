@@ -182,17 +182,18 @@ export const CLIENT_GUIDE: GuideGroup[] = [
       },
       {
         title: "Company DNA",
-        what: "The core profile of your business — who you are, what you offer, your values, and key contacts.",
+        what: "The core profile of your business — who you are, what you offer, your values, and key contacts. It has two pages: Profile (the facts plus your voice & editorial policy) and Competitors (who you compete with, kept strictly separate from your own facts).",
         why: "The goal is to give the AI a rock-solid foundation about you. Because this profile is used in every single answer, a few minutes keeping it accurate quietly lifts the quality of everything at once — the highest-leverage five minutes in the whole portal.",
         can: [
-          "Fill in and update your company's essential details.",
+          "Fill in and update your company's essential details in Profile.",
+          "Track competitors and their public content in Competitors.",
           "Improve the accuracy of every AI answer in one place.",
         ],
         how: [
-          "Open Company DNA from the menu.",
+          "Open the Company DNA group in the menu and pick Profile or Competitors.",
           "Fill in each field (services, values, audience, contacts…) and save.",
         ],
-        tip: "Revisit it whenever your services, pricing, or positioning change — the AI will instantly reflect it.",
+        tip: "Revisit it whenever your services, pricing, or positioning change — the AI will instantly reflect it. Fields with an auto-fill badge were drafted by AI — review those first.",
       },
       {
         title: "Company Brain",
@@ -231,19 +232,22 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     items: [
       {
         title: "Content",
-        what: "A guided Content Studio for moving from an idea or competitor opportunity to a channel-specific draft, review and approval.",
-        why: "The goal is to keep ideas, briefs, Vault evidence, competitor inspiration, voice settings, drafts and approvals connected in one recoverable workflow.",
+        what: "A guided content workspace — quick drafts, grounded ideas, competitor opportunities, projects and approvals, each on its own page under the Content menu.",
+        why: "The goal is to keep ideas, briefs, Vault evidence, competitor inspiration, voice settings, drafts and approvals connected in one recoverable workflow — without everything competing for space on one screen.",
         can: [
-          "Quick-create a draft from only a topic and channel.",
-          "Save ideas and continue unfinished projects.",
-          "Review competitor opportunities, edit drafts, validate, approve, archive, adapt and export.",
+          "Quick Draft: create a draft from only a topic and channel.",
+          "Ideas: review AI-suggested topics and Vault gaps; approve the good ones.",
+          "Competitor Ideas: see market analysis turned into recommended ideas.",
+          "Projects: continue unfinished work exactly where you left off.",
+          "Drafts & Approved: edit, validate, approve, archive, adapt and export.",
+          "Content Style: manage voice profiles, golden examples and style sources.",
         ],
         how: [
-          "Open Content from the menu.",
-          "Use Quick Create for speed, or choose an approved idea or competitor opportunity.",
-          "Open any unfinished project to continue where you left off.",
+          "Open the Content group in the menu and pick a section.",
+          "Use Quick Draft for speed, or start from an approved idea or competitor opportunity.",
+          "Open any project to continue where you left off — every step is saved.",
         ],
-        tip: "Start with Quick Create when speed matters; use the guided workflow when you want tighter control over evidence and direction.",
+        tip: "Start with Quick Draft when speed matters; use Projects when you want tighter control over evidence and direction.",
       },
       {
         title: "CRM",
