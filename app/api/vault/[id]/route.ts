@@ -1,4 +1,11 @@
 /**
+ * GET /api/vault/[id] — fetch one vault item including raw_content.
+ *
+ * The list endpoint intentionally omits raw_content (payload size), so the
+ * edit drawer and the row preview fetch the document on demand. Without this
+ * route the drawer's Content field always opened empty — and saving replaced
+ * the whole document with whatever was typed.
+ *
  * PATCH /api/vault/[id] — Update a vault item's title, content, category, tags.
  *
  * After saving, fires vault-process in the background (non-blocking) to refresh
@@ -6,7 +13,7 @@
  * after the DB write — the UI receives a live update via Supabase Realtime when
  * vault-process completes and writes back to vault_items.
  *
- * Auth: withAuth — client_admin or item creator only.
+ * Auth: withAuth — read: any user with client access; write: client_admin or creator.
  * Safeguards: Zod validation, assertClientAccess, created_by ownership check.
  */
 
@@ -18,6 +25,24 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
 import { z } from "zod";
+
+export const GET = withAuth<{ id: string }>(async (req, { user, params }) => {
+  const clientId = req.nextUrl.searchParams.get("clientId");
+  if (!clientId) return NextResponse.json({ error: "Missing clientId." }, { status: 400 });
+  const denied = assertClientAccess(user, clientId);
+  if (denied) return denied;
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("vault_items")
+    .select("id, client_id, title, raw_content, source_url, source_type, updated_at")
+    .eq("id", params.id)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) return serverError(error, { userId: user.id, clientId });
+  if (!data) return NextResponse.json({ error: "Item not found." }, { status: 404 });
+  return NextResponse.json(data);
+});
 
 const patchSchema = z.object({
   clientId: z.string().uuid(),

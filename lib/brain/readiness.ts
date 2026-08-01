@@ -126,19 +126,19 @@ export async function computeBrainReadiness(
       .eq("client_id", clientId).eq("contribution", "support").limit(5000),
     admin.from("content_analysis_attempts")
       .select("status,analysis_kind,lease_until,created_at")
-      .eq("client_id", clientId).gte("created_at", recent).limit(5000),
+      .eq("client_id", clientId).gte("created_at", recent).limit(1000),
     admin.from("brain_context_snapshots")
       .select("id,surface,created_at")
-      .eq("client_id", clientId).gte("created_at", recent).limit(5000),
+      .eq("client_id", clientId).gte("created_at", recent).limit(1000),
     admin.from("vault_queries")
       .select("answered,created_at")
       .eq("client_id", clientId).neq("visibility", "private_coach")
-      .gte("created_at", recent).limit(5000),
+      .gte("created_at", recent).limit(1000),
     admin.from("competitors")
       .select("id,status").eq("client_id", clientId).eq("status", "active").limit(100),
     admin.from("competitor_content_items")
       .select("id,captured_at,is_removed").eq("client_id", clientId)
-      .eq("is_removed", false).order("captured_at", { ascending: false }).limit(5000),
+      .eq("is_removed", false).order("captured_at", { ascending: false }).limit(1000),
     admin.from("competitor_intelligence_runs")
       .select("id,status,created_at,analysis,source_count")
       .eq("client_id", clientId).eq("status", "complete")

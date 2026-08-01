@@ -42,10 +42,12 @@ export default async function BrainAnalyticsPage({ searchParams: searchParamsPro
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
   const [queriesRes, feedbackRes, memoryRes, topicsRes, signalsRes] = await Promise.all([
-    admin.from("vault_queries").select("*")
+    // Narrow columns only — select("*") used to drag full answer text and
+    // sources JSONB for rows we only count/group.
+    admin.from("vault_queries").select("id, question, answered, dismissed, created_at")
       .eq("client_id", clientId).neq("visibility", "private_coach")
       .gte("created_at", since).order("created_at", { ascending: false }).limit(2000),
-    admin.from("vault_feedback").select("*")
+    admin.from("vault_feedback").select("id, question, answer, rating, resolved, sources, created_at")
       .eq("client_id", clientId).gte("created_at", since).order("created_at", { ascending: false }).limit(1000),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (admin as any).from("brain_memory")

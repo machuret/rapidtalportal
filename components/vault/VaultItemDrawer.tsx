@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   DbVaultItem,
@@ -47,7 +47,13 @@ interface VaultItemVersionSummary {
 export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemDrawerProps) {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState(item.title);
-  const [content, setContent] = useState(item.raw_content ?? "");
+  // The list API omits raw_content (payload size) — fetch it on open. The
+  // Content field stays disabled until loaded, and a save only sends
+  // raw_content when it was actually fetched AND changed. Before this, the
+  // field always opened empty and any save wiped the whole document.
+  const [content, setContent] = useState("");
+  const [contentLoaded, setContentLoaded] = useState(false);
+  const originalContentRef = useRef("");
   const [category, setCategory] = useState<VaultCategory>(item.category ?? "general");
   const [tagInput, setTagInput] = useState(item.tags?.join(", ") ?? "");
   const [authorityLevel, setAuthorityLevel] = useState<VaultAuthorityLevel>(
@@ -68,6 +74,18 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
 
   useEffect(() => {
     let active = true;
+    void api.get<{ raw_content: string | null }>(
+      ROUTES.vault.itemContent(item.id, clientId),
+      { showErrorToast: false },
+    ).then((result) => {
+      if (!active) return;
+      originalContentRef.current = result.raw_content ?? "";
+      setContent(result.raw_content ?? "");
+      setContentLoaded(true);
+    }).catch(() => {
+      // Content stays disabled and unsavable when it can't be fetched — an
+      // unreachable document must fail closed, never be replaced by guesses.
+    });
     void api.get<{ items: Array<{ id: string; title: string }> }>(
       `${ROUTES.vault.items()}?clientId=${clientId}&evidenceRole=factual&limit=50`,
       { showErrorToast: false },
@@ -114,7 +132,7 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
       return api.patch(ROUTES.vault.item(item.id), {
         clientId,
         title: title.trim(),
-        raw_content: content.trim() !== (item.raw_content ?? "").trim()
+        raw_content: contentLoaded && content.trim() !== originalContentRef.current.trim()
           ? content.trim() || undefined
           : undefined,
         category,
@@ -349,8 +367,9 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
             <Textarea
               value={content}
               onChange={e => setContent(e.target.value)}
+              disabled={!contentLoaded}
               className="bg-zinc-900 border-zinc-700 text-zinc-100 font-mono text-xs leading-relaxed resize-none min-h-[300px]"
-              placeholder="Document content…"
+              placeholder={contentLoaded ? "Document content…" : "Loading document…"}
             />
             <p className="text-xs text-zinc-600">{formatNumber(content.length)} characters</p>
           </div>

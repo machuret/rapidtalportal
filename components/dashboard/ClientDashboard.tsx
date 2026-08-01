@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -63,6 +63,11 @@ export function ClientDashboard(props: ClientDashboardProps) {
   const [requestOpen, setRequestOpen] = useState(false);
   const [changesFor, setChangesFor] = useState<AwaitingTask | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  // router.refresh() (e.g. after RequestWorkDialog) delivers new server props;
+  // without this sync the lists kept showing the pre-refresh data forever.
+  useEffect(() => { setAwaiting(props.awaiting); }, [props.awaiting]);
+  useEffect(() => { setDelivered(props.recentDelivered); }, [props.recentDelivered]);
 
   const vaNames = vas.map((v) => v.name.trim()).filter(Boolean).join(", ");
 

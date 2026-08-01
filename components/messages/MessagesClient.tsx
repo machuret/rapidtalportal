@@ -18,6 +18,7 @@ interface MessagesClientProps {
   currentUserId: string;
   currentUserRole: string;
   clientId: string;
+  initialMessages?: Message[];
 }
 
 function formatMessageTime(ts: string): string {
@@ -37,7 +38,7 @@ function DateDivider({ label }: { label: string }) {
   );
 }
 
-export function MessagesClient({ currentUserId, currentUserRole, clientId }: MessagesClientProps) {
+export function MessagesClient({ currentUserId, currentUserRole, clientId, initialMessages }: MessagesClientProps) {
   // Memoized: a fresh client per render used to tear down and reopen the
   // realtime websocket channel on every keystroke.
   const [supabase] = useState(() => createClient());
@@ -50,7 +51,7 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
     appendMessage,
     // Poll as a safety net so new messages still arrive if the realtime
     // channel is blocked (e.g. by RLS on the browser client).
-  } = useMessages(clientId, { refetchInterval: 25_000 });
+  } = useMessages(clientId, { refetchInterval: 25_000, initialMessages });
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [connection, setConnection] = useState<ConversationConnection>("connecting");
@@ -69,9 +70,11 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
   }, [isError]);
 
   // ── Opening the chat clears the "new messages" bell notification ─────────────
+  // and marks the thread read so the dashboard unread count is finally true.
   useEffect(() => {
     void api.patch(ROUTES.notifications(), { type: "message" }, { showErrorToast: false }).catch(() => {});
-  }, []);
+    void api.post(ROUTES.messages.markRead(), { clientId }, { showErrorToast: false }).catch(() => {});
+  }, [clientId]);
 
   // ── Scroll to bottom once the initial load completes ─────────────────────────
   useEffect(() => {

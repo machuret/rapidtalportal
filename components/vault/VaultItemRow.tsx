@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { cn, formatDate, formatNumber } from "@/lib/utils";
+import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import type { DbVaultItem } from "@/types/database";
 import { CategoryBadge } from "@/components/shared/CategoryBadge";
 import {
@@ -42,6 +45,25 @@ export function VaultItemRow({
   onToggleExpand, onToggleSelect, onEdit, onDelete, onReprocess,
 }: VaultItemRowProps) {
   const src = SOURCE_META[item.source_type as keyof typeof SOURCE_META];
+  // The list API omits raw_content — fetch it on first expand for the preview.
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  useEffect(() => {
+    if (!isExpanded || previewContent !== null) return;
+    let active = true;
+    setPreviewLoading(true);
+    void api.get<{ raw_content: string | null }>(
+      ROUTES.vault.itemContent(item.id, item.client_id),
+      { showErrorToast: false },
+    ).then((result) => {
+      if (active) setPreviewContent(result.raw_content ?? "");
+    }).catch(() => {
+      if (active) setPreviewContent(null);
+    }).finally(() => {
+      if (active) setPreviewLoading(false);
+    });
+    return () => { active = false; };
+  }, [isExpanded, item.id, item.client_id, previewContent]);
   const processingTimestamp = new Date(item.updated_at ?? item.created_at).getTime();
   const isStuck =
     ["pending", "processing"].includes(item.status) &&
@@ -189,13 +211,18 @@ export function VaultItemRow({
           {item.status === "error" && item.error_message && (
             <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{item.error_message}</p>
           )}
-          {item.raw_content && (
+          {previewLoading && (
+            <p className="text-xs text-zinc-600 flex items-center gap-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading content…
+            </p>
+          )}
+          {!previewLoading && previewContent !== null && previewContent.length > 0 && (
             <div>
               <p className="label-section mb-2">Content Preview</p>
               <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap font-mono">
-                {item.raw_content.slice(0, 400)}
-                {item.raw_content.length > 400 && (
-                  <span className="text-zinc-600"> …{formatNumber(item.raw_content.length - 400)} more characters</span>
+                {previewContent.slice(0, 400)}
+                {previewContent.length > 400 && (
+                  <span className="text-zinc-600"> …{formatNumber(previewContent.length - 400)} more characters</span>
                 )}
               </p>
             </div>

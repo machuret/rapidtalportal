@@ -249,6 +249,24 @@ export const PATCH = withAuth(async (req, { user }) => {
       }),
     );
   }
+  // An admin moved a card from Review to Done (drag or the status select) →
+  // the VA gets the same approval notice the Approve button sends. Before this,
+  // dragging a Review card to Done silently skipped it.
+  if (parsed.data.status === "done" && task.status === "review" && isAdmin(user.role)
+      && task.assigned_to && task.assigned_to !== user.id) {
+    void notify([task.assigned_to], {
+      clientId: updated.client_id,
+      type: "task_approved",
+      title: `Approved: ${updated.title.slice(0, 110)}`,
+      href: "/tasks",
+      email: {
+        subject: `Approved: ${updated.title.slice(0, 80)}`,
+        heading: "Your work was approved",
+        paragraphs: [`"${updated.title}" was approved. Nice work!`],
+        ctaLabel: "Open the task board",
+      },
+    });
+  }
 
   return NextResponse.json(data);
 });

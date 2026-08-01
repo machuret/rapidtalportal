@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getCurrentUserAndClient } from "@/lib/auth";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { MobileSidebarTrigger } from "@/components/layout/MobileSidebarTrigger";
+import { SidebarShell } from "@/components/layout/SidebarShell";
 import { createClient } from "@/lib/supabase/server";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
@@ -61,13 +60,9 @@ export default async function PortalLayout({
         Skip to content
       </a>
       <ErrorReporter />
-      {/* Desktop sidebar (hidden when printing, e.g. My Job documents) */}
-      <div className="hidden md:flex print:!hidden">
-        <Sidebar user={ctx.user} client={ctx.client} />
-      </div>
-      {/* Mobile sidebar drawer */}
+      {/* The single sidebar instance (desktop column + mobile drawer) */}
       <div className="print:hidden">
-        <MobileSidebarTrigger user={ctx.user} client={ctx.client} />
+        <SidebarShell user={ctx.user} client={ctx.client} />
       </div>
       {/* Main content — pt accounts for mobile menu button */}
       <main id="main-content" className="flex-1 overflow-auto pt-14 md:pt-0 print:pt-0 print:overflow-visible">

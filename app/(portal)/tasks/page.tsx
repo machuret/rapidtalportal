@@ -19,22 +19,34 @@ export default async function TasksPage() {
   const isAdmin = user.role === "client_admin" || user.role === "super_admin";
 
   const admin = createAdminClient();
-  const [{ data: tasks }, { data: people }, { data: commentRows }, { data: cats }, { data: doneRows }, { data: recRows }] = await Promise.all([
+  const [{ data: tasks }, { data: people }, { data: cats }, { data: recRows }] = await Promise.all([
     // The live board excludes archived cards.
     admin.from("tasks").select("*").eq("client_id", user.client_id).is("archived_at", null)
       .order("status").order("order_index").order("created_at"),
     admin.from("users").select("id, full_name, email, role").eq("client_id", user.client_id),
-    admin.from("task_events").select("task_id").eq("client_id", user.client_id).eq("kind", "comment"),
     admin.from("task_categories").select("id, name, color").eq("client_id", user.client_id)
       .order("order_index").order("name"),
-    // Achieved stats read ALL done cards (incl. archived) so the totals survive archiving.
-    admin.from("tasks").select("title, status, completed_at, due_date, assigned_to")
-      .eq("client_id", user.client_id).eq("status", "done"),
     // Recurrences only matter to admins (who manage them).
     isAdmin
       ? admin.from("task_recurrences").select("id, assigned_to, category_id, title, priority, frequency, interval, next_run_on, active")
           .eq("client_id", user.client_id).order("active", { ascending: false }).order("next_run_on")
       : Promise.resolve({ data: [] as TaskRecurrence[] }),
+  ]);
+
+  // Second round, bounded by the live board: comment badges only exist on live
+  // cards, so counting all-time comments for archived tasks just grew forever.
+  const liveIds = ((tasks ?? []) as Task[]).map((task) => task.id);
+  const doneWindow = new Date(Date.now() - 365 * 86_400_000).toISOString();
+  const [{ data: commentRows }, { data: doneRows }] = await Promise.all([
+    liveIds.length
+      ? admin.from("task_events").select("task_id").eq("client_id", user.client_id)
+          .eq("kind", "comment").in("task_id", liveIds)
+      : Promise.resolve({ data: [] as { task_id: string }[] }),
+    // Achieved stats read done cards (incl. archived) within a rolling year so
+    // the totals survive archiving without dragging all-time history.
+    admin.from("tasks").select("title, status, completed_at, due_date, assigned_to")
+      .eq("client_id", user.client_id).eq("status", "done")
+      .gte("completed_at", doneWindow).limit(5000),
   ]);
 
   const commentCounts: Record<string, number> = {};

@@ -59,6 +59,7 @@ export const ROUTES = {
     teach: () => "/api/vault/teach",
     gaps: () => "/api/vault/gaps",
     item: (id: string) => `/api/vault/${id}`,
+    itemContent: (id: string, clientId: string) => `/api/vault/${id}?clientId=${clientId}`,
     itemVersions: (id: string) => `/api/vault/${id}/versions`,
     reprocess: (id: string) => `/api/vault/${id}/reprocess`,
   },
@@ -183,6 +184,7 @@ export const ROUTES = {
   messages: {
     list: (clientId: string) => `/api/messages?clientId=${clientId}`,
     send: () => "/api/messages/send",
+    markRead: () => "/api/messages/read",
   },
   myJob: {
     contract: (userId?: string) => `/api/my-job/contract${userId ? `?userId=${userId}` : ""}`,

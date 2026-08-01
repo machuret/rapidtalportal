@@ -245,6 +245,7 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
                             <Link
                               key={child.href}
                               href={child.href}
+                              prefetch={false}
                               onClick={onNavigate}
                               aria-current={childActive ? "page" : undefined}
                               className={cn(
@@ -271,6 +272,7 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={false}
                     onClick={onNavigate}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(

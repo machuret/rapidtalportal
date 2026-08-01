@@ -6,6 +6,7 @@
  * these on their My Job → Overview as read-only key terms.
  */
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
@@ -22,6 +23,7 @@ export interface ContractInit {
 }
 
 export function VaContractEditor({ vaId, initial }: { vaId: string; initial: ContractInit | null }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({
@@ -100,6 +102,9 @@ export function VaContractEditor({ vaId, initial }: { vaId: string; initial: Con
       }, { showErrorToast: false });
       toast.success("Contract terms saved.");
       setOpen(false);
+      // The read-only compensation card and stats on team/[id] render from
+      // server props — without the refresh they kept showing the old values.
+      router.refresh();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Couldn't save the contract."); }
     finally { setSaving(false); }
   }

@@ -27,7 +27,9 @@ export const GET = withAuth(async (req, { user }) => {
     .from("messages")
     .select("id, client_id, sender_id, sender_name, sender_role, body, audience, read_by, created_at")
     .eq("client_id", clientId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    // Bounded: the thread used to ship entire history on every load and poll.
+    .limit(100);
   if (user.role === "client_admin") {
     query = query.or(`audience.in.(company,client),sender_id.eq.${user.id}`);
   } else if (user.role === "va") {
@@ -40,5 +42,5 @@ export const GET = withAuth(async (req, { user }) => {
   // and here we return it so the client can show something actionable.
   if (error) return serverError(error);
 
-  return NextResponse.json({ messages: data ?? [] });
+  return NextResponse.json({ messages: [...(data ?? [])].reverse() });
 });

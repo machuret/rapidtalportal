@@ -42,7 +42,11 @@ export default async function SupervisionPage() {
     ? await Promise.all([
         admin.from("daily_logs").select("user_id, log_date, updated_at").in("user_id", vaIds).gte("log_date", sinceDate),
         admin.from("time_entries").select("user_id, started_at, ended_at").in("user_id", vaIds).eq("phase", "work").gte("started_at", sinceIso),
-        admin.from("tasks").select("assigned_to, status, updated_at, completed_at, due_date").in("assigned_to", vaIds).is("archived_at", null),
+        // Live cards always count; done cards only inside the stats window —
+        // the all-time non-archived history used to ride along forever.
+        admin.from("tasks").select("assigned_to, status, updated_at, completed_at, due_date")
+          .in("assigned_to", vaIds).is("archived_at", null)
+          .or(`status.neq.done,completed_at.gte.${sinceIso}`),
       ])
     : [{ data: [] }, { data: [] }, { data: [] }];
 
