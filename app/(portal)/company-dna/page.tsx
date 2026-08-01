@@ -3,9 +3,6 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DnaForm } from "@/components/dna/DnaForm";
 import { PageIntro } from "@/components/layout/PageIntro";
-import { StyleAnalysisManager } from "@/components/content/StyleAnalysisManager";
-import { VoiceGoldenLibrary } from "@/components/content/VoiceGoldenLibrary";
-import { LinkedInVaultSourcePanel } from "@/components/vault/LinkedInVaultSourcePanel";
 import { hasContentCapability } from "@/lib/auth/content-capabilities";
 
 export const dynamic = "force-dynamic";
@@ -28,8 +25,6 @@ export default async function CompanyDnaPage() {
   // Admin-only editing: DNA feeds every AI answer, so a stray VA edit would
   // silently poison the Brain. VAs read it; admins own it.
   const canEdit = hasContentCapability(user.role, "edit_company_dna");
-  const socialLinks = (dna as { social_links?: Record<string, string> } | null)?.social_links;
-  const linkedInUrl = typeof socialLinks?.linkedin === "string" ? socialLinks.linkedin : "";
 
   return (
     <div className="page-prose">
@@ -41,19 +36,6 @@ export default async function CompanyDnaPage() {
       </p>
       <PageIntro id="company-dna" />
       <DnaForm initialData={dna ?? null} clientId={user.client_id} readOnly={!canEdit} />
-      {canEdit && (
-        <LinkedInVaultSourcePanel
-          clientId={user.client_id}
-          clientName={client?.name ?? "this company"}
-          initialUrl={linkedInUrl}
-        />
-      )}
-      <StyleAnalysisManager
-        clientId={user.client_id}
-        clientName={client?.name}
-        canEdit={canEdit}
-      />
-      <VoiceGoldenLibrary clientId={user.client_id} canEdit={canEdit} />
     </div>
   );
 }

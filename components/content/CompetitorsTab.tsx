@@ -41,6 +41,8 @@ interface CompetitorsTabProps {
   clientId: string;
   canManage: boolean;
   active?: boolean;
+  /** Set false where only the management console is wanted (e.g. DNA › Competitors). */
+  showIntelligence?: boolean;
   onIdeaSelected?: (
     idea: CompetitorIntelligenceIdea,
     run: CompetitorIntelligenceRun,
@@ -136,6 +138,7 @@ export function CompetitorsTab({
   clientId,
   canManage,
   active = true,
+  showIntelligence = true,
   onIdeaSelected,
 }: CompetitorsTabProps) {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
@@ -483,7 +486,7 @@ export function CompetitorsTab({
         </div>
       )}
 
-      {competitors.length > 0 && (
+      {competitors.length > 0 && showIntelligence && (
         <CompetitorIntelligencePanel
           clientId={clientId}
           canManage={canManage}

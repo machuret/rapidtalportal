@@ -98,4 +98,39 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
     body: "The Notebook is the shared home for your placement — SOPs, account registers, content calendars, weekly reports and meeting notes, all in one place instead of scattered across email and chat. Both you and your counterpart can read and edit every page, and it starts pre-loaded with useful templates. RapidTal admins cannot see anything you write here.",
     guide: "Notebook",
   },
+  "content-quick": {
+    title: "What is Quick Draft?",
+    body: "The fastest way to a finished draft: give the engine a topic and a channel, and it applies your Company DNA, approved voice and the most relevant Vault evidence automatically. Use Guided Create when you want to review the idea and sources before anything is written.",
+    guide: "Content",
+  },
+  "content-ideas": {
+    title: "What is Ideas?",
+    body: "Ideas the engine generates from your DNA, Vault and the questions your team asks — each one explains why it matters and what evidence supports it. Approve the good ones, then turn them into drafts whenever you're ready.",
+    guide: "Content",
+  },
+  "content-competitors": {
+    title: "What is Competitor Ideas?",
+    body: "Your competitors' public content, analyzed into market maps, formats and positioning gaps — then turned into recommended ideas only your company can credibly own. Competitor material never becomes your DNA or your voice; it's context, not truth.",
+    guide: "Content",
+  },
+  "content-projects": {
+    title: "What are Projects?",
+    body: "Every draft-in-progress, saved automatically at each step — idea, brief, evidence, generation, edit, approval. Stop anytime and pick up exactly where you left off, from any device.",
+    guide: "Content",
+  },
+  "content-library": {
+    title: "What are Drafts & Approved?",
+    body: "Every artifact the engine has produced, in one library. Open any piece to edit it, compare versions, adapt it to another channel, approve it, or export it.",
+    guide: "Content",
+  },
+  "content-style": {
+    title: "What is Content Style?",
+    body: "How the engine learns to write like your company: analyzed style profiles per channel, golden examples of your best published work, and the sources (like your LinkedIn posts) it learns from. The more approved evidence here, the more every draft sounds like you.",
+    guide: "Content",
+  },
+  "dna-competitors": {
+    title: "What are Competitors?",
+    body: "The companies you compete with, and the public content the portal collects about them. This material is quarantined: it can inform market analysis and ideas, but it can never become your Company DNA, your facts, or your writing style.",
+    guide: "Company DNA",
+  },
 };

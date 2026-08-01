@@ -8,6 +8,8 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { LinkedInVaultSourcePanel } from "@/components/vault/LinkedInVaultSourcePanel";
 import { StyleAnalysisManager } from "@/components/content/StyleAnalysisManager";
 import { VoiceGoldenLibrary } from "@/components/content/VoiceGoldenLibrary";
+import { ContentPilotPanel } from "@/components/content/ContentPilotPanel";
+import { loadProjects } from "@/lib/content/server";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Client Vaults — RapidTal" };
@@ -49,13 +51,18 @@ export default async function AdminVaultPage({ searchParams: searchParamsPromise
   const clientName = clients.find((c) => c.id === clientId)?.name;
   let linkedInUrl = "";
   let companyProfileLoadFailed = false;
+  let pilotProjects: Awaited<ReturnType<typeof loadProjects>>["projects"] = [];
   if (clientId) {
-    const { data: dna, error: dnaError } = await admin
-      .from("company_dna")
-      .select("social_links")
-      .eq("client_id", clientId)
-      .maybeSingle();
+    const [{ data: dna, error: dnaError }, projectsResult] = await Promise.all([
+      admin
+        .from("company_dna")
+        .select("social_links")
+        .eq("client_id", clientId)
+        .maybeSingle(),
+      loadProjects(admin, clientId, 51).catch(() => null),
+    ]);
     companyProfileLoadFailed = !!dnaError;
+    pilotProjects = projectsResult?.projects ?? [];
     const links = (dna as { social_links?: Record<string, string> } | null)?.social_links;
     linkedInUrl = typeof links?.linkedin === "string" ? links.linkedin : "";
   }
@@ -103,6 +110,11 @@ export default async function AdminVaultPage({ searchParams: searchParamsPromise
               Vault items remain available and unchanged.
             </div>
           )}
+          <ContentPilotPanel
+            key={`pilot-${clientId}`}
+            clientId={clientId}
+            projects={pilotProjects}
+          />
           <LinkedInVaultSourcePanel
             key={`linkedin-${clientId}`}
             clientId={clientId}

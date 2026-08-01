@@ -4,7 +4,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { api } from "@/lib/api-client";
 import { generateQuickDraft } from "@/lib/content/quick-draft";
-import { ContentStudio } from "@/components/content/ContentStudio";
+import { QuickDraftPage } from "@/components/content/QuickDraftPage";
+import { ProjectsPage } from "@/components/content/ProjectsPage";
 import type { ContentPiece, ContentProject } from "@/types/content";
 
 jest.mock("@/lib/api-client", () => ({
@@ -16,18 +17,6 @@ jest.mock("@/lib/api-client", () => ({
 }));
 jest.mock("@/lib/content/quick-draft", () => ({
   generateQuickDraft: jest.fn(),
-}));
-jest.mock("@/components/content/ContentPilotPanel", () => ({
-  ContentPilotPanel: () => null,
-}));
-jest.mock("@/components/content/TopicsTab", () => ({
-  TopicsTab: () => <div>Ideas area</div>,
-}));
-jest.mock("@/components/content/HistoryTab", () => ({
-  HistoryTab: () => <div>Draft library</div>,
-}));
-jest.mock("@/components/content/CompetitorsTab", () => ({
-  CompetitorsTab: () => <div>Competitor area</div>,
 }));
 jest.mock("@/components/content/ContentProjectWorkflow", () => ({
   ContentProjectWorkflow: () => <div>Draft editor</div>,
@@ -70,7 +59,7 @@ function project(current_step: ContentProject["current_step"]): ContentProject {
   };
 }
 
-describe("Content Studio Quick Create", () => {
+describe("Quick Draft page", () => {
   beforeEach(() => jest.clearAllMocks());
 
   test("creates and opens a draft from three lightweight controls", async () => {
@@ -90,18 +79,10 @@ describe("Content Studio Quick Create", () => {
     (generateQuickDraft as jest.Mock).mockResolvedValue({ project: ready, piece });
 
     render(
-      <ContentStudio
+      <QuickDraftPage
         clientId={CLIENT_ID}
-        viewerUserId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         canApprove
-        canManageCompetitors
         brandStyle={{}}
-        history={[]}
-        historyHasMore={false}
-        topics={[]}
-        projects={[]}
-        projectsHasMore={false}
-        vaultGaps={[]}
       />,
     );
 
@@ -123,6 +104,10 @@ describe("Content Studio Quick Create", () => {
     ));
     expect(screen.getByText("Draft editor")).toBeInTheDocument();
   });
+});
+
+describe("Projects page", () => {
+  beforeEach(() => jest.clearAllMocks());
 
   test("removes an abandoned project from unfinished work without deleting its drafts", async () => {
     const user = userEvent.setup();
@@ -137,18 +122,13 @@ describe("Content Studio Quick Create", () => {
     (api.patch as jest.Mock).mockResolvedValue(archived);
 
     render(
-      <ContentStudio
+      <ProjectsPage
         clientId={CLIENT_ID}
-        viewerUserId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         canApprove
-        canManageCompetitors
         brandStyle={{}}
-        history={[]}
-        historyHasMore={false}
-        topics={[]}
-        projects={[unfinished]}
+        initialProjects={[unfinished]}
         projectsHasMore={false}
-        vaultGaps={[]}
+        initialTopics={[]}
       />,
     );
 

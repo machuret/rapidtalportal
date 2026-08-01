@@ -40,19 +40,53 @@ import {
   Wallet,
   BookOpen,
   LibraryBig,
+  ChevronDown,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "./NotificationsBell";
 
-type NavItem = { href: string; label: string; icon: LucideIcon } | { section: string };
+type NavItem =
+  | { href: string; label: string; icon: LucideIcon }
+  | { section: string }
+  | {
+      group: string;
+      icon: LucideIcon;
+      /** Route prefix — the group auto-expands and highlights when active. */
+      base: string;
+      children: { href: string; label: string }[];
+    };
 
 interface SidebarProps {
   user: DbUser;
   client: DbClient | null;
   onNavigate?: () => void;
 }
+
+const contentGroup = {
+  group: "Content",
+  icon: PenLine,
+  base: "/content",
+  children: [
+    { href: "/content/quick", label: "Quick Draft" },
+    { href: "/content/ideas", label: "Ideas" },
+    { href: "/content/competitors", label: "Competitor Ideas" },
+    { href: "/content/projects", label: "Projects" },
+    { href: "/content/library", label: "Drafts & Approved" },
+    { href: "/content/style", label: "Content Style" },
+  ],
+} satisfies NavItem;
+
+const dnaGroup = {
+  group: "Company DNA",
+  icon: Dna,
+  base: "/company-dna",
+  children: [
+    { href: "/company-dna", label: "Profile" },
+    { href: "/company-dna/competitors", label: "Competitors" },
+  ],
+} satisfies NavItem;
 
 const vaLinks: NavItem[] = [
   { href: "/dashboard",      label: "Dashboard",      icon: LayoutDashboard },
@@ -64,10 +98,10 @@ const vaLinks: NavItem[] = [
   { href: "/daily-log",      label: "Daily Log",      icon: NotebookPen },
   { href: "/crm",            label: "CRM",            icon: ContactRound },
   { section: "Knowledge & content" },
-  { href: "/content",        label: "Content Studio", icon: PenLine },
+  contentGroup,
+  dnaGroup,
   { href: "/ask",            label: "RapidTal Coach", icon: Sparkles },
   { href: "/vault",          label: "Vault",          icon: Archive },
-  { href: "/company-dna",    label: "Company DNA",    icon: Dna },
   { href: "/brain",          label: "Company Brain",  icon: Brain },
   { href: "/company-report", label: "Company Report", icon: Brain },
   { section: "Tools" },
@@ -83,10 +117,9 @@ const vaLinks: NavItem[] = [
 // communicate — lead. The VA/AI work tools (which a client *can* open but their
 // VA mostly drives) are grouped under "Workspace" so the top level reads like a
 // client product, not the VA's.
-// Grouped by job-to-be-done so a non-technical client isn't faced with a flat
-// wall of 17 links. The three AI-insight surfaces (Company Brain / Company
-// Report / Brain Analytics) are deliberately co-located so it's clear they're
-// related views of the same thing.
+// Content and Company DNA are expandable groups: each content concern (draft,
+// ideas, competitors, projects, library, style) and each DNA concern (profile,
+// competitors) is one deep-linkable page instead of one crowded scroll.
 const clientAdminLinks: NavItem[] = [
   { href: "/dashboard",      label: "Dashboard",       icon: LayoutDashboard },
   { section: "Team & work" },
@@ -96,15 +129,16 @@ const clientAdminLinks: NavItem[] = [
   { href: "/supervision",    label: "Supervision",     icon: Eye },
   { href: "/team",           label: "My Team",         icon: UsersRound },
   { href: "/reports",        label: "Reports",         icon: FileBarChart },
+  { section: "Content & brand" },
+  contentGroup,
+  dnaGroup,
   { section: "Your AI & knowledge" },
-  { href: "/company-dna",    label: "Company DNA",     icon: Dna },
   { href: "/vault",          label: "Vault",           icon: Archive },
   { href: "/ask",            label: "RapidTal Coach",  icon: Sparkles },
   { href: "/brain",          label: "Company Brain",   icon: Brain },
   { href: "/brain-analytics",label: "Brain Analytics", icon: BarChart3 },
   { section: "Tools" },
   { href: "/crm",            label: "CRM",             icon: ContactRound },
-  { href: "/content",        label: "Content Studio",  icon: PenLine },
   { href: "/access",         label: "Access",          icon: KeyRound },
   { section: "Account" },
   { href: "/guide",          label: "Guide",           icon: BookOpen },
@@ -138,6 +172,8 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
   const router = useRouter();
   const supabase = createClient();
   const [confirmLogout, setConfirmLogout] = useState(false);
+  // Groups start expanded for discoverability; toggling collapses per group.
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -177,6 +213,56 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
               <p key={`s-${item.section}`} className="font-mono text-3xs font-bold uppercase tracking-[0.16em] text-zinc-500 px-2.5 pt-4 pb-1.5">
                 {item.section}
               </p>
+            ) : "group" in item ? (
+              (() => {
+                const groupActive = pathname === item.base || pathname.startsWith(item.base + "/");
+                const collapsed = !!collapsedGroups[item.group];
+                return (
+                  <div key={`g-${item.group}`}>
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedGroups((prev) => ({ ...prev, [item.group]: !collapsed }))}
+                      aria-expanded={!collapsed}
+                      className={cn(
+                        "relative flex w-full items-center gap-3 px-2.5 py-2.5 rounded-md text-xs font-semibold transition-colors",
+                        groupActive
+                          ? "bg-orange-500/10 text-orange-500"
+                          : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-50"
+                      )}
+                    >
+                      {groupActive && <span className="absolute -left-3 top-1/2 -translate-y-1/2 w-[3px] h-[18px] rounded-r-md bg-orange-500" />}
+                      <item.icon className="w-[18px] h-[18px] shrink-0" />
+                      {item.group}
+                      <ChevronDown className={cn("ml-auto w-3.5 h-3.5 transition-transform", collapsed && "-rotate-90")} />
+                    </button>
+                    {!collapsed && (
+                      <div className="ml-6 flex flex-col gap-0.5 border-l border-zinc-800 pl-3 pb-1">
+                        {item.children.map((child) => {
+                          const childActive = child.href === item.base
+                            ? pathname === child.href
+                            : pathname === child.href || pathname.startsWith(child.href + "/");
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              onClick={onNavigate}
+                              aria-current={childActive ? "page" : undefined}
+                              className={cn(
+                                "rounded-md px-2.5 py-2 text-xs font-medium transition-colors",
+                                childActive
+                                  ? "bg-orange-500/10 text-orange-500"
+                                  : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
+                              )}
+                            >
+                              {child.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()
             ) : (
               (() => {
                 // "/admin" is exact-only, otherwise it would highlight on every /admin/* page.

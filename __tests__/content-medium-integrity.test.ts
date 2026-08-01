@@ -7,8 +7,8 @@ const root = path.resolve(__dirname, "..");
 const read = (file: string) => readFileSync(path.join(root, file), "utf8");
 
 describe("Content Studio medium-priority integrity repairs", () => {
-  const page = read("app/(portal)/content/page.tsx");
-  const studio = read("components/content/ContentStudio.tsx");
+  const loaders = read("lib/content/server.ts");
+  const projectsPage = read("components/content/ProjectsPage.tsx");
   const history = read("components/content/HistoryTab.tsx");
   const projects = read("app/api/content/projects/route.ts");
   const pieces = read("app/api/content/pieces/route.ts");
@@ -20,12 +20,12 @@ describe("Content Studio medium-priority integrity repairs", () => {
   const quality = read("supabase/functions/_shared/content-quality.ts");
 
   test("history, projects and project artifacts expose recoverable pagination", () => {
-    expect(page).toContain(".limit(51)");
-    expect(page).toContain(".limit(201)");
+    expect(loaders).toContain("limit = 51");
+    expect(loaders).toContain("limit = 201");
     expect(pieces).toContain("nextOffset");
     expect(projects).toContain("pieces_next_offset");
     expect(history).toContain("Load older content");
-    expect(studio).toContain("Load older projects");
+    expect(projectsPage).toContain("Load older projects");
     expect(history).toContain("onLoadMore");
   });
 

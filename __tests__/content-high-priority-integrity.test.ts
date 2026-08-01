@@ -7,19 +7,21 @@ const root = path.resolve(__dirname, "..");
 const read = (file: string) => readFileSync(path.join(root, file), "utf8");
 
 describe("Content Studio high-priority integrity repairs", () => {
-  const page = read("app/(portal)/content/page.tsx");
+  const loaders = read("lib/content/server.ts");
   const topics = read("app/api/content/topics/generate/route.ts");
   const topicsLib = read("lib/content/topics-generate.ts");
   const workflow = read("components/content/ContentProjectWorkflow.tsx");
-  const studio = read("components/content/ContentStudio.tsx");
+  const takeover = read("components/content/ProjectTakeover.tsx");
   const history = read("components/content/HistoryTab.tsx");
   const pieces = read("app/api/content/pieces/route.ts");
   const generator = read("supabase/functions/content-generate/index.ts");
   const migration = read("db/migrations/113_content_high_priority_integrity.sql");
 
   test("initial database failures are not presented as empty content", () => {
-    expect(page).toContain("results.find((result) => result.error)");
-    expect(page).toContain("Content Studio could not load your saved work");
+    // Every sub-page loader throws on a failed query (Next renders the route
+    // error boundary) — nothing silently renders as an empty Studio.
+    expect(loaders).toContain("if (styleError) throw styleError");
+    expect(loaders).toContain("if (error) throw error");
   });
 
   test("topic output is bounded, repaired and preserves valid partial results", () => {
@@ -71,7 +73,7 @@ describe("Content Studio high-priority integrity repairs", () => {
     expect(derived).not.toContain("SET\n    current_piece_id = v_piece.id,\n    current_step = 'edit',\n    status = 'active'");
     expect(workflow).toContain("piece.project_id !== project.id");
     expect(workflow).toContain("onProjectChange(derivedProject)");
-    expect(studio).toContain("key={activeProject.id}");
+    expect(takeover).toContain("key={projects.activeProject.id}");
   });
 
   test("VA lifecycle controls are denied in UI, API and database", () => {

@@ -20,7 +20,11 @@ describe("connected editorial journey", () => {
   const validationRoute = read("app/api/content/validate/route.ts");
   const generator = read("supabase/functions/content-generate/index.ts");
   const retrieval = read("supabase/functions/_shared/content-vault-retrieval.ts");
-  const studio = read("components/content/ContentStudio.tsx");
+  const quick = read("components/content/QuickDraftPage.tsx");
+  const projectsPage = read("components/content/ProjectsPage.tsx");
+  const ideas = read("components/content/IdeasPage.tsx");
+  const sidebar = read("components/layout/Sidebar.tsx");
+  const projectsHook = read("hooks/useContentProjects.ts");
   const workflow = read("components/content/ContentProjectWorkflow.tsx");
   const quickDraft = read("lib/content/quick-draft.ts");
   const topics = read("components/content/TopicsTab.tsx");
@@ -65,19 +69,21 @@ describe("connected editorial journey", () => {
   });
 
   test("the primary Studio navigation supports discovery and recovery", () => {
-    expect(studio).toContain("Continue working");
-    expect(studio).toContain("IDEAS approved");
-    expect(studio).toContain("Saved ideas stay here after refresh");
-    expect(studio).toContain("onTopicsChange={setTopics}");
-    expect(studio).toContain("onTopicApproved");
+    // The monolith is split into routed sub-pages: each concern is its own
+    // deep-linkable page, reachable from the sidebar's Content group.
+    expect(projectsPage).toContain("Continue working");
+    expect(projectsPage).toContain("IDEAS approved");
+    expect(projectsPage).toContain("Saved ideas stay here after refresh");
+    expect(ideas).toContain("onTopicsChange={setTopics}");
+    expect(ideas).toContain("onTopicApproved");
     expect(topics).toContain("await onTopicApproved?.(approved)");
-    expect(studio).toContain("Quick Create");
-    expect(studio).toContain("Create a draft in under a minute");
-    expect(studio).toContain("Guided Create");
-    expect(studio).toContain("> Ideas");
-    expect(studio).toContain("Competitor ideas");
-    expect(studio).toContain("Drafts &amp; approved");
-    expect(studio).toContain("openProject");
+    expect(quick).toContain("Quick Create");
+    expect(quick).toContain("Create a draft in under a minute");
+    expect(quick).toContain("Guided Create");
+    expect(sidebar).toContain('label: "Ideas"');
+    expect(sidebar).toContain('label: "Competitor Ideas"');
+    expect(sidebar).toContain('label: "Drafts & Approved"');
+    expect(projectsHook).toContain("openProject");
     expect(workflow).toContain("Project saved · recoverable on any device");
     for (const step of ["Idea", "Brief", "Evidence", "Generate", "Edit", "Validate", "Approve"]) {
       expect(workflow).toContain(`label: "${step}"`);
