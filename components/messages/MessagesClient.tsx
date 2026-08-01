@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Send, MessageSquare, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -13,6 +12,7 @@ import {
   ConversationPulse,
   type ConversationConnection,
 } from "@/components/intelligence/ConversationPulse";
+import { useSupabase } from "@/hooks/useSupabase";
 
 interface MessagesClientProps {
   currentUserId: string;
@@ -41,7 +41,7 @@ function DateDivider({ label }: { label: string }) {
 export function MessagesClient({ currentUserId, currentUserRole, clientId, initialMessages }: MessagesClientProps) {
   // Memoized: a fresh client per render used to tear down and reopen the
   // realtime websocket channel on every keystroke.
-  const [supabase] = useState(() => createClient());
+  const supabase = useSupabase();
   const {
     messages,
     isLoading: loading,

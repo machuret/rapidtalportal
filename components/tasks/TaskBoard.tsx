@@ -10,9 +10,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { categoryColor } from "@/lib/tasks/category-colors";
 import { CategoryManager, type TaskCategory } from "./CategoryManager";
 import { RecurrenceManager, type TaskRecurrence } from "./RecurrenceManager";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Plus, CalendarDays, Loader2, Settings2, Repeat, MessageSquare } from "lucide-react";
+import { Plus, CalendarDays, Settings2, Repeat, MessageSquare } from "lucide-react";
 import { TaskDialog } from "./TaskDialog";
 import type { Task, TaskStatus, BoardMember } from "./types";
 

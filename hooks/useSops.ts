@@ -43,11 +43,6 @@ interface DeleteSopInput {
 }
 
 // Query Keys
-export const sopKeys = {
-  all: [SOPS_KEY] as const,
-  byClient: (clientId: string | null) => [SOPS_KEY, clientId ?? "global"] as const,
-};
-
 // Create SOP
 async function createSop(input: CreateSopInput): Promise<Sop> {
   return api.post<Sop>(ROUTES.sops(), input);
@@ -70,21 +65,18 @@ export function useSops(clientId: string | null) {
   const createMutation = useMutation({
     mutationFn: createSop,
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: sopKeys.byClient(clientId) });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: updateSop,
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: sopKeys.byClient(clientId) });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteSop,
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: sopKeys.byClient(clientId) });
     },
   });
 

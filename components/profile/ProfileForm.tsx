@@ -7,15 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { DbUser } from "@/types/database";
-import { createClient } from "@/lib/supabase/client";
 import { useProfile } from "@/hooks/useProfile";
+import { useSupabase } from "@/hooks/useSupabase";
 
 interface Props {
   user: DbUser;
 }
 
 export function ProfileForm({ user }: Props) {
-  const [supabase] = useState(() => createClient());
+  const supabase = useSupabase();
   const fileRef = useRef<HTMLInputElement>(null);
   const {
     updateProfile,

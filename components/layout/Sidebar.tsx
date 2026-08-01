@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { DbUser, DbClient } from "@/types/database";
 import {
@@ -46,6 +45,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "./NotificationsBell";
+import { useSupabase } from "@/hooks/useSupabase";
 
 type NavItem =
   | { href: string; label: string; icon: LucideIcon }
@@ -170,7 +170,7 @@ const adminLinks: NavItem[] = [
 export function Sidebar({ user, client, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [supabase] = useState(() => createClient());
+  const supabase = useSupabase();
   const [confirmLogout, setConfirmLogout] = useState(false);
   // Groups start expanded for discoverability; toggling collapses per group.
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});

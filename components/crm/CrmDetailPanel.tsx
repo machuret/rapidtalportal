@@ -89,7 +89,7 @@ export function CrmDetailPanel({
       onUpdated(updated);
       setEditing(false);
       toast.success("Contact updated.");
-    } catch (err) {
+    } catch {
       /* api-client surfaces the error toast */
     } finally {
       savingRef.current = false;
@@ -102,7 +102,7 @@ export function CrmDetailPanel({
       await deleteContact({ id: contact.id, clientId });
       onDeleted(contact.id);
       toast.success("Contact deleted.");
-    } catch (err) {
+    } catch {
       /* api-client surfaces the error toast */
     }
   }
@@ -112,7 +112,7 @@ export function CrmDetailPanel({
       const updated = await updateContact({ id: contact.id, clientId, archived: archive });
       onUpdated(updated);
       toast.success(archive ? "Contact archived — recoverable from the Archived view." : "Contact restored.");
-    } catch (err) {
+    } catch {
       /* api-client surfaces the error toast */
     }
   }
@@ -138,7 +138,7 @@ export function CrmDetailPanel({
       onNoteAdded(note);
       setNoteBody("");
       toast.success("Note saved.");
-    } catch (err) {
+    } catch {
       /* api-client surfaces the error toast */
     }
   }
@@ -149,7 +149,7 @@ export function CrmDetailPanel({
     try {
       await deleteNoteMutation({ id: noteId, clientId });
       onNoteDeleted(noteId);
-    } catch (err) {
+    } catch {
       /* api-client surfaces the error toast */
     } finally {
       deletingNotesRef.current.delete(noteId);

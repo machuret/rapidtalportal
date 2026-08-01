@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +11,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { cn, formatDate } from "@/lib/utils";
 import { Plus, Users, Archive, ArchiveRestore } from "lucide-react";
+import { useSupabase } from "@/hooks/useSupabase";
 
 interface Client {
   id: string;
@@ -27,7 +27,7 @@ interface ClientsTableProps {
 }
 
 export function ClientsTable({ clients: initial, userCounts }: ClientsTableProps) {
-  const [supabase] = useState(() => createClient());
+  const supabase = useSupabase();
   const [clients, setClients] = useState(initial);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");

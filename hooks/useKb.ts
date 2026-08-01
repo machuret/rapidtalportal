@@ -7,11 +7,6 @@ import { ROUTES } from "@/lib/api/routes";
 const KB_KEY = "kb-entries";
 
 // Query Keys
-export const kbKeys = {
-  all: [KB_KEY] as const,
-  byClient: (clientId: string) => [KB_KEY, clientId] as const,
-};
-
 interface GenerateInput {
   clientId: string;
   customCategories: string[];
@@ -51,21 +46,18 @@ export function useKb(clientId: string) {
   const generateMutation = useMutation({
     mutationFn: generateKb,
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: kbKeys.byClient(clientId) });
     },
   });
 
   const updateEntryMutation = useMutation({
     mutationFn: updateEntry,
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: kbKeys.byClient(clientId) });
     },
   });
 
   const deleteEntryMutation = useMutation({
     mutationFn: deleteEntry,
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: kbKeys.byClient(clientId) });
     },
   });
 

@@ -11,16 +11,6 @@ const NOTES_KEY = "crm-notes";
 export type CrmNote = { id: string; body: string; created_at: string };
 
 // Query Keys
-export const contactKeys = {
-  all: [CONTACTS_KEY] as const,
-  byClient: (clientId: string) => [CONTACTS_KEY, clientId] as const,
-};
-
-export const noteKeys = {
-  all: [NOTES_KEY] as const,
-  byContact: (contactId: string) => [NOTES_KEY, contactId] as const,
-};
-
 interface CreateContactInput {
   clientId: string;
   first_name: string;
@@ -91,7 +81,6 @@ export function useCreateContact() {
   return useMutation({
     mutationFn: createContact,
     onSettled: (_data, _err, variables) => {
-      queryClient.invalidateQueries({ queryKey: contactKeys.byClient(variables.clientId) });
     },
   });
 }
@@ -103,21 +92,18 @@ export function useContactMutations(clientId: string) {
   const updateMutation = useMutation({
     mutationFn: updateContact,
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: contactKeys.byClient(clientId) });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteContact,
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: contactKeys.byClient(clientId) });
     },
   });
 
   const createNoteMutation = useMutation({
     mutationFn: createNote,
     onSettled: (_data, _err, variables) => {
-      queryClient.invalidateQueries({ queryKey: noteKeys.byContact(variables.contactId) });
     },
   });
 
