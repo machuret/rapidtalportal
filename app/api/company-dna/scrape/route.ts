@@ -36,7 +36,7 @@ export const POST = withAuth(async (req: NextRequest, { user }) => {
   const denied = assertClientAccess(user, parsed.data.clientId);
   if (denied) return denied;
 
-  const rl = scrapeLimiter.check(`dna:${user.id}`);
+  const rl = await scrapeLimiter.check(`dna:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   if (isBlockedUrl(parsed.data.url)) {

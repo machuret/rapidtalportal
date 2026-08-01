@@ -43,7 +43,7 @@ function mergeSources(existing: unknown, generated: unknown): unknown[] {
 }
 
 export const POST = withAuth(async (req, { user }) => {
-  const rl = aiGenerateLimiter.check(`content-rewrite:${user.id}`);
+  const rl = await aiGenerateLimiter.check(`content-rewrite:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   let raw: unknown;

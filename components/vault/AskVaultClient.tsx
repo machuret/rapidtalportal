@@ -160,6 +160,11 @@ function decodeHeader<T>(value: string | null, fallback: T): T {
  * Stream an answer from /api/vault/ask-stream (SSE). Calls onProgress with the
  * growing answer. Returns { ok:false } on any failure so the caller can fall
  * back to the non-streaming endpoint — streaming is pure upside, never a break.
+ *
+ * Pass an AbortSignal and abort it on unmount (or when superseded): without it
+ * the connection and its paid LLM stream keep running after the page is gone.
+ * When the result has aborted:true the caller must NOT fall back — the abort
+ * was deliberate, and the fallback would be a second paid call nobody sees.
  */
 async function askStream(
   clientId: string,
@@ -168,8 +173,10 @@ async function askStream(
   onProgress: (answer: string, sources: Source[]) => void,
   mode?: "deep",
   coachMode: CoachMode = "private",
+  signal?: AbortSignal,
 ): Promise<{
   ok: boolean;
+  aborted: boolean;
   answer: string;
   sources: Source[];
   brainContextSnapshotId: string | null;
@@ -186,6 +193,7 @@ async function askStream(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clientId, question, history, coachMode, ...(mode ? { mode } : {}) }),
+      signal,
     });
     if (!res.ok || !res.body) {
       let message = "The Brain could not complete that answer.";
@@ -197,6 +205,7 @@ async function askStream(
       } catch { /* response was not JSON */ }
       return {
         ok: false,
+        aborted: false,
         answer: "",
         sources: [],
         brainContextSnapshotId: null,
@@ -237,6 +246,7 @@ async function askStream(
     }
     return {
       ok: answer.length > 0,
+      aborted: false,
       answer,
       sources,
       brainContextSnapshotId,
@@ -249,6 +259,7 @@ async function askStream(
   } catch {
     return {
       ok: false,
+      aborted: signal?.aborted ?? false,
       answer: "",
       sources: [],
       brainContextSnapshotId: null,
@@ -296,6 +307,11 @@ export function AskVaultClient({
   const [interim, setInterim] = useState<Turn | null>(null);
   const [askFailure, setAskFailure] = useState<{ question: string; message: string; recoverable: boolean } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
+
+  // Kill any in-flight SSE stream when the page unmounts — otherwise the paid
+  // LLM stream keeps running and onProgress fires against a dead component.
+  useEffect(() => () => streamAbortRef.current?.abort(), []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -450,11 +466,18 @@ export function AskVaultClient({
     }
 
     // Stream first; fall back to the non-streaming endpoint if anything fails.
+    streamAbortRef.current?.abort();
+    const streamAbort = new AbortController();
+    streamAbortRef.current = streamAbort;
     const r = await askStream(clientId, trimmed, history, (answer, sources) =>
       setInterim((current) => current ? { ...current, answer, sources } : null),
       undefined,
       resolvedMode,
+      streamAbort.signal,
     );
+    // Deliberately aborted (unmount or superseded) — never fall back to a
+    // second paid call, and don't touch state on a dead component.
+    if (r.aborted) return;
     if (r.ok) {
       const completedTurn: Turn = {
         question: trimmed,
@@ -756,6 +779,10 @@ function ChatTurn({
   const [actionBusy, setActionBusy] = useState(false);
   const [actionComplete, setActionComplete] = useState(turn.actionStatus === "completed");
   const [actionDraft, setActionDraft] = useState<CoachActionDraft | null>(turn.actionDraft ?? null);
+  const deepAbortRef = useRef<AbortController | null>(null);
+
+  // Abort an in-flight "Go deeper" stream if this turn unmounts mid-generation.
+  useEffect(() => () => deepAbortRef.current?.abort(), []);
 
   const unanswered = turn.sources.length === 0;
 
@@ -785,7 +812,11 @@ function ChatTurn({
     setDeepLoading(true);
     // Stream the deep answer so the long (gpt-4o) generation shows progress as it
     // arrives; fall back to the non-streaming endpoint if streaming fails.
-    const r = await askStream(clientId, turn.question, history, (a) => setDeepAnswer(a), "deep", turn.coachMode);
+    deepAbortRef.current?.abort();
+    const deepAbort = new AbortController();
+    deepAbortRef.current = deepAbort;
+    const r = await askStream(clientId, turn.question, history, (a) => setDeepAnswer(a), "deep", turn.coachMode, deepAbort.signal);
+    if (r.aborted) return; // unmounted mid-stream — no fallback, no state writes
     if (r.ok) {
       setDeepEvidence({
         sources: r.sources,

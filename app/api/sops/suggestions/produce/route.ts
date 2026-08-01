@@ -41,7 +41,7 @@ export const POST = withAuth(async (req, { user }) => {
   const denied = authorizeSopScope(user, clientId);
   if (denied) return denied;
 
-  const rl = sopAiLimiter.check(`sop-ai:${user.id}`);
+  const rl = await sopAiLimiter.check(`sop-ai:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   const admin = createAdminClient();

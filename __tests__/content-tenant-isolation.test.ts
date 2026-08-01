@@ -516,7 +516,8 @@ describe("all content endpoint tenant boundaries", () => {
       });
     const routeFiles = filesUnder(root)
       .filter((file) => file.endsWith(`${path.sep}route.ts`))
-      .map((file) => path.relative(root, file));
+      // Normalise to posix separators — path.relative yields "\\" on Windows.
+      .map((file) => path.relative(root, file).split(path.sep).join("/"));
     const discovered = routeFiles.flatMap((file) => {
       const source = readFileSync(path.join(root, file), "utf8");
       const methods = Array.from(

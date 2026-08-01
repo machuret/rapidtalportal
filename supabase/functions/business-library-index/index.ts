@@ -1,35 +1,19 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "https://rapidtal.online",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-  status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-});
+import { handleOptions, jsonResponse as json } from "../_shared/cors.ts";
+import { authorizeRequest } from "../_shared/auth.ts";
 
 Deno.serve(async (request: Request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (request.method === "OPTIONS") return handleOptions();
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized." }, 401);
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const jwt = authHeader.slice(7);
-  const admin = createClient(supabaseUrl, serviceKey);
-  const internal = jwt === serviceKey;
-  if (!internal) {
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error } = await userClient.auth.getUser();
-    if (error || !user) return json({ error: "Unauthorized." }, 401);
-    const actor = await admin.from("users").select("role").eq("id", user.id).single();
-    if (actor.error || actor.data?.role !== "super_admin") return json({ error: "Forbidden." }, 403);
-  }
+  // Super-admin only; a trusted server-to-server call may present the
+  // service-role key as its token to bypass the user checks.
+  const auth = await authorizeRequest(request, {
+    allowServiceKey: true,
+    requireSuperAdmin: true,
+    select: "role",
+  });
+  if (!auth.ok) return auth.response;
+  const { admin } = auth;
 
   let input: { versionId?: string; limit?: number } = {};
   try { input = await request.json(); } catch { return json({ error: "Invalid JSON." }, 400); }

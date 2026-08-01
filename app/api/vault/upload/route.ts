@@ -17,7 +17,7 @@ const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
 const ALLOWED_EXT = new Set(["pdf", "docx", "txt", "md", "csv"]);
 
 export const POST = withAuth(async (req, { user }) => {
-  const rl = vaultUploadLimiter.check(`upload:${user.id}`);
+  const rl = await vaultUploadLimiter.check(`upload:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   const form = await req.formData();

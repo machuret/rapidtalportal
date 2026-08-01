@@ -31,7 +31,7 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
     );
   }
   // Shares the ask quota with /api/vault/ask — same user, same OpenRouter cost.
-  const rl = askVaultLimiter.check(`ask:${user.id}`);
+  const rl = await askVaultLimiter.check(`ask:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   let body: unknown;

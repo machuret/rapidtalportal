@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import type { Sop } from "@/app/(portal)/sops/page";
 
 const SOPS_KEY = "sops";
@@ -49,17 +50,17 @@ export const sopKeys = {
 
 // Create SOP
 async function createSop(input: CreateSopInput): Promise<Sop> {
-  return api.post<Sop>("/sops", input);
+  return api.post<Sop>(ROUTES.sops(), input);
 }
 
 // Update SOP
 async function updateSop(input: UpdateSopInput): Promise<Sop> {
-  return api.patch<Sop>("/sops", input);
+  return api.patch<Sop>(ROUTES.sops(), input);
 }
 
 // Delete SOP
 async function deleteSop(input: DeleteSopInput): Promise<void> {
-  return api.delete("/sops", input);
+  return api.delete(ROUTES.sops(), input);
 }
 
 // Hook for SOP mutations

@@ -162,8 +162,10 @@ export const GET = withAuth(async (req, { user }) => {
       .single();
 
     if (error) {
-      console.error("[content/pieces GET single]", error.code, error.message);
-      return NextResponse.json({ error: error.message }, { status: error.code === "PGRST116" ? 404 : 500 });
+      if (error.code === "PGRST116") {
+        return NextResponse.json({ error: "Content piece not found." }, { status: 404 });
+      }
+      return serverError(error);
     }
     return NextResponse.json(data);
   }
@@ -315,6 +317,8 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   if (error) {
     console.error("[content/pieces PATCH]", error.code, error.message);
+    // Codes below are only raised by our own SQL functions with custom,
+    // user-safe messages (migrations 088/089/093/094) — safe to return.
     if (error.code === "40001") {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

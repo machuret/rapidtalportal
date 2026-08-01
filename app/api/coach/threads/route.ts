@@ -12,6 +12,7 @@ const sourceSchema = z.object({
   kindLabel: z.string().max(100),
   title: z.string().max(300),
   itemId: z.string().uuid().nullable(),
+  clientId: z.string().uuid().nullable(),
   sourceUrl: z.string().url().nullable(),
   versionId: z.string().uuid().nullable(),
   versionNumber: z.number().int().nullable(),
@@ -95,6 +96,7 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
     warningCodes: parsed.data.warnings.map((warning) => warning.code),
     sources: parsed.data.sources,
     action: parsed.data.actionDraft,
+    expectedClientId: parsed.data.clientId,
   });
   if (!quality.passed) {
     return NextResponse.json({
@@ -114,7 +116,7 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
 
   // The Edge function, not the browser, authors executable previews. History
   // stores that immutable original while the user may still edit the payload
-  // they explicitly confirms later.
+  // they explicitly confirm later.
   let securedActionDraft = null;
   if (parsed.data.actionDraft) {
     const preview = await db.from("coach_action_previews")

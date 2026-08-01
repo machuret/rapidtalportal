@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   // hammered into an unbounded bill. Resolve identity here (the proxy re-verifies).
   const auth = await requireApiAuth();
   if ("error" in auth) return auth.error;
-  const rl = aiGenerateLimiter.check(`content:${auth.user.id}`);
+  const rl = await aiGenerateLimiter.check(`content:${auth.user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
   let raw: unknown;
   try { raw = await req.json(); }

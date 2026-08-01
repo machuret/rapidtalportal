@@ -291,7 +291,7 @@ export const POST = withAuth(async (request, { user }) => {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
-  const rateLimit = aiGenerateLimiter.check(`style-analysis:${user.id}`);
+  const rateLimit = await aiGenerateLimiter.check(`style-analysis:${user.id}`);
   if (!rateLimit.allowed) return tooManyRequests(rateLimit.retryAfterSeconds);
 
   const provider = chatProvider();

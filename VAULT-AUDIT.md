@@ -1,5 +1,10 @@
 # Vault Audit — "The Company Brain" (June 2026)
 
+> **Status (Aug 2026): historical.** The gaps this audit raised were largely
+> closed by migrations 069–132 (pgvector embeddings, the Brain learning loop,
+> Business Library, official context contract). Keep for history; do not treat
+> its findings as open work.
+
 **Goal of this audit:** assess the Vault against the intended vision —
 *a company brain that ingests everything you know about a business and turns it into a
 living report the VA can use: who we are, our services, contacts, flows/processes, policies…

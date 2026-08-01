@@ -3,7 +3,9 @@ import { createHash } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
+import { serverError } from "@/lib/api/errors";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
+import { vaultUploadLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { z } from "zod";
 import { errorMessage } from "@/lib/error-message";
 
@@ -39,6 +41,10 @@ function isBlockedUrl(raw: string): boolean {
 }
 
 export const POST = withAuth(async (req, { user }) => {
+  // URL ingestion fans out into a paid Firecrawl scrape + embedding pipeline.
+  const rl = await vaultUploadLimiter.check(`url:${user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
+
   const body = await req.json();
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
@@ -72,7 +78,7 @@ export const POST = withAuth(async (req, { user }) => {
     .single();
 
   if (insertError || !item) {
-    return NextResponse.json({ error: insertError?.message ?? "Insert failed" }, { status: 500 });
+    return serverError(insertError ?? new Error("vault_items insert returned no row"));
   }
 
   const itemId = (item as { id: string }).id;

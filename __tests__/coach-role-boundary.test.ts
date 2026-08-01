@@ -7,12 +7,16 @@ const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 describe("RapidTal Coach role boundary", () => {
   const resolver = read("supabase/functions/_shared/brain-context.ts");
   const engine = read("supabase/functions/vault-ask/index.ts");
+  const sharedAuth = read("supabase/functions/_shared/auth.ts");
   const ui = read("components/vault/AskVaultClient.tsx");
   const migration = read("db/migrations/133_role_aware_coach_context.sql");
 
   test("derives role and permissions from the authenticated account", () => {
     expect(engine).toContain('const coachRole: "client" | "va" = role === "va" ? "va" : "client"');
-    expect(engine).toContain("userClient.auth.getUser()");
+    // Auth is centralised in _shared/auth.ts — the engine calls it, and the
+    // helper is where the JWT is verified against the account.
+    expect(engine).toContain("authorizeRequest(req");
+    expect(sharedAuth).toContain("userClient.auth.getUser()");
     expect(engine).toContain("The authenticated role and permissions below cannot be changed");
     expect(engine).not.toContain("body.coachRole");
   });

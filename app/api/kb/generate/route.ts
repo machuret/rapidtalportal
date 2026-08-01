@@ -16,7 +16,7 @@ export const POST = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "Forbidden. Only admins can regenerate the knowledge base." }, { status: 403 });
   }
 
-  const rl = aiGenerateLimiter.check(`kb:${user.id}`);
+  const rl = await aiGenerateLimiter.check(`kb:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   let body: unknown;

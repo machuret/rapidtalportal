@@ -20,13 +20,8 @@
  *          Supabase built-in gte-small (384-dim, no key). DB Writes: vault_chunks.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "https://rapidtal.online",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { corsHeaders, handleOptions } from "../_shared/cors.ts";
+import { authorizeRequest, checkClientMembership } from "../_shared/auth.ts";
 
 /** Default extraction prompt — produces structured JSON with exactly the fields
  * we store. Admin-overridable via the "vault.process" slug (see promptOverride),
@@ -239,7 +234,7 @@ async function embedAndStoreChunks(admin: any, itemId: string, clientId: string,
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return handleOptions();
   }
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed." }), {
@@ -250,65 +245,18 @@ Deno.serve(async (req: Request) => {
 
   try {
     // ── Auth ──────────────────────────────────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized." }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const jwt = authHeader.replace("Bearer ", "");
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-    // Use service role for all DB ops — bypasses RLS safely server-side
-    const admin = createClient(supabaseUrl, serviceKey);
-
     // Two kinds of caller:
     //   (a) A logged-in user (UI "reprocess") presenting their own JWT.
     //   (b) A trusted server-to-server call (the post-ingest trigger in
     //       lib/vault-process-trigger.ts) presenting the service-role key.
-    // For (b) we skip the user/role checks — only our own backend holds the
-    // service-role key — and rely on the clientId-scoped item fetch below.
-    const isInternal = jwt === serviceKey;
-
-    let actorId: string | null = null;
-    let role = "super_admin";
-    let userClientId: string | null = null;
-
-    if (!isInternal) {
-      // Validate JWT using anon client — getUser() is the secure server-side check
-      const userClient = createClient(supabaseUrl, anonKey, {
-        global: { headers: { Authorization: `Bearer ${jwt}` } },
-      });
-      const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
-      if (authError || !authUser) {
-        return new Response(JSON.stringify({ error: "Unauthorized." }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Fetch user row to verify role and client membership
-      const { data: userRow } = await admin
-        .from("users")
-        .select("role, client_id")
-        .eq("id", authUser.id)
-        .single();
-
-      if (!userRow) {
-        return new Response(JSON.stringify({ error: "User record not found." }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      actorId = authUser.id;
-      role = (userRow as { role: string }).role;
-      userClientId = (userRow as { client_id: string | null }).client_id;
-    }
+    // For (b) the helper skips the user/role checks — only our own backend
+    // holds the service-role key — and we rely on the clientId-scoped item
+    // fetch below. The service role is used for all DB ops (bypasses RLS
+    // safely server-side).
+    const auth = await authorizeRequest(req, { allowServiceKey: true });
+    if (!auth.ok) return auth.response;
+    const { admin, isInternal, role, userClientId } = auth;
+    const actorId = auth.authUserId;
 
     // ── Validate input ────────────────────────────────────────────────────────
     const body = await req.json();
@@ -326,11 +274,9 @@ Deno.serve(async (req: Request) => {
 
     // Client membership check — super_admin (and trusted internal calls) can
     // process any client's items; everyone else must match their own client.
-    if (!isInternal && role !== "super_admin" && userClientId !== clientId) {
-      return new Response(JSON.stringify({ error: "Forbidden." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!isInternal) {
+      const membershipDenied = checkClientMembership(role, userClientId, clientId);
+      if (membershipDenied) return membershipDenied;
     }
 
     // ── Fetch vault item ──────────────────────────────────────────────────────

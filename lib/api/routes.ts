@@ -18,6 +18,7 @@ export const ROUTES = {
     placements: () => "/api/admin/placements",
     leads: () => "/api/admin/leads",
     leadEvents: () => "/api/admin/leads/events",
+    leadEventsForLead: (leadId: string) => `/api/admin/leads/events?leadId=${leadId}`,
     expenses: () => "/api/admin/expenses",
     featureVideos: () => "/api/admin/feature-videos",
     guides: () => "/api/admin/guides",
@@ -104,6 +105,19 @@ export const ROUTES = {
     competitorIntelligence: () => "/api/content/competitors/intelligence",
     competitorIntelligenceForClient: (clientId: string) =>
       `/api/content/competitors/intelligence?client_id=${clientId}`,
+    competitors: () => "/api/content/competitors",
+    competitorsForClient: (clientId: string) => `/api/content/competitors?client_id=${clientId}`,
+    competitorSources: () => "/api/content/competitors/sources",
+    competitorCrawl: () => "/api/content/competitors/crawl",
+    competitorCrawlAdvance: () => "/api/content/competitors/crawl/advance",
+    competitorItemsPage: (clientId: string, competitorId: string, page: number, limit = 20) =>
+      `/api/content/competitors/items?client_id=${clientId}&competitor_id=${competitorId}&page=${page}&limit=${limit}`,
+    competitorItem: (clientId: string, competitorId: string, id: string) =>
+      `/api/content/competitors/items?client_id=${clientId}&competitor_id=${competitorId}&id=${id}`,
+    adapt: () => "/api/content/adapt",
+    duplicate: () => "/api/content/duplicate",
+    rewrite: () => "/api/content/rewrite",
+    revisions: () => "/api/content/revisions",
     topics: () => "/api/content/topics",
     topicsForClient: (clientId: string) => `/api/content/topics?client_id=${clientId}`,
     topicsGenerate: () => "/api/content/topics/generate",

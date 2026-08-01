@@ -3,11 +3,30 @@
 # unrelated config.toml from a parent workspace.
 project_id = "qzglxknorjrdnuklqrdq"
 
+# Every function is JWT-gated. verify_jwt defaults to true today, but each
+# function is listed explicitly so a platform default change can never
+# silently open one. Never add a function here with verify_jwt = false —
+# each function additionally re-verifies the caller in code.
+[functions.business-library-index]
+verify_jwt = true
+
+[functions.company-dna-scrape]
+verify_jwt = true
+
 [functions.content-generate]
+verify_jwt = true
+
+[functions.kb-generate]
+verify_jwt = true
+
+[functions.send-message]
 verify_jwt = true
 
 [functions.vault-ask]
 verify_jwt = true
 
-[functions.business-library-index]
+[functions.vault-delete]
+verify_jwt = true
+
+[functions.vault-process]
 verify_jwt = true

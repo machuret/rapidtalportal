@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import type { CrmContact } from "@/app/(portal)/crm/page";
 
 const CONTACTS_KEY = "contacts";
@@ -65,23 +66,23 @@ interface DeleteNoteInput {
 }
 
 function createContact(input: CreateContactInput): Promise<CrmContact> {
-  return api.post<CrmContact>("/crm/contacts", input);
+  return api.post<CrmContact>(ROUTES.crm.contacts(), input);
 }
 
 function updateContact(input: UpdateContactInput): Promise<CrmContact> {
-  return api.patch<CrmContact>("/crm/contacts", input);
+  return api.patch<CrmContact>(ROUTES.crm.contacts(), input);
 }
 
 function deleteContact(input: DeleteContactInput): Promise<{ ok: true }> {
-  return api.delete<{ ok: true }>("/crm/contacts", input);
+  return api.delete<{ ok: true }>(ROUTES.crm.contacts(), input);
 }
 
 function createNote(input: CreateNoteInput): Promise<CrmNote> {
-  return api.post<CrmNote>("/crm/notes", input);
+  return api.post<CrmNote>(ROUTES.crm.notes(), input);
 }
 
 function deleteNote(input: DeleteNoteInput): Promise<{ ok: true }> {
-  return api.delete<{ ok: true }>("/crm/notes", input);
+  return api.delete<{ ok: true }>(ROUTES.crm.notes(), input);
 }
 
 // Create contact (used by the Add Contact form)

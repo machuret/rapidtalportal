@@ -35,7 +35,7 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
     );
   }
   // Each question costs an OpenRouter call — throttle per user.
-  const rl = askVaultLimiter.check(`ask:${user.id}`);
+  const rl = await askVaultLimiter.check(`ask:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   let body: unknown;

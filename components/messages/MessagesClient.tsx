@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
 import { useMessages, type Message } from "@/hooks/useMessages";
+import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import {
   ConversationPulse,
   type ConversationConnection,
@@ -66,11 +68,7 @@ export function MessagesClient({ currentUserId, currentUserRole, clientId }: Mes
 
   // ── Opening the chat clears the "new messages" bell notification ─────────────
   useEffect(() => {
-    void fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "message" }),
-    }).catch(() => {});
+    void api.patch(ROUTES.notifications(), { type: "message" }, { showErrorToast: false }).catch(() => {});
   }, []);
 
   // ── Scroll to bottom once the initial load completes ─────────────────────────

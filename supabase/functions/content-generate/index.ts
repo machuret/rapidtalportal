@@ -32,13 +32,14 @@ import {
   runContentGenerationOrchestration,
   type ContentModelRequest,
 } from "../_shared/content-generation-orchestration.ts";
+import {
+  buildCorsHeaders,
+  DEFAULT_ALLOWED_ORIGIN,
+  handleOptions,
+} from "../_shared/cors.ts";
+import { authorizeRequest, checkClientMembership } from "../_shared/auth.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-
-const baseCorsHeaders = {
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
 
 // Default base system prompt — kept in sync with the "content.generate" entry
 // in lib/prompts/registry.ts so that saving the default in admin resets cleanly.
@@ -387,12 +388,9 @@ export async function handleContentGenerateRequest(
   const createSupabaseClient = dependencies.createClient ?? createClient;
   const fetchImpl = dependencies.fetch ?? fetch;
   const envGet = dependencies.envGet ?? ((key: string) => Deno.env.get(key));
-  const corsHeaders = {
-    ...baseCorsHeaders,
-    "Access-Control-Allow-Origin": envGet("ALLOWED_ORIGIN") ?? "https://rapidtal.online",
-  };
+  const corsHeaders = buildCorsHeaders(envGet("ALLOWED_ORIGIN") ?? DEFAULT_ALLOWED_ORIGIN);
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return handleOptions(corsHeaders);
   }
 
   if (req.method !== "POST") {
@@ -404,6 +402,8 @@ export async function handleContentGenerateRequest(
 
   try {
     // ── Auth ──────────────────────────────────────────────────────────────────
+    // The Bearer check intentionally precedes the OpenRouter env check so a
+    // missing key surfaces as a 500 only for requests that carry a token.
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized." }), {
@@ -411,11 +411,7 @@ export async function handleContentGenerateRequest(
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const jwt = authHeader.replace("Bearer ", "");
 
-    const supabaseUrl = envGet("SUPABASE_URL")!;
-    const serviceKey = envGet("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = envGet("SUPABASE_ANON_KEY")!;
     const openrouterKey = envGet("OPENROUTER_API_KEY");
     const contentModel =
       envGet("CONTENT_GENERATION_MODEL")?.trim() || DEFAULT_CONTENT_MODEL;
@@ -433,31 +429,15 @@ export async function handleContentGenerateRequest(
       });
     }
 
-    const userClient = createSupabaseClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    const auth = await authorizeRequest(req, {
+      select: "id, role, client_id",
+      createClientImpl: createSupabaseClient,
+      envGet,
+      headers: corsHeaders,
     });
-    const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
-    if (authError || !authUser) {
-      return new Response(JSON.stringify({ error: "Unauthorized." }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const admin = createSupabaseClient(supabaseUrl, serviceKey);
-
-    const { data: userRow } = await admin
-      .from("users")
-      .select("id, role, client_id")
-      .eq("id", authUser.id)
-      .single();
-
-    if (!userRow) {
-      return new Response(JSON.stringify({ error: "User record not found." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!auth.ok) return auth.response;
+    const { admin, role, userClientId } = auth;
+    const authUserId = auth.authUserId as string;
 
     // ── Parse + validate body ─────────────────────────────────────────────────
     const body = await req.json();
@@ -563,14 +543,8 @@ export async function handleContentGenerateRequest(
     }
 
     // ── Client access ─────────────────────────────────────────────────────────
-    const role = (userRow as { role: string }).role;
-    const userClientId = (userRow as { client_id: string | null }).client_id;
-    if (role !== "super_admin" && userClientId !== clientId) {
-      return new Response(JSON.stringify({ error: "Forbidden." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const membershipDenied = checkClientMembership(role, userClientId, clientId, corsHeaders);
+    if (membershipDenied) return membershipDenied;
     if (
       evaluationStyleMode &&
       (persist || !["client_admin", "super_admin"].includes(role))
@@ -661,7 +635,7 @@ export async function handleContentGenerateRequest(
       if (captureError) {
         console.warn("content-generate: competitor similarity corpus unavailable:", captureError);
       } else {
-        competitorReferenceTexts.push(...(captureRows ?? []).flatMap((row) =>
+        competitorReferenceTexts.push(...(captureRows ?? []).flatMap((row: { raw_content?: unknown }) =>
           typeof row.raw_content === "string" ? [row.raw_content] : []));
       }
     }
@@ -852,7 +826,7 @@ export async function handleContentGenerateRequest(
         admin,
         context: brainContext,
         artifactKind: "content_piece",
-        createdBy: authUser.id,
+        createdBy: authUserId,
       });
       brainContextSnapshotId = snapshot.id;
     } catch (error) {
@@ -889,7 +863,7 @@ export async function handleContentGenerateRequest(
         const { error: renewError } = await admin.rpc("renew_content_project_generation", {
           p_client_id: clientId,
           p_project_id: projectId,
-          p_actor_id: authUser.id,
+          p_actor_id: authUserId,
           p_lease_token: generationLeaseToken,
           p_lease_seconds: 600,
         });
@@ -941,7 +915,7 @@ export async function handleContentGenerateRequest(
       const { error: releaseError } = await admin.rpc("release_content_project_generation", {
         p_client_id: clientId,
         p_project_id: projectId,
-        p_actor_id: authUser.id,
+        p_actor_id: authUserId,
         p_lease_token: generationLeaseToken,
       });
       if (releaseError) {
@@ -954,7 +928,7 @@ export async function handleContentGenerateRequest(
         .rpc("claim_content_project_generation", {
           p_client_id: clientId,
           p_project_id: projectId,
-          p_actor_id: authUser.id,
+          p_actor_id: authUserId,
           p_lease_seconds: 600,
         })
         .single();
@@ -1054,7 +1028,7 @@ export async function handleContentGenerateRequest(
         ? await admin.rpc("create_content_project_draft", {
             p_client_id: clientId,
             p_project_id: projectId,
-            p_actor_id: authUser.id,
+            p_actor_id: authUserId,
             p_content_type: contentType,
             p_title: title,
             p_body: finalBody,
@@ -1076,7 +1050,7 @@ export async function handleContentGenerateRequest(
             source_references: verifiedSources,
             body: finalBody,
             status: "draft",
-            created_by: authUser.id,
+            created_by: authUserId,
             style_snapshot: styleSnapshot,
             brain_context_snapshot_id: brainContextSnapshotId,
             generation_kind: generationKind,
@@ -1129,7 +1103,7 @@ export async function handleContentGenerateRequest(
         client_id: clientId,
         project_id: projectId ?? null,
         piece_id: pieceId,
-        actor_id: authUser.id,
+        actor_id: authUserId,
         event_type: generationKind === "original" || generationKind === "reply"
           ? "draft_generated"
           : "draft_revised",

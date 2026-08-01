@@ -5,6 +5,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
+import { scrapeLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { errorMessage } from "@/lib/error-message";
 
 export const runtime = "nodejs";
@@ -114,6 +115,10 @@ export const POST = withAuth(async (req, { user }) => {
   if (!["client_admin", "super_admin"].includes(user.role)) {
     return NextResponse.json({ error: "Only admins can manage LinkedIn style sources." }, { status: 403 });
   }
+
+  // Each run spends Apify/Firecrawl credits — cap before any paid call.
+  const rl = await scrapeLimiter.check(`linkedin:${user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   let body: unknown;
   try { body = await req.json(); }

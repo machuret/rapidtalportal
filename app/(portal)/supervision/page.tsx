@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ExportCsv } from "@/components/supervision/ExportCsv";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { Eye, Clock, ChevronRight, CheckCircle2, Target, Inbox, AlertTriangle, NotebookPen } from "lucide-react";
-import { sumWorkHours, isOnTime, isOverdue, isDueSoon } from "@/lib/tasks/metrics";
+import { sumWorkHours, isOnTime, isOverdue, isDueSoon, daysOverdue } from "@/lib/tasks/metrics";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -92,7 +92,6 @@ export default async function SupervisionPage() {
 
   // Flags lead with the most urgent signal — overdue work — then the client's
   // action item (work awaiting them), then VA hygiene.
-  const daysBetween = (a: string, b: string) => Math.floor((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000);
   type Flag = { text: string; kind: "alert" | "action" | "warn" };
   const flagsFor = (id: string): Flag[] => {
     const s = stats[id]; const f: Flag[] = [];
@@ -100,7 +99,7 @@ export default async function SupervisionPage() {
     if (s && s.reviewing > 0) f.push({ text: `${s.reviewing} awaiting your review`, kind: "action" });
     if (s && s.dueSoon > 0) f.push({ text: `${s.dueSoon} due soon`, kind: "warn" });
     if (!s || !s.lastLog) f.push({ text: "No daily log this month", kind: "warn" });
-    else if (daysBetween(s.lastLog, today) >= 3) f.push({ text: `No log for ${daysBetween(s.lastLog, today)} days`, kind: "warn" });
+    else if (daysOverdue(s.lastLog, today) >= 3) f.push({ text: `No log for ${daysOverdue(s.lastLog, today)} days`, kind: "warn" });
     if (s && s.inProgress > 0 && s.delivered === 0) f.push({ text: "Active tasks, nothing delivered yet", kind: "warn" });
     return f;
   };

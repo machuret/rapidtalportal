@@ -69,6 +69,7 @@ jobs:
         working-directory: supabase/functions
         run: |
           deno check \
+            business-library-index/index.ts \
             company-dna-scrape/index.ts \
             content-generate/index.ts \
             kb-generate/index.ts \

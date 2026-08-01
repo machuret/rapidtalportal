@@ -9,6 +9,7 @@ const read = (file: string) => readFileSync(path.join(root, file), "utf8");
 describe("Content Studio high-priority integrity repairs", () => {
   const page = read("app/(portal)/content/page.tsx");
   const topics = read("app/api/content/topics/generate/route.ts");
+  const topicsLib = read("lib/content/topics-generate.ts");
   const workflow = read("components/content/ContentProjectWorkflow.tsx");
   const studio = read("components/content/ContentStudio.tsx");
   const history = read("components/content/HistoryTab.tsx");
@@ -22,16 +23,18 @@ describe("Content Studio high-priority integrity repairs", () => {
   });
 
   test("topic output is bounded, repaired and preserves valid partial results", () => {
-    expect(topics).toContain("generatedTopicsSchema.safeParse");
-    expect(topics).toContain("generatedTopicSchema.safeParse(candidate)");
+    // Parsing/schema lives in lib/content/topics-generate.ts; the route keeps
+    // the repair/retry lifecycle and the budget accounting.
+    expect(topicsLib).toContain("generatedTopicsSchema.safeParse");
+    expect(topicsLib).toContain("generatedTopicSchema.safeParse(candidate)");
     expect(topics).toContain("if (rawTopics.length < count)");
     expect(topics).toContain("if (rawTopics.length === 0)");
     expect(topics).toContain("REPAIR REQUIRED");
-    expect(topics).toContain("args.count * 420");
-    expect(topics).toContain("args.count * 3_000");
-    expect(topics).toContain("Math.min(110_000");
-    expect(topics).toContain("title: z.string().trim().min(1).max(300)");
-    expect(topics).toContain("description: z.string().trim().min(1).max(2000)");
+    expect(topicsLib).toContain("args.count * 420");
+    expect(topicsLib).toContain("args.count * 3_000");
+    expect(topicsLib).toContain("Math.min(110_000");
+    expect(topicsLib).toContain("title: z.string().trim().min(1).max(300)");
+    expect(topicsLib).toContain("description: z.string().trim().min(1).max(2000)");
     expect(topics).toContain("INCOMPLETE_VERIFIED_IDEA_SET");
   });
 

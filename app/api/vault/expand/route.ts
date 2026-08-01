@@ -64,7 +64,7 @@ export const POST = withAuth(async (req, { user }) => {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return NextResponse.json({ error: "OPENROUTER_API_KEY is not configured." }, { status: 503 });
 
-  const rl = deepAnalysisLimiter.check(`expand:${user.id}`);
+  const rl = await deepAnalysisLimiter.check(`expand:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   const admin = createAdminClient();

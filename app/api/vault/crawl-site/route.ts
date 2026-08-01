@@ -70,7 +70,7 @@ export const POST = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "Only public HTTPS URLs can be crawled." }, { status: 400 });
   }
 
-  const rl = siteCrawlLimiter.check(`site-crawl:${user.id}`);
+  const rl = await siteCrawlLimiter.check(`site-crawl:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   const firecrawlKey = process.env.FIRECRAWL_API_KEY;

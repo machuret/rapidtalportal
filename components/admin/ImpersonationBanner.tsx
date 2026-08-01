@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Eye, X, Loader2 } from "lucide-react";
+import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 
 /**
  * Sticky banner shown while a super_admin is viewing the app as another user.
@@ -21,7 +23,7 @@ export function ImpersonationBanner({
   async function exit() {
     setExiting(true);
     try {
-      await fetch("/api/admin/impersonate", { method: "DELETE" });
+      await api.delete(ROUTES.admin.impersonate(), undefined, { showErrorToast: false });
     } finally {
       // Full reload so every server component re-resolves the real user.
       window.location.href = "/admin/users";

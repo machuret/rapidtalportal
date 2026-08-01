@@ -1,3 +1,12 @@
+/**
+ * Hand-maintained database row types — the canonical client-side contract.
+ *
+ * Source of truth is `db/migrations/`; update these interfaces when a
+ * migration changes a table shape. `pnpm gen:types` writes Supabase-generated
+ * types to `types/database.generated.ts` (gitignored) for diffing/reference —
+ * it deliberately does NOT overwrite this file, because the generated output
+ * erases the hand-tuned unions and JSDoc below.
+ */
 import type { ContentHardRule } from "@/supabase/functions/_shared/content-style";
 import type { StyleAnalysisProfile } from "@/lib/content/style-analysis";
 

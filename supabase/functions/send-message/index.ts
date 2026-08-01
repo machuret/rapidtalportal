@@ -7,17 +7,12 @@
  * receive the event immediately.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "https://rapidtal.online",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { corsHeaders, handleOptions } from "../_shared/cors.ts";
+import { authorizeRequest } from "../_shared/auth.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return handleOptions();
   }
 
   if (req.method !== "POST") {
@@ -29,66 +24,19 @@ Deno.serve(async (req: Request) => {
 
   try {
     // ── Auth ──────────────────────────────────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized." }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const jwt = authHeader.replace("Bearer ", "");
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-    // Verify JWT
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    // super_admins have no client and are blocked from messaging; every other
+    // caller must have a users row with a client assigned.
+    const auth = await authorizeRequest(req, {
+      blockSuperAdmin: true,
+      select: "id, role, client_id, full_name, email",
     });
-    const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
-    if (authError || !authUser) {
-      return new Response(JSON.stringify({ error: "Unauthorized." }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!auth.ok) return auth.response;
+    const { admin, role, userClientId, userRow } = auth;
+    // No service-key bypass here, so an authorized caller always has a user id.
+    const authUserId = auth.authUserId as string;
 
-    const admin = createClient(supabaseUrl, serviceKey);
-
-    // Fetch user row — need role, client_id, and full_name
-    const { data: userRow } = await admin
-      .from("users")
-      .select("id, role, client_id, full_name, email")
-      .eq("id", authUser.id)
-      .single();
-
-    if (!userRow) {
-      return new Response(JSON.stringify({ error: "User record not found." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const role = (userRow as { role: string }).role;
-    const userClientId = (userRow as { client_id: string | null }).client_id;
     const fullName = (userRow as { full_name: string | null; email: string }).full_name
       || (userRow as { email: string }).email;
-
-    // super_admin has no client — block messaging
-    if (role === "super_admin") {
-      return new Response(JSON.stringify({ error: "Super admins cannot send messages." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (!userClientId) {
-      return new Response(JSON.stringify({ error: "User has no client assigned." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     // ── Parse + validate body ─────────────────────────────────────────────────
     const body = await req.json();
@@ -143,12 +91,12 @@ Deno.serve(async (req: Request) => {
       .from("messages")
       .insert({
         client_id: userClientId,
-        sender_id: authUser.id,
+        sender_id: authUserId,
         sender_name: fullName,
         sender_role: role,
         body: trimmed,
         audience,
-        read_by: [authUser.id],
+        read_by: [authUserId],
       })
       .select()
       .single();
@@ -170,7 +118,7 @@ Deno.serve(async (req: Request) => {
         .from("users")
         .select("id,role")
         .eq("client_id", userClientId)
-        .neq("id", authUser.id);
+        .neq("id", authUserId);
       const recipientIds = ((teammates ?? []) as { id: string; role: string }[])
         .filter((user) =>
           audience === "company"

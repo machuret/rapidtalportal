@@ -11,19 +11,14 @@
  * Secrets: OPENROUTER_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   persistBrainContextSnapshot,
   resolveBrainContext,
   type BrainContextV1,
 } from "../_shared/brain-context.ts";
 import { embedBrainMemoryQuery } from "../_shared/brain-memory-embedding.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "https://rapidtal.online",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { corsHeaders, handleOptions, jsonResponse as json } from "../_shared/cors.ts";
+import { authorizeRequest, checkClientMembership } from "../_shared/auth.ts";
 
 const ANSWER_PROMPT = `You are RapidTal Coach, a grounded business coach and work copilot. Answer the authenticated speaker using ONLY the permitted context below.
 
@@ -312,13 +307,6 @@ async function promptOverride(admin: any, slug: string, fallback: string): Promi
   }
 }
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
 /** Base64(UTF-8) so source titles with non-Latin chars survive the header. */
 function encodeSources(s: unknown): string {
   return btoa(unescape(encodeURIComponent(JSON.stringify(s))));
@@ -450,7 +438,7 @@ function coachingCommitmentScore(
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return handleOptions();
   if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
   try {
@@ -471,27 +459,17 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Auth ──────────────────────────────────────────────────────────────────
+    // The Bearer check intentionally precedes the OpenRouter env check so a
+    // missing key surfaces as a 500 only for requests that carry a token.
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized." }, 401);
-    const jwt = authHeader.replace("Bearer ", "");
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
     if (!openrouterKey) return json({ error: "OpenRouter not configured." }, 500);
 
-    const admin = createClient(supabaseUrl, serviceKey);
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
-    });
-    const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
-    if (authError || !authUser) return json({ error: "Unauthorized." }, 401);
-
-    const { data: userRow } = await admin.from("users").select("role, client_id, timezone").eq("id", authUser.id).single();
-    if (!userRow) return json({ error: "User record not found." }, 403);
-    const role = (userRow as { role: string }).role;
-    const userClientId = (userRow as { client_id: string | null }).client_id;
+    const auth = await authorizeRequest(req, { select: "role, client_id, timezone" });
+    if (!auth.ok) return auth.response;
+    const { admin, role, userClientId, userRow } = auth;
+    const authUserId = auth.authUserId as string;
     const userTimeZone = (userRow as { timezone?: string | null }).timezone || "UTC";
 
     // ── Input ─────────────────────────────────────────────────────────────────
@@ -542,7 +520,8 @@ Deno.serve(async (req: Request) => {
     }
     if (question.length < 3) return json({ error: "Question too short." }, 422);
     if (question.length > 4_000) return json({ error: "Question too long." }, 422);
-    if (role !== "super_admin" && userClientId !== clientId) return json({ error: "Forbidden." }, 403);
+    const membershipDenied = checkClientMembership(role, userClientId, clientId);
+    if (membershipDenied) return membershipDenied;
 
     // Best-effort question log (powers gap detection / analytics). Never throws.
     // deno-lint-ignore no-explicit-any
@@ -550,7 +529,7 @@ Deno.serve(async (req: Request) => {
       try {
         await admin.from("vault_queries").insert({
           client_id: clientId,
-          user_id: authUser.id,
+          user_id: authUserId,
           question,
           mode: deep ? "deep" : "concise",
           sources_count: sourcesCount,
@@ -590,7 +569,7 @@ Deno.serve(async (req: Request) => {
           objective: requestedCoachMode.replaceAll("_", " "),
           intent: deep ? "thorough Coach answer" : "concise Coach answer",
           actor: {
-            userId: authUser.id,
+            userId: authUserId,
             accountRole: role === "va" || role === "client_admin" ? role : "super_admin",
             coachRole,
             permissions: [...coachPermissions],
@@ -624,7 +603,7 @@ Deno.serve(async (req: Request) => {
         admin,
         context: brainContext,
         artifactKind: "vault_answer",
-        createdBy: authUser.id,
+        createdBy: authUserId,
       });
       brainContextSnapshotId = snapshot.id;
     } catch (error) {
@@ -892,7 +871,7 @@ Deno.serve(async (req: Request) => {
           idempotency_key: actionDraft.idempotencyKey,
           brain_context_snapshot_id: brainContextSnapshotId,
           client_id: clientId,
-          owner_id: authUser.id,
+          owner_id: authUserId,
           action_type: actionDraft.type,
           generated_payload: actionDraft,
           status: "draft",

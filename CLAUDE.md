@@ -97,9 +97,10 @@ live within ~30s of a save (cache TTL), no deploy.
 - **Task/throughput metrics** live in `lib/tasks/metrics.ts` (`sumWorkHours`,
   `workHours`, `isOnTime`, `onTimePct`). Dashboard, supervision, reports, etc.
   all use these — don't reimplement on-time/hours math inline.
-- **Admin CRUD data layer**: `lib/hooks/useResource.ts` — generic React-Query
+- **Admin CRUD data layer**: `hooks/useResource.ts` — generic React-Query
   collection (SSR-seeded, optimistic create/update/remove, rollback on error).
-  Backs Users, Leads, Expenses. `lib/hooks/useCrudDialog.ts` holds the shared
+  Backs Leads and Expenses (Users is a custom flow and intentionally does
+  not). `hooks/useCrudDialog.ts` holds the shared
   save/archive/busy plumbing for edit dialogs. (AdminPlacements and
   PromptsManager intentionally don't use these — they're server-refresh and
   slug-keyed-override shapes, not id-CRUD lists.)

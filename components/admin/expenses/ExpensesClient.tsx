@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useResource } from "@/lib/hooks/useResource";
-import { useCrudDialog } from "@/lib/hooks/useCrudDialog";
+import { useResource } from "@/hooks/useResource";
+import { useCrudDialog } from "@/hooks/useCrudDialog";
 import { ROUTES } from "@/lib/api/routes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";

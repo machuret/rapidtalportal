@@ -26,7 +26,7 @@ export const POST = withAuth(async (req, { user }) => {
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
 
-  const limit = siteCrawlLimiter.check(`competitor-crawl:${user.id}`);
+  const limit = await siteCrawlLimiter.check(`competitor-crawl:${user.id}`);
   if (!limit.allowed) return tooManyRequests(limit.retryAfterSeconds);
 
   const admin = createAdminClient();

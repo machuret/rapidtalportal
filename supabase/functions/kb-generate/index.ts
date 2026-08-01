@@ -6,13 +6,8 @@
  * well beyond Vercel's timeout limits, making this an ideal edge function.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "https://rapidtal.online",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { corsHeaders, handleOptions } from "../_shared/cors.ts";
+import { authorizeRequest, checkClientMembership } from "../_shared/auth.ts";
 
 const SYSTEM_PROMPT = `You are generating a comprehensive FAQ knowledge base for a company's virtual assistants based on their Company DNA and Vault documents.
 
@@ -68,7 +63,7 @@ async function promptOverride(admin: any, slug: string, fallback: string): Promi
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return handleOptions();
   }
 
   if (req.method !== "POST") {
@@ -80,6 +75,8 @@ Deno.serve(async (req: Request) => {
 
   try {
     // ── Auth ──────────────────────────────────────────────────────────────────
+    // The Bearer check intentionally precedes the OpenRouter env check so a
+    // missing key surfaces as a 500 only for requests that carry a token.
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized." }), {
@@ -87,11 +84,6 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const jwt = authHeader.replace("Bearer ", "");
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
 
     if (!openrouterKey) {
@@ -101,31 +93,10 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
-    });
-    const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
-    if (authError || !authUser) {
-      return new Response(JSON.stringify({ error: "Unauthorized." }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const admin = createClient(supabaseUrl, serviceKey);
-
-    const { data: userRow } = await admin
-      .from("users")
-      .select("id, role, client_id")
-      .eq("id", authUser.id)
-      .single();
-
-    if (!userRow) {
-      return new Response(JSON.stringify({ error: "User record not found." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const auth = await authorizeRequest(req, { select: "id, role, client_id" });
+    if (!auth.ok) return auth.response;
+    const { admin, role, userClientId } = auth;
+    const authUserId = auth.authUserId as string;
 
     // ── Parse body ────────────────────────────────────────────────────────────
     const body = await req.json();
@@ -142,14 +113,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Client access ─────────────────────────────────────────────────────────
-    const role = (userRow as { role: string }).role;
-    const userClientId = (userRow as { client_id: string | null }).client_id;
-    if (role !== "super_admin" && userClientId !== clientId) {
-      return new Response(JSON.stringify({ error: "Forbidden." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const membershipDenied = checkClientMembership(role, userClientId, clientId);
+    if (membershipDenied) return membershipDenied;
 
     // ── Concurrent run guard ─────────────────────────────────────────────────
     // Prevent two users from triggering KB generation at the same time.
@@ -170,7 +135,7 @@ Deno.serve(async (req: Request) => {
     // ── Create run record ─────────────────────────────────────────────────────
     const { data: run, error: runError } = await admin
       .from("kb_generation_runs")
-      .insert({ client_id: clientId, triggered_by: authUser.id, status: "running" })
+      .insert({ client_id: clientId, triggered_by: authUserId, status: "running" })
       .select()
       .single();
 

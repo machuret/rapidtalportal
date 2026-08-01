@@ -159,7 +159,7 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
 
   return (
     <div className="surface-card mb-4 overflow-hidden">
-      <button type="button" onClick={() => setOpen((value) => !value)} className="flex w-full items-center justify-between gap-3 p-4 text-left">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="coach-progress-body" className="flex w-full items-center justify-between gap-3 p-4 text-left">
         <span className="flex items-center gap-3">
           <span className="rounded-lg bg-purple-500/10 p-2 text-purple-300"><Target className="h-4 w-4" /></span>
           <span>
@@ -173,7 +173,7 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
       </button>
 
       {open && (
-        <div className="border-t border-zinc-800 p-4">
+        <div id="coach-progress-body" className="border-t border-zinc-800 p-4">
           <p className="mb-4 text-xs leading-5 text-zinc-500">
             Only you can see this plan. Active items stay until you finish or stop them; completed history is removed after 12 months. The Coach never creates one without your approval.
           </p>
@@ -191,9 +191,9 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
               </div>
               {form === "goal" && (
                 <div className="mb-3 grid gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                  <Input value={goalTitle} onChange={(event) => setGoalTitle(event.target.value)} maxLength={300} placeholder="What do you want to achieve?" />
-                  <Textarea value={goalOutcome} onChange={(event) => setGoalOutcome(event.target.value)} maxLength={4000} rows={2} placeholder="What would success look like?" />
-                  <Input type="date" value={goalDate} onChange={(event) => setGoalDate(event.target.value)} />
+                  <Input value={goalTitle} onChange={(event) => setGoalTitle(event.target.value)} maxLength={300} placeholder="What do you want to achieve?" aria-label="Goal title" />
+                  <Textarea value={goalOutcome} onChange={(event) => setGoalOutcome(event.target.value)} maxLength={4000} rows={2} placeholder="What would success look like?" aria-label="Success outcome" />
+                  <Input type="date" value={goalDate} onChange={(event) => setGoalDate(event.target.value)} aria-label="Target date" />
                   <Button size="sm" onClick={createGoal} disabled={busy || !goalTitle.trim()}>{busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}Save private goal</Button>
                 </div>
               )}
@@ -222,8 +222,8 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
               </div>
               {form === "commitment" && (
                 <div className="mb-3 grid gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                  <Textarea value={commitment} onChange={(event) => setCommitment(event.target.value)} maxLength={1000} rows={2} placeholder="What will you do next?" />
-                  <select value={commitmentGoal} onChange={(event) => setCommitmentGoal(event.target.value)} className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"><option value="">No linked goal</option>{activeGoals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select>
+                  <Textarea value={commitment} onChange={(event) => setCommitment(event.target.value)} maxLength={1000} rows={2} placeholder="What will you do next?" aria-label="Commitment" />
+                  <select value={commitmentGoal} onChange={(event) => setCommitmentGoal(event.target.value)} aria-label="Linked goal" className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"><option value="">No linked goal</option>{activeGoals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select>
                   <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs text-zinc-500">Due date<Input type="date" value={commitmentDue} onChange={(event) => setCommitmentDue(event.target.value)} className="mt-1" /></label><label className="text-xs text-zinc-500">Weekly Coach check-ins start<Input type="date" value={checkInDate} onChange={(event) => setCheckInDate(event.target.value)} className="mt-1" /></label></div>
                   <Button size="sm" onClick={createCommitment} disabled={busy || !commitment.trim()}>{busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}Save commitment</Button>
                 </div>

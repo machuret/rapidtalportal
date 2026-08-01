@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import { toast } from "sonner";
 import type { AiSuggestion, ContentTopic, ContentType } from "@/types/content";
 
@@ -45,17 +46,17 @@ async function fetchTopics(clientId: string): Promise<ContentTopic[]> {
 
 // Create Topic
 async function createTopic(input: CreateTopicInput): Promise<ContentTopic> {
-  return api.post<ContentTopic>("/content/topics", input);
+  return api.post<ContentTopic>(ROUTES.content.topics(), input);
 }
 
 // Update Topic
 async function updateTopic(input: UpdateTopicInput): Promise<ContentTopic> {
-  return api.patch<ContentTopic>("/content/topics", input);
+  return api.patch<ContentTopic>(ROUTES.content.topics(), input);
 }
 
 // Delete Topic
 async function deleteTopic(input: DeleteTopicInput): Promise<void> {
-  return api.delete("/content/topics", input);
+  return api.delete(ROUTES.content.topics(), input);
 }
 
 // Generate AI Topic Ideas
@@ -64,7 +65,7 @@ async function generateTopicIdeas(
   count: number = 4,
   mode: "company" | "competitor_gap" = "company",
 ): Promise<{ topics: AiSuggestion[]; mode: "company" | "competitor_gap"; warning?: string }> {
-  return api.post("/content/topics/generate", { client_id: clientId, count, mode });
+  return api.post(ROUTES.content.topicsGenerate(), { client_id: clientId, count, mode });
 }
 
 // Hook for topics management

@@ -1,5 +1,9 @@
 # RapidTal Portal — Per-Feature Audit & Product Scorecard (June 2026)
 
+> **Status (Aug 2026): historical.** Product scorecard as of June 2026 (49
+> pages / 77 migrations); the portal has since grown to ~126 routes / 141
+> migrations including the Coach system. Keep for history; scores are stale.
+
 **Lens:** CTO / product-portfolio review (not code style).
 **Method:** Full route map (49 pages, ~24 API domains, 77 migrations, 28 test files) + four grounded code deep-dives. Every feature below was read at the page + route + lib level.
 **Scale (1–10):** 9–10 production-grade & differentiated · 7–8 solid, shippable, minor gaps · 5–6 functional MVP, real gaps · 3–4 half-built/thin · 1–2 stub.

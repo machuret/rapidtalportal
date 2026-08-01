@@ -2,6 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import type { DbCompanyDna } from "@/types/database";
 
 interface SaveDnaInput {
@@ -22,13 +23,13 @@ interface ScrapeResult {
 function saveDna(input: SaveDnaInput): Promise<DbCompanyDna> {
   const { form, clientId } = input;
   // Component shows its own toast messages, so suppress the default error toast.
-  return api.post<DbCompanyDna>("/company-dna", { ...form, client_id: clientId }, { showErrorToast: false });
+  return api.post<DbCompanyDna>(ROUTES.companyDna.base(), { ...form, client_id: clientId }, { showErrorToast: false });
 }
 
 function scrapeDna(input: ScrapeInput): Promise<ScrapeResult> {
   const { url, clientId } = input;
   // Component shows its own toast messages, so suppress the default error toast.
-  return api.post<ScrapeResult>("/company-dna/scrape", { url, clientId }, { showErrorToast: false });
+  return api.post<ScrapeResult>(ROUTES.companyDna.scrape(), { url, clientId }, { showErrorToast: false });
 }
 
 export function useDna() {

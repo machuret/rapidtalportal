@@ -5,7 +5,7 @@
  * the error toast); canSave/archiveConfirm gate the actions.
  */
 import { renderHook, act } from "@testing-library/react";
-import { useCrudDialog } from "@/lib/hooks/useCrudDialog";
+import { useCrudDialog } from "@/hooks/useCrudDialog";
 
 jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
 import { toast } from "sonner";

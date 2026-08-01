@@ -16,17 +16,12 @@
  * Safeguard: Cross-tenant check — all itemIds verified against clientId before ANY deletion
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "https://rapidtal.online",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { corsHeaders, handleOptions } from "../_shared/cors.ts";
+import { authorizeRequest, checkClientMembership } from "../_shared/auth.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return handleOptions();
   }
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed." }), {
@@ -37,56 +32,15 @@ Deno.serve(async (req: Request) => {
 
   try {
     // ── Auth ──────────────────────────────────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized." }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const jwt = authHeader.replace("Bearer ", "");
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-    // Validate JWT — getUser() is authoritative; getSession() is not safe server-side
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    // Delete is restricted to client_admin/super_admin — the VA role is
+    // explicitly blocked at function level too (getUser() is authoritative;
+    // getSession() is not safe server-side).
+    const auth = await authorizeRequest(req, {
+      allowedRoles: ["client_admin", "super_admin"],
+      forbiddenMessage: "Forbidden. Only client admins can delete vault items.",
     });
-    const { data: { user: authUser }, error: authError } = await userClient.auth.getUser();
-    if (authError || !authUser) {
-      return new Response(JSON.stringify({ error: "Unauthorized." }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const admin = createClient(supabaseUrl, serviceKey);
-
-    // Fetch user row to check role — delete is restricted to client_admin/super_admin
-    const { data: userRow } = await admin
-      .from("users")
-      .select("role, client_id")
-      .eq("id", authUser.id)
-      .single();
-
-    if (!userRow) {
-      return new Response(JSON.stringify({ error: "User record not found." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const role = (userRow as { role: string }).role;
-
-    // VA role is explicitly blocked from deleting — enforce at function level too
-    if (role !== "client_admin" && role !== "super_admin") {
-      return new Response(JSON.stringify({ error: "Forbidden. Only client admins can delete vault items." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!auth.ok) return auth.response;
+    const { admin, role } = auth;
 
     // ── Validate input ─────────────────────────────────────────────
     // Guard against malformed JSON — req.json() throws on invalid input,
@@ -118,13 +72,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // Client membership check
-    const userClientId = (userRow as { client_id: string | null }).client_id;
-    if (role !== "super_admin" && userClientId !== clientId) {
-      return new Response(JSON.stringify({ error: "Forbidden." }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const membershipDenied = checkClientMembership(role, auth.userClientId, clientId);
+    if (membershipDenied) return membershipDenied;
 
     // ── Cross-tenant safety check ─────────────────────────────────────────────
     // Fetch ALL requested items and verify every single one belongs to clientId.
@@ -154,7 +103,7 @@ Deno.serve(async (req: Request) => {
     if (crossTenantViolation) {
       // Log full context for incident response — user, claimed client, actual client(s)
       const actualClients = [...new Set(fetchedItems.map(i => i.client_id))].join(", ");
-      console.error(`❌ Cross-tenant delete attempt: user=${authUser.id} claimed_client=${clientId} actual_clients=${actualClients}`);
+      console.error(`❌ Cross-tenant delete attempt: user=${auth.authUserId} claimed_client=${clientId} actual_clients=${actualClients}`);
       return new Response(JSON.stringify({ error: "Forbidden. Item ownership mismatch." }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

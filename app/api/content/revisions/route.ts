@@ -3,6 +3,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { serverError } from "@/lib/api/errors";
 
 const schema = z.object({
   client_id: z.string().uuid(),
@@ -27,6 +28,6 @@ export const GET = withAuth(async (req, { user }) => {
     .eq("client_id", parsed.data.client_id)
     .order("revision_number", { ascending: false })
     .limit(50);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError(error);
   return NextResponse.json(data ?? []);
 });

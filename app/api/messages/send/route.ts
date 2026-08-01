@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   if (originRejected(req)) return NextResponse.json({ error: "Cross-origin request blocked." }, { status: 403 });
   const auth = await requireApiAuth();
   if ("error" in auth) return auth.error;
-  const rl = messageSendLimiter.check(`msg:${auth.user.id}`);
+  const rl = await messageSendLimiter.check(`msg:${auth.user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
   const body = await req.json();
   return proxyToEdgeFunction("send-message", body);

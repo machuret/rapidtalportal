@@ -18,7 +18,7 @@ const schema = z.object({ id: z.string().uuid() });
 
 export const POST = withAuth(async (req, { user }) => {
   // Throttle reveals so a compromised session can't bulk-export the vault.
-  const rl = credentialRevealLimiter.check(`reveal:${user.id}`);
+  const rl = await credentialRevealLimiter.check(`reveal:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   let body: unknown;

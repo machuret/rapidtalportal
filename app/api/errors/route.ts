@@ -16,7 +16,7 @@ const schema = z.object({
 });
 
 export const POST = withAuth(async (req, { user }) => {
-  const rl = clientErrorLimiter.check(`errors:${user.id}`);
+  const rl = await clientErrorLimiter.check(`errors:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   let body: unknown;

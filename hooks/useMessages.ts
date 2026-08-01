@@ -41,7 +41,7 @@ async function fetchMessages(clientId: string): Promise<Message[]> {
 
 // Send message via API
 async function sendMessage(input: SendMessageInput): Promise<unknown> {
-  return api.post("/messages/send", input);
+  return api.post(ROUTES.messages.send(), input);
 }
 
 interface UseMessagesOptions {

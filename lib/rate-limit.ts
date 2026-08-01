@@ -1,25 +1,71 @@
 /**
  * Per-user rate limiting for expensive or sensitive endpoints.
  *
- * Sliding-window, in-memory. On serverless this is per-instance and resets on
- * cold starts, so treat it as a speed bump against abuse and runaway loops —
- * not a hard guarantee. (For hard guarantees, swap the store for Redis/Upstash;
- * the call sites won't need to change.)
+ * Two backends, selected automatically:
+ *
+ * - **Upstash Redis** — active when `UPSTASH_REDIS_REST_URL` and
+ *   `UPSTASH_REDIS_REST_TOKEN` are set. The sliding window lives in Redis, so
+ *   limits hold across serverless instances and cold starts. This is the
+ *   production backend.
+ * - **In-memory** — fallback for local dev and for any instance where Redis is
+ *   not configured (or unreachable). Sliding-window per instance; resets on
+ *   cold start, so treat it as a speed bump, not a guarantee.
+ *
+ * If the Redis call itself fails, the limiter degrades to the in-memory check
+ * for that request (fail-open) rather than taking the endpoint down — rate
+ * limiting must never be the reason the app is unavailable.
  *
  * Keys should identify the caller AND the action, e.g. `ask:<userId>` or
  * `reveal:<userId>`, so one user hitting a limit never affects another.
  */
 import { NextResponse } from "next/server";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
 const MAX_TRACKED_KEYS = 5000;
 
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      })
+    : null;
+
 export class SlidingWindowLimiter {
   private hits = new Map<string, number[]>();
+  private distributed: Ratelimit | null;
 
-  constructor(private maxRequests: number, private windowMs: number) {}
+  constructor(private maxRequests: number, private windowMs: number) {
+    this.distributed = redis
+      ? new Ratelimit({
+          redis,
+          limiter: Ratelimit.slidingWindow(maxRequests, `${windowMs} ms`),
+          // Namespace per limiter instance so two limiters can never collide
+          // even if a call site reuses a key prefix.
+          prefix: `rl:${maxRequests}:${windowMs}`,
+          analytics: false,
+        })
+      : null;
+  }
 
   /** Records a hit and reports whether the caller is within the limit. */
-  check(key: string): { allowed: boolean; retryAfterSeconds: number } {
+  async check(key: string): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
+    if (this.distributed) {
+      try {
+        const { success, reset } = await this.distributed.limit(key);
+        return {
+          allowed: success,
+          retryAfterSeconds: success ? 0 : Math.max(1, Math.ceil((reset - Date.now()) / 1000)),
+        };
+      } catch {
+        // Redis unreachable — fall through to the in-memory check (fail-open).
+      }
+    }
+    return this.checkInMemory(key);
+  }
+
+  private checkInMemory(key: string): { allowed: boolean; retryAfterSeconds: number } {
     const now = Date.now();
     const windowStart = now - this.windowMs;
 

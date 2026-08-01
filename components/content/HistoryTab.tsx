@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LocalTime } from "@/components/ui/LocalTime";
@@ -255,7 +256,7 @@ function PieceDetail({
     }
     setRewriting(true);
     try {
-      const result = await api.post<ContentPieceFull>("/content/rewrite", {
+      const result = await api.post<ContentPieceFull>(ROUTES.content.rewrite(), {
         client_id: clientId,
         id: piece.id,
         scope,
@@ -288,7 +289,7 @@ function PieceDetail({
     derivedActionRef.current = "duplicate";
     setDerivedAction("duplicate");
     try {
-      const created = await api.post<ContentPiece>("/content/duplicate", { client_id: clientId, id: piece.id });
+      const created = await api.post<ContentPiece>(ROUTES.content.duplicate(), { client_id: clientId, id: piece.id });
       onArtifactCreated(created);
       toast.success("Draft duplicated. It is available in History.");
     } catch {
@@ -304,7 +305,7 @@ function PieceDetail({
     derivedActionRef.current = "adapt";
     setDerivedAction("adapt");
     try {
-      const created = await api.post<ContentPiece>("/content/adapt", {
+      const created = await api.post<ContentPiece>(ROUTES.content.adapt(), {
         client_id: clientId,
         id: piece.id,
         target_type: adaptType,

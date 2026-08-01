@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isOnTime } from "@/lib/tasks/metrics";
+import { onTimePct, workHours, type TimeRange } from "@/lib/tasks/metrics";
 
 export interface ReportVARow { name: string; delivered: number; onTimePct: number | null; hours: number }
 export interface ReportCatRow { name: string; color: string; count: number }
@@ -52,20 +52,11 @@ async function monthTotals(
   ]);
 
   const tasks = (doneRows ?? []) as { completed_at: string | null; due_date: string | null }[];
-  let onNum = 0, onDen = 0;
-  for (const t of tasks) {
-    if (t.due_date && t.completed_at) { onDen++; if (isOnTime(t.completed_at, t.due_date)) onNum++; }
-  }
-  let hoursMs = 0;
-  for (const e of (timeRows ?? []) as { started_at: string; ended_at: string | null }[]) {
-    if (!e.ended_at) continue;
-    hoursMs += new Date(e.ended_at).getTime() - new Date(e.started_at).getTime();
-  }
   return {
     delivered: tasks.length,
     requested: requested ?? 0,
-    hours: Math.round(hoursMs / 360_000) / 10,
-    onTimePct: onDen ? Math.round((onNum / onDen) * 100) : null,
+    hours: workHours((timeRows ?? []) as TimeRange[]),
+    onTimePct: onTimePct(tasks),
     content: content ?? 0,
     toolRuns: toolRuns ?? 0,
   };
@@ -121,34 +112,35 @@ export async function buildClientReport(clientId: string, clientName: string, mo
   const tasks = (deliveredRows ?? []) as TaskRow[];
 
   // Totals + per-VA + per-category.
-  let onTimeNum = 0, onTimeDen = 0;
-  const perVA = new Map<string, { delivered: number; onNum: number; onDen: number; hours: number }>();
+  const perVATasks = new Map<string, TaskRow[]>();
+  const perVAEntries = new Map<string, TimeRange[]>();
   const perCat = new Map<string, number>();
-  const ensureVA = (id: string) => perVA.get(id) ?? perVA.set(id, { delivered: 0, onNum: 0, onDen: 0, hours: 0 }).get(id)!;
+  const pushTo = <T,>(map: Map<string, T[]>, key: string, value: T) => {
+    const list = map.get(key);
+    if (list) list.push(value);
+    else map.set(key, [value]);
+  };
 
   for (const t of tasks) {
-    if (t.assigned_to) { const v = ensureVA(t.assigned_to); v.delivered++; }
-    if (t.due_date && t.completed_at) {
-      const onTime = isOnTime(t.completed_at, t.due_date);
-      onTimeDen++; if (onTime) onTimeNum++;
-      if (t.assigned_to) { const v = ensureVA(t.assigned_to); v.onDen++; if (onTime) v.onNum++; }
-    }
+    if (t.assigned_to) pushTo(perVATasks, t.assigned_to, t);
     const key = t.category_id ?? "__none__";
     perCat.set(key, (perCat.get(key) ?? 0) + 1);
   }
 
-  // Hours per VA + total.
-  let hoursMs = 0;
-  for (const e of (timeRows ?? []) as { user_id: string; started_at: string; ended_at: string | null }[]) {
-    if (!e.ended_at) continue;
-    const ms = new Date(e.ended_at).getTime() - new Date(e.started_at).getTime();
-    hoursMs += ms;
-    if (e.user_id) { const v = ensureVA(e.user_id); v.hours += ms; }
+  const entries = (timeRows ?? []) as ({ user_id: string } & TimeRange)[];
+  for (const e of entries) {
+    if (e.user_id) pushTo(perVAEntries, e.user_id, e);
   }
 
-  const round1 = (ms: number) => Math.round(ms / 360_000) / 10;
-  const vaRowsOut: ReportVARow[] = Array.from(perVA.entries())
-    .map(([id, v]) => ({ name: vaName.get(id) ?? "VA", delivered: v.delivered, onTimePct: v.onDen ? Math.round((v.onNum / v.onDen) * 100) : null, hours: round1(v.hours) }))
+  // A VA appears if they delivered anything OR logged any time this month.
+  const vaIds = new Set([...perVATasks.keys(), ...perVAEntries.keys()]);
+  const vaRowsOut: ReportVARow[] = Array.from(vaIds)
+    .map((id) => ({
+      name: vaName.get(id) ?? "VA",
+      delivered: perVATasks.get(id)?.length ?? 0,
+      onTimePct: onTimePct(perVATasks.get(id) ?? []),
+      hours: workHours(perVAEntries.get(id) ?? []),
+    }))
     .sort((a, b) => b.delivered - a.delivered);
 
   const categories: ReportCatRow[] = Array.from(perCat.entries())
@@ -175,8 +167,8 @@ export async function buildClientReport(clientId: string, clientName: string, mo
     totals: {
       delivered: tasks.length,
       requested: requested ?? 0,
-      hours: round1(hoursMs),
-      onTimePct: onTimeDen ? Math.round((onTimeNum / onTimeDen) * 100) : null,
+      hours: workHours(entries),
+      onTimePct: onTimePct(tasks),
       content: content ?? 0,
       toolRuns: toolRuns ?? 0,
     },

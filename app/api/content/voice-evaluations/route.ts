@@ -192,7 +192,7 @@ export const POST = withAuth(async (request, { user }) => {
   if (!canManage(user.role)) {
     return NextResponse.json({ error: "Only client admins and super admins can run voice evaluations." }, { status: 403 });
   }
-  const rateLimit = aiGenerateLimiter.check(`voice-evaluation:${user.id}`);
+  const rateLimit = await aiGenerateLimiter.check(`voice-evaluation:${user.id}`);
   if (!rateLimit.allowed) return tooManyRequests(rateLimit.retryAfterSeconds);
   let raw: unknown;
   try { raw = await request.json(); }
@@ -364,8 +364,19 @@ export const PATCH = withAuth(async (request, { user }) => {
     p_reviewer_notes: parsed.data.reviewer_notes,
   }).single();
   if (error) {
-    const status = error.code === "42501" ? 403 : error.code === "P0002" ? 409 : 422;
-    return NextResponse.json({ error: error.message }, { status });
+    // The RPC only raises custom, user-safe messages under these codes
+    // (migration 107); anything else is an unexpected Postgres error whose
+    // message must not leak to the client.
+    if (error.code === "42501") {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    if (error.code === "P0002") {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error.code === "P0001" || error.code === "22023") {
+      return NextResponse.json({ error: error.message }, { status: 422 });
+    }
+    return serverError(error);
   }
   return NextResponse.json(reveal(data as Record<string, unknown>));
 });

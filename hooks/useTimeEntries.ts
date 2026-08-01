@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 
 const TIME_ENTRIES_KEY = "time-entries";
 
@@ -47,7 +48,7 @@ async function fetchTimeEntries(date: string): Promise<TimeEntryRow[]> {
 async function upsertTimeEntry(
   input: UpsertTimeEntryInput
 ): Promise<{ entry?: { id: string } }> {
-  return api.post<{ entry?: { id: string } }>("/time-entries", input);
+  return api.post<{ entry?: { id: string } }>(ROUTES.timeEntries(), input);
 }
 
 // Query for a given day's time entries.

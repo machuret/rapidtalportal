@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import type { DailyLog, DailyLogNote, Mood } from "@/types/daily-log";
 
 const DAILY_LOG_KEY = "daily-log";
@@ -65,19 +66,19 @@ export function useDailyLogQuery(
 // These mutations are surfaced with component-specific error toasts, so the
 // api-client default error toast is suppressed to avoid double-toasting.
 async function upsertDailyLog(input: UpsertDailyLogInput): Promise<DailyLog> {
-  return api.post<DailyLog>("/daily-log/upsert", input, { showErrorToast: false });
+  return api.post<DailyLog>(ROUTES.dailyLog.upsert(), input, { showErrorToast: false });
 }
 
 async function addNote(input: AddNoteInput): Promise<DailyLogNote> {
-  return api.post<DailyLogNote>("/daily-log/notes", input, { showErrorToast: false });
+  return api.post<DailyLogNote>(ROUTES.dailyLog.notes(), input, { showErrorToast: false });
 }
 
 async function deleteNote(id: string): Promise<void> {
-  return api.delete(`/daily-log/notes?id=${id}`, undefined, { showErrorToast: false });
+  return api.delete(ROUTES.dailyLog.note(id), undefined, { showErrorToast: false });
 }
 
 async function submitFeedback(input: FeedbackInput): Promise<unknown> {
-  return api.post("/daily-log/feedback", input, { showErrorToast: false });
+  return api.post(ROUTES.dailyLog.feedback(), input, { showErrorToast: false });
 }
 
 export function useUpsertDailyLog() {

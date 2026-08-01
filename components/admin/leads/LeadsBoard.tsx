@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
-import { useResource } from "@/lib/hooks/useResource";
-import { useCrudDialog } from "@/lib/hooks/useCrudDialog";
+import { useResource } from "@/hooks/useResource";
+import { useCrudDialog } from "@/hooks/useCrudDialog";
 import { ROUTES } from "@/lib/api/routes";
 import { cn, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -236,8 +236,8 @@ function LeadTimeline({ leadId }: { leadId: string }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetch(`${ROUTES.admin.leadEvents()}?leadId=${leadId}`).then((r) => r.json())
-      .then((rows: LeadEvent[]) => setEvents(Array.isArray(rows) ? rows : [])).catch(() => {});
+    api.get<LeadEvent[]>(ROUTES.admin.leadEventsForLead(leadId), { showErrorToast: false })
+      .then((rows) => setEvents(Array.isArray(rows) ? rows : [])).catch(() => {});
   }, [leadId]);
 
   async function add() {

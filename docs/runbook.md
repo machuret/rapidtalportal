@@ -5,6 +5,80 @@ rediscovered. For architecture/invariants see `CLAUDE.md`.
 
 ---
 
+## 0. Environment variables — the complete reference
+
+Everything the app reads, in one place. Set **Vercel** vars under Project →
+Settings → Environment Variables; set **edge** vars with `supabase secrets set`
+(or Edge Functions → Secrets) — they need a `pnpm functions:deploy` to take
+effect. Vars marked *auto* are provided by the platform; don't set them.
+
+### Vercel — required
+
+| Var | Purpose |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (browser + server). |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (browser auth, RLS-scoped). |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role for the admin client — **bypasses RLS**, server-only. |
+| `CRON_SECRET` | Bearer token authenticating every `/api/cron/*` route (see §4). |
+| `CREDENTIALS_ENCRYPTION_KEY` | AES-256-GCM key for the credential vault. App **throws** without it. Generate: `openssl rand -base64 32`. |
+
+### Vercel — optional integrations (feature is skipped/degraded when unset)
+
+| Var | Purpose |
+|---|---|
+| `OPENROUTER_API_KEY` | LLM chat for Brain distillation, onboarding, tools, crawl dossiers. Preferred provider. |
+| `OPENAI_API_KEY` | Brain memory **embeddings** (OpenAI-only) + fallback chat provider if no OpenRouter key. Without it, memory dedup/reinforce is skipped. |
+| `FIRECRAWL_API_KEY` | Vault URL ingestion, competitor crawling, tools fetch-url, site crawls. |
+| `APIFY_API_TOKEN` | LinkedIn company-posts discovery (`/api/vault/linkedin`). |
+| `APIFY_LINKEDIN_ACTOR_ID` | Apify actor override. Default `harvestapi~linkedin-company-posts`. |
+| `RESEND_API_KEY` | Transactional email (see §2b). Sends are skipped without it. |
+| `RESEND_FROM` | Sender. Default `RapidTal <noreply@rapidtal.online>`. |
+| `NEXT_PUBLIC_APP_URL` / `APP_URL` | Absolute base URL for email links. Falls back to `VERCEL_URL` (*auto*). |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Distributed rate limiting (Upstash Redis REST). When set, endpoint limits hold across serverless instances; unset → per-instance in-memory fallback. |
+
+### Vercel — model / behavior tunables (all optional)
+
+| Var | Default | Purpose |
+|---|---|---|
+| `BRAIN_DISTILL_MIN` | `3` | Min new signals before distillation runs. |
+| `BRAIN_FIT_THRESHOLD` | `55` | Fit score below which topic generation skips a candidate. |
+| `BRAIN_EMBED_MODEL` | `text-embedding-3-small` | Brain memory embedding model. |
+| `TOOLS_MODEL` | `openai/gpt-4o` | Tools hub model. |
+| `TOOLS_MODEL_MINI` | `openai/gpt-4o-mini` | High-frequency short-form tools model. |
+| `VAULT_DOSSIER_MODEL` | `openai/gpt-4o` | Company dossier refresh synthesis. |
+| `VAULT_EXPAND_MODEL` | `openai/gpt-4o` | Vault Expanded View analysis (see §2). |
+| `SOP_MODEL` | `openai/gpt-4o` | Full-SOP generation. |
+| `SOP_SUGGEST_MODEL` | `openai/gpt-4o-mini` | SOP angle suggestions. |
+| `TASK_ARCHIVE_DAYS` | `30` | Days before done tasks are archived (cron). |
+| `NOTIFICATION_RETENTION_DAYS` | `60` | Days notifications are kept (cron). |
+| `ERROR_ALERT_THRESHOLD` | `5` | Errors in window before the alert cron fires. |
+
+### Local tooling only (never in Vercel)
+
+| Var | Purpose |
+|---|---|
+| `SUPABASE_DB_URL` | Postgres URI for `pnpm db:status / db:baseline / db:apply` (see §1). |
+| `SUPABASE_PROJECT_REF` | Project ref for `supabase link` / `pnpm functions:deploy`. |
+
+### Edge functions (Supabase secrets)
+
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are *auto*-
+provided by Supabase. `OPENROUTER_API_KEY`, `OPENAI_API_KEY`,
+`FIRECRAWL_API_KEY` mirror their Vercel meanings. The rest:
+
+| Var | Default | Purpose |
+|---|---|---|
+| `ALLOWED_ORIGIN` | `https://rapidtal.online` | CORS origin for function responses (see §8.2). |
+| `VAULT_ASK_MODEL` | `openai/gpt-4o-mini` | Concise Ask-the-Vault answers. |
+| `VAULT_DEEP_MODEL` | `openai/gpt-4o` | "Go deeper" answers. |
+| `VAULT_PROCESS_MODEL` | `openai/gpt-4o-mini` | Per-document summary/tagging. |
+| `VAULT_EMBED_BUDGET` | `40` | Max chunks embedded per `vault-process` run. |
+| `CONTENT_EVAL_MODEL` | `openai/gpt-4o-mini` | Live content evaluation model. |
+| `CONTENT_EVAL_MIN_REVIEWS` | `20` | Human reviews required before trusting eval. |
+| `CONTENT_EVAL_REQUIRE_PILOT` | unset | Set to `1` to require pilot mode for eval. |
+
+---
+
 ## 1. Apply database migrations
 
 New SQL lands in `db/migrations/NNN_name.sql`. To apply to an environment you

@@ -13,7 +13,7 @@ const schema = z.object({
 });
 
 export const POST = withAuth(async (req, { user }) => {
-  const rl = aiGenerateLimiter.check(`content-adapt:${user.id}`);
+  const rl = await aiGenerateLimiter.check(`content-adapt:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
   let raw: unknown;
   try { raw = await req.json(); }

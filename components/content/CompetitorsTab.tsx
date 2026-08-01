@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import type {
   CompetitorIntelligenceIdea,
   CompetitorIntelligenceRun,
@@ -181,7 +182,7 @@ export function CompetitorsTab({
     if (!quiet) setLoading(true);
     try {
       const result = await api.get<{ competitors: Competitor[] }>(
-        `/content/competitors?client_id=${clientId}`,
+        ROUTES.content.competitorsForClient(clientId),
         { showErrorToast: !quiet },
       );
       setCompetitors(result.competitors);
@@ -209,7 +210,7 @@ export function CompetitorsTab({
     if (!active || !canManage || activeJobs.length === 0) return;
     const timer = window.setTimeout(async () => {
       await Promise.allSettled(activeJobs.map((job) =>
-        api.post("/content/competitors/crawl/advance", {
+        api.post(ROUTES.content.competitorCrawlAdvance(), {
           client_id: clientId,
           job_id: job.id,
         }, { showErrorToast: false })));
@@ -222,7 +223,7 @@ export function CompetitorsTab({
     event.preventDefault();
     setWorking("create");
     try {
-      await api.post("/content/competitors", {
+      await api.post(ROUTES.content.competitors(), {
         client_id: clientId,
         ...createForm,
       });
@@ -247,7 +248,7 @@ export function CompetitorsTab({
     event.preventDefault();
     setWorking(`source:${competitorId}`);
     try {
-      await api.post("/content/competitors/sources", {
+      await api.post(ROUTES.content.competitorSources(), {
         client_id: clientId,
         competitor_id: competitorId,
         url: sourceForm.url,
@@ -269,7 +270,7 @@ export function CompetitorsTab({
   async function refreshSource(source: CompetitorSource) {
     setWorking(`refresh:${source.id}`);
     try {
-      await api.post("/content/competitors/crawl", {
+      await api.post(ROUTES.content.competitorCrawl(), {
         client_id: clientId,
         source_id: source.id,
       });
@@ -285,7 +286,7 @@ export function CompetitorsTab({
   async function toggleSource(source: CompetitorSource) {
     setWorking(`toggle:${source.id}`);
     try {
-      await api.patch("/content/competitors/sources", {
+      await api.patch(ROUTES.content.competitorSources(), {
         client_id: clientId,
         id: source.id,
         status: source.status === "paused" ? "active" : "paused",
@@ -309,7 +310,7 @@ export function CompetitorsTab({
   async function saveSourceSettings(source: CompetitorSource) {
     setWorking(`settings:${source.id}`);
     try {
-      await api.patch("/content/competitors/sources", {
+      await api.patch(ROUTES.content.competitorSources(), {
         client_id: clientId,
         id: source.id,
         refresh_cadence: sourceSettings.refresh_cadence || null,
@@ -331,7 +332,7 @@ export function CompetitorsTab({
   ) {
     setWorking(`cadence:${competitor.id}`);
     try {
-      await api.patch("/content/competitors", {
+      await api.patch(ROUTES.content.competitors(), {
         client_id: clientId,
         id: competitor.id,
         refresh_cadence: refreshCadence,
@@ -360,7 +361,7 @@ export function CompetitorsTab({
         page: number;
         total: number;
         has_more: boolean;
-      }>(`/content/competitors/items?client_id=${clientId}&competitor_id=${competitorId}&page=${page}&limit=20`);
+      }>(ROUTES.content.competitorItemsPage(clientId, competitorId, page, 20));
       setCaptureBrowser({
         competitorId,
         items: result.items,
@@ -380,7 +381,7 @@ export function CompetitorsTab({
     setWorking(`capture:${itemId}`);
     try {
       const result = await api.get<{ item: CompetitorContentItem }>(
-        `/content/competitors/items?client_id=${clientId}&competitor_id=${competitorId}&id=${itemId}`,
+        ROUTES.content.competitorItem(clientId, competitorId, itemId),
       );
       setCaptureBrowser((current) => current ? { ...current, selected: result.item } : current);
     } catch (caught) {
@@ -394,7 +395,7 @@ export function CompetitorsTab({
     if (!window.confirm("Delete this source and all content captured from it? This cannot be undone.")) return;
     setWorking(`delete-source:${source.id}`);
     try {
-      await api.delete("/content/competitors/sources", {
+      await api.delete(ROUTES.content.competitorSources(), {
         client_id: clientId,
         id: source.id,
       });
@@ -410,7 +411,7 @@ export function CompetitorsTab({
   async function toggleCompetitor(competitor: Competitor) {
     setWorking(`toggle-competitor:${competitor.id}`);
     try {
-      await api.patch("/content/competitors", {
+      await api.patch(ROUTES.content.competitors(), {
         client_id: clientId,
         id: competitor.id,
         status: competitor.status === "paused" ? "active" : "paused",
@@ -427,7 +428,7 @@ export function CompetitorsTab({
     if (!window.confirm(`Delete ${competitor.name} and every captured source? This cannot be undone.`)) return;
     setWorking(`delete-competitor:${competitor.id}`);
     try {
-      await api.delete("/content/competitors", {
+      await api.delete(ROUTES.content.competitors(), {
         client_id: clientId,
         id: competitor.id,
       });

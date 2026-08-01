@@ -45,7 +45,7 @@ export function withTool<S extends z.ZodTypeAny>(
     const denied = authorizeTool(user, (data as { clientId: string }).clientId);
     if (denied) return denied;
 
-    const rl = toolsLimiter.check(`tools:${opts.slug}:${user.id}`);
+    const rl = await toolsLimiter.check(`tools:${opts.slug}:${user.id}`);
     if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
     return handler({ data, user, req });

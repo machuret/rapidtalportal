@@ -41,7 +41,7 @@ export const POST = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "Only admins can edit the company profile." }, { status: 403 });
   }
 
-  const rl = aiGenerateLimiter.check(`onboard:${user.id}`);
+  const rl = await aiGenerateLimiter.check(`onboard:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   const llm = chatProvider();

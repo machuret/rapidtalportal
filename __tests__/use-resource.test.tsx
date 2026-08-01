@@ -8,7 +8,7 @@
 import React from "react";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useResource } from "@/lib/hooks/useResource";
+import { useResource } from "@/hooks/useResource";
 
 // Mock the api client — the hook's job is the optimistic cache choreography,
 // not the network. We drive create/update/delete return values per test.

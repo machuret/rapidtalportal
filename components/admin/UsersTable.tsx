@@ -201,15 +201,7 @@ export function UsersTable({
     if (!confirm(`Log in as ${u.full_name ?? u.email}? You'll see the app exactly as they do, with a banner to switch back.`)) return;
     setImpersonatingId(u.id);
     try {
-      const res = await fetch("/api/admin/impersonate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: u.id }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Failed to start impersonation.");
-      }
+      await api.post(ROUTES.admin.impersonate(), { userId: u.id }, { showErrorToast: false });
       window.location.href = "/dashboard";
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to start impersonation.");

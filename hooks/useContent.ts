@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import { toast } from "sonner";
 import type {
   ContentBrief,
@@ -80,18 +81,18 @@ async function fetchPieceDetail(
 async function generateContent(
   input: GenerateContentInput
 ): Promise<GenerationResponse> {
-  return api.post<GenerationResponse>("/content/generate", input);
+  return api.post<GenerationResponse>(ROUTES.content.generate(), input);
 }
 
 // Update piece status
 async function updatePieceStatus(
   input: UpdatePieceStatusInput
 ): Promise<ContentPieceFull> {
-  return api.patch<ContentPieceFull>("/api/content/pieces", input);
+  return api.patch<ContentPieceFull>(ROUTES.content.pieces(), input);
 }
 
 async function updateContentPiece(input: UpdateContentPieceInput): Promise<ContentPieceFull> {
-  return api.patch<ContentPieceFull>("/api/content/pieces", input);
+  return api.patch<ContentPieceFull>(ROUTES.content.pieces(), input);
 }
 
 // Hook: lazily fetch a content piece's full detail.
