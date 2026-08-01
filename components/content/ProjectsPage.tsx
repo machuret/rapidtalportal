@@ -86,8 +86,9 @@ export function ProjectsPage({
                   <button
                     key={topic.id}
                     type="button"
+                    disabled={projects.creatingProject || projects.openingProject !== null}
                     onClick={() => void projects.handleTopicSelected(topic)}
-                    className="rounded-lg border border-emerald-500/20 bg-zinc-950 p-3 text-left hover:border-emerald-400/50"
+                    className="rounded-lg border border-emerald-500/20 bg-zinc-950 p-3 text-left hover:border-emerald-400/50 disabled:opacity-50"
                   >
                     <span className="block text-xs capitalize text-emerald-300">
                       {topic.content_type} · {existing ? "Continue draft" : "Start draft"}

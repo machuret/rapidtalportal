@@ -114,7 +114,7 @@ function analysisRow(status: "draft" | "approved" = "draft") {
     analysed_at: "2026-07-29T01:00:00.000Z",
     approved_at: status === "approved" ? "2026-07-29T02:00:00.000Z" : null,
     created_at: "2026-07-29T01:00:00.000Z",
-    updated_at: "2026-07-29T01:00:00.000Z",
+    updated_at: "2026-07-29T01:00:00.000+00:00", // PostgREST timestamptz format — regression guard for the datetime validation
   };
 }
 
@@ -410,7 +410,7 @@ test("rejects a stale refresh before calling the model", async () => {
   const response = await POST(request("POST", {
     client_id: CLIENT_A,
     channel: "linkedin",
-    expected_updated_at: "2026-07-29T01:00:00.000Z",
+    expected_updated_at: "2026-07-29T01:00:00.000+00:00", // PostgREST timestamptz format — regression guard for the datetime validation
   }), routeCtx);
 
   expect(response.status).toBe(409);
@@ -430,7 +430,7 @@ test("rejects a stale edit instead of overwriting a newer draft", async () => {
     id: ANALYSIS_ID,
     action: "save",
     analysis: profile,
-    expected_updated_at: "2026-07-29T01:00:00.000Z",
+    expected_updated_at: "2026-07-29T01:00:00.000+00:00", // PostgREST timestamptz format — regression guard for the datetime validation
   }), routeCtx);
 
   expect(response.status).toBe(409);

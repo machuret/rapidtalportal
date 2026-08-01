@@ -215,7 +215,9 @@ export function QuickDraftPage({
             <select value={manualType} onChange={(event) => setManualType(event.target.value as ContentType)} className="h-9 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm capitalize">
               {CHANNELS.map((type) => <option key={type} value={type}>{type}</option>)}
             </select>
-            <Button onClick={handleManualIdea}>Start guided draft</Button>
+            <Button onClick={handleManualIdea} disabled={projects.creatingProject}>
+              {projects.creatingProject ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Starting…</> : "Start guided draft"}
+            </Button>
           </div>
         </section>
       )}

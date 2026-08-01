@@ -92,15 +92,17 @@ export async function apiClient<T>(
       return await response.json() as T;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      
-      // Don't retry on client errors (4xx) except 429 (rate limit)
+
+      // Don't retry client errors (4xx) except 429 — but DO fall through to
+      // the shared toast+throw below. Throwing here directly made every
+      // actionable 409/422 silent (callers were told "the client surfaces it").
       if (error instanceof ApiError && error.statusCode >= 400 && error.statusCode < 500) {
-        if (error.statusCode !== 429) throw error;
+        if (error.statusCode !== 429) break;
       }
-      
+
       // Last attempt failed
       if (attempt === maxAttempts - 1) break;
-      
+
       // Exponential backoff
       await sleep(RETRY_DELAY * Math.pow(2, attempt));
     }

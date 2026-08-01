@@ -114,7 +114,6 @@ export function useTopics(clientId: string, initialTopics: ContentTopic[] = []) 
         topicKeys.byClient(clientId),
         (current = []) => current.filter((topic) => topic.id !== context?.optimisticId),
       );
-      toast.error(err instanceof Error ? err.message : "Failed to create topic");
     },
     onSuccess: (savedTopic, _variables, context) => {
       queryClient.setQueryData<ContentTopic[]>(
@@ -153,7 +152,6 @@ export function useTopics(clientId: string, initialTopics: ContentTopic[] = []) 
       if (context?.previousTopics) {
         queryClient.setQueryData(topicKeys.byClient(clientId), context.previousTopics);
       }
-      toast.error(err instanceof Error ? err.message : "Failed to update topic");
     },
     onSuccess: (_, variables) => {
       const action = variables.status === "approved" ? "approved" : "rejected";
@@ -185,7 +183,6 @@ export function useTopics(clientId: string, initialTopics: ContentTopic[] = []) 
       if (context?.previousTopics) {
         queryClient.setQueryData(topicKeys.byClient(clientId), context.previousTopics);
       }
-      toast.error(err instanceof Error ? err.message : "Failed to delete topic");
     },
     onSuccess: () => {
       toast.success("Topic deleted");
@@ -201,9 +198,6 @@ export function useTopics(clientId: string, initialTopics: ContentTopic[] = []) 
       count: number;
       mode?: "company" | "competitor_gap";
     }) => generateTopicIdeas(clientId, count, mode),
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to generate ideas");
-    },
   });
 
   return {

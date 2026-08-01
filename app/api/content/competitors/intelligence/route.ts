@@ -112,6 +112,26 @@ async function loadState(clientId: string): Promise<{
   ]);
   if (error) throw error;
   if (jobError) throw jobError;
+  // Reap expired leases: a killed invocation (timeout, cold start) leaves the
+  // job "running" forever — the running banner silently vanishes with no error
+  // and no retry. Mark it failed so the failure banner + Retry light up.
+  if (job && job.status === "running" && new Date(job.lease_until).getTime() <= Date.now()) {
+    const { error: reapError } = await db
+      .from("competitor_intelligence_jobs")
+      .update({
+        status: "failed",
+        error_code: "lease_expired",
+        error_message: "The analysis lease expired before it completed — retry the run.",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", job.id)
+      .eq("status", "running"); // never reap a job a live worker just reclaimed
+    if (!reapError) {
+      job.status = "failed";
+      job.error_code = "lease_expired";
+      job.error_message = "The analysis lease expired before it completed — retry the run.";
+    }
+  }
   const activeJob = job && new Date(job.lease_until).getTime() > Date.now()
     && job.status === "running"
     ? job as CompetitorIntelligenceJob
@@ -488,7 +508,7 @@ Do not claim publishing cadence, recurring social formats or broad content trend
   try {
     response = await fetch(provider.url, {
       method: "POST",
-      signal: AbortSignal.timeout(100_000),
+      signal: AbortSignal.timeout(70_000), // 70s + 40s repair fits inside maxDuration=120 with headroom
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${provider.key}`,
@@ -609,7 +629,7 @@ ${rendered.text}`,
     try {
       repairResponse = await fetch(provider.url, {
         method: "POST",
-        signal: AbortSignal.timeout(55_000),
+        signal: AbortSignal.timeout(40_000),
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${provider.key}`,

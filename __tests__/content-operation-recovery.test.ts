@@ -21,6 +21,18 @@ describe("durable content operation recovery", () => {
     expect(workflow).toContain("Your project, brief and selected Vault knowledge remain saved.");
   });
 
+  test("every read path returns the recovery fields — the retry UI is dead without them", () => {
+    // The exact blind spot that shipped: writes existed, selects didn't.
+    const projectsRoute = read("app/api/content/projects/route.ts");
+    const loaders = read("lib/content/server.ts");
+    for (const field of ["last_operation", "last_error_code", "last_error_message", "last_error_at", "last_generation_warnings"]) {
+      expect(projectsRoute).toContain(field);
+      expect(loaders).toContain(field);
+    }
+    // GET single/list and the PATCH response must all include the snapshot link too.
+    expect(projectsRoute).toContain("brain_context_snapshot_id");
+  });
+
   test("persists competitor failure codes and returns the latest job", () => {
     expect(migration).toContain("ADD COLUMN IF NOT EXISTS error_code TEXT");
     expect(migration).toContain(

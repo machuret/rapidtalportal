@@ -35,6 +35,7 @@ export function useContentProjects(
   const [activeProject, setActiveProject] = useState<ContentProject | null>(null);
   const [openingProject, setOpeningProject] = useState<string | null>(null);
   const [archivingProject, setArchivingProject] = useState<string | null>(null);
+  const [creatingProject, setCreatingProject] = useState(false);
 
   const updateProject = useCallback((project: ContentProject) => {
     setActiveProject(project);
@@ -47,6 +48,10 @@ export function useContentProjects(
   }, []);
 
   const createProject = useCallback(async (idea: ContentProjectIdea) => {
+    // Single-flight: double-clicks race into duplicate projects (the server
+    // also dedupes, but the button shouldn't even fire twice).
+    if (creatingProject) return null;
+    setCreatingProject(true);
     try {
       const created = await api.post<ContentProject>(ROUTES.content.projects(), {
         client_id: clientId,
@@ -56,8 +61,10 @@ export function useContentProjects(
       return created;
     } catch {
       return null;
+    } finally {
+      setCreatingProject(false);
     }
-  }, [clientId, updateProject]);
+  }, [clientId, creatingProject, updateProject]);
 
   const openProject = useCallback(async (projectId: string) => {
     setOpeningProject(projectId);
@@ -186,6 +193,7 @@ export function useContentProjects(
     activeProject,
     openingProject,
     archivingProject,
+    creatingProject,
     openProject,
     closeProject,
     updateProject,

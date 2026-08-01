@@ -112,9 +112,6 @@ export function useGenerateContent() {
     onSuccess: () => {
       toast.success("Content generated!");
     },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Generation failed");
-    },
   });
 
   return {
@@ -139,9 +136,6 @@ export function useUpdatePieceStatus() {
             : "Content restored to draft"
       );
     },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to update status");
-    },
     onSettled: (_, __, variables) => {
       queryClient.invalidateQueries({
         queryKey: pieceKeys.byClient(variables.client_id),
@@ -159,9 +153,6 @@ export function useUpdateContentPiece() {
   const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: updateContentPiece,
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to save draft");
-    },
     onSuccess: (piece, variables) => {
       queryClient.setQueryData(pieceKeys.detail(variables.client_id, variables.id), piece);
       queryClient.invalidateQueries({ queryKey: pieceKeys.byClient(variables.client_id) });

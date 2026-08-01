@@ -246,10 +246,13 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const db = createAdminClient();
-  const columns = "id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,brain_context_snapshot_id,created_at,updated_at";
+  // last_operation/last_error_*/last_generation_warnings are the durable
+  // operation-recovery fields (migration 118) — the retry UI is dead without them.
+  const columns = "id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,brain_context_snapshot_id,last_operation,last_error_code,last_error_message,last_error_at,last_generation_warnings,created_at,updated_at";
   if (!parsed.data.id) {
     const paged = searchParams.has("offset") || searchParams.has("limit");
-    const { data, error } = await db
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 118 columns precede generated schema snapshot
+    const { data, error } = await (db as any)
       .from("content_projects")
       .select(columns)
       .eq("client_id", parsed.data.client_id)
@@ -267,7 +270,8 @@ export const GET = withAuth(async (req, { user }) => {
     });
   }
 
-  const { data: project, error } = await db
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 118 columns precede generated schema snapshot
+  const { data: project, error } = await (db as any)
     .from("content_projects")
     .select(columns)
     .eq("id", parsed.data.id)
@@ -351,6 +355,38 @@ export const POST = withAuth(async (req, { user }) => {
       }, { status: 422 });
     }
     inheritedBrainContextSnapshotId = topic.brain_context_snapshot_id ?? null;
+  }
+  // Idempotence: one live project per idea. A double-click, a slow-network
+  // retry, or "start the same idea again" returns the existing project
+  // instead of creating permanent twins (all six Studio surfaces share this).
+  const recoveryColumns = "id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,brain_context_snapshot_id,last_operation,last_error_code,last_error_message,last_error_at,last_generation_warnings,created_at,updated_at";
+  if (parsed.data.idea.topicId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: existingProject, error: existingError } = await (db as any)
+      .from("content_projects")
+      .select(recoveryColumns)
+      .eq("client_id", parsed.data.client_id)
+      .eq("idea_snapshot->>topicId", parsed.data.idea.topicId)
+      .in("status", ["active", "saved"])
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingError) return serverError(existingError);
+    if (existingProject) return NextResponse.json(existingProject, { status: 200 });
+  } else if (market) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: existingProject, error: existingError } = await (db as any)
+      .from("content_projects")
+      .select(recoveryColumns)
+      .eq("client_id", parsed.data.client_id)
+      .eq("idea_snapshot->marketIntelligence->>runId", market.runId)
+      .eq("idea_snapshot->marketIntelligence->>ideaTitle", market.ideaTitle)
+      .in("status", ["active", "saved"])
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingError) return serverError(existingError);
+    if (existingProject) return NextResponse.json(existingProject, { status: 200 });
   }
   // The validated Zod object contains nested JSON that the generated Supabase
   // type cannot narrow to its recursive Json alias.
@@ -527,7 +563,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
     .eq("updated_at", parsed.data.expected_updated_at)
-    .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,created_at,updated_at")
+    .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,brain_context_snapshot_id,last_operation,last_error_code,last_error_message,last_error_at,last_generation_warnings,created_at,updated_at")
     .maybeSingle();
   if (error) return serverError(error);
   if (!data) {

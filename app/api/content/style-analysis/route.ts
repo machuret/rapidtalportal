@@ -34,14 +34,16 @@ const channelSchema = z.enum(STYLE_ANALYSIS_CHANNELS);
 const analyseSchema = z.object({
   client_id: z.string().uuid(),
   channel: channelSchema,
-  expected_updated_at: z.string().datetime().nullable(),
+  // PostgREST renders timestamptz with a +00:00 offset — plain .datetime()
+  // only accepts Z, which 422'd every real save/approve/refresh (migration 101+).
+  expected_updated_at: z.iso.datetime({ offset: true }).nullable(),
 });
 const updateSchema = z.object({
   client_id: z.string().uuid(),
   id: z.string().uuid(),
   action: z.enum(["save", "approve"]),
   analysis: styleAnalysisProfileSchema,
-  expected_updated_at: z.string().datetime(),
+  expected_updated_at: z.iso.datetime({ offset: true }),
 });
 
 interface AnalysisRow {

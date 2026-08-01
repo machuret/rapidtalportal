@@ -40,7 +40,7 @@ export async function loadBrandStyle(admin: Admin, clientId: string) {
 export async function loadProjects(admin: Admin, clientId: string, limit = 201) {
   const { data, error } = await admin
     .from("content_projects")
-    .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,brain_context_snapshot_id,created_at,updated_at")
+    .select("id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,brain_context_snapshot_id,last_operation,last_error_code,last_error_message,last_error_at,last_generation_warnings,created_at,updated_at")
     .eq("client_id", clientId)
     .order("updated_at", { ascending: false })
     .limit(limit);
@@ -52,7 +52,9 @@ export async function loadProjects(admin: Admin, clientId: string, limit = 201) 
 export async function loadTopics(admin: Admin, clientId: string) {
   const { data, error } = await admin
     .from("content_topics")
-    .select("id, title, description, content_type, status, created_at, created_by, brain_context_snapshot_id")
+    // Same shape as the GET route — without `why`, projects started from
+    // SSR-loaded topics persist generic filler instead of verified explainability.
+    .select("id, title, description, content_type, status, created_at, created_by, approved_by, approved_at, why, ai_fit_score, ai_flagged, brain_context_snapshot_id")
     .eq("client_id", clientId)
     .order("created_at", { ascending: false });
   if (error) throw error;
