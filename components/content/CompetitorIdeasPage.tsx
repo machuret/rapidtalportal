@@ -29,8 +29,8 @@ export function CompetitorIdeasPage({
 
   useEffect(() => {
     let active = true;
-    api.get<Competitor[]>(ROUTES.content.competitorsForClient(clientId))
-      .then((rows) => { if (active) setCompetitors(Array.isArray(rows) ? rows : []); })
+    api.get<{ competitors: Competitor[] }>(ROUTES.content.competitorsForClient(clientId))
+      .then((result) => { if (active) setCompetitors(result.competitors ?? []); })
       .catch(() => { if (active) setLoadFailed(true); });
     return () => { active = false; };
   }, [clientId]);
