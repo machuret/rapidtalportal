@@ -2,8 +2,10 @@ import type { Config } from "tailwindcss";
 import twColors from "tailwindcss/colors";
 
 const config: Config = {
-  // Always-dark app — use media strategy so no .dark class is needed
-  darkMode: "media",
+  // Theme is cookie-driven via <html data-theme="dark|light"> (app/layout.tsx)
+  // — dark: variants must follow the APP theme, not the OS preference
+  // (darkMode "media" gave OS-dark + app-light users dark-tinted inputs).
+  darkMode: ["class", '[data-theme="dark"]'],
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
