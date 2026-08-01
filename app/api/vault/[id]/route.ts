@@ -112,6 +112,10 @@ export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
     .update({
       ...updates,
       ...(curating ? { meta_curated: true } : {}),
+      // Content changed → embeddings must be rebuilt. Mark not-yet-indexed so
+      // the cron sweep finishes the job if the fire-and-forget call below is
+      // dropped — otherwise stale embeddings would be served forever.
+      ...(updates.raw_content ? { indexed_at: null } : {}),
       updated_at: new Date().toISOString(),
       updated_by: user.id,
     })

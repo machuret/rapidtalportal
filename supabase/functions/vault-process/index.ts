@@ -111,9 +111,9 @@ function isHeading(line: string): boolean {
  * with the document title + section heading — so each embedded vector knows
  * what it is about ("the price is $450" → "[KB v4 › Tours] the price is $450").
  */
-function chunkText(text: string, title: string, maxLen = 1200, maxChunks = 200): string[] {
+function chunkText(text: string, title: string, maxLen = 1200, maxChunks = 200): { chunks: string[]; truncated: boolean } {
   const clean = text.replace(/\r\n/g, "\n").trim();
-  if (!clean) return [];
+  if (!clean) return { chunks: [], truncated: false };
 
   // Split into (heading, body) sections.
   const sections: { heading: string; body: string }[] = [];
@@ -132,16 +132,17 @@ function chunkText(text: string, title: string, maxLen = 1200, maxChunks = 200):
   if (!sections.length) sections.push({ heading: "", body: clean });
 
   const out: string[] = [];
+  let truncated = false;
   const shortTitle = title.slice(0, 80);
-  for (const s of sections) {
-    if (out.length >= maxChunks) break;
+  outer: for (const s of sections) {
+    if (out.length >= maxChunks) { truncated = true; break; }
     const prefix = s.heading ? `[${shortTitle} › ${s.heading.slice(0, 60)}]\n` : `[${shortTitle}]\n`;
     for (const piece of charChunks(s.body, maxLen)) {
-      if (out.length >= maxChunks) break;
+      if (out.length >= maxChunks) { truncated = true; break outer; }
       out.push(prefix + piece);
     }
   }
-  return out;
+  return { chunks: out, truncated };
 }
 
 /** Max chunks embedded per invocation. gte-small runs ON-CPU in the edge
@@ -168,12 +169,17 @@ interface EmbedOutcome { count: number; total: number; complete: boolean; error:
  */
 // deno-lint-ignore no-explicit-any
 async function embedAndStoreChunks(admin: any, itemId: string, clientId: string, title: string, rawContent: string, rebuild: boolean): Promise<EmbedOutcome> {
-  const chunks = chunkText(rawContent, title);
+  const { chunks, truncated } = chunkText(rawContent, title);
   const total = chunks.length;
   if (!total) {
     await admin.from("vault_chunks").delete().eq("item_id", itemId);
     return { count: 0, total: 0, complete: true, error: "no embeddable content" };
   }
+  // Honesty over silent blind spots: when the doc exceeded the chunk cap, say
+  // so in index_error (surfaced on /admin/health) instead of looking complete.
+  const truncationNote = truncated
+    ? `document truncated: only the first ${total} chunks are searchable — the tail is not indexed`
+    : null;
 
   if (rebuild) await admin.from("vault_chunks").delete().eq("item_id", itemId);
 
@@ -187,7 +193,7 @@ async function embedAndStoreChunks(admin: any, itemId: string, clientId: string,
   }
   const missing: number[] = [];
   for (let i = 0; i < total; i++) if (!have.has(i)) missing.push(i);
-  if (!missing.length) return { count: total, total, complete: true, error: null };
+  if (!missing.length) return { count: total, total, complete: true, error: truncationNote };
 
   // deno-lint-ignore no-explicit-any
   let session: any;
@@ -228,7 +234,9 @@ async function embedAndStoreChunks(admin: any, itemId: string, clientId: string,
     count: stored,
     total,
     complete,
-    error: complete ? firstErr : (firstErr ?? `indexed ${stored}/${total} — ${remaining} pending (will resume)`),
+    error: complete
+      ? (truncationNote ?? firstErr)
+      : (firstErr ?? `indexed ${stored}/${total} — ${remaining} pending (will resume)`),
   };
 }
 

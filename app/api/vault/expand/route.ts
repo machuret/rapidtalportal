@@ -72,6 +72,8 @@ export const POST = withAuth(async (req, { user }) => {
   // Assemble the corpus from everything we know about the company:
   //   declared Company DNA (authoritative) + crawl dossier + product catalog +
   //   real excerpts from the richest pages + a summary of every page.
+  // Governed items only — same lifecycle boundary the Brain resolver applies.
+  const today = new Date().toISOString().slice(0, 10);
   const [
     { data: rows, error: itemsError },
     { data: dnaRow, error: dnaError },
@@ -80,6 +82,13 @@ export const POST = withAuth(async (req, { user }) => {
       .from("vault_items")
       .select("title, source_url, ai_summary, raw_content, tags, category")
       .eq("client_id", parsed.data.clientId)
+      .eq("status", "ready")
+      .eq("evidence_role", "factual")
+      .eq("knowledge_status", "active")
+      .eq("has_conflict", false)
+      .or(`valid_from.is.null,valid_from.lte.${today}`)
+      .or(`valid_until.is.null,valid_until.gte.${today}`)
+      .or(`review_due_at.is.null,review_due_at.gt.${today}`)
       .order("created_at", { ascending: false }),
     admin
       .from("company_dna")

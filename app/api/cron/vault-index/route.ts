@@ -33,15 +33,22 @@ export async function GET(req: NextRequest) {
   // indexed_at ONLY when every chunk is embedded, so `indexed_at IS NULL` covers
   // both never-indexed AND partially-indexed (resumed across runs) documents.
   // Oldest-touched first so nothing starves.
+  // Also reclaim `processing` items stuck >20 min (edge isolate killed before
+  // the ready write) — but dead-letter permanent failures after 24h of retries
+  // so they stop crowding the queue for items that can succeed.
+  const staleProcessingCutoff = new Date(Date.now() - 20 * 60_000).toISOString();
+  const deadLetterCutoff = new Date(Date.now() - 24 * 3_600_000).toISOString();
   const { data: candidates } = await admin
     .from("vault_items")
-    .select("id, client_id")
-    .in("status", ["ready", "error"])
+    .select("id, client_id, status, index_error, updated_at")
+    .in("status", ["ready", "error", "processing"])
     .is("indexed_at", null)
+    .or(`status.neq.processing,updated_at.lt.${staleProcessingCutoff}`)
     .order("updated_at", { ascending: true })
     .limit(SCAN_LIMIT);
 
-  const rows = (candidates ?? []) as { id: string; client_id: string }[];
+  const rows = ((candidates ?? []) as { id: string; client_id: string; status: string; index_error: string | null; updated_at: string }[])
+    .filter((row) => !(row.status === "error" && row.index_error && row.updated_at < deadLetterCutoff));
   // Heartbeat first: even a no-op run proves the cron is alive (/admin/health).
   const beat = (detail: Record<string, number>) =>
     admin.from("cron_heartbeats").upsert({ name: "vault-index", ran_at: new Date().toISOString(), detail });
@@ -59,7 +66,7 @@ export async function GET(req: NextRequest) {
   // so finished docs drop out.
   const ROUNDS = 4;
   let calls = 0;
-  let remaining = todo;
+  let remaining: { id: string; client_id: string }[] = todo;
   for (let round = 0; round < ROUNDS && remaining.length > 0; round++) {
     for (let i = 0; i < remaining.length; i += CONCURRENCY) {
       const batch = remaining.slice(i, i + CONCURRENCY);

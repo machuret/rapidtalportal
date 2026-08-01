@@ -81,6 +81,20 @@ export const POST = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
 
   // One active crawl per client at a time — they're heavyweight.
+  // Advance is UI-driven, so an "active" job may be abandoned (tab closed
+  // forever): auto-fail jobs untouched for 24h instead of blocking forever.
+  const staleCutoff = new Date(Date.now() - 24 * 3_600_000).toISOString();
+  await admin
+    .from("crawl_jobs")
+    .update({
+      status: "error",
+      error: "Crawl abandoned — no progress for 24 hours.",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("client_id", parsed.data.clientId)
+    .in("status", ["crawling", "ingesting", "synthesizing"])
+    .lt("updated_at", staleCutoff);
+
   const { data: active, error: activeError } = await admin
     .from("crawl_jobs")
     .select("id, status")

@@ -125,6 +125,12 @@ export async function streamEdgeFunction(
         "Cache-Control": "no-cache, no-transform",
         "X-Vault-Sources": res.headers.get("X-Vault-Sources") ?? "",
         "X-Brain-Context-Snapshot": res.headers.get("X-Brain-Context-Snapshot") ?? "",
+        // The client reads all three for the Library retry affordance,
+        // degradation warnings and follow-up suggestions — dropping them
+        // silently disabled those features on every streamed answer.
+        "X-Brain-Library-Availability": res.headers.get("X-Brain-Library-Availability") ?? "",
+        "X-Brain-Warnings": res.headers.get("X-Brain-Warnings") ?? "",
+        "X-Brain-Suggestions": res.headers.get("X-Brain-Suggestions") ?? "",
       },
     });
   } catch (err) {

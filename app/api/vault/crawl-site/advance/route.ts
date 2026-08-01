@@ -29,12 +29,14 @@ import {
 import { dossierSystemPrompt } from "@/lib/crawl/prompts";
 import { notify } from "@/lib/notifications";
 import { errorMessage } from "@/lib/error-message";
+import { captureError } from "@/lib/error-tracking";
 
 export const maxDuration = 60;
 
 const INGEST_BATCH = 8;   // pages classified/stored per tick
 const MAP_BATCH = 5;      // core pages summarized per LLM call
 const CRAWL_LEASE_SECONDS = 90; // longer than maxDuration; expires after a killed request
+const MAX_TICK_ERRORS = 3; // consecutive transient failures before a job goes terminal
 const MAP_MODEL = "openai/gpt-4o-mini";
 const SYNTHESIS_MODEL = "openai/gpt-4o"; // runs once per site — quality over cost
 
@@ -52,6 +54,10 @@ type JobMeta = {
   dossier_text?: string;
   warning?: string;
   unverified?: string[];
+  /** Consecutive failed ticks — the job only goes terminal at MAX_TICK_ERRORS. */
+  error_count?: number;
+  /** The last transient failure's real message (PostgrestError-safe). */
+  last_error?: string;
 };
 
 interface CrawlJob {
@@ -159,9 +165,11 @@ export const POST = withAuth(async (req, { user }) => {
       const { status, total, completed } = await fetchCrawlPages(job.firecrawl_id!, firecrawlKey);
       patch.pages_total = total;
       patch.pages_done = completed;
-      if (status === "failed") {
+      if (status === "failed" || status === "cancelled") {
         patch.status = "error";
-        patch.error = "Firecrawl reported the crawl as failed.";
+        patch.error = status === "cancelled"
+          ? "Firecrawl reported the crawl as cancelled."
+          : "Firecrawl reported the crawl as failed.";
       } else if (status === "completed") {
         patch.status = "ingesting";
         meta.cursor = 0;
@@ -201,6 +209,22 @@ export const POST = withAuth(async (req, { user }) => {
           .maybeSingle();
         if (existingError) throw existingError;
         if (existing) {
+          // Refresh pages whose content changed since the last crawl — dedupe
+          // must not freeze stale pages in place. Null-hash rows get backfilled.
+          const newHash = createHash("sha256").update(markdown).digest("hex");
+          const { data: refreshed, error: refreshError } = await admin
+            .from("vault_items")
+            .update({
+              raw_content: markdown,
+              content_hash: newHash,
+              indexed_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", (existing as { id: string }).id)
+            .or(`content_hash.is.null,content_hash.neq.${newHash}`)
+            .select("id");
+          if (refreshError) throw refreshError;
+          if ((refreshed ?? []).length) scheduleVaultProcess((existing as { id: string }).id, job.client_id);
           (meta.kept = meta.kept ?? []).push((existing as { id: string }).id);
           continue;
         }
@@ -240,23 +264,48 @@ export const POST = withAuth(async (req, { user }) => {
       if (step === "catalog") {
         if ((meta.catalog ?? []).length > 0) {
           const md = buildCatalogMarkdown(host, meta.catalog!);
-          const { data: item, error: catalogError } = await admin
+          const mdHash = createHash("sha256").update(md).digest("hex");
+          // Refresh-instead-of-insert: re-crawls update the same catalog row
+          // (a second insert would hit the content_hash unique index).
+          const { data: existingCatalog, error: catalogLookupError } = await admin
             .from("vault_items")
-            .insert({
-              client_id: job.client_id,
-              source_type: "text",
-              title: `Product Catalog — ${host}`,
-              raw_content: md,
-              content_hash: createHash("sha256").update(md).digest("hex"),
-              status: "processing",
-              created_by: user.id,
-            })
             .select("id")
-            .single();
-          if (catalogError) throw catalogError;
-          if (!item) throw new Error("The generated product catalog could not be saved.");
+            .eq("client_id", job.client_id)
+            .eq("title", `Product Catalog — ${host}`)
+            .maybeSingle();
+          if (catalogLookupError) throw catalogLookupError;
+          if (existingCatalog) {
+            const { error: catalogUpdateError } = await admin
+              .from("vault_items")
+              .update({
+                raw_content: md,
+                content_hash: mdHash,
+                status: "processing",
+                indexed_at: null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", (existingCatalog as { id: string }).id);
+            if (catalogUpdateError) throw catalogUpdateError;
+            scheduleVaultProcess((existingCatalog as { id: string }).id, job.client_id);
+          } else {
+            const { data: item, error: catalogError } = await admin
+              .from("vault_items")
+              .insert({
+                client_id: job.client_id,
+                source_type: "text",
+                title: `Product Catalog — ${host}`,
+                raw_content: md,
+                content_hash: mdHash,
+                status: "processing",
+                created_by: user.id,
+              })
+              .select("id")
+              .single();
+            if (catalogError) throw catalogError;
+            if (!item) throw new Error("The generated product catalog could not be saved.");
+            scheduleVaultProcess((item as { id: string }).id, job.client_id);
+          }
           patch.items_created = job.items_created + 1;
-          scheduleVaultProcess((item as { id: string }).id, job.client_id);
         }
         meta.syn_step = "map";
         meta.map_i = 0;
@@ -325,27 +374,56 @@ export const POST = withAuth(async (req, { user }) => {
           ? `\n\n---\n\n## Verification\n${verified} figures verified against scraped pages. ⚠️ Could not verify: ${unverified.join(", ")} — confirm before quoting to customers.`
           : `\n\n---\n\n## Verification\nAll ${verified} quoted figures verified against the scraped pages.`;
 
-        const { data: dossierItem, error: dossierError } = await admin
+        const dossierContent = dossier + verification;
+        // Refresh-instead-of-insert: one dossier per (client, host) — re-crawls
+        // replace it rather than stacking duplicates into the corpus.
+        const dossierHash = createHash("sha256").update(dossierContent).digest("hex");
+        const { data: existingDossier, error: dossierLookupError } = await admin
           .from("vault_items")
-          .insert({
-            client_id: job.client_id,
-            source_type: "text",
-            title: `Company Dossier — ${host}`,
-            source_url: job.url,
-            raw_content: dossier + verification,
-            category: "reference",
-            tags: ["dossier", "website", host],
-            meta_curated: true,
-            status: "processing",
-            created_by: user.id,
-          })
           .select("id")
-          .single();
-        if (dossierError) throw dossierError;
-        if (!dossierItem) throw new Error("The generated company dossier could not be saved.");
-        patch.dossier_item_id = (dossierItem as { id: string }).id;
+          .eq("client_id", job.client_id)
+          .eq("title", `Company Dossier — ${host}`)
+          .maybeSingle();
+        if (dossierLookupError) throw dossierLookupError;
+        let dossierItemId: string;
+        if (existingDossier) {
+          dossierItemId = (existingDossier as { id: string }).id;
+          const { error: dossierUpdateError } = await admin
+            .from("vault_items")
+            .update({
+              raw_content: dossierContent,
+              content_hash: dossierHash,
+              status: "processing",
+              indexed_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", dossierItemId);
+          if (dossierUpdateError) throw dossierUpdateError;
+        } else {
+          const { data: dossierItem, error: dossierError } = await admin
+            .from("vault_items")
+            .insert({
+              client_id: job.client_id,
+              source_type: "text",
+              title: `Company Dossier — ${host}`,
+              source_url: job.url,
+              raw_content: dossierContent,
+              content_hash: dossierHash,
+              category: "reference",
+              tags: ["dossier", "website", host],
+              meta_curated: true,
+              status: "processing",
+              created_by: user.id,
+            })
+            .select("id")
+            .single();
+          if (dossierError) throw dossierError;
+          if (!dossierItem) throw new Error("The generated company dossier could not be saved.");
+          dossierItemId = (dossierItem as { id: string }).id;
+        }
+        patch.dossier_item_id = dossierItemId;
         patch.items_created = job.items_created + 1;
-        scheduleVaultProcess((dossierItem as { id: string }).id, job.client_id);
+        scheduleVaultProcess(dossierItemId, job.client_id);
 
         // Company DNA: fill ONLY fields that are still empty — never overwrite
         // anything a human wrote.
@@ -386,9 +464,27 @@ export const POST = withAuth(async (req, { user }) => {
         patch.status = "done";
       }
     }
+    // The tick succeeded — clear the transient-failure bookkeeping.
+    meta.error_count = 0;
+    meta.last_error = undefined;
   } catch (err) {
-    patch.status = "error";
-    patch.error = err instanceof Error ? err.message : "Unexpected error while advancing the crawl.";
+    // PostgrestError is a plain object, not an Error — errorMessage() extracts
+    // the real constraint/column detail instead of the generic fallback.
+    const message = errorMessage(err, "Unexpected error while advancing the crawl.");
+    captureError("api", err, {
+      userId: user.id,
+      clientId: job.client_id,
+      url: "/api/vault/crawl-site/advance",
+    });
+    meta.error_count = (meta.error_count ?? 0) + 1;
+    if (meta.error_count >= MAX_TICK_ERRORS) {
+      patch.status = "error";
+      patch.error = message;
+    } else {
+      // Transient (LLM 429, Firecrawl blip, DB hiccup): keep the job alive and
+      // let the next poll retry this tick — one failure must not kill a crawl.
+      meta.last_error = message;
+    }
   }
 
   patch.meta = meta;

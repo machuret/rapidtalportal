@@ -150,4 +150,5 @@ export const MIGRATIONS = [
   "142_coach_proactive_turns.sql",
   "143_coach_checkin_messages.sql",
   "144_fix_multi_table_trigger_field_validation.sql",
+  "145_vault_chunks_uniqueness.sql",
 ] as const;

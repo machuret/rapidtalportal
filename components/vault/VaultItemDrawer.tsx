@@ -94,8 +94,24 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
   // PATCH /api/vault/[id] — JSON endpoint via api client. useMutation's isPending
   // also guards against double-submit (replaces the previous savingRef guard).
   const saveMutation = useMutation({
-    mutationFn: () =>
-      api.patch(ROUTES.vault.item(item.id), {
+    mutationFn: () => {
+      // Send governance fields ONLY when actually changed — the route treats
+      // their mere presence as a governance write and 403s non-admins, so a VA
+      // fixing a typo used to be rejected for fields they never touched.
+      const normDate = (v: string | null | undefined) => (v ?? "").slice(0, 10) || null;
+      const gov: Record<string, unknown> = {};
+      if (authorityLevel !== (item.authority_level ?? "supporting")) gov.authority_level = authorityLevel;
+      if (knowledgeStatus !== (item.knowledge_status ?? "active")) gov.knowledge_status = knowledgeStatus;
+      if (timeSensitive !== (item.time_sensitive ?? false)) gov.time_sensitive = timeSensitive;
+      if ((validFrom || null) !== normDate(item.valid_from)) gov.valid_from = validFrom || null;
+      if ((validUntil || null) !== normDate(item.valid_until)) gov.valid_until = validUntil || null;
+      if ((reviewDueAt || null) !== normDate(item.review_due_at)) gov.review_due_at = reviewDueAt || null;
+      if ((supersedesItemId || null) !== (item.supersedes_item_id ?? null)) gov.supersedes_item_id = supersedesItemId || null;
+      if (hasConflict !== (item.has_conflict ?? false)) gov.has_conflict = hasConflict;
+      if (hasConflict || conflictNote.trim() !== (item.conflict_note ?? "")) {
+        gov.conflict_note = hasConflict ? conflictNote.trim() : null;
+      }
+      return api.patch(ROUTES.vault.item(item.id), {
         clientId,
         title: title.trim(),
         raw_content: content.trim() !== (item.raw_content ?? "").trim()
@@ -103,16 +119,9 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
           : undefined,
         category,
         tags: parseTags(tagInput),
-        authority_level: authorityLevel,
-        knowledge_status: knowledgeStatus,
-        time_sensitive: timeSensitive,
-        valid_from: validFrom || null,
-        valid_until: validUntil || null,
-        review_due_at: reviewDueAt || null,
-        supersedes_item_id: supersedesItemId || null,
-        has_conflict: hasConflict,
-        conflict_note: hasConflict ? conflictNote.trim() : null,
-      }, { showErrorToast: false }),
+        ...gov,
+      }, { showErrorToast: false });
+    },
     onSuccess: () => {
       toast.success("Source saved. Knowledge safeguards are active.");
       // Return updated item to parent optimistically
