@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { runBrainDiagnostic } from "@/lib/brain/opportunities";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notify } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -47,6 +48,7 @@ export async function GET(req: NextRequest) {
   let completed = 0;
   let failed = 0;
   let created = 0;
+  let notified = 0;
   for (const clientId of queue) {
     try {
       const result = await runBrainDiagnostic({
@@ -56,6 +58,24 @@ export async function GET(req: NextRequest) {
       });
       completed++;
       created += result.created;
+      // Fan-out: opportunities are pull-only on /brain unless someone is told.
+      if (result.created > 0) {
+        const { data: adminsOfClient } = await admin
+          .from("users").select("id")
+          .eq("client_id", clientId).eq("role", "client_admin");
+        const recipientIds = ((adminsOfClient ?? []) as Array<{ id: string }>).map((row) => row.id);
+        if (recipientIds.length) {
+          const top = result.createdTitles.slice(0, 2).join(" · ");
+          await notify(recipientIds, {
+            clientId,
+            type: "brain_opportunity",
+            title: `Your Brain found ${result.created} new opportunit${result.created === 1 ? "y" : "ies"}`,
+            body: top.length > 220 ? `${top.slice(0, 220)}…` : top,
+            href: "/brain",
+          });
+          notified += recipientIds.length;
+        }
+      }
     } catch (error) {
       failed++;
       console.error("[cron/brain-opportunities] client", clientId, error);
@@ -65,7 +85,7 @@ export async function GET(req: NextRequest) {
   await admin.from("cron_heartbeats").upsert({
     name: "brain-opportunities",
     ran_at: new Date().toISOString(),
-    detail: { queued: queue.length, completed, failed, created },
+    detail: { queued: queue.length, completed, failed, created, notified },
   });
 
   return NextResponse.json({

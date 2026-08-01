@@ -5,6 +5,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { serverError } from "@/lib/api/errors";
 import { evaluateCoachQuality } from "@/lib/brain/coach-quality-gate";
+import { coachModeSchema } from "@/lib/brain/coach-action-policy";
 
 const sourceSchema = z.object({
   n: z.number().int().optional(),
@@ -26,7 +27,7 @@ const saveSchema = z.object({
   question: z.string().trim().min(3).max(8000),
   answer: z.string().trim().min(1).max(30000),
   snapshotId: z.string().uuid(),
-  coachMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task", "create_goal", "create_commitment", "create_memory"]),
+  coachMode: coachModeSchema,
   sources: z.array(sourceSchema).max(30).default([]),
   suggestions: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
   libraryAvailability: z.enum(["available", "degraded", "unavailable", "not_requested"]),

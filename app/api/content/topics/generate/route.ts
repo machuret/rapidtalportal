@@ -923,7 +923,8 @@ export const POST = withAuth(async (req, { user }) => {
   if (flaggedCount > 0) {
     await logBrainEvent(admin, parsed.data.client_id, "filtered",
       `Pre-screened ${topics.length} ideas and flagged ${flaggedCount} as weak before you saw them`,
-      { total: topics.length, flagged: flaggedCount });
+      { total: topics.length, flagged: flaggedCount },
+      { meaningful: true, eventKey: `filtered:${new Date().toISOString().slice(0, 10)}` });
   }
 
   return NextResponse.json({

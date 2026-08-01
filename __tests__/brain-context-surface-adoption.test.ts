@@ -9,6 +9,7 @@ describe("official Brain Context surface adoption", () => {
   it.each([
     ["Ask", "supabase/functions/vault-ask/index.ts"],
     ["Content", "supabase/functions/content-generate/index.ts"],
+    ["KB", "supabase/functions/kb-generate/index.ts"],
   ])("%s uses the shared Edge resolver and persists its snapshot", (_name, file) => {
     const code = source(file);
     expect(code).toContain('from "../_shared/brain-context.ts"');

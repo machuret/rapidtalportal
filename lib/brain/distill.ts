@@ -397,7 +397,9 @@ export async function distillClientMemory(admin: Admin, clientId: string): Promi
     if (committed.conflicts) bits.push(`flagged ${committed.conflicts} conflict${committed.conflicts === 1 ? "" : "s"}`);
     const total = committed.newMemories + committed.reinforced + committed.proposed + (committed.conflicts ?? 0);
     await logBrainEvent(admin, clientId, "learned", `From your feedback: ${bits.join(", ")} lesson${total === 1 ? "" : "s"}`,
-      { inserted: committed.newMemories, reinforced: committed.reinforced, proposed: committed.proposed, conflicts: committed.conflicts ?? 0 });
+      { inserted: committed.newMemories, reinforced: committed.reinforced, proposed: committed.proposed, conflicts: committed.conflicts ?? 0 },
+      // One journal row per client per day — reruns update it in place.
+      { meaningful: true, eventKey: `learned:${new Date().toISOString().slice(0, 10)}` });
   }
 
   return { skipped: false, ...committed };

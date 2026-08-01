@@ -117,6 +117,11 @@ live within ~30s of a save (cache TTL), no deploy.
   **deployed manually** (`supabase functions deploy …`) — they are *not*
   deployed by a `git push`. They're Deno (excluded from the Next tsconfig/lint);
   the `edge-functions` CI job `deno check`s them.
+- **Node Brain surfaces are semantic too.** `lib/brain/resolver.ts` proxies
+  gte-small embeddings through the `brain-embed` edge function (service-key
+  auth, ~10s timeout) instead of falling back to lexical Vault retrieval.
+  `brain-embed` is also a **manual deploy** (`pnpm functions:deploy brain-embed`);
+  until it's live, Node degrades to lexical + a visible warning as before.
 - **Ask-the-Vault has two modes:** concise (default) and `mode:"deep"` ("Go
   deeper" — stronger model, whole-section context, bigger budget). Models are
   env-configurable: `VAULT_ASK_MODEL` / `VAULT_DEEP_MODEL` (see `docs/runbook.md`).
@@ -174,7 +179,9 @@ resolver versions and invariants aligned.
 - **Proactive opportunities are snapshot-backed.** The weekly
   `/api/cron/brain-opportunities` diagnostic and manual Brain-page run resolve
   official context, persist a required snapshot, and only then create
-  `brain_opportunities`. State changes go through
+  `brain_opportunities`. Newly created rows notify the client's admins
+  (in-app, href `/brain`) — zero new rows means zero notifications. State
+  changes go through
   `transition_brain_opportunity`, which records the approval/outcome event and
   effectiveness. Opportunity queries and writes must remain client-scoped.
 - **Grounded + self-critical generation** lives in the `content-generate` **edge
@@ -195,12 +202,52 @@ resolver versions and invariants aligned.
   `brain_opportunity_events`), 131 (outcome measurement integrity), and 132
   (official snapshotted Brain onboarding).
 
+## Proactive Coach (draft-and-confirm)
+
+The Coach can **initiate** — but everything it originates still requires a
+human to confirm through the unchanged `/api/coach/actions` execution path.
+`/api/cron/coach-proactive` (weekly, Mon 04:15) runs `lib/coach/proactive.ts`:
+per client admin it resolves the official context (surface `diagnostic`,
+actor = the target user), scans for deterministic triggers
+(overdue/unassigned/due-this-week/review work), and only then drafts ONE
+suggested action (`create_task`/`update_task`). Writes, in order: immutable
+snapshot (`artifact_kind: coach_proactive`, `created_by` = the user) →
+`coach_action_previews` row (server-authored, same as vault-ask) →
+`coach_turns` row with `origin='proactive'` (migration 142) → notification.
+
+Invariants you must not break:
+
+- **Never invent IDs** — `validateDraftAgainstContext` drops any draft
+  referencing team/task IDs the resolver didn't supply.
+- **No noise** — zero triggers → zero writes; one proactive turn per owner
+  per 7 days (origin-tagged dedupe).
+- The quality gate (`evaluateCoachQuality` with `expectedClientId`) runs
+  before any write, exactly like the interactive path.
+- Model: `COACH_PROACTIVE_MODEL` (default gpt-4o-mini via the Brain chat
+  provider chain).
+
+## Coach mode router
+
+When a Coach question arrives in the default `private` mode and the
+client-side regex (`inferredCoachMode`) stays silent, the UI asks
+`POST /api/coach/route-mode` (`lib/coach/route-mode.ts`) — a tiny classifier
+(`COACH_ROUTER_MODEL`, temp 0) that suggests an action mode. It is advisory
+only: validated against `coachActionDenial` in the route, re-enforced by the
+edge function and DB at execution, and any failure degrades to a private
+answer. All proxies validate `coachMode` against the single
+`coachModeSchema` in `lib/brain/coach-action-policy.ts` — do not re-add local
+enums.
+
 ## Cron
 
 `vercel.json` defines crons (`/api/cron/tasks` daily, `/api/cron/vault-index`
 every 15 min, `/api/cron/brain-distill`). Cron routes authenticate with a
 `CRON_SECRET` Bearer token — set it in Vercel env. Heartbeats land in
-`cron_heartbeats` (migration 059).
+`cron_heartbeats` (migration 059). Check-in notifications are LLM-generated
+follow-ups (`COACH_CHECKIN_MODEL`, grounded in the commitment + linked goal +
+recent progress events); generation failure falls back to the raw commitment
+text (`deliver_coach_check_in`'s `p_message`, migration 143) so delivery never
+depends on the model.
 
 ## Validation gates (run before every commit)
 

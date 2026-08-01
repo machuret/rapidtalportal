@@ -9,6 +9,7 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { streamEdgeFunction } from "@/lib/edge-proxy";
 import { askVaultLimiter, tooManyRequests } from "@/lib/rate-limit";
+import { coachModeSchema } from "@/lib/brain/coach-action-policy";
 
 // Deep mode streams a stronger model's long answer — give it room past Vercel's
 // short default so a slow generation isn't cut off mid-stream.
@@ -18,7 +19,7 @@ const bodySchema = z.object({
   clientId: z.string().uuid(),
   question: z.string().min(3).max(8000),
   mode: z.enum(["concise", "deep"]).optional(),
-  coachMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task"]).optional(),
+  coachMode: coachModeSchema.optional(),
   surface: z.enum(["vault_answer", "compose"]).optional(),
   history: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
 });

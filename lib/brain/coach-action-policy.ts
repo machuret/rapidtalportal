@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export type CoachActionIntent =
   | { type: "create_task" }
   | { type: "send_message"; audience: "client" | "va_team" }
@@ -9,6 +11,23 @@ export type CoachActionIntent =
   | { type: "create_memory" };
 
 export type CoachRole = "client_admin" | "va" | "super_admin";
+
+/**
+ * Every coach mode the vault-ask edge function and the turn store accept.
+ * Validate against this single definition in every proxy/route — a divergent
+ * local enum in /api/vault/ask previously made the three progress modes
+ * (create_goal, create_commitment, create_memory) unreachable end-to-end.
+ */
+export const COACH_MODES = [
+  "private",
+  "message_client", "message_va_team",
+  "create_task", "update_task", "submit_review", "review_task",
+  "create_goal", "create_commitment", "create_memory",
+] as const;
+
+export type CoachMode = (typeof COACH_MODES)[number];
+
+export const coachModeSchema = z.enum(COACH_MODES);
 
 /**
  * Pure first-line authorization used before database execution. The database

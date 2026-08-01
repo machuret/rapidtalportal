@@ -7,6 +7,9 @@ project_id = "qzglxknorjrdnuklqrdq"
 # function is listed explicitly so a platform default change can never
 # silently open one. Never add a function here with verify_jwt = false —
 # each function additionally re-verifies the caller in code.
+[functions.brain-embed]
+verify_jwt = true
+
 [functions.business-library-index]
 verify_jwt = true
 

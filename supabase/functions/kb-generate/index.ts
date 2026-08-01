@@ -1,13 +1,26 @@
 /**
  * Supabase Edge Function: kb-generate
- * 
- * Generates a comprehensive FAQ knowledge base from Company DNA + Vault items
- * using OpenAI. Can process 25-60 Q&A pairs and runs for 30-60 seconds —
+ *
+ * Generates a comprehensive FAQ knowledge base from the official Brain context
+ * (Company DNA + governed Vault knowledge + learned memory + Business Library)
+ * using OpenRouter. Can process 25-60 Q&A pairs and runs for 30-60 seconds —
  * well beyond Vercel's timeout limits, making this an ideal edge function.
+ *
+ * Context comes exclusively from the shared Brain resolver
+ * (`_shared/brain-context.ts`): Vault governance filters (factual, active,
+ * conflict-free, in-date) are applied there, and the exact resolved context is
+ * snapshotted to `brain_context_snapshots` BEFORE the model call, like every
+ * other generation surface. Do not re-derive DNA/Vault context inline.
  */
 
 import { corsHeaders, handleOptions } from "../_shared/cors.ts";
 import { authorizeRequest, checkClientMembership } from "../_shared/auth.ts";
+import {
+  persistBrainContextSnapshot,
+  renderBrainContext,
+  resolveBrainContext,
+} from "../_shared/brain-context.ts";
+import { embedBrainMemoryQuery } from "../_shared/brain-memory-embedding.ts";
 
 const SYSTEM_PROMPT = `You are generating a comprehensive FAQ knowledge base for a company's virtual assistants based on their Company DNA and Vault documents.
 
@@ -37,9 +50,17 @@ QUALITY REQUIREMENTS:
 - Use professional but accessible language
 - Create practical, actionable answers VAs can use immediately
 
-IMPORTANT: Only use information explicitly present in the provided sources. Do not invent facts.`;
+IMPORTANT: Only use information explicitly present in the provided sources. Do not invent facts. Business Library guidance (if present) is generic best practice, never a company fact — do not present it as something this company does.`;
 
 const TOKEN_BUDGET = 80000;
+
+// Broad knowledge budget: KB generation surveys the whole governed corpus, so
+// it keeps the 50-document cap the previous inline Vault fetch used.
+const MAX_VAULT_ITEMS = 50;
+
+// Model (OpenRouter slug). Env-overridable so the operator can point at a
+// newer model without redeploying — same pattern as VAULT_ASK_MODEL.
+const KB_MODEL = Deno.env.get("KB_GENERATION_MODEL") || "openai/gpt-4o-mini";
 
 /**
  * Admin prompt override (/admin/prompts → ai_prompts table). When a row exists
@@ -155,98 +176,81 @@ Deno.serve(async (req: Request) => {
         .eq("id", runId);
     };
 
-    // ── Fetch source data ─────────────────────────────────────────────────────
-    // Prioritise items with ai_summary (signal-dense) to stay within token budget.
-    // Cap at 50 items to prevent OOM on large vaults — raw_content can be huge.
-    const MAX_VAULT_ITEMS = 50;
-    const [{ data: allVaultItems }, { data: dna }] = await Promise.all([
-      admin.from("vault_items").select("id,title,raw_content,category,tags,ai_summary").eq("client_id", clientId).eq("status", "ready").order("updated_at", { ascending: false }).limit(MAX_VAULT_ITEMS * 2),
-      admin.from("company_dna").select("*").eq("client_id", clientId).single(),
-    ]);
-
-    // Sort: items with ai_summary first (richer signal), then by recency. Cap at 50.
-    type VaultFetchRow = { id: string; title: string; raw_content: string | null; category: string | null; tags: string[]; ai_summary: string | null };
-    const vaultItems = ((allVaultItems ?? []) as VaultFetchRow[])
-      .sort((a, b) => {
-        if (a.ai_summary && !b.ai_summary) return -1;
-        if (!a.ai_summary && b.ai_summary) return 1;
-        return 0;
-      })
-      .slice(0, MAX_VAULT_ITEMS);
-
-    if (!vaultItems.length && !dna) {
-      await failRun("No Vault items or Company DNA found.");
-      return new Response(JSON.stringify({ error: "No source material available." }), {
-        status: 422,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // ── Build context ─────────────────────────────────────────────────────────
+    // ── Official Brain context (resolve → snapshot → render) ─────────────────
+    // KB articles are generated company knowledge, so they resolve the
+    // "content" surface: governed Vault evidence only (factual, active,
+    // conflict-free, in-date), learned memory, and Library guidance. The exact
+    // resolved context is persisted BEFORE the model call; a failure here is a
+    // recoverable 503, like the other Brain surfaces.
     let context = "";
-    const vaultIds: string[] = [];
+    let vaultIds: string[] = [];
+    try {
+      const brainContext = await resolveBrainContext({
+        admin,
+        clientId,
+        request: {
+          surface: "content",
+          contentType: "knowledge_base",
+          topic: "Comprehensive FAQ knowledge base for virtual assistants",
+          audience: "virtual assistants",
+          objective: `Generate a comprehensive FAQ knowledge base covering: ${categoryList.join(", ")}`,
+          selectedVaultSourceIds: [],
+          includeMarketIntelligence: false,
+        },
+        model: KB_MODEL,
+        promptVersion: "kb.generate",
+        maxKnowledge: MAX_VAULT_ITEMS,
+        maxLibrary: 8,
+        maxMemory: 20,
+        memoryEmbed: embedBrainMemoryQuery,
+        embed: async (value) => {
+          // deno-lint-ignore no-explicit-any
+          const session = new (globalThis as any).Supabase.ai.Session("gte-small");
+          return await session.run(value, { mean_pool: true, normalize: true }) as number[];
+        },
+      });
+      // kb_entries/kb_generation_runs have no snapshot linkage column, so the
+      // snapshot carries the run id as its artifact_id (artifact_kind has a
+      // CHECK constraint with no KB value — a migration would be needed to add
+      // one, which is deliberately out of scope).
+      await persistBrainContextSnapshot({
+        admin,
+        context: brainContext,
+        artifactKind: null,
+        artifactId: runId,
+        createdBy: authUserId,
+      });
 
-    if (dna) {
-      context += "=== COMPANY DNA (CORE INFORMATION) ===\n";
-      const dnaRow = dna as Record<string, unknown>;
-      const priorityFields = [
-        "company_name", "mission", "services", "values", "description",
-        "phone", "email", "website", "address", "founders",
-        "target_demographic", "client_type", "extra",
-      ];
-      for (const field of priorityFields) {
-        const value = dnaRow[field];
-        if (value && typeof value === "string" && value.trim()) {
-          context += `${field.toUpperCase()}: ${value.trim()}\n`;
-        }
+      const hasCompanyDna = Object.keys(brainContext.company.fields).length > 0;
+      vaultIds = brainContext.provenance.vaultItemIds;
+
+      if (!vaultIds.length && !hasCompanyDna) {
+        await failRun("No Vault items or Company DNA found.");
+        return new Response(JSON.stringify({ error: "No source material available." }), {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-      context += "\n";
-    }
 
-    if (vaultItems.length) {
-      // Category-aware sections: AI knows what type of content it's reading,
-      // improving routing for SOP (process), KB Q&A (service/policy), contacts, etc.
-      const categoryOrder = ["process", "policy", "service", "contact", "reference", "general"] as const;
-      type VaultRow = { id: string; title: string; raw_content: string | null; category: string | null; tags: string[]; ai_summary: string | null };
-      const byCategory: Record<string, VaultRow[]> = {};
-      for (const item of vaultItems as unknown as VaultRow[]) {
-        const cat = item.category ?? "general";
-        if (!byCategory[cat]) byCategory[cat] = [];
-        byCategory[cat].push(item);
+      context = renderBrainContext(brainContext);
+      context += `\n=== SOURCE SUMMARY ===\nCompany DNA: ${hasCompanyDna ? "Available" : "Not available"}\nVault Documents: ${vaultIds.length}\n`;
+
+      if (!context.trim()) {
+        await failRun("No readable content found in source material.");
+        return new Response(JSON.stringify({ error: "No readable content." }), {
+          status: 422,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
-
-      const categoryLabels: Record<string, string> = {
-        process: "PROCESS DOCUMENTS (workflows, how-to guides, onboarding)",
-        policy: "POLICY DOCUMENTS (rules, guidelines, compliance)",
-        service: "SERVICE & PRODUCT DOCUMENTS (offerings, pricing, features)",
-        contact: "CONTACT INFORMATION (people, numbers, addresses, suppliers)",
-        reference: "REFERENCE MATERIAL (background info, FAQs, glossaries)",
-        general: "GENERAL DOCUMENTS",
-      };
-
-      for (const cat of categoryOrder) {
-        const items = byCategory[cat];
-        if (!items?.length) continue;
-        context += `\n=== ${categoryLabels[cat]} ===\n`;
-        for (const row of items) {
-          if (!row.raw_content?.trim()) continue;
-          // Include AI summary as a quick digest before the full content
-          const summaryLine = row.ai_summary ? `SUMMARY: ${row.ai_summary}\n` : "";
-          const tagsLine = row.tags?.length ? `TAGS: ${row.tags.join(", ")}\n` : "";
-          const chunk = `DOCUMENT: ${row.title}\n${summaryLine}${tagsLine}${row.raw_content.trim()}\n\n`;
-          if ((context + chunk).length > TOKEN_BUDGET * 3) break;
-          context += chunk;
-          vaultIds.push(row.id);
-        }
-      }
-    }
-
-    context += `\n=== SOURCE SUMMARY ===\nCompany DNA: ${dna ? "Available" : "Not available"}\nVault Documents: ${vaultIds.length}\n`;
-
-    if (!context.trim()) {
-      await failRun("No readable content found in source material.");
-      return new Response(JSON.stringify({ error: "No readable content." }), {
-        status: 422,
+    } catch (error) {
+      console.error("kb-generate: Brain context failed:", error);
+      await failRun("The Brain could not prepare and snapshot verified context.");
+      return new Response(JSON.stringify({
+        error: "The Brain could not prepare and snapshot verified context. No entries were generated; please try again.",
+        code: "brain_context_unavailable",
+        recoverable: true,
+      }), {
+        status: 503,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -261,7 +265,7 @@ Deno.serve(async (req: Request) => {
         "Authorization": `Bearer ${openrouterKey}`,
       },
       body: JSON.stringify({
-        model: "openai/gpt-4o-mini",
+        model: KB_MODEL,
         response_format: { type: "json_object" },
         max_tokens: 12000,
         temperature: 0.3,

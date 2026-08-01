@@ -19,6 +19,10 @@
       "schedule": "15 3 * * 1"
     },
     {
+      "path": "/api/cron/coach-proactive",
+      "schedule": "15 4 * * 1"
+    },
+    {
       "path": "/api/cron/coach-retention",
       "schedule": "45 2 * * *"
     },

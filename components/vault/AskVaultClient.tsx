@@ -413,9 +413,21 @@ export function AskVaultClient({
     setAskFailure(null);
     const history: HistoryItem[] = turns.slice(-4).map((t) => ({ question: t.question, answer: t.answer }));
     const requestedLayers = queriedKinds(trimmed);
-    const resolvedMode = actionsEnabled
+    let resolvedMode = actionsEnabled
       ? inferredCoachMode(trimmed, coachRole, requestedMode)
       : "private";
+    // Regex stayed silent — ask the LLM router before defaulting to private.
+    // Advisory only: the edge function re-enforces role gates downstream.
+    if (actionsEnabled && requestedMode === "private" && resolvedMode === "private") {
+      try {
+        const routed = await api.post<{ mode: CoachMode }>(
+          ROUTES.coach.routeMode(),
+          { clientId, question: trimmed, coachRole },
+          { showErrorToast: false },
+        );
+        if (routed.mode && routed.mode !== "private") resolvedMode = routed.mode;
+      } catch { /* router failure never blocks a private answer */ }
+    }
     setInterim({
       question: trimmed,
       answer: "",

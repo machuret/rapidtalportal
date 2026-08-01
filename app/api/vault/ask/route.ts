@@ -10,6 +10,7 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { askVaultLimiter, tooManyRequests } from "@/lib/rate-limit";
+import { coachModeSchema } from "@/lib/brain/coach-action-policy";
 
 // Deep mode runs a stronger model over whole documents — it can take 20-40s, so
 // lift the function timeout well above Vercel's short default or the answer 504s.
@@ -22,7 +23,7 @@ const bodySchema = z.object({
   // silently dropped here (schema stripped them, the proxy forwarded only
   // clientId+question), so deep answers were really just concise re-asks.
   mode: z.enum(["concise", "deep"]).optional(),
-  coachMode: z.enum(["private", "message_client", "message_va_team", "create_task", "update_task", "submit_review", "review_task"]).optional(),
+  coachMode: coachModeSchema.optional(),
   surface: z.enum(["vault_answer", "compose"]).optional(),
   history: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
 });

@@ -221,6 +221,8 @@ export async function runBrainDiagnostic(args: {
   runId: string;
   snapshotId: string;
   created: number;
+  /** Titles of the newly inserted rows only (already fingerprint-deduped). */
+  createdTitles: string[];
   libraryAvailability: BrainContext["library"]["availability"];
 }> {
   const now = new Date().toISOString();
@@ -332,14 +334,14 @@ export async function runBrainDiagnostic(args: {
         library_provenance: candidate.libraryProvenance,
       }));
 
-    let createdRows: Array<{ id: string }> = [];
+    let createdRows: Array<{ id: string; title: string }> = [];
     if (rows.length) {
       const { data, error } = await args.admin
         .from("brain_opportunities")
         .insert(rows)
-        .select("id");
+        .select("id, title");
       if (error) throw error;
-      createdRows = (data ?? []) as Array<{ id: string }>;
+      createdRows = (data ?? []) as Array<{ id: string; title: string }>;
     }
 
     const { error: finishError } = await args.admin
@@ -366,6 +368,7 @@ export async function runBrainDiagnostic(args: {
       runId: run.id,
       snapshotId: snapshot.id,
       created: createdRows.length,
+      createdTitles: createdRows.map((row) => row.title),
       libraryAvailability: context.library.availability,
     };
   } catch (error) {
