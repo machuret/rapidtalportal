@@ -223,47 +223,6 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
 
   const archived = pages.filter((p) => p.is_archived).sort((a, b) => a.sort_order - b.sort_order);
 
-  function PageRow({ page, depth }: { page: NotebookPage; depth: number }) {
-    const kids = pages.filter((p) => p.parent_page_id === page.id && !p.is_archived);
-    const isOpen = expanded[page.id] ?? true;
-    return (
-      <div>
-        <div
-          draggable
-          onDragStart={() => { dragId.current = page.id; }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => { e.preventDefault(); void dropOn(page.id); }}
-          onClick={() => void selectPage(page.id)}
-          className={cn(
-            "group flex items-center gap-1 pr-1.5 py-1.5 rounded-md cursor-pointer text-sm transition-colors",
-            depth === 0 ? "pl-1.5" : "pl-5",
-            page.id === selectedId ? "bg-zinc-800 text-white" : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200",
-          )}
-        >
-          {depth === 0 && kids.length > 0 ? (
-            <button aria-label={isOpen ? "Collapse sub-pages" : "Expand sub-pages"} aria-expanded={isOpen}
-              onClick={(e) => { e.stopPropagation(); setExpanded((x) => ({ ...x, [page.id]: !isOpen })); }}
-              className="text-zinc-500 hover:text-white shrink-0">
-              <ChevronRight className={cn("w-3.5 h-3.5 transition-transform", isOpen && "rotate-90")} />
-            </button>
-          ) : <span className="w-3.5 shrink-0" />}
-          <GripVertical className="w-3 h-3 text-zinc-600 opacity-0 group-hover:opacity-100 shrink-0" />
-          <FileText className="w-3.5 h-3.5 shrink-0" />
-          <span className="truncate flex-1">{page.title || "New page"}</span>
-          {depth === 0 && (
-            <button title="Add sub-page" aria-label="Add sub-page" onClick={(e) => { e.stopPropagation(); void newPage(page.id); }}
-              className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-white shrink-0">
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-        {depth === 0 && isOpen && kids.sort((a, b) => a.sort_order - b.sort_order).map((c) => (
-          <PageRow key={c.id} page={c} depth={1} />
-        ))}
-      </div>
-    );
-  }
-
   return (
     <div className="flex gap-0 border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950 h-[calc(100vh-13rem)] min-h-[500px]">
       {/* Sidebar */}
@@ -293,7 +252,21 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
         </div>
         <div className="flex-1 overflow-y-auto p-1.5">
           {tree.length === 0 && <p className="text-xs text-zinc-600 text-center py-6">No pages yet.</p>}
-          {tree.map(({ page }) => <PageRow key={page.id} page={page} depth={0} />)}
+          {tree.map(({ page }) => (
+            <PageRow
+              key={page.id}
+              page={page}
+              depth={0}
+              pages={pages}
+              expanded={expanded}
+              selectedId={selectedId}
+              dragId={dragId}
+              onDrop={(targetId) => void dropOn(targetId)}
+              onSelect={(id) => void selectPage(id)}
+              onToggle={(id, next) => setExpanded((x) => ({ ...x, [id]: next }))}
+              onAddSub={(parentId) => void newPage(parentId)}
+            />
+          ))}
 
           {archived.length > 0 && (
             <div className="mt-3 border-t border-zinc-800 pt-2">
@@ -387,6 +360,75 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
           onRestored={onRestored}
         />
       )}
+    </div>
+  );
+}
+
+// Module scope, NOT inside NotebookApp: a component declared in render gets a
+// new type identity every render, so React unmounted/remounted the whole
+// sidebar subtree on every keystroke. Stable identity → rows can diff.
+function PageRow({
+  page, depth, pages, expanded, selectedId, dragId, onDrop, onSelect, onToggle, onAddSub,
+}: {
+  page: NotebookPage;
+  depth: number;
+  pages: NotebookPage[];
+  expanded: Record<string, boolean>;
+  selectedId: string | null;
+  dragId: React.MutableRefObject<string | null>;
+  onDrop: (targetId: string) => void;
+  onSelect: (id: string) => void;
+  onToggle: (id: string, next: boolean) => void;
+  onAddSub: (parentId: string) => void;
+}) {
+  const kids = pages.filter((p) => p.parent_page_id === page.id && !p.is_archived);
+  const isOpen = expanded[page.id] ?? true;
+  return (
+    <div>
+      <div
+        draggable
+        onDragStart={() => { dragId.current = page.id; }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); onDrop(page.id); }}
+        onClick={() => onSelect(page.id)}
+        className={cn(
+          "group flex items-center gap-1 pr-1.5 py-1.5 rounded-md cursor-pointer text-sm transition-colors",
+          depth === 0 ? "pl-1.5" : "pl-5",
+          page.id === selectedId ? "bg-zinc-800 text-white" : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200",
+        )}
+      >
+        {depth === 0 && kids.length > 0 ? (
+          <button aria-label={isOpen ? "Collapse sub-pages" : "Expand sub-pages"} aria-expanded={isOpen}
+            onClick={(e) => { e.stopPropagation(); onToggle(page.id, !isOpen); }}
+            className="text-zinc-500 hover:text-white shrink-0">
+            <ChevronRight className={cn("w-3.5 h-3.5 transition-transform", isOpen && "rotate-90")} />
+          </button>
+        ) : <span className="w-3.5 shrink-0" />}
+        <GripVertical className="w-3 h-3 text-zinc-600 opacity-0 group-hover:opacity-100 shrink-0" />
+        <FileText className="w-3.5 h-3.5 shrink-0" />
+        <span className="truncate flex-1">{page.title || "New page"}</span>
+        {depth === 0 && (
+          <button title="Add sub-page" aria-label="Add sub-page" onClick={(e) => { e.stopPropagation(); onAddSub(page.id); }}
+            className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-white shrink-0">
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      {depth === 0 && isOpen && kids.sort((a, b) => a.sort_order - b.sort_order).map((c) => (
+        <PageRow
+          key={c.id}
+          page={c}
+          depth={1}
+          pages={pages}
+          expanded={expanded}
+          selectedId={selectedId}
+          dragId={dragId}
+          onDrop={onDrop}
+          onSelect={onSelect}
+          onToggle={onToggle}
+          onAddSub={onAddSub}
+        />
+      ))}
     </div>
   );
 }
