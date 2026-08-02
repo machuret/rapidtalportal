@@ -16,15 +16,29 @@ export const metadata = { title: "My Team — RapidTal" };
 
 const STATS_WINDOW_DAYS = 30;
 
-export default async function TeamPage() {
+export default async function TeamPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ client?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;
 
   const isAdmin = user.role === "client_admin" || user.role === "super_admin";
-  if (!isAdmin || !user.client_id) redirect("/dashboard");
+  if (!isAdmin) redirect("/dashboard");
 
   const admin = createAdminClient();
+  // Super admins have no client of their own — pick one (the old cross-tenant
+  // supervision view they replaced). Same picker pattern as /brain.
+  let clientId = user.client_id;
+  let clientOptions: { id: string; name: string }[] = [];
+  if (user.role === "super_admin") {
+    const { data: clients } = await admin
+      .from("clients").select("id, name").is("archived_at", null).order("name");
+    clientOptions = (clients ?? []) as { id: string; name: string }[];
+    const selected = clientOptions.find((option) => option.id === searchParams.client) ?? clientOptions[0];
+    clientId = selected?.id ?? null;
+  }
+  if (!clientId) redirect("/dashboard");
+
   const since = format(subDays(new Date(), 6), "yyyy-MM-dd");
 
   // VAs and the client's pending leave are independent (both scoped by
@@ -34,13 +48,13 @@ export default async function TeamPage() {
     admin
       .from("users")
       .select("id, full_name, email, phone, birthday, avatar_url, created_at")
-      .eq("client_id", user.client_id)
+      .eq("client_id", clientId)
       .eq("role", "va")
       .order("full_name"),
     admin
       .from("va_leave_requests")
       .select("id, user_id, start_date, end_date, leave_type, reason, status")
-      .eq("client_id", user.client_id)
+      .eq("client_id", clientId)
       .eq("status", "pending")
       .order("start_date"),
   ]);
@@ -59,7 +73,7 @@ export default async function TeamPage() {
           .order("log_date", { ascending: false })
       : Promise.resolve({ data: [] }),
     // 30-day outcome stats (shared with the old Supervision page's formulas).
-    computeVaStats(admin, vaIds, user.client_id, STATS_WINDOW_DAYS),
+    computeVaStats(admin, vaIds, clientId, STATS_WINDOW_DAYS),
   ]);
 
   const summaryMap: Record<string, { user_id: string; log_date: string; mood: string | null; tasks_done: string | null }[]> = {};
@@ -116,6 +130,24 @@ export default async function TeamPage() {
         </div>
         <ExportCsv rows={csvRows} filename={`team-${new Date().toISOString().slice(0, 10)}.csv`} />
       </div>
+
+      {user.role === "super_admin" && clientOptions.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-8">
+          {clientOptions.map((option) => (
+            <a
+              key={option.id}
+              href={`/team?client=${option.id}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                option.id === clientId
+                  ? "bg-zinc-700 border-zinc-600 text-white"
+                  : "border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600"
+              }`}
+            >
+              {option.name}
+            </a>
+          ))}
+        </div>
+      )}
 
       <TeamLeaveApprovals initial={pendingLeave} />
 
