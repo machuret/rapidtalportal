@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   BarChart3,
   BookOpen,
@@ -68,19 +69,26 @@ export function CompetitorIntelligencePanel({
   const [analysing, setAnalysing] = useState(false);
   const [section, setSection] = useState<Section>("overview");
   const [windowDays, setWindowDays] = useState(180);
-  const readyCompetitors = useMemo(
+  const analysisReadyCompetitors = useMemo(
     () => competitors.filter((competitor) =>
-      competitor.status === "active" && competitor.readiness.ready),
+      competitor.status === "active" && competitor.readiness.content_strategy_ready),
+    [competitors],
+  );
+  const positioningOnlyCompetitors = useMemo(
+    () => competitors.filter((competitor) =>
+      competitor.status === "active" &&
+      competitor.readiness.positioning_ready &&
+      !competitor.readiness.content_strategy_ready),
     [competitors],
   );
   const buildingCompetitors = useMemo(
     () => competitors.filter((competitor) =>
-      competitor.status === "active" && !competitor.readiness.ready),
+      competitor.status === "active" && !competitor.readiness.positioning_ready),
     [competitors],
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const selectedLimitations = useMemo(
-    () => readyCompetitors
+    () => analysisReadyCompetitors
       .filter((competitor) => selectedIds.has(competitor.id))
       .flatMap((competitor) => [
         ...competitor.readiness.limitations.map((limitation) =>
@@ -88,7 +96,7 @@ export function CompetitorIntelligencePanel({
         ...competitor.identity_warnings.map((warning) =>
           `${competitor.name}: ${warning}`),
       ]),
-    [readyCompetitors, selectedIds],
+    [analysisReadyCompetitors, selectedIds],
   );
 
   const loadReport = useCallback(async (showLoading = false, silent = false) => {
@@ -124,11 +132,11 @@ export function CompetitorIntelligencePanel({
 
   useEffect(() => {
     setSelectedIds((current) => {
-      const valid = new Set(readyCompetitors.map((competitor) => competitor.id));
+      const valid = new Set(analysisReadyCompetitors.map((competitor) => competitor.id));
       const retained = new Set([...current].filter((id) => valid.has(id)));
       return retained.size > 0 ? retained : valid;
     });
-  }, [readyCompetitors]);
+  }, [analysisReadyCompetitors]);
 
   const sourceById = useMemo(
     () => new Map((run?.sources ?? []).map((source) => [source.id, source])),
@@ -254,11 +262,11 @@ export function CompetitorIntelligencePanel({
           )}
         </div>
 
-        {canManage && readyCompetitors.length > 0 && (
+        {canManage && analysisReadyCompetitors.length > 0 && (
           <div className="mt-4">
             <p className="mb-2 text-xs text-zinc-500">Competitors included in this report</p>
             <div className="flex flex-wrap gap-2">
-              {readyCompetitors.map((competitor) => (
+              {analysisReadyCompetitors.map((competitor) => (
                 <button
                   key={competitor.id}
                   type="button"
@@ -269,10 +277,38 @@ export function CompetitorIntelligencePanel({
                       : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
                   }`}
                 >
-                  {competitor.name} · {competitor.readiness.content_strategy_ready
-                    ? "content-ready"
-                    : "positioning-only"}
+                  {competitor.name} · content-ready
                 </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {positioningOnlyCompetitors.length > 0 && (
+          <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+            <p className="text-sm font-medium text-amber-100">Collect content before broad analysis</p>
+            <p className="mt-1 text-xs leading-5 text-amber-200/80">
+              Website copy can describe positioning, but topic, format and cadence intelligence needs public posts or articles.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {positioningOnlyCompetitors.map((competitor) => (
+                <div key={competitor.id} className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/20 bg-zinc-950/40 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-zinc-200">{competitor.name}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {competitor.readiness.social_post_count} social posts · {competitor.readiness.article_count} articles
+                    </p>
+                  </div>
+                  {canManage ? (
+                    <Link
+                      href={`/company-dna/competitors#competitor-${competitor.id}`}
+                      className="shrink-0 rounded-md border border-amber-500/30 px-2.5 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-500/10"
+                    >
+                      Add or collect sources
+                    </Link>
+                  ) : (
+                    <span className="max-w-40 text-right text-xs text-zinc-500">Ask your client admin to add posts or articles.</span>
+                  )}
+                </div>
               ))}
             </div>
           </div>
@@ -348,9 +384,11 @@ export function CompetitorIntelligencePanel({
           <BarChart3 className="mx-auto h-8 w-8 text-zinc-700" />
           <p className="mt-3 font-medium text-zinc-300">No intelligence report yet</p>
           <p className="mx-auto mt-1 max-w-xl text-sm text-zinc-500">
-            {readyCompetitors.length > 0
+            {analysisReadyCompetitors.length > 0
               ? "Analyse the evidence-ready competitor mini-vaults to find repeatable market signals and content opportunities."
-              : "Collect at least 5 recent items and 2,500 characters for a competitor before running analysis."}
+              : positioningOnlyCompetitors.length > 0
+                ? "Add public posts or articles to the competitor mini-vault before running broad market synthesis."
+                : "Collect at least 5 recent items and 2,500 characters for a competitor before running analysis."}
           </p>
         </div>
       ) : (

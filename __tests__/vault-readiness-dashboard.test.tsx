@@ -67,6 +67,7 @@ const readiness: VaultReadiness = {
     lastUpdatedAt: "2026-07-20T00:00:00.000Z",
   }],
   thinTopics: [],
+  attentionSources: [],
   recommendations: [
     {
       id: "coverage",
@@ -119,5 +120,56 @@ describe("Vault readiness dashboard", () => {
     await waitFor(() => {
       expect(screen.getByText("What is the approval policy?")).toBeInTheDocument();
     });
+  });
+
+  test("identifies blocked sources and reports the result of Fix now", async () => {
+    const user = userEvent.setup();
+    const blocked: VaultReadiness = {
+      ...readiness,
+      status: "needs_attention",
+      recommendations: [{
+        id: "unsearchable",
+        title: "Finish preparing 2 sources",
+        detail: "Saved but not yet available.",
+        action: "index",
+        priority: "high",
+      }],
+      attentionSources: [
+        {
+          id: "source-1",
+          title: "Company services guide",
+          issue: "not_searchable",
+          detail: "Saved successfully, but not yet available to Coach or content generation.",
+        },
+        {
+          id: "source-2",
+          title: "Pricing policy",
+          issue: "not_searchable",
+          detail: "Saved successfully, but not yet available to Coach or content generation.",
+        },
+      ],
+    };
+    (api.get as jest.Mock).mockResolvedValue(blocked);
+    const onIndex = jest.fn().mockResolvedValue({ processed: 0, remaining: 0 });
+
+    render(
+      <VaultReadinessDashboard
+        clientId="11111111-1111-4111-8111-111111111111"
+        canCurate
+        canIndex
+        version="1"
+        onAdd={jest.fn()}
+        onIndex={onIndex}
+      />,
+    );
+
+    expect(await screen.findByText("Company services guide")).toBeInTheDocument();
+    expect(screen.getByText("Pricing policy")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Fix now" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "No source changed. 2 still need attention",
+    );
+    expect(onIndex).toHaveBeenCalledTimes(1);
   });
 });

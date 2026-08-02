@@ -107,24 +107,11 @@ function VaultClientInner({
   // and the post-run readiness refresh are owned by VaultReadinessDashboard's
   // runningAction; the list refreshes via useVaultList's realtime invalidation.
   const handleIndexAll = useCallback(async () => {
-    try {
-      const { processed, remaining } = await api.post<{ processed: number; remaining: number }>(
-        ROUTES.vault.indexBatch(),
-        { clientId },
-        { showErrorToast: false },
-      );
-      if (processed === 0) {
-        toast.success("Every source is ready for Ask and content generation.");
-      } else if (remaining > 0) {
-        toast.success(
-          `Indexing is running for ${processed} source${processed !== 1 ? "s" : ""} — ${remaining} still need${remaining !== 1 ? "" : "s"} embeddings. The background indexer finishes the rest automatically.`,
-        );
-      } else {
-        toast.success(`Prepared ${processed} source${processed !== 1 ? "s" : ""} for Ask and content generation.`);
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Indexing failed.");
-    }
+    return api.post<{ processed: number; remaining: number }>(
+      ROUTES.vault.indexBatch(),
+      { clientId },
+      { showErrorToast: false },
+    );
   }, [clientId]);
 
   // ── Delete (single) ─────────────────────────────────────────────────────────

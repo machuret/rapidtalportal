@@ -163,11 +163,18 @@ it("rejects a cross-tenant snapshot before any database read", async () => {
 });
 
 it("returns five explicitly separated influence areas with contextual readiness", async () => {
+  const context = snapshot();
+  context.knowledge.sources.push({
+    ...context.knowledge.sources[0],
+    chunkId: "88888888-8888-4888-8888-888888888888",
+    excerpt: "A second relevant passage from the same company guide.",
+  });
+  context.provenance.vaultChunkIds.push("88888888-8888-4888-8888-888888888888");
   const query = snapshotQuery({
     id: SNAPSHOT_ID,
     client_id: CLIENT_A,
     snapshot_hash: "a".repeat(64),
-    snapshot: snapshot(),
+    snapshot: context,
     created_at: "2026-07-31T02:00:00.000Z",
     artifact_kind: "content_piece",
     artifact_id: null,
@@ -182,6 +189,8 @@ it("returns five explicitly separated influence areas with contextual readiness"
 
   expect(response.status).toBe(200);
   expect(body.companyKnowledge.sources[0].title).toBe("Company private credit guide");
+  expect(body.companyKnowledge.sources).toHaveLength(1);
+  expect(body.companyKnowledge.sources[0].matchingExcerptCount).toBe(2);
   expect(body.businessLibrary.sources[0]).toMatchObject({
     title: "SEO foundations",
     versionNumber: 1,

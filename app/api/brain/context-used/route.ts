@@ -11,6 +11,28 @@ const querySchema = z.object({
   snapshotId: z.string().uuid(),
 });
 
+/**
+ * Context snapshots retain every exact chunk for audit and reproducibility.
+ * The read model groups those chunks by their immutable source identity so the
+ * user sees one useful evidence card per source instead of a wall of excerpts.
+ */
+function groupDisplaySources<T>(
+  sources: T[],
+  identity: (source: T) => string,
+): Array<T & { matchingExcerptCount: number }> {
+  const grouped = new Map<string, T & { matchingExcerptCount: number }>();
+  for (const source of sources) {
+    const key = identity(source);
+    const current = grouped.get(key);
+    if (current) {
+      current.matchingExcerptCount += 1;
+    } else {
+      grouped.set(key, { ...source, matchingExcerptCount: 1 });
+    }
+  }
+  return [...grouped.values()];
+}
+
 export const GET = withAuth(async (req, { user }) => {
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams));
   if (!parsed.success) {
@@ -95,20 +117,20 @@ export const GET = withAuth(async (req, { user }) => {
     companyKnowledge: {
       coverage: snapshot.knowledge.coverage,
       retrievalMethod: snapshot.knowledge.retrievalMethod,
-      sources: snapshot.knowledge.sources.map((source) => ({
+      sources: groupDisplaySources(snapshot.knowledge.sources.map((source) => ({
         itemId: source.itemId,
         chunkId: source.chunkId,
         title: source.title,
         excerpt: source.excerpt,
         sourceUrl: source.sourceUrl,
         selectionReason: source.selectionReason,
-      })),
+      })), (source) => source.itemId),
     },
     businessLibrary: {
       availability: snapshot.library.availability,
       coverage: snapshot.library.coverage,
       retrievalMethod: snapshot.library.retrievalMethod,
-      sources: snapshot.library.sources.map((source) => ({
+      sources: groupDisplaySources(snapshot.library.sources.map((source) => ({
         entryId: source.entryId,
         versionId: source.versionId,
         chunkId: source.chunkId,
@@ -118,7 +140,7 @@ export const GET = withAuth(async (req, { user }) => {
         category: source.category,
         sourceUrl: source.sourceUrl,
         selectionReason: source.selectionReason,
-      })),
+      })), (source) => source.versionId),
     },
     roleBoundary: snapshot.request.actor ? {
       coachRole: snapshot.request.actor.coachRole,

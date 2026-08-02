@@ -58,6 +58,13 @@ export interface VaultReadinessRecommendation {
   priority: "high" | "medium" | "low";
 }
 
+export interface VaultReadinessAttentionSource {
+  id: string;
+  title: string;
+  issue: "failed" | "stuck_processing" | "not_searchable";
+  detail: string;
+}
+
 export interface VaultReadiness {
   score: number;
   status: VaultReadinessStatus;
@@ -87,6 +94,7 @@ export interface VaultReadiness {
   knowledgeGaps: VaultKnowledgeGap[];
   topics: VaultTopicStrength[];
   thinTopics: VaultTopicStrength[];
+  attentionSources: VaultReadinessAttentionSource[];
   recommendations: VaultReadinessRecommendation[];
   freshnessWindowDays: number;
 }
@@ -130,13 +138,17 @@ export function evaluateVaultReadiness(args: {
   const processingItems = currentItems.filter(
     (item) => ["pending", "processing"].includes(item.status),
   );
-  const stuckProcessing = processingItems.filter((item) => {
+  const stuckProcessingItems = processingItems.filter((item) => {
     const timestamp = new Date(item.updated_at ?? item.created_at).getTime();
     return Number.isFinite(timestamp) && now.getTime() - timestamp > PROCESSING_STALE_MS;
-  }).length;
+  });
+  const stuckProcessing = stuckProcessingItems.length;
   const processing = Math.max(0, processingItems.length - stuckProcessing);
-  const failed = currentItems.filter((item) => item.status === "error").length;
-  const searchable = readyItems.filter((item) => item.indexed_at !== null).length;
+  const failedItems = currentItems.filter((item) => item.status === "error");
+  const failed = failedItems.length;
+  const searchableItems = readyItems.filter((item) => item.indexed_at !== null);
+  const searchable = searchableItems.length;
+  const unsearchableItems = readyItems.filter((item) => item.indexed_at === null);
   const stale = readyItems.filter((item) => {
     const timestamp = new Date(item.updated_at ?? item.created_at).getTime();
     return Number.isFinite(timestamp) && timestamp < freshnessBoundary;
@@ -154,6 +166,26 @@ export function evaluateVaultReadiness(args: {
   ).length;
   const supporting = Math.max(0, readyItems.length - authoritative);
   const timeSensitive = currentItems.filter((item) => item.time_sensitive === true).length;
+  const attentionSources = [
+    ...failedItems.map((item) => ({
+      id: item.id ?? `failed:${item.title ?? item.created_at}`,
+      title: item.title?.trim() || "Untitled Vault source",
+      issue: "failed" as const,
+      detail: "Processing failed. Run recovery to try this source again.",
+    })),
+    ...stuckProcessingItems.map((item) => ({
+      id: item.id ?? `stuck:${item.title ?? item.created_at}`,
+      title: item.title?.trim() || "Untitled Vault source",
+      issue: "stuck_processing" as const,
+      detail: "Preparation has been inactive for more than 20 minutes.",
+    })),
+    ...unsearchableItems.map((item) => ({
+      id: item.id ?? `unsearchable:${item.title ?? item.created_at}`,
+      title: item.title?.trim() || "Untitled Vault source",
+      issue: "not_searchable" as const,
+      detail: "Saved successfully, but not yet available to Coach or content generation.",
+    })),
+  ];
   const normalisedGaps: VaultKnowledgeGap[] = args.gaps.map((gap, index): VaultKnowledgeGap => {
     if (typeof gap === "string") {
       return {
@@ -417,6 +449,7 @@ export function evaluateVaultReadiness(args: {
     knowledgeGaps,
     topics,
     thinTopics,
+    attentionSources,
     recommendations,
     freshnessWindowDays,
   };

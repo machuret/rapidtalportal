@@ -35,6 +35,11 @@ export function EditorialLearningPrompt({
 }) {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const factual = ["company_dna_update", "vault_correction"].includes(suggestion.proposed_outcome);
+  const channelLabel = channel.replaceAll("_", " ").trim();
+  const contentTypeLabel = contentType.replaceAll("_", " ").trim();
+  const hasDistinctContentType = Boolean(
+    contentTypeLabel && contentTypeLabel.toLocaleLowerCase() !== channelLabel.toLocaleLowerCase(),
+  );
 
   async function respond(action: "use_draft" | "remember_channel" | "remember_content_type" | "review" | "dismiss") {
     if (busyAction) return;
@@ -90,12 +95,30 @@ export function EditorialLearningPrompt({
         </Button>
         {!factual && (
           <>
-            <Button type="button" size="sm" variant="outline" disabled={!!busyAction} onClick={() => respond("remember_channel")}>
-              Remember for {channel}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!!busyAction}
+              aria-label={`Remember this lesson for the ${channelLabel} channel`}
+              title={`Apply only when creating ${channelLabel} content`}
+              onClick={() => respond("remember_channel")}
+            >
+              Remember on {channelLabel}
             </Button>
-            <Button type="button" size="sm" variant="outline" disabled={!!busyAction} onClick={() => respond("remember_content_type")}>
-              Remember for {contentType.replaceAll("_", " ")}
-            </Button>
+            {hasDistinctContentType && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!!busyAction}
+                aria-label={`Remember this lesson for ${contentTypeLabel} content on any channel`}
+                title={`Apply to ${contentTypeLabel} content wherever it is created`}
+                onClick={() => respond("remember_content_type")}
+              >
+                Remember for {contentTypeLabel}
+              </Button>
+            )}
           </>
         )}
         <Button type="button" size="sm" disabled={!!busyAction} onClick={() => respond("review")}>
@@ -109,7 +132,8 @@ export function EditorialLearningPrompt({
         </Button>
       </div>
       <p className="mt-3 text-2xs text-zinc-500">
-        Nothing becomes permanent memory until a client administrator or super administrator approves it.
+        Channel memory applies only on {channelLabel}. Content-type memory can apply across channels.
+        Nothing becomes permanent until a client administrator or super administrator approves it.
       </p>
     </section>
   );

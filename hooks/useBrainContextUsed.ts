@@ -16,6 +16,7 @@ export type BrainContextUsedResponse = {
       excerpt: string;
       sourceUrl: string | null;
       selectionReason: string;
+      matchingExcerptCount: number;
     }>;
   };
   businessLibrary: {
@@ -32,6 +33,7 @@ export type BrainContextUsedResponse = {
       category: string;
       sourceUrl: string | null;
       selectionReason: string;
+      matchingExcerptCount: number;
     }>;
   };
   roleBoundary: {

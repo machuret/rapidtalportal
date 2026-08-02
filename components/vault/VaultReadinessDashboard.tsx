@@ -31,8 +31,10 @@ interface Props {
   canIndex: boolean;
   version: string;
   onAdd: () => void;
-  onIndex: () => Promise<void>;
+  onIndex: () => Promise<{ processed: number; remaining: number }>;
 }
+
+type RecoveryResult = { tone: "success" | "warning" | "error"; message: string };
 
 const statusClasses: Record<VaultReadiness["status"], string> = {
   setup: "border-zinc-700 bg-zinc-900 text-zinc-300",
@@ -53,9 +55,10 @@ export function VaultReadinessDashboard({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [runningAction, setRunningAction] = useState<VaultReadinessAction>(null);
+  const [recoveryResult, setRecoveryResult] = useState<RecoveryResult | null>(null);
   const [showGaps, setShowGaps] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<VaultReadiness | null> => {
     try {
       const result = await api.get<VaultReadiness>(
         `${ROUTES.vault.readiness()}?clientId=${clientId}`,
@@ -63,8 +66,10 @@ export function VaultReadinessDashboard({
       );
       setReadiness(result);
       setLoadError(null);
+      return result;
     } catch (error) {
       setLoadError(errorMessage(error, "Vault readiness could not be loaded."));
+      return null;
     } finally {
       setLoading(false);
     }
@@ -103,9 +108,39 @@ export function VaultReadinessDashboard({
       return;
     }
     setRunningAction(action);
+    setRecoveryResult(null);
     try {
-      await onIndex();
-      await load();
+      const result = await onIndex();
+      const refreshed = await load();
+      if (!refreshed) {
+        setRecoveryResult({
+          tone: "warning",
+          message: "Recovery ran, but the updated Vault status could not be loaded. Refresh to check the result.",
+        });
+        return;
+      }
+      const remaining = refreshed.attentionSources.length;
+      if (remaining === 0) {
+        setRecoveryResult({
+          tone: "success",
+          message: result.processed > 0
+            ? `Recovery completed. ${result.processed} source${result.processed === 1 ? " is" : "s are"} now ready for Coach and content generation.`
+            : "All Vault sources are already ready for Coach and content generation.",
+        });
+      } else {
+        const names = refreshed.attentionSources.slice(0, 3).map((source) => source.title).join(", ");
+        setRecoveryResult({
+          tone: "warning",
+          message: result.processed > 0
+            ? `Recovery ran for ${result.processed} source${result.processed === 1 ? "" : "s"}. ${remaining} still need${remaining === 1 ? "s" : ""} attention: ${names}${remaining > 3 ? ` and ${remaining - 3} more` : ""}. The background indexer finishes the rest automatically.`
+            : `No source changed. ${remaining} still need${remaining === 1 ? "s" : ""} attention: ${names}${remaining > 3 ? ` and ${remaining - 3} more` : ""}. Open the source list for details or retry shortly.`,
+        });
+      }
+    } catch (error) {
+      setRecoveryResult({
+        tone: "error",
+        message: errorMessage(error, "Vault recovery failed. Nothing was changed; retry when ready."),
+      });
     } finally {
       setRunningAction(null);
     }
@@ -320,6 +355,36 @@ export function VaultReadinessDashboard({
               );
             })}
           </div>
+          {readiness.attentionSources.length > 0 && (
+            <div className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-3">
+              <p className="text-xs font-medium text-amber-200">Sources that need attention</p>
+              <ul className="mt-2 space-y-2">
+                {readiness.attentionSources.slice(0, 6).map((source) => (
+                  <li key={`${source.issue}:${source.id}`} className="text-xs leading-5 text-zinc-400">
+                    <span className="font-medium text-zinc-200">{source.title}</span>
+                    <span className="block text-zinc-500">{source.detail}</span>
+                  </li>
+                ))}
+              </ul>
+              {readiness.attentionSources.length > 6 && (
+                <p className="mt-2 text-xs text-zinc-500">And {readiness.attentionSources.length - 6} more.</p>
+              )}
+            </div>
+          )}
+          {recoveryResult && (
+            <div
+              role={recoveryResult.tone === "error" ? "alert" : "status"}
+              className={`mt-3 rounded-xl border p-3 text-xs leading-5 ${
+                recoveryResult.tone === "success"
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                  : recoveryResult.tone === "error"
+                    ? "border-red-500/30 bg-red-500/10 text-red-200"
+                    : "border-amber-500/30 bg-amber-500/10 text-amber-200"
+              }`}
+            >
+              {recoveryResult.message}
+            </div>
+          )}
         </div>
       </div>
 

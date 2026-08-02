@@ -133,8 +133,15 @@ export function BrainContextUsed({
                 {data.companyKnowledge.sources.length ? (
                   <ul className="space-y-2">
                     {data.companyKnowledge.sources.map((source) => (
-                      <li key={`${source.itemId}:${source.chunkId ?? "item"}`} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
-                        <p className="text-xs font-medium text-zinc-200">{source.title}</p>
+                      <li key={source.itemId} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-xs font-medium text-zinc-200">{source.title}</p>
+                          {source.matchingExcerptCount > 1 && (
+                            <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-2xs text-zinc-500">
+                              {source.matchingExcerptCount} matching passages
+                            </span>
+                          )}
+                        </div>
                         <p className="mt-1 line-clamp-3 text-xs leading-5 text-zinc-500">{source.excerpt}</p>
                         <p className="mt-1 text-xs text-zinc-600">{source.selectionReason}</p>
                       </li>
@@ -151,10 +158,17 @@ export function BrainContextUsed({
                 {data.businessLibrary.sources.length ? (
                   <ul className="space-y-2">
                     {data.businessLibrary.sources.map((source) => (
-                      <li key={`${source.versionId}:${source.chunkId ?? "version"}`} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
-                        <p className="text-xs font-medium text-zinc-200">
-                          {source.title} <span className="text-zinc-600">· v{source.versionNumber}</span>
-                        </p>
+                      <li key={source.versionId} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-xs font-medium text-zinc-200">
+                            {source.title} <span className="text-zinc-600">· v{source.versionNumber}</span>
+                          </p>
+                          {source.matchingExcerptCount > 1 && (
+                            <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-2xs text-zinc-500">
+                              {source.matchingExcerptCount} matching passages
+                            </span>
+                          )}
+                        </div>
                         <p className="mt-0.5 text-xs text-orange-300/70">
                           {source.category} · General guidance, not a company fact
                         </p>

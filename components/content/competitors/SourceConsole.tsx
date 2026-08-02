@@ -218,7 +218,10 @@ export function SourceConsole({
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/40">
+    <section
+      id={`competitor-${competitor.id}`}
+      className="scroll-mt-24 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/40"
+    >
       <div className="flex flex-col gap-3 border-b border-zinc-800 p-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

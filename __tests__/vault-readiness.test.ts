@@ -63,8 +63,8 @@ describe("Vault readiness scoring", () => {
   test("treats failed and unsearchable knowledge as release-blocking health issues", () => {
     const result = evaluateVaultReadiness({
       items: [
-        item("service", { indexed_at: null }),
-        item("process", { status: "error", indexed_at: null }),
+        item("service", { id: "service-guide", title: "Services guide", indexed_at: null }),
+        item("process", { id: "process-guide", title: "Process guide", status: "error", indexed_at: null }),
       ],
       gaps: [],
       questionCount: 5,
@@ -75,6 +75,10 @@ describe("Vault readiness scoring", () => {
     expect(result.recommendations).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "failed", action: "index", priority: "high" }),
       expect.objectContaining({ id: "unsearchable", action: "index", priority: "high" }),
+    ]));
+    expect(result.attentionSources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "process-guide", title: "Process guide", issue: "failed" }),
+      expect.objectContaining({ id: "service-guide", title: "Services guide", issue: "not_searchable" }),
     ]));
   });
 
