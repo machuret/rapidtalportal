@@ -2,9 +2,9 @@
 
 import { useRef, useState } from "react";
 import { cn, formatDate } from "@/lib/utils";
-import type { CrmContact } from "@/app/(portal)/crm/page";
+import type { CrmContact } from "@/types/crm";
 import { useContactMutations } from "@/hooks/useContacts";
-import { CRM_STATUS_META, CRM_STATUSES } from "@/lib/crm-config";
+import { CRM_STATUS_META, CRM_STATUSES } from "@/lib/crm/config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

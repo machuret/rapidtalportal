@@ -5,8 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   businessLibraryCreateSchema,
   businessLibraryValidationMessage,
-} from "@/lib/business-library";
-import { loadBusinessLibrary, loadBusinessLibraryEntry } from "@/lib/business-library-admin";
+} from "@/lib/business-library/shared";
+import { loadBusinessLibrary, loadBusinessLibraryEntry } from "@/lib/business-library/admin";
 
 export const dynamic = "force-dynamic";
 

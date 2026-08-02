@@ -5,7 +5,7 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logCrm } from "@/lib/crm/events";
-import { CRM_STATUSES } from "@/lib/crm-config";
+import { CRM_STATUSES } from "@/lib/crm/config";
 
 // Single source of truth for the statuses (also the DB CHECK + UI meta).
 const STATUSES = CRM_STATUSES as [string, ...string[]];

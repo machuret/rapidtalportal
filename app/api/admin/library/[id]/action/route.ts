@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { withSuperAdmin } from "@/lib/api/with-auth";
 import { serverError } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { businessLibraryTransitionSchema } from "@/lib/business-library";
-import { loadBusinessLibraryEntry } from "@/lib/business-library-admin";
+import { businessLibraryTransitionSchema } from "@/lib/business-library/shared";
+import { loadBusinessLibraryEntry } from "@/lib/business-library/admin";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 
 export const dynamic = "force-dynamic";

@@ -5,7 +5,7 @@ import type {
   BusinessLibraryEntryDetail,
   BusinessLibraryEntrySummary,
   BusinessLibraryVersion,
-} from "@/lib/business-library";
+} from "@/lib/business-library/shared";
 
 type AdminClient = SupabaseClient<Database>;
 type CategoryRow = Database["public"]["Tables"]["business_library_categories"]["Row"];

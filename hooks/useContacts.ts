@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import type { CrmContact } from "@/app/(portal)/crm/page";
+import type { CrmContact } from "@/types/crm";
 
 const CONTACTS_KEY = "contacts";
 const NOTES_KEY = "crm-notes";

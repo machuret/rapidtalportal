@@ -5,8 +5,12 @@ import { CrmBoard } from "@/components/crm/CrmBoard";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { CrmContact } from "@/types/crm";
 import { Plus } from "lucide-react";
 import Link from "next/link";
+
+// Canonical home is types/crm.ts — re-exported for existing importers.
+export type { CrmContact } from "@/types/crm";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "CRM — RapidTal" };
@@ -54,22 +58,4 @@ export default async function CrmPage() {
       />
     </div>
   );
-}
-
-export interface CrmContact {
-  id: string;
-  client_id: string;
-  first_name: string;
-  last_name: string | null;
-  email: string | null;
-  phone: string | null;
-  company: string | null;
-  job_title: string | null;
-  status: string;
-  source: string | null;
-  tags: string[];
-  notes: string | null;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
 }

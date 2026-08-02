@@ -5,7 +5,7 @@ import {
   businessLibraryValidationMessage,
   isLibraryReviewDue,
   slugifyLibraryTitle,
-} from "@/lib/business-library";
+} from "@/lib/business-library/shared";
 
 const validInput = {
   categoryId: "2aa7ca90-af7e-4ee1-84d4-f8fa01a39df6",

@@ -3,6 +3,10 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SopsLibrary } from "@/components/sops/SopsLibrary";
 import { PageIntro } from "@/components/layout/PageIntro";
+import type { Sop } from "@/types/sops";
+
+// Canonical home is types/sops.ts — re-exported for existing importers.
+export type { Sop } from "@/types/sops";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "SOPs — RapidTal" };
@@ -54,20 +58,4 @@ export default async function SopsPage() {
       />
     </div>
   );
-}
-
-export interface Sop {
-  id: string;
-  client_id: string | null;
-  title: string;
-  category: string;
-  subcategory?: string | null;
-  visibility?: string;
-  body: string;
-  order_index: number;
-  version?: number;
-  forked_from?: string | null;
-  forked_version?: number | null;
-  created_at: string;
-  updated_at: string;
 }

@@ -4,7 +4,7 @@ import { SopsLibrary } from "@/components/sops/SopsLibrary";
 import { SopSuggestions, type SopSuggestion } from "@/components/sops/SopSuggestions";
 import { SopCategoryManager, type CategoryNode } from "@/components/sops/SopCategoryManager";
 import { SopTrash, type TrashedSop } from "@/components/sops/SopTrash";
-import type { Sop } from "@/app/(portal)/sops/page";
+import type { Sop } from "@/types/sops";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "SOP Library — RapidTal" };

@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import { parseSopSteps, type SopStep } from "@/lib/sop-steps";
+import { parseSopSteps, type SopStep } from "@/lib/sops/steps";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, Circle, RotateCcw, Sparkles, Loader2, PartyPopper, Lightbulb, ClipboardList } from "lucide-react";
 import { ProgressBar } from "@/components/ui/ProgressBar";

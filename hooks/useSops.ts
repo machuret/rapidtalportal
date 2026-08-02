@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import type { Sop } from "@/app/(portal)/sops/page";
+import type { Sop } from "@/types/sops";
 
 const SOPS_KEY = "sops";
 

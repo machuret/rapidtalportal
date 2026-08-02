@@ -39,7 +39,7 @@ import {
   type BusinessLibraryVersion,
   type LibraryTransition,
   type LibraryVersionStatus,
-} from "@/lib/business-library";
+} from "@/lib/business-library/shared";
 
 export interface BusinessLibraryInitialData {
   categories: BusinessLibraryCategory[];

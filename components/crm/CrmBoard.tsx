@@ -2,11 +2,11 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { CrmContact } from "@/app/(portal)/crm/page";
+import type { CrmContact } from "@/types/crm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { CRM_STATUS_META, CRM_STATUSES } from "@/lib/crm-config";
+import { CRM_STATUS_META, CRM_STATUSES } from "@/lib/crm/config";
 import { Plus, Search, User, Archive } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { CrmContactCard } from "./CrmContactCard";

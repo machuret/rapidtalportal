@@ -1,4 +1,4 @@
-import { parseSopSteps, serializeSteps, type SopStep } from "@/lib/sop-steps";
+import { parseSopSteps, serializeSteps, type SopStep } from "@/lib/sops/steps";
 
 describe("parseSopSteps", () => {
   it("parses explicit \"Step N:\" blocks, keeping detail lines", () => {

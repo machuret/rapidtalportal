@@ -10,7 +10,7 @@ import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sopAiLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { authorizeSopScope, generateSopDraft } from "@/lib/sops/ai";
-import { serializeSteps } from "@/lib/sop-steps";
+import { serializeSteps } from "@/lib/sops/steps";
 
 export const maxDuration = 60;
 

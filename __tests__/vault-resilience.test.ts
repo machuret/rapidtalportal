@@ -48,10 +48,14 @@ describe("admin Vault failure handling", () => {
     expect(upload).toContain("The file was uploaded, but its contents could not be processed");
   });
 
-  test("bulk indexing reports partial failures truthfully", () => {
+  test("bulk indexing runs server-side and reports unfinished items truthfully", () => {
     const list = read("components/vault/VaultClient.tsx");
-    expect(list).toContain("succeeded++");
-    expect(list).toContain("failed++");
-    expect(list).toContain("They remain marked for retry.");
+    const route = read("app/api/vault/index-batch/route.ts");
+    // One server-side sweep — no per-item browser loop that dies on navigation.
+    expect(list).toContain("ROUTES.vault.indexBatch()");
+    expect(list).not.toContain("succeeded++");
+    // Items still unindexed after the sweep are surfaced, not hidden.
+    expect(route).toContain("remaining");
+    expect(list).toContain("The background indexer finishes the rest automatically.");
   });
 });

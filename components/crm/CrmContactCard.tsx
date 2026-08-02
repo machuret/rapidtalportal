@@ -1,8 +1,8 @@
 "use client";
 
 import { cn, formatDate } from "@/lib/utils";
-import type { CrmContact } from "@/app/(portal)/crm/page";
-import { CRM_STATUS_META } from "@/lib/crm-config";
+import type { CrmContact } from "@/types/crm";
+import { CRM_STATUS_META } from "@/lib/crm/config";
 import { Mail, Phone, ExternalLink, Tag, CalendarDays } from "lucide-react";
 
 interface CrmContactCardProps {

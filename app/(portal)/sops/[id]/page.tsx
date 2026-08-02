@@ -2,7 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SopDetail } from "@/components/sops/SopDetail";
-import type { Sop } from "@/app/(portal)/sops/page";
+import type { Sop } from "@/types/sops";
 import Link from "next/link";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 

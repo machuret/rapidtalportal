@@ -37,5 +37,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# generated Supabase types (reference only — types/database.ts is hand-maintained)
+# stale local copies of the old generated-types slot — the canonical, tracked
+# artifact is types/schema.generated.ts (output of `pnpm gen:types`)
 types/database.generated.ts
