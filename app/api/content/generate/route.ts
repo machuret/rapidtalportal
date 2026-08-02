@@ -121,8 +121,7 @@ export async function POST(req: NextRequest) {
                 typeof warning === "string").slice(0, 20)
             : [],
         };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: operationError } = await (admin as any)
+    const { error: operationError } = await admin
       .from("content_projects")
       .update(operationState)
       .eq("id", projectId)

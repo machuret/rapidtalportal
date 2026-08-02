@@ -30,8 +30,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   if (!row.deleted_at) return NextResponse.json({ ok: true }); // already live — no-op
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any)
+  const { error } = await admin
     .from("sops")
     .update({ deleted_at: null })
     .eq("id", parsed.data.id);

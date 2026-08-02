@@ -19,8 +19,7 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: source, error } = await (admin as any)
+  const { data: source, error } = await admin
     .from("content_pieces")
     .select("project_id,content_type,title,brief,body,content_brief,source_references,style_snapshot")
     .eq("id", parsed.data.id)
@@ -31,8 +30,7 @@ export const POST = withAuth(async (req, { user }) => {
   const title = `Copy of ${source.title}`.slice(0, 300);
   // Supabase's generated client cannot infer the newly introduced migration
   // until production types are refreshed.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const persistence = source.project_id
     ? db
       .rpc("create_content_project_derived_draft", {

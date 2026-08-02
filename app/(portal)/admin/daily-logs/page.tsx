@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { format, subDays } from "date-fns";
-import { AdminDailyLogsReview } from "@/components/daily-log/AdminDailyLogsReview";
+import { AdminDailyLogsReview, type LogWithUser } from "@/components/daily-log/AdminDailyLogsReview";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -34,26 +34,47 @@ export default async function AdminDailyLogsPage({
 
   const admin = createAdminClient();
 
-  const [{ data: logs }, { data: older }] = await Promise.all([
-    admin
-      .from("daily_logs")
-      .select("*, users!inner(full_name, email, role)")
-      .eq("client_id", user.client_id)
-      .eq("users.role", "va")
-      .gte("log_date", since)
-      .lte("log_date", until)
-      .order("log_date", { ascending: false })
-      .limit(300),
+  // Two-step fetch instead of a users!inner embed: daily_logs has TWO FKs to
+  // users (user_id, reviewed_by), so the embed is ambiguous at runtime
+  // (PGRST201) and unparseable by the supabase-js type layer in every hint form.
+  const { data: vaUsers } = await admin
+    .from("users")
+    .select("id, full_name, email, role")
+    .eq("client_id", user.client_id)
+    .eq("role", "va");
+  const vaIds = ((vaUsers ?? []) as { id: string }[]).map((va) => va.id);
+  const vaById = new Map(((vaUsers ?? []) as { id: string; full_name: string | null; email: string; role: string }[]).map((va) => [va.id, va]));
+
+  const [{ data: rawLogs }, { data: older }] = await Promise.all([
+    vaIds.length
+      ? admin
+          .from("daily_logs")
+          .select("*")
+          .eq("client_id", user.client_id)
+          .in("user_id", vaIds)
+          .gte("log_date", since)
+          .lte("log_date", until)
+          .order("log_date", { ascending: false })
+          .limit(300)
+      : Promise.resolve({ data: [] }),
     // Is there anything older than this window? Drives the "Older" control.
-    admin
-      .from("daily_logs")
-      .select("id, users!inner(role)")
-      .eq("client_id", user.client_id)
-      .eq("users.role", "va")
-      .lt("log_date", since)
-      .order("log_date", { ascending: false })
-      .limit(1),
+    vaIds.length
+      ? admin
+          .from("daily_logs")
+          .select("id")
+          .eq("client_id", user.client_id)
+          .in("user_id", vaIds)
+          .lt("log_date", since)
+          .order("log_date", { ascending: false })
+          .limit(1)
+      : Promise.resolve({ data: [] }),
   ]);
+
+  const logs = ((rawLogs ?? []) as (Record<string, unknown> & { user_id: string })[])
+    .map((log) => {
+      const va = vaById.get(log.user_id);
+      return { ...log, users: va ? { full_name: va.full_name, email: va.email } : null } as LogWithUser;
+    });
 
   const hasOlder = (older?.length ?? 0) > 0;
   const rangeLabel = page === 0

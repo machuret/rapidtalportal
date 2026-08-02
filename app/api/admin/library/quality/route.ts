@@ -10,8 +10,7 @@ const updateSchema = z.object({
 });
 
 export const GET = withSuperAdmin(async () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 140 precedes generated types
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const [chunks, gaps, signals] = await Promise.all([
     db.from("business_library_chunks")
       .select("id,embedded_at,embedding_error"),
@@ -55,8 +54,7 @@ export const PATCH = withSuperAdmin(async (request) => {
   catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid suggestion update." }, { status: 422 });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 140 precedes generated types
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const result = await db.from("business_library_gap_suggestions")
     .update({ status: parsed.data.status, updated_at: new Date().toISOString() })
     .eq("id", parsed.data.id)

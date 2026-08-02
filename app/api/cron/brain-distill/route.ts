@@ -10,6 +10,8 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 import { distillClientMemory, decayClientMemory } from "@/lib/brain/distill";
 
 export const dynamic = "force-dynamic";
@@ -32,8 +34,7 @@ export async function GET(req: NextRequest) {
     admin.from("cron_heartbeats").upsert({ name: "brain-distill", ran_at: new Date().toISOString(), detail });
 
   // Distinct clients that have feedback not yet folded into memory.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: pending } = await (admin as any)
+  const { data: pending } = await admin
     .from("brain_signals")
     .select("client_id")
     .is("distilled_at", null)
@@ -103,8 +104,7 @@ export async function GET(req: NextRequest) {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function markMaintained(admin: any, clientId: string) {
+async function markMaintained(admin: SupabaseClient<Database>, clientId: string) {
   const { error } = await admin.from("brain_maintenance_state").upsert(
     {
       client_id: clientId,

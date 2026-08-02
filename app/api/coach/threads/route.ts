@@ -63,8 +63,7 @@ export const GET = withAuth(async (req, { user, impersonating }) => {
   const denied = assertClientAccess(user, clientId);
   if (denied) return denied;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration follows generated schema snapshot
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const { data: thread, error: threadError } = await db.from("coach_threads")
     .select("id,title,status,retention_days,created_at,updated_at")
     .eq("client_id", clientId).eq("owner_id", user.id).eq("status", "active")
@@ -107,8 +106,7 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
     }, { status: 409 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration follows generated schema snapshot
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const { data: snapshot, error: snapshotError } = await db.from("brain_context_snapshots")
     .select("id").eq("id", parsed.data.snapshotId).eq("client_id", parsed.data.clientId)
     .eq("created_by", user.id).maybeSingle();
@@ -205,8 +203,7 @@ export const DELETE = withAuth(async (req, { user, impersonating }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid Coach thread." }, { status: 422 });
   const denied = assertClientAccess(user, parsed.data.clientId);
   if (denied) return denied;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration follows generated schema snapshot
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const { error } = await db.from("coach_threads").update({ status: "archived", updated_at: new Date().toISOString() })
     .eq("id", parsed.data.threadId).eq("client_id", parsed.data.clientId).eq("owner_id", user.id);
   if (error) return serverError(error);

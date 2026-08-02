@@ -3,6 +3,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/types/database";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { recordEditorialRevision } from "@/lib/brain/editorial-events";
@@ -55,8 +56,7 @@ export const POST = withAuth(async (req, { user }) => {
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: piece, error } = await (admin as any)
+  const { data: piece, error } = await admin
     .from("content_pieces")
     .select("id,project_id,content_type,title,body,status,content_brief,source_references,style_snapshot,updated_at")
     .eq("id", parsed.data.id)
@@ -142,17 +142,16 @@ export const POST = withAuth(async (req, { user }) => {
     : generated.body.trim();
   const sourceReferences = mergeSources(piece.source_references, generated.sources);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: updated, error: updateError } = await (admin as any)
+  const { data: updated, error: updateError } = await admin
     .rpc("commit_content_piece_rewrite", {
       p_client_id: parsed.data.client_id,
       p_piece_id: parsed.data.id,
       p_actor_id: user.id,
       p_expected_updated_at: parsed.data.expected_updated_at,
       p_body: nextBody,
-      p_content_brief: existingBrief,
-      p_source_references: sourceReferences,
-      p_style_snapshot: piece.style_snapshot ?? generated.styleSnapshot ?? {},
+      p_content_brief: existingBrief as Json,
+      p_source_references: sourceReferences as Json,
+      p_style_snapshot: (piece.style_snapshot ?? generated.styleSnapshot ?? {}) as Json,
       p_reason: parsed.data.scope === "section" ? "section rewrite" : "full rewrite",
     })
     .single();

@@ -31,8 +31,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   const admin = createAdminClient();
   // Migration 095 tables are accessed before the next generated-type refresh.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("competitor_sources")
     .select("*, competitors!inner(name, refresh_cadence, status, website_url)")
     .eq("id", parsed.data.source_id)

@@ -118,10 +118,17 @@ export default async function BrainAnalyticsPage({ searchParams: searchParamsPro
   const hasContentBrain = topics.length > 0 || contentSignals.length > 0;
 
   const queries = (queriesRes.error ? [] : (queriesRes.data ?? [])) as { question: string; answered: boolean; dismissed?: boolean }[];
-  const feedback = (feedbackRes.error ? [] : (feedbackRes.data ?? [])) as {
+  const feedback = ((feedbackRes.error ? [] : (feedbackRes.data ?? [])) as {
     id: string; question: string; answer: string; rating: number;
-    sources?: { kind: string; title: string }[]; resolved?: boolean;
-  }[];
+    sources: unknown; resolved: boolean; created_at: string | null;
+  }[]).map((row) => ({
+    id: row.id,
+    question: row.question,
+    answer: row.answer,
+    rating: row.rating,
+    resolved: row.resolved,
+    sources: (Array.isArray(row.sources) ? row.sources : []) as { kind: string; title: string }[],
+  }));
 
   const asked = queries.length;
   const answered = queries.filter((q) => q.answered).length;

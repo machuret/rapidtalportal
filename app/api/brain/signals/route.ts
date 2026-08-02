@@ -4,6 +4,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/types/database";
 import { EDITORIAL_DIMENSIONS } from "@/lib/brain/editorial-learning";
 
 /**
@@ -45,21 +46,19 @@ export const POST = withAuth(async (req, { user }) => {
   // a duplicate (which would inflate source_count and re-distil the same input).
   // created_at is bumped + distilled_at cleared so the change is re-distilled.
   if (parsed.data.artifact_id) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: prior } = await (admin as any)
+    const { data: prior } = await admin
       .from("brain_signals").select("id")
       .eq("user_id", user.id).eq("surface", parsed.data.surface).eq("artifact_id", parsed.data.artifact_id)
       .order("created_at", { ascending: false }).limit(1);
     const existing = (prior ?? [])[0] as { id: string } | undefined;
     if (existing) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (admin as any)
+      const { data, error } = await admin
         .from("brain_signals")
         .update({
           rating:        parsed.data.rating,
           reason:        parsed.data.reason ?? null,
           artifact_text: parsed.data.artifact_text,
-          context:       parsed.data.context ?? {},
+          context:       (parsed.data.context ?? {}) as Json,
           dimensions:    parsed.data.dimensions,
           channel:       parsed.data.channel ?? null,
           content_type:  parsed.data.content_type ?? null,
@@ -83,8 +82,7 @@ export const POST = withAuth(async (req, { user }) => {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("brain_signals")
     .insert({
       client_id:     parsed.data.client_id,
@@ -94,7 +92,7 @@ export const POST = withAuth(async (req, { user }) => {
       artifact_text: parsed.data.artifact_text,
       rating:        parsed.data.rating,
       reason:        parsed.data.reason ?? null,
-      context:       parsed.data.context ?? {},
+      context:       (parsed.data.context ?? {}) as Json,
       dimensions:    parsed.data.dimensions,
       channel:       parsed.data.channel ?? null,
       content_type:  parsed.data.content_type ?? null,

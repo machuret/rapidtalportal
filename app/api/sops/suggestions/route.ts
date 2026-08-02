@@ -34,8 +34,7 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await scoped((admin as any).from("sop_suggestions").select("id, title, scope, category, step_count, status, created_at"), clientId)
+  const { data } = await scoped(admin.from("sop_suggestions").select("id, title, scope, category, step_count, status, created_at"), clientId)
     .eq("status", "open")
     .order("created_at", { ascending: false });
   return NextResponse.json({ suggestions: (data ?? []) as SuggestionRow[] });
@@ -67,8 +66,7 @@ export const POST = withAuth(async (req, { user }) => {
   // Everything we already have/considered, so we never suggest it again.
   const [{ data: sopRows }, { data: sugRows }] = await Promise.all([
     scoped(admin.from("sops").select("title").is("deleted_at", null), clientId),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    scoped((admin as any).from("sop_suggestions").select("title"), clientId),
+    scoped(admin.from("sop_suggestions").select("title"), clientId),
   ]);
   const existingTitles = [
     ...((sopRows ?? []) as { title: string }[]).map((r) => r.title),
@@ -109,8 +107,7 @@ ${ctx ? `\nCompany context:\n${ctx}` : ""}`;
     });
 
   if (fresh.length) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (admin as any).from("sop_suggestions").insert(fresh.map((s) => ({
+    await admin.from("sop_suggestions").insert(fresh.map((s) => ({
       client_id: clientId,
       title: s.title,
       scope: s.scope || null,
@@ -121,8 +118,7 @@ ${ctx ? `\nCompany context:\n${ctx}` : ""}`;
     })));
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await scoped((admin as any).from("sop_suggestions").select("id, title, scope, category, step_count, status, created_at"), clientId)
+  const { data } = await scoped(admin.from("sop_suggestions").select("id, title, scope, category, step_count, status, created_at"), clientId)
     .eq("status", "open")
     .order("created_at", { ascending: false });
   return NextResponse.json({ added: fresh.length, suggestions: (data ?? []) as SuggestionRow[] });
@@ -144,8 +140,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   const targetIds = parsed.data.ids?.length ? parsed.data.ids : [parsed.data.id!];
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (admin as any).from("sop_suggestions").select("id, client_id").in("id", targetIds);
+  const { data: existing } = await admin.from("sop_suggestions").select("id, client_id").in("id", targetIds);
   const rows = (existing ?? []) as { id: string; client_id: string | null }[];
   if (!rows.length) return NextResponse.json({ updated: 0 });
 
@@ -155,8 +150,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     if (denied) return denied;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any).from("sop_suggestions").update({ status: parsed.data.status }).in("id", rows.map((r) => r.id));
+  const { error } = await admin.from("sop_suggestions").update({ status: parsed.data.status }).in("id", rows.map((r) => r.id));
   if (error) return serverError(error);
   return NextResponse.json({ updated: rows.length });
 }, ADMIN);

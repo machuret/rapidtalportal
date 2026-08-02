@@ -33,8 +33,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   const admin = createAdminClient();
   // vault_queries is introduced after the checked-in generated schema snapshot.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const gapId = parsed.data.gapId;
   let queryGapId: string | undefined;
   if (gapId) {
@@ -67,7 +66,6 @@ export const POST = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "This knowledge gap is no longer open." }, { status: 409 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: kbEntryId, error } = await db.rpc("resolve_vault_gap_with_answer", {
     p_gap_id: queryGapId,
     p_client_id: parsed.data.clientId,

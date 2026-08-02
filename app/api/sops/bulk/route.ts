@@ -14,6 +14,8 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { type ApiUser } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, TablesUpdate } from "@/types/database";
 import { syncSopAccess, authorizeScope } from "@/lib/sops/sop-access";
 
 const MAX_IDS = 500;
@@ -21,8 +23,7 @@ const MAX_IDS = 500;
 interface SopRow { id: string; client_id: string | null }
 
 /** Load the SOPs and verify the caller may write every one. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function loadAuthorised(admin: any, user: ApiUser, ids: string[]): Promise<{ rows: SopRow[] } | { error: NextResponse }> {
+async function loadAuthorised(admin: SupabaseClient<Database>, user: ApiUser, ids: string[]): Promise<{ rows: SopRow[] } | { error: NextResponse }> {
   const { data } = await admin.from("sops").select("id, client_id").in("id", ids);
   const rows = (data ?? []) as SopRow[];
   for (const clientId of Array.from(new Set(rows.map((r) => r.client_id)))) {
@@ -53,14 +54,13 @@ export const PATCH = withAuth(async (req, { user }) => {
   const ids = loaded.rows.map((r) => r.id);
 
   // Shared column updates (category / subcategory).
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const updates: TablesUpdate<"sops"> = { updated_at: new Date().toISOString() };
   if (parsed.data.category !== undefined) updates.category = parsed.data.category.trim() || "General";
   if (parsed.data.subcategory !== undefined) updates.subcategory = parsed.data.subcategory?.trim() || null;
   if (parsed.data.visibility !== undefined) updates.visibility = parsed.data.visibility;
 
   if (Object.keys(updates).length > 1) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (admin as any).from("sops").update(updates).in("id", ids);
+    const { error } = await admin.from("sops").update(updates).in("id", ids);
     if (error) return serverError(error);
   }
 
@@ -87,8 +87,7 @@ export const DELETE = withAuth(async (req, { user }) => {
   const ids = loaded.rows.map((r) => r.id);
 
   // Soft delete — recoverable, mirroring the single-SOP DELETE.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any).from("sops").update({ deleted_at: new Date().toISOString() }).in("id", ids);
+  const { error } = await admin.from("sops").update({ deleted_at: new Date().toISOString() }).in("id", ids);
   if (error) return serverError(error);
   return NextResponse.json({ deleted: ids.length });
 }, { roles: ["client_admin", "super_admin"] });

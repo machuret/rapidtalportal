@@ -11,6 +11,8 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/types/database";
 import {
   runCoachProactiveForClient,
   selectProactiveClients,
@@ -24,8 +26,7 @@ export const maxDuration = 300;
 
 const CLIENT_BATCH = 10;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated schema follows migration 142
-async function recordHeartbeat(admin: any, detail: Record<string, unknown>) {
+async function recordHeartbeat(admin: SupabaseClient<Database>, detail: Json) {
   const result = await admin.from("cron_heartbeats").upsert({
     name: "coach-proactive", ran_at: new Date().toISOString(), detail,
   });

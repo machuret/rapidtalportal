@@ -4,6 +4,7 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { serverError } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/types/database";
 import { normalizeBrainMemoryScope } from "@/supabase/functions/_shared/brain-memory-scope";
 import { embedTexts } from "@/lib/brain/embed";
 
@@ -47,8 +48,7 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query = (admin as any)
+  let query = admin
     .from("editorial_learning_suggestions")
     .select("id,client_id,project_id,piece_id,event_id,classification,proposed_outcome,dimensions,summary,lesson_content,explanation,before_excerpt,after_excerpt,proposed_scope,confidence,status,signal_id,memory_id,created_by,reviewed_by,reviewed_at,created_at,updated_at,content_pieces(title,content_type)")
     .eq("client_id", parsed.data.client_id)
@@ -70,8 +70,7 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const { data: suggestion, error } = await db
     .from("editorial_learning_suggestions")
     .select("*,content_pieces(title,body,content_type,content_brief)")
@@ -167,7 +166,7 @@ export const POST = withAuth(async (req, { user }) => {
     .from("editorial_learning_suggestions")
     .update({
       status: "proposed",
-      proposed_scope: proposedScope,
+      proposed_scope: proposedScope as Json,
       signal_id: signalId,
       updated_at: new Date().toISOString(),
     })
@@ -191,8 +190,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
 
   if (parsed.data.action === "approve") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (admin as any)
+    const { data, error } = await admin
       .rpc("approve_editorial_learning_suggestion", {
         p_client_id: parsed.data.client_id,
         p_suggestion_id: parsed.data.id,
@@ -206,8 +204,7 @@ export const PATCH = withAuth(async (req, { user }) => {
       const vectors = await embedTexts([approved.lesson_content]);
       const vector = vectors?.[0];
       if (vector?.length) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: embeddingError } = await (admin as any)
+        const { error: embeddingError } = await admin
           .from("brain_memory")
           .update({
             embedding: vector,
@@ -223,8 +220,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     return NextResponse.json(data);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("editorial_learning_suggestions")
     .update({
       status: "rejected",

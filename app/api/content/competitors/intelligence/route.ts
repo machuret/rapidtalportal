@@ -7,6 +7,7 @@ import { chatModel, chatProvider } from "@/lib/brain/llm";
 import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { captureError } from "@/lib/error-tracking";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/types/database";
 import {
   finishAnalysisAttempt,
   recordWorkflowEvent,
@@ -93,8 +94,7 @@ async function loadState(clientId: string): Promise<{
 }> {
   const admin = createAdminClient();
   // Migration 103 is service-role-only; the tenant boundary is checked first.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const [{ data: row, error }, { data: job, error: jobError }] = await Promise.all([
     db
       .from("competitor_intelligence_runs")
@@ -226,8 +226,7 @@ export const POST = withAuth(async (request, { user }) => {
   }
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const recordPreflightFailure = async (code: string, details: Record<string, unknown>) => {
     await recordWorkflowEvent(db, {
       clientId: parsed.data.client_id,
@@ -794,7 +793,7 @@ ${rendered.text}`,
       p_lease_token: job.lease_token,
       p_source_evidence: snapshots,
       p_source_character_count: rendered.characterCount,
-      p_company_evidence: companySources,
+      p_company_evidence: companySources as unknown as Json,
       p_analysis: bounded,
       p_model: model,
     },

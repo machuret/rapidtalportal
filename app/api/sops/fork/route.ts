@@ -35,14 +35,13 @@ export const POST = withAuth(
 
     const source = src as {
       id: string; title: string; category: string; body: string; client_id: string | null;
-      steps: unknown; intro: string | null; prerequisites: string[] | null; version: number;
+      steps: { title: string; detail: string; tip?: string }[] | null; intro: string | null; prerequisites: string[] | null; version: number;
     };
     // Only the global library, or the caller's own client, may be forked.
     const readable = source.client_id === null || source.client_id === user.client_id || user.role === "super_admin";
     if (!readable) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (admin as any)
+    const { data, error } = await admin
       .from("sops")
       .insert({
         client_id:  user.client_id,

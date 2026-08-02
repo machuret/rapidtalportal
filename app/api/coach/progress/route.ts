@@ -55,8 +55,7 @@ export const GET = withAuth(async (req, { user, impersonating }) => {
   if (!parsedClient.success) return NextResponse.json({ error: "Invalid clientId." }, { status: 400 });
   const denied = assertClientAccess(user, parsedClient.data);
   if (denied) return denied;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 138 precedes generated schema refresh
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const [goals, commitments] = await Promise.all([
     db.from("coach_goals").select("id,title,outcome,status,progress,target_date,achieved_at,updated_at")
       .eq("client_id", parsedClient.data).eq("owner_id", user.id)
@@ -78,8 +77,7 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid coaching item." }, { status: 422 });
   const denied = assertClientAccess(user, parsed.data.clientId);
   if (denied) return denied;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 138 precedes generated schema refresh
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const result = parsed.data.kind === "goal"
     ? await db.rpc("create_coach_goal", {
       p_client_id: parsed.data.clientId, p_owner_id: user.id, p_title: parsed.data.title,
@@ -104,8 +102,7 @@ export const PATCH = withAuth(async (req, { user, impersonating }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid coaching update." }, { status: 422 });
   const denied = assertClientAccess(user, parsed.data.clientId);
   if (denied) return denied;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 138 precedes generated schema refresh
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const result = parsed.data.kind === "goal"
     ? await db.rpc("update_coach_goal", {
       p_client_id: parsed.data.clientId, p_owner_id: user.id, p_goal_id: parsed.data.id,

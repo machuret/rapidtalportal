@@ -11,6 +11,8 @@ import {
   contentProjectStepSchema,
 } from "@/lib/content/project-schema";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 import {
   recordWorkflowEvent,
   type PilotDbClient,
@@ -54,8 +56,7 @@ function sameSet(left: string[], right: string[]): boolean {
 }
 
 async function verifyMarketIntelligence(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
+  db: SupabaseClient<Database>,
   clientId: string,
   provenance: MarketIntelligence,
 ): Promise<string | null> {
@@ -183,8 +184,7 @@ const updateSchema = z.object({
 );
 
 async function loadProjectStyleSnapshot(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
+  db: SupabaseClient<Database>,
   clientId: string,
   channel: string,
   brief: z.infer<typeof contentBriefSchema>,
@@ -251,8 +251,7 @@ export const GET = withAuth(async (req, { user }) => {
   const columns = "id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,brain_context_snapshot_id,last_operation,last_error_code,last_error_message,last_error_at,last_generation_warnings,created_at,updated_at";
   if (!parsed.data.id) {
     const paged = searchParams.has("offset") || searchParams.has("limit");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 118 columns precede generated schema snapshot
-    const { data, error } = await (db as any)
+    const { data, error } = await db
       .from("content_projects")
       .select(columns)
       .eq("client_id", parsed.data.client_id)
@@ -270,8 +269,7 @@ export const GET = withAuth(async (req, { user }) => {
     });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 118 columns precede generated schema snapshot
-  const { data: project, error } = await (db as any)
+  const { data: project, error } = await db
     .from("content_projects")
     .select(columns)
     .eq("id", parsed.data.id)
@@ -335,8 +333,7 @@ export const POST = withAuth(async (req, { user }) => {
   }
   let inheritedBrainContextSnapshotId = parsed.data.idea.brainContextSnapshotId ?? null;
   if (parsed.data.idea.topicId) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: topic, error: topicError } = await (db as any)
+    const { data: topic, error: topicError } = await db
       .from("content_topics")
       .select("id,brain_context_snapshot_id")
       .eq("id", parsed.data.idea.topicId)
@@ -361,8 +358,7 @@ export const POST = withAuth(async (req, { user }) => {
   // instead of creating permanent twins (all six Studio surfaces share this).
   const recoveryColumns = "id,client_id,title,status,current_step,idea_snapshot,content_brief,vault_source_ids,vault_source_references,competitor_signals,style_snapshot,current_piece_id,brain_context_snapshot_id,last_operation,last_error_code,last_error_message,last_error_at,last_generation_warnings,created_at,updated_at";
   if (parsed.data.idea.topicId) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: existingProject, error: existingError } = await (db as any)
+    const { data: existingProject, error: existingError } = await db
       .from("content_projects")
       .select(recoveryColumns)
       .eq("client_id", parsed.data.client_id)
@@ -374,8 +370,7 @@ export const POST = withAuth(async (req, { user }) => {
     if (existingError) return serverError(existingError);
     if (existingProject) return NextResponse.json(existingProject, { status: 200 });
   } else if (market) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: existingProject, error: existingError } = await (db as any)
+    const { data: existingProject, error: existingError } = await db
       .from("content_projects")
       .select(recoveryColumns)
       .eq("client_id", parsed.data.client_id)
@@ -390,8 +385,7 @@ export const POST = withAuth(async (req, { user }) => {
   }
   // The validated Zod object contains nested JSON that the generated Supabase
   // type cannot narrow to its recursive Json alias.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (db as any)
+  const { data, error } = await db
     .from("content_projects")
     .insert({
       client_id: parsed.data.client_id,
@@ -478,8 +472,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "Generate the connected draft before continuing." }, { status: 422 });
   }
   if (parsed.data.current_step === "approve") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: validationIsCurrent, error: validationError } = await (db as any)
+    const { data: validationIsCurrent, error: validationError } = await db
       .rpc("content_project_validation_is_current", {
         p_client_id: parsed.data.client_id,
         p_project_id: parsed.data.id,
@@ -556,10 +549,10 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   // Dynamic update shape is validated above; Supabase's generated type cannot
   // express this discriminated partial without collapsing JSON fields.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (db as any)
+  const { data, error } = await db
     .from("content_projects")
-    .update(updates)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(updates as any)
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
     .eq("updated_at", parsed.data.expected_updated_at)

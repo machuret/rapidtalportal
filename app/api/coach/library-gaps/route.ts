@@ -32,8 +32,7 @@ export const POST = withAuth(async (request, { user, impersonating }) => {
 
   // The snapshot proves that this suggestion came from the signed-in owner's
   // private Coach turn. A user cannot submit another person's question.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 140 precedes generated types
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const snapshot = await db.from("brain_context_snapshots")
     .select("id,created_by,snapshot")
     .eq("id", parsed.data.snapshotId)
@@ -43,7 +42,10 @@ export const POST = withAuth(async (request, { user, impersonating }) => {
   if (!snapshot.data || snapshot.data.created_by !== user.id) {
     return NextResponse.json({ error: "Private Coach snapshot not found." }, { status: 404 });
   }
-  const actor = snapshot.data.snapshot?.request?.actor;
+  const snapshotPayload = snapshot.data.snapshot as {
+    request?: { actor?: { conversationVisibility?: string } };
+  } | null;
+  const actor = snapshotPayload?.request?.actor;
   if (actor?.conversationVisibility !== "private_coach") {
     return NextResponse.json({ error: "Only private Coach topics can be suggested here." }, { status: 409 });
   }

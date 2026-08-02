@@ -26,8 +26,7 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   if (parsed.data.id) {
     const { data, error } = await db
       .from("competitor_content_items")

@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { DbUser, DbClient } from "@/types/database";
+import type { DbUser, DbClient, Database } from "@/types/database";
+import type { SupabaseClient } from "@supabase/supabase-js";
 // Canonical name lives in lib/impersonation (dependency-free). Imported for use
 // below and re-exported so existing `import { IMPERSONATE_COOKIE } from "@/lib/auth"`
 // callers keep working.
@@ -24,8 +25,7 @@ export interface CurrentUserAndClient {
   actualUser?: DbUser;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function loadClient(admin: any, clientId: string | null): Promise<DbClient | null> {
+async function loadClient(admin: SupabaseClient<Database>, clientId: string | null): Promise<DbClient | null> {
   if (!clientId) return null;
   const { data } = await admin
     .from("clients")

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json, TablesUpdate } from "@/types/database";
 import { hasContentCapability } from "@/lib/auth/content-capabilities";
 
 const createSchema = z.object({
@@ -62,8 +63,7 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("content_topics")
     .select("id, title, description, content_type, status, created_at, created_by, approved_by, approved_at, why, ai_fit_score, ai_flagged, brain_context_snapshot_id")
     .eq("client_id", parsed.data.client_id)
@@ -98,8 +98,7 @@ export const POST = withAuth(async (req, { user }) => {
   const approvedAt = parsed.data.status === "approved"
     ? new Date().toISOString()
     : null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("content_topics")
     .insert({
       client_id:    parsed.data.client_id,
@@ -109,7 +108,7 @@ export const POST = withAuth(async (req, { user }) => {
       created_by:   user.id,
       ai_fit_score: parsed.data.ai_fit_score ?? null,
       ai_flagged:   parsed.data.ai_flagged ?? false,
-      why:          parsed.data.why ?? null,
+      why:          (parsed.data.why ?? null) as Json,
       brain_context_snapshot_id: parsed.data.brain_context_snapshot_id ?? null,
       status:       parsed.data.status,
       approved_by:  parsed.data.status === "approved" ? user.id : null,
@@ -128,8 +127,7 @@ export const POST = withAuth(async (req, { user }) => {
   if (parsed.data.status === "approved" && data) {
     const artifactText = [data.title, data.description].filter(Boolean).join(" — ").slice(0, 8000);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: signalError } = await (admin as any).from("brain_signals").insert({
+      const { error: signalError } = await admin.from("brain_signals").insert({
         client_id: parsed.data.client_id,
         user_id: user.id,
         surface: "content_topic",
@@ -169,7 +167,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   }
 
   const admin = createAdminClient();
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const updates: TablesUpdate<"content_topics"> = { updated_at: new Date().toISOString() };
   if (parsed.data.status !== undefined) {
     updates.status = parsed.data.status;
     if (parsed.data.status === "approved") {
@@ -182,8 +180,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (parsed.data.flagged !== undefined) updates.flagged = parsed.data.flagged;
   if (parsed.data.flag_reason !== undefined) updates.flag_reason = parsed.data.flag_reason;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("content_topics")
     .update(updates)
     .eq("id", parsed.data.id)
@@ -203,8 +200,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   if ((isNegative || isPositive) && data) {
     const artifactText = [data.title, data.description].filter(Boolean).join(" — ").slice(0, 8000);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: signalError } = await (admin as any).from("brain_signals").insert({
+      const { error: signalError } = await admin.from("brain_signals").insert({
         client_id:     parsed.data.client_id,
         user_id:       user.id,
         surface:       "content_topic",
@@ -242,8 +238,7 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (!canApprove) {
     // A VA may withdraw only an idea they personally submitted while it is
     // still pending. Approved/rejected ideas remain client-admin decisions.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: topic, error: topicError } = await (admin as any)
+    const { data: topic, error: topicError } = await admin
       .from("content_topics")
       .select("id,status,created_by")
       .eq("id", parsed.data.id)
@@ -258,8 +253,7 @@ export const DELETE = withAuth(async (req, { user }) => {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any)
+  const { error } = await admin
     .from("content_topics")
     .delete()
     .eq("id", parsed.data.id)

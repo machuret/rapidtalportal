@@ -43,8 +43,7 @@ export async function notify(recipientIds: string[], n: NotificationInput): Prom
   if (category || wantEmail) {
     try {
       const admin = createAdminClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (admin as any).from("users").select("id, email, notification_prefs").in("id", unique);
+      const { data } = await admin.from("users").select("id, email, notification_prefs").in("id", unique);
       for (const r of (data ?? []) as { id: string; email: string | null; notification_prefs: NotificationPrefs | null }[]) {
         info.set(r.id, { email: r.email ?? null, prefs: r.notification_prefs ?? {} });
       }

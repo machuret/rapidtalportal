@@ -62,8 +62,7 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("sops")
     .insert({
       client_id:   clientId,
@@ -126,10 +125,11 @@ export const PATCH = withAuth(async (req, { user }) => {
     || parsed.data.intro !== undefined || parsed.data.prerequisites !== undefined;
   if (contentChanged) updates.version = (cur.version ?? 1) + 1;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("sops")
-    .update(updates)
+    // Dynamic key bag built from the validated PATCH body (Object.entries loop).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(updates as any)
     .eq("id", id)
     .select(SELECT)
     .single();
@@ -161,8 +161,7 @@ export const DELETE = withAuth(async (req, { user }) => {
 
   // Soft delete — stamp deleted_at so the SOP leaves every list but stays
   // recoverable, and any fork's forked_from pointer survives.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any)
+  const { error } = await admin
     .from("sops")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", parsed.data.id);

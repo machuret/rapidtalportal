@@ -12,8 +12,7 @@ type Admin = SupabaseClient;
 export async function loadBrandStyle(admin: Admin, clientId: string) {
   // content_style_analyses is service-role-only; page auth fixes the client
   // boundary before this server-side read.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const [{ data: brandStyle, error: styleError }, { data: styleAnalyses, error: analysesError }] = await Promise.all([
     admin
       .from("company_dna")

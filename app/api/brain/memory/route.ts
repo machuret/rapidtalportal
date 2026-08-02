@@ -4,6 +4,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json, TablesUpdate } from "@/types/database";
 import {
   isBrainMemoryScopeExpansion,
   normalizeBrainMemoryScope,
@@ -45,8 +46,7 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("brain_memory")
     .select("id,kind,content,confidence,source_count,active,pinned,status,scope,created_at,first_observed_at,last_confirmed_at,approved_by,approved_at,contradiction_status,contradicts_memory_id,conflict_summary,lineage_complete")
     .eq("client_id", parsed.data.client_id)
@@ -60,8 +60,7 @@ export const GET = withAuth(async (req, { user }) => {
   const memories = (data ?? []) as Array<Record<string, unknown> & { id: string; approved_by?: string | null; contradicts_memory_id?: string | null }>;
   // Phase 2 tables are added by migration 122 and are not in the generated
   // Supabase type snapshot yet.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const phaseTwoAdmin = admin as any;
+  const phaseTwoAdmin = admin;
   const memoryIds = memories.map((memory) => memory.id);
   const approverIds = Array.from(new Set(memories.flatMap((memory) =>
     typeof memory.approved_by === "string" ? [memory.approved_by] : []
@@ -129,13 +128,12 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   const admin = createAdminClient();
   if (parsed.data.conflict_action) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (admin as any).rpc("resolve_brain_memory_conflict", {
+    const { data, error } = await admin.rpc("resolve_brain_memory_conflict", {
       p_client_id: parsed.data.client_id,
       p_memory_id: parsed.data.id,
       p_action: parsed.data.conflict_action,
       p_actor_id: user.id,
-      p_resolution: parsed.data.resolution ?? {},
+      p_resolution: (parsed.data.resolution ?? {}) as Json,
     });
     if (error) return serverError(error);
     return NextResponse.json(data);
@@ -143,8 +141,7 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   // Read the current row before deciding whether a scope change broadens the
   // lesson. Broadening can never silently change production behavior.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: current, error: currentError } = await (admin as any)
+  const { data: current, error: currentError } = await admin
     .from("brain_memory")
     .select("scope,status,lineage_complete,contradiction_status")
     .eq("id", parsed.data.id)
@@ -152,7 +149,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .single();
   if (currentError) return serverError(currentError);
 
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const updates: TablesUpdate<"brain_memory"> = { updated_at: new Date().toISOString() };
   let scopeExpanded = false;
   if (parsed.data.pinned !== undefined) updates.pinned = parsed.data.pinned;
   if (parsed.data.content !== undefined) updates.content = parsed.data.content;
@@ -161,7 +158,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     if (!scope.global && !scope.surfaces?.length) {
       return NextResponse.json({ error: "A lesson needs a surface or explicit global scope." }, { status: 422 });
     }
-    updates.scope = scope;
+    updates.scope = scope as Json;
     scopeExpanded = isBrainMemoryScopeExpansion(current.scope, scope);
     if (scopeExpanded) {
       updates.status = "proposed";
@@ -199,8 +196,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("brain_memory")
     .update(updates)
     .eq("id", parsed.data.id)
@@ -229,8 +225,7 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any)
+  const { error } = await admin
     .from("brain_memory")
     .delete()
     .eq("id", parsed.data.id)

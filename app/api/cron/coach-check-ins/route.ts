@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/types/database";
 import { chatProvider, chatModel } from "@/lib/brain/llm";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +18,7 @@ type ClaimedCheckIn = {
   goal_id: string | null;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated schema follows migration 139
-async function recordHeartbeat(admin: any, detail: Record<string, unknown>) {
+async function recordHeartbeat(admin: SupabaseClient<Database>, detail: Json) {
   const result = await admin.from("cron_heartbeats").upsert({
     name: "coach-check-ins", ran_at: new Date().toISOString(), detail,
   });
@@ -29,8 +30,7 @@ async function recordHeartbeat(admin: any, detail: Record<string, unknown>) {
 // when the model is unavailable, fails, or answers empty — the caller then
 // delivers with p_message NULL and the notification falls back to the
 // commitment text. Only the commitment owner's own data enters the prompt.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated schema follows migration 139
-async function composeCheckInMessage(admin: any, item: ClaimedCheckIn): Promise<string | null> {
+async function composeCheckInMessage(admin: SupabaseClient<Database>, item: ClaimedCheckIn): Promise<string | null> {
   const llm = chatProvider();
   if (!llm) return null;
   try {
@@ -89,8 +89,7 @@ export async function GET(req: NextRequest) {
   if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 138 precedes generated schema refresh
-  const admin = createAdminClient() as any;
+  const admin = createAdminClient();
   const claimed = await admin.rpc("claim_due_coach_check_ins", { p_limit: 100 });
   if (claimed.error) {
     await recordHeartbeat(admin, { claimed: 0, delivered: 0, failed: 1, stage: "claim" });

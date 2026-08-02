@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { TablesUpdate } from "@/types/database";
 import { withSuperAdmin } from "@/lib/api/with-auth";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 
@@ -78,15 +79,14 @@ export const PATCH = withSuperAdmin<{ id: string }>(async (req, { params, user }
   const admin = createAdminClient();
 
   const { archived, content_pilot_enabled: pilotEnabled, company_profile: companyProfile, ...rest } = parsed.data;
-  const updates: Record<string, unknown> = { ...rest };
+  const updates: TablesUpdate<"clients"> = { ...rest };
   if (archived !== undefined) updates.archived_at = archived ? new Date().toISOString() : null;
   if (pilotEnabled !== undefined) {
     updates.content_pilot_enabled = pilotEnabled;
     updates.content_pilot_started_at = pilotEnabled ? new Date().toISOString() : null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const clientQuery = Object.keys(updates).length
     ? db
       .from("clients")
@@ -157,8 +157,7 @@ export const DELETE = withSuperAdmin<{ id: string }>(async (_req, { params }) =>
     .select("id")
     .eq("client_id", params.id);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any)
+  const { error } = await admin
     .from("clients")
     .delete()
     .eq("id", params.id);

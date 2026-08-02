@@ -3,6 +3,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/types/database";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 
@@ -24,8 +25,7 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: source, error } = await (admin as any)
+  const { data: source, error } = await admin
     .from("content_pieces")
     .select("project_id,title,body,content_brief,updated_at")
     .eq("id", parsed.data.id)
@@ -104,8 +104,7 @@ export const POST = withAuth(async (req, { user }) => {
     }
     // Supabase's generated client cannot infer the newly introduced migration
     // until production types are refreshed.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = admin as any;
+    const db = admin;
     const { data: connectedPiece, error: insertError } = await db
       .rpc("create_content_project_derived_draft", {
         p_client_id: parsed.data.client_id,
@@ -115,9 +114,9 @@ export const POST = withAuth(async (req, { user }) => {
         p_content_type: parsed.data.target_type,
         p_title: `${source.title} — ${parsed.data.target_type}`.slice(0, 300),
         p_body: generated.body,
-        p_content_brief: adaptedBrief,
-        p_source_references: generated.sources ?? [],
-        p_style_snapshot: generated.styleSnapshot,
+        p_content_brief: adaptedBrief as unknown as Json,
+        p_source_references: (generated.sources ?? []) as Json,
+        p_style_snapshot: generated.styleSnapshot as Json,
         p_generation_kind: "adaptation",
       })
       .single();

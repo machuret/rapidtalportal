@@ -210,8 +210,7 @@ export async function runCoachProactiveForClient(
   clientId: string,
   today = new Date().toISOString().slice(0, 10),
 ): Promise<{ owners: number; suggested: number; quiet: number; recent: number; failed: number }> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- coach tables follow generated types
-  const db = admin as any;
+  const db = admin;
   const out = { owners: 0, suggested: 0, quiet: 0, recent: 0, failed: 0 };
 
   const { data: admins, error: adminsError } = await db
@@ -365,8 +364,7 @@ export async function runCoachProactiveForClient(
 
 /** Clients ordered by least-recent proactive suggestion (never first). */
 export async function selectProactiveClients(admin: Admin, limit: number): Promise<string[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- coach tables follow generated types
-  const db = admin as any;
+  const db = admin;
   const { data: clients, error } = await db
     .from("clients").select("id").is("archived_at", null).limit(500);
   if (error || !clients?.length) return [];

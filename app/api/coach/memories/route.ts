@@ -18,8 +18,7 @@ export const GET = withAuth(async (request, { user, impersonating }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid clientId." }, { status: 400 });
   const denied = assertClientAccess(user, parsed.data);
   if (denied) return denied;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 140 precedes generated types
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const result = await db.from("coach_memories")
     .select("id,kind,content,status,source_turn_id,created_at,updated_at")
     .eq("client_id", parsed.data).eq("owner_id", user.id)
@@ -38,8 +37,7 @@ export const PATCH = withAuth(async (request, { user, impersonating }) => {
   }
   const denied = assertClientAccess(user, parsed.data.clientId);
   if (denied) return denied;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 140 precedes generated types
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const updates = { ...(parsed.data.status ? { status: parsed.data.status } : {}), ...(parsed.data.content ? { content: parsed.data.content } : {}), updated_at: new Date().toISOString() };
   const result = await db.from("coach_memories").update(updates)
     .eq("id", parsed.data.id).eq("client_id", parsed.data.clientId).eq("owner_id", user.id)
@@ -57,8 +55,7 @@ export const DELETE = withAuth(async (request, { user, impersonating }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid memory." }, { status: 422 });
   const denied = assertClientAccess(user, parsed.data.clientId);
   if (denied) return denied;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 140 precedes generated types
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const result = await db.from("coach_memories").delete()
     .eq("id", parsed.data.id).eq("client_id", parsed.data.clientId).eq("owner_id", user.id);
   if (result.error) return serverError(result.error);

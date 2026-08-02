@@ -6,6 +6,7 @@ import { serverError } from "@/lib/api/errors";
 import { isCollectableLinkedinCompanyUrl, resolveCompetitorUrl } from "@/lib/competitors/urls";
 import { competitorSourceMatchesIdentity } from "@/lib/competitors/readiness";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { TablesUpdate } from "@/types/database";
 import { rolesWithContentCapability } from "@/lib/auth/content-capabilities";
 
 const MANAGER_ROLES = rolesWithContentCapability("manage_competitors");
@@ -54,8 +55,7 @@ export const POST = withAuth(async (req, { user }) => {
 
   const admin = createAdminClient();
   // Migration 095 tables are accessed before the next generated-type refresh.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const { data: competitor, error: competitorError } = await db
     .from("competitors")
     .select("id, refresh_cadence, website_url")
@@ -121,10 +121,9 @@ export const PATCH = withAuth(async (req, { user }) => {
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
 
-  const updates: Record<string, unknown> = {};
+  const updates: TablesUpdate<"competitor_sources"> = {};
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const { data: current, error: currentError } = await db
     .from("competitor_sources")
     .select("id, source_type, platform, normalized_url, refresh_cadence, competitors!inner(refresh_cadence)")
@@ -204,8 +203,7 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("competitor_sources")
     .delete()
     .eq("id", parsed.data.id)

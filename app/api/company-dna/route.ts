@@ -113,8 +113,7 @@ export const POST = withAuth(async (req, { user }) => {
     // Row exists — update only the submitted fields
     ({ data, error } = await admin
       .from("company_dna")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 146 precedes generated schema snapshot
-      .update({ ...fields, updated_at: updatedAt } as any)
+      .update({ ...fields, updated_at: updatedAt })
       .eq("client_id", client_id)
       .select()
       .single());
@@ -122,8 +121,7 @@ export const POST = withAuth(async (req, { user }) => {
     // No row yet — insert with all required columns including extra
     ({ data, error } = await admin
       .from("company_dna")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 146 precedes generated schema snapshot
-      .insert({ client_id, ...fields, extra: fields.extra ?? {}, updated_at: updatedAt } as any)
+      .insert({ client_id, ...fields, extra: fields.extra ?? {}, updated_at: updatedAt })
       .select()
       .single());
   }

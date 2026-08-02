@@ -42,8 +42,7 @@ export const GET = withAuth(async (req, { user }) => {
 
   const admin = createAdminClient();
   // Pilot tables precede the next generated Supabase type refresh.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const abandonedBefore = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const [
     { data: client, error: clientError },
@@ -96,9 +95,13 @@ export const GET = withAuth(async (req, { user }) => {
   const uniqueProjects = (type: string) =>
     new Set(eventRows.filter((row) => row.event_type === type).map((row) => row.project_id).filter(Boolean)).size;
   const attemptRows = (attempts ?? []) as AttemptRow[];
-  const totals = (feedback ?? []).reduce((acc: Record<string, number>, row: Record<string, number>) => {
-    for (const field of ["voice_accuracy", "idea_usefulness", "differentiation_quality", "source_trust", "workflow_ease"]) {
-      acc[field] = (acc[field] ?? 0) + row[field];
+  type FeedbackRow = {
+    voice_accuracy: number | null; idea_usefulness: number | null;
+    differentiation_quality: number | null; source_trust: number | null; workflow_ease: number | null;
+  };
+  const totals = (feedback ?? []).reduce((acc: Record<string, number>, row: FeedbackRow) => {
+    for (const field of ["voice_accuracy", "idea_usefulness", "differentiation_quality", "source_trust", "workflow_ease"] as const) {
+      acc[field] = (acc[field] ?? 0) + (row[field] ?? 0);
     }
     return acc;
   }, {});
@@ -108,7 +111,7 @@ export const GET = withAuth(async (req, { user }) => {
   let decidedEvaluations = 0;
   for (const row of evaluations ?? []) {
     if (!row.preferred_variant || row.preferred_variant === "tie") continue;
-    const chosen = row.assignment?.[row.preferred_variant];
+    const chosen = (row.assignment as Record<string, string> | null)?.[row.preferred_variant];
     if (chosen === "conditioned") conditionedWins++;
     decidedEvaluations++;
   }
@@ -169,8 +172,7 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const [
     { data: client, error: clientError },
     { data: project, error: projectError },

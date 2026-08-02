@@ -50,8 +50,7 @@ export const POST = withAuth(async (req, { user }) => {
   const targets: Target[] = [];
   if (parsed.data.ids?.length) {
     // Load the chosen backlog suggestions, scoped — never trust ids alone.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let q = (admin as any).from("sop_suggestions").select("id, title, category, client_id").in("id", parsed.data.ids).eq("status", "open");
+    let q = admin.from("sop_suggestions").select("id, title, category, client_id").in("id", parsed.data.ids).eq("status", "open");
     q = clientId === null ? q.is("client_id", null) : q.eq("client_id", clientId);
     const { data: rows } = await q;
     for (const s of (rows ?? []) as SuggestionRow[]) targets.push({ title: s.title, category: s.category, subcategory: null, suggestionId: s.id });
@@ -68,8 +67,7 @@ export const POST = withAuth(async (req, { user }) => {
       if (!draft) return { id: t.suggestionId, ok: false, error };
 
       const body = serializeSteps(draft.intro, draft.prerequisites, draft.steps);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: insErr } = await (admin as any)
+      const { error: insErr } = await admin
         .from("sops")
         .insert({
           client_id: clientId,
@@ -88,8 +86,7 @@ export const POST = withAuth(async (req, { user }) => {
       if (insErr) return { id: t.suggestionId, ok: false, error: insErr.message };
 
       if (t.suggestionId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (admin as any).from("sop_suggestions").update({ status: "created" }).eq("id", t.suggestionId);
+        await admin.from("sop_suggestions").update({ status: "created" }).eq("id", t.suggestionId);
       }
       return { id: t.suggestionId, ok: true };
     } catch (e) {

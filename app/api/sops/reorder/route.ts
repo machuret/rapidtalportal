@@ -42,8 +42,7 @@ export const POST = withAuth(
     // sequential loop ignored every result, so a partial failure went silent).
     const results = await Promise.all(
       parsed.data.items.map((item) =>
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (admin as any).from("sops").update({ order_index: item.order_index }).eq("id", item.id),
+        admin.from("sops").update({ order_index: item.order_index }).eq("id", item.id),
       ),
     );
     if (results.some((r) => r.error)) {

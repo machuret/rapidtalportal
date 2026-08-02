@@ -25,9 +25,17 @@ const EXCLUDED_PATHS = [
   "search",
 ];
 
-// Supabase's generated schema is intentionally updated after migration deployment.
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/types/database";
+
+/**
+ * Accepts BOTH the real admin client (SupabaseClient<Database>) and the
+ * structural jest mocks used in tests ({ from, rpc } only). The mock shape is
+ * deliberate — full SupabaseClient is too strict for lightweight mocks, and
+ * the mock shape alone is too loose for the generic-typed real client.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AdminClient = any;
+type AdminClient = SupabaseClient<Database> | { from: (table: string) => any; rpc: (fn: string, args?: any) => any };
 
 export interface IngestionSource extends CompetitorSource {
   competitor_name?: string;
@@ -821,7 +829,7 @@ export async function startCompetitorRefresh(
       const { error: stageError } = await admin.rpc("stage_competitor_crawl_pages", {
         p_job_id: job.id,
         p_lease_token: claimed.lease_token,
-        p_pages: inlinePages,
+        p_pages: inlinePages as unknown as Json,
         p_next_result_url: null,
         p_provider_complete: true,
         p_pages_discovered: inlinePages.length,
@@ -940,7 +948,7 @@ export async function advanceCompetitorCrawl(
       const { error: stageError } = await admin.rpc("stage_competitor_crawl_pages", {
         p_job_id: claimed.id,
         p_lease_token: leaseToken,
-        p_pages: readable,
+        p_pages: readable as unknown as Json,
         p_next_result_url: result.next,
         p_provider_complete: providerComplete,
         p_pages_discovered: result.total || result.completed,

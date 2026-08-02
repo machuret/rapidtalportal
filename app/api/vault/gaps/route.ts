@@ -52,8 +52,7 @@ export const POST = withAuth(
 
     const admin = createAdminClient();
     // vault_queries workflow columns follow the generated schema snapshot.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = admin as any;
+    const db = admin;
     let lookup = db
       .from("brain_knowledge_gaps")
       .select("id,normalized_topic,example_questions")
@@ -85,7 +84,6 @@ export const POST = withAuth(
       if (!query) {
         return NextResponse.json({ error: "No source question is linked to this gap." }, { status: 409 });
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await db.rpc("resolve_vault_gap_with_item", {
         p_gap_id: query.id,
         p_client_id: parsed.data.clientId,
@@ -104,7 +102,6 @@ export const POST = withAuth(
             importance: parsed.data.importance,
             recommended_source: parsed.data.recommendedSource,
           };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateQuery = db
       .from("brain_knowledge_gaps")
       .update(updates)

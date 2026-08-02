@@ -38,6 +38,8 @@ export const POST = withAuth(async (req, { user }) => {
   if (access) return access;
 
   const admin = createAdminClient();
+  // Live DB predates migration 027 (no `sources` column on vault_feedback) —
+  // probe with it, fall back without. Cast stays until the drift is resolved.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let { error } = await (admin as any).from("vault_feedback").insert({
     client_id: parsed.data.clientId,
@@ -50,8 +52,8 @@ export const POST = withAuth(async (req, { user }) => {
 
   // Pre-027 fallback: retry without the sources column so feedback never breaks.
   if (error && /sources/.test(error.message ?? "")) {
-    // eslint-disable-next-line no-extra-semi, @typescript-eslint/no-explicit-any
-    ;({ error } = await (admin as any).from("vault_feedback").insert({
+    // eslint-disable-next-line no-extra-semi
+    ;({ error } = await admin.from("vault_feedback").insert({
       client_id: parsed.data.clientId,
       user_id: user.id,
       question: parsed.data.question,
@@ -68,8 +70,7 @@ export const POST = withAuth(async (req, { user }) => {
   // Fold Ask-the-Vault feedback into the unified Brain learning loop, so the
   // Brain learns from answers too — not just content topics. Best-effort.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (admin as any).from("brain_signals").insert({
+    await admin.from("brain_signals").insert({
       client_id: parsed.data.clientId,
       user_id: user.id,
       surface: "vault_answer",
@@ -103,6 +104,8 @@ export const PATCH = withAuth(
     if (access) return access;
 
     const admin = createAdminClient();
+    // Live DB predates migration 027 (no `resolved` column on vault_feedback);
+    // the cast stays until the drift is resolved.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (admin as any)
       .from("vault_feedback")

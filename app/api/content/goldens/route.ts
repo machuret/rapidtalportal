@@ -37,8 +37,7 @@ export const GET = withAuth(async (request, { user }) => {
 
   const admin = createAdminClient();
   // Service-role access is intentional; the tenant boundary above is mandatory.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("content_golden_examples")
     .select(columns)
     .eq("client_id", parsed.data.client_id)
@@ -63,8 +62,7 @@ export const POST = withAuth(async (request, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("content_golden_examples")
     .insert({
       ...parsed.data,
@@ -135,10 +133,11 @@ export const PATCH = withAuth(async (request, { user }) => {
   }
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("content_golden_examples")
-    .update(updates)
+    // Validated key list above; the indexed loop keeps the bag dynamic.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(updates as any)
     .eq("id", parsed.data.id)
     .eq("client_id", parsed.data.client_id)
     .eq("updated_at", parsed.data.expected_updated_at)
@@ -171,8 +170,7 @@ export const DELETE = withAuth(async (request, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("content_golden_examples")
     .update({ status: "archived", updated_by: user.id, updated_at: new Date().toISOString() })
     .eq("id", parsed.data.id)

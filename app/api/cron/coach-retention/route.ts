@@ -10,8 +10,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration 137 precedes generated schema refresh
-  const admin = createAdminClient() as any;
+  const admin = createAdminClient();
   const { data, error } = await admin.rpc("purge_expired_coach_private_data");
   const deleted = typeof data === "number" ? data : 0;
   await admin.from("cron_heartbeats").upsert({

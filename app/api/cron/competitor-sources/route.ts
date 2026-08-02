@@ -21,8 +21,7 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient();
   // Migration 095 tables are accessed before the next generated-type refresh.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   let advanced = 0;
   let completed = 0;
   let started = 0;

@@ -40,8 +40,7 @@ export const POST = withAuth(async (req, { user }) => {
   let marked = 0;
   for (const row of (unread ?? []) as { id: string; read_by: string[] | null }[]) {
     const next = [...(row.read_by ?? []), user.id];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- read_by precedes generated schema snapshot
-    const { error: updateError } = await (admin as any)
+    const { error: updateError } = await admin
       .from("messages")
       .update({ read_by: next })
       .eq("id", row.id);

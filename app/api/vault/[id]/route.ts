@@ -131,8 +131,7 @@ export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
   // preserves these fields instead of overwriting them with AI values.
   const curating = updates.category !== undefined || updates.tags !== undefined;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: updateErr } = await (supabase as any)
+  const { error: updateErr } = await supabase
     .from("vault_items")
     .update({
       ...updates,

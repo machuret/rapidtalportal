@@ -119,8 +119,7 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
   if (denial === "coaching_progress_forbidden") return NextResponse.json({ error: "Private coaching progress is available only to signed-in Clients and VAs." }, { status: 403 });
   if (denial) return NextResponse.json({ error: "This role cannot update tasks." }, { status: 403 });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Coach RPC arrives before generated schema refresh
-  const db = createAdminClient() as any;
+  const db = createAdminClient();
   const { data: turn, error: turnError } = await db.from("coach_turns")
     .select("id")
     .eq("owner_id", user.id)

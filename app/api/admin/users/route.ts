@@ -51,8 +51,7 @@ export const POST = withSuperAdmin(async (req) => {
   // user was created above — a plain insert then collides on users_pkey. Upsert
   // updates that row with the chosen role/client/name, and still inserts cleanly
   // if no such trigger exists.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: userRow, error: dbError } = await (admin as any)
+  const { data: userRow, error: dbError } = await admin
     .from("users")
     .upsert(
       {
@@ -103,8 +102,7 @@ export const PATCH = withSuperAdmin(async (req) => {
   const admin = createAdminClient();
 
   // Fetch current state for the lockout guard + email rollback.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: current } = await (admin as any)
+  const { data: current } = await admin
     .from("users")
     .select("role, email")
     .eq("id", id)
@@ -125,8 +123,7 @@ export const PATCH = withSuperAdmin(async (req) => {
   }
 
   // Update the public.users row first.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("users")
     .update(updates)
     .eq("id", id)
@@ -144,8 +141,7 @@ export const PATCH = withSuperAdmin(async (req) => {
     const { error: authError } = await admin.auth.admin.updateUserById(id, { email: updates.email });
     if (authError) {
       console.error("[admin/users PATCH] Auth email update error:", authError.message);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (admin as any).from("users").update({ email: cur.email }).eq("id", id);
+      await admin.from("users").update({ email: cur.email }).eq("id", id);
       return NextResponse.json({ error: "Failed to update email in auth: " + authError.message }, { status: 500 });
     }
   }
@@ -177,8 +173,7 @@ export const DELETE = withSuperAdmin(async (req, { user }) => {
   const admin = createAdminClient();
 
   // Guard: never delete the last remaining super_admin.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: victim } = await (admin as any)
+  const { data: victim } = await admin
     .from("users")
     .select("role")
     .eq("id", parsed.data.id)
@@ -194,8 +189,7 @@ export const DELETE = withSuperAdmin(async (req, { user }) => {
   }
 
   // Delete from public.users first
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: dbError } = await (admin as any)
+  const { error: dbError } = await admin
     .from("users")
     .delete()
     .eq("id", parsed.data.id);

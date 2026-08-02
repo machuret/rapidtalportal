@@ -13,6 +13,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withAuth, withSuperAdmin } from "@/lib/api/with-auth";
 import { IMPERSONATE_COOKIE } from "@/lib/auth";
@@ -28,8 +30,7 @@ const COOKIE_OPTS = {
 
 // Best-effort audit write — never throws into the request path.
 async function logImpersonation(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  admin: any,
+  admin: SupabaseClient<Database>,
   entry: { actor_id: string; target_id: string | null; target_email: string | null; action: "start" | "stop" }
 ) {
   try {

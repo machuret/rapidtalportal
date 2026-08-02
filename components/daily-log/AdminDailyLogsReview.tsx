@@ -7,25 +7,24 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useSubmitDailyLogFeedback } from "@/hooks/useDailyLog";
-import { MOOD_META } from "@/lib/daily-logs/mood";
-import type { Mood } from "./DailyLogStudio";
+import { moodMeta } from "@/lib/daily-logs/mood";
 
-interface LogWithUser {
+export interface LogWithUser {
   id: string;
   log_date: string;
   user_id: string;
-  mood: Mood | null;
-  tasks_done: string;
-  positives: string;
-  challenges: string;
-  goals_achieved: string;
-  goals_tomorrow: string;
+  mood: string | null;
+  tasks_done: string | null;
+  positives: string | null;
+  challenges: string | null;
+  goals_achieved: string | null;
+  goals_tomorrow: string | null;
   admin_feedback: string | null;
   reviewed_at: string | null;
   users: { full_name: string | null; email: string } | null;
 }
 
-function Section({ label, value }: { label: string; value: string }) {
+function Section({ label, value }: { label: string; value: string | null }) {
   if (!value?.trim()) return null;
   return (
     <div>
@@ -66,13 +65,16 @@ function LogRow({ log, onFeedbackSaved }: { log: LogWithUser; onFeedbackSaved: (
             <p className="text-xs text-zinc-500">{format(parseISO(log.log_date), "EEEE, MMM d")}</p>
           </div>
           <div>
-            {log.mood ? (
-              <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${MOOD_META[log.mood].pill}`}>
-                {MOOD_META[log.mood].emoji} {MOOD_META[log.mood].label}
-              </span>
-            ) : (
-              <span className="text-xs text-zinc-600">No mood</span>
-            )}
+            {(() => {
+              const mood = moodMeta(log.mood);
+              return mood ? (
+                <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${mood.pill}`}>
+                  {mood.emoji} {mood.label}
+                </span>
+              ) : (
+                <span className="text-xs text-zinc-600">No mood</span>
+              );
+            })()}
           </div>
           <div className="flex items-center gap-2 justify-end">
             {isReviewed ? (

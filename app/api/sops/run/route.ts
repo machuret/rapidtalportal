@@ -37,8 +37,7 @@ export const POST = withAuth(async (req, { user }) => {
   }
   const sopVersion = sopRow.version ?? null;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("sop_runs")
     .insert({
       sop_id: parsed.data.sopId,
@@ -62,8 +61,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input." }, { status: 422 });
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any)
+  const { error } = await admin
     .from("sop_runs")
     .update({
       steps_done: parsed.data.stepsDone,

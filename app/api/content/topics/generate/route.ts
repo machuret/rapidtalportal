@@ -122,8 +122,7 @@ export const POST = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
   // These are service-role reads behind the authenticated tenant boundary.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   let brainContextSnapshotId: string | null = null;
   let structuredBrain: Awaited<ReturnType<typeof resolveNodeBrainContext>> | null = null;
   let brain: {

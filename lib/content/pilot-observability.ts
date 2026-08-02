@@ -1,9 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { captureError } from "@/lib/error-tracking";
 
+// Structural minimum for the observability helpers, so tests can stub it.
+// Params are `any` (bivariant) so the typed SupabaseClient<Database> — whose
+// from()/rpc() only accept known table/function names — stays assignable.
 export type PilotDbClient = {
-  from: (table: string) => any;
-  rpc: (name: string, args: Record<string, unknown>) => any;
+  from: (table: any) => any;
+  rpc: (name: any, args: any) => any;
 };
 
 export type AnalysisAttempt = {

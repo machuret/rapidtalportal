@@ -19,9 +19,10 @@ import {
   contentQualityWarnings,
 } from "@/supabase/functions/_shared/content-quality";
 import { recordEditorialRevision } from "@/lib/brain/editorial-events";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/types/database";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function approvedStyleProfile(db: any, clientId: string, channel: string) {
+async function approvedStyleProfile(db: SupabaseClient<Database>, clientId: string, channel: string) {
   return db
     .from("content_style_analyses")
     .select("id,channel,analysis,source_item_ids,source_evidence,analysed_at,approved_at")
@@ -79,8 +80,7 @@ export const POST = withAuth(async (req, { user }) => {
   const admin = createAdminClient();
   // Capture the current style authority even for drafts promoted from Compose.
   // Missing DNA is allowed at draft time, but a database failure is not.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const [
     { data: dna, error: dnaError },
     { data: styleProfile, error: styleProfileError },
@@ -105,8 +105,7 @@ export const POST = withAuth(async (req, { user }) => {
     typeof dna?.updated_at === "string" ? dna.updated_at : null,
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("content_pieces")
     .insert({
       client_id: parsed.data.client_id,
@@ -153,8 +152,7 @@ export const GET = withAuth(async (req, { user }) => {
 
   if (parsed.data.id) {
     // Single piece with full body
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (admin as any)
+    const { data, error } = await admin
       .from("content_pieces")
       .select("id, client_id, project_id, content_type, title, brief, body, status, content_brief, source_references, style_snapshot, parent_piece_id, generation_kind, created_by, created_at, updated_at")
       .eq("id", parsed.data.id)
@@ -171,8 +169,7 @@ export const GET = withAuth(async (req, { user }) => {
   }
 
   // List (no body for performance)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("content_pieces")
     .select("id, project_id, content_type, title, status, generation_kind, parent_piece_id, created_at")
     .eq("client_id", parsed.data.client_id)
@@ -217,8 +214,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   // Read the exact version that will be passed to the atomic updater. It locks and
   // compares updated_at before committing, so validation can never approve a stale
   // body after another tab has edited it.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: current, error: currentError } = await (admin as any)
+  const { data: current, error: currentError } = await admin
     .from("content_pieces")
     .select("project_id, content_type, title, body, status, updated_at, source_references, style_snapshot, content_brief")
     .eq("id", parsed.data.id)
@@ -232,8 +228,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   // Prohibited terms, claims and explicit no-emoji policies are deterministic
   // approval gates. Natural-language style guidance remains visibly model-enforced.
   if (parsed.data.status === "approved") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = admin as any;
+    const db = admin;
     const [
       { data: dna, error: dnaError },
       { data: styleProfile, error: styleProfileError },
@@ -299,8 +294,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any).rpc("update_content_piece_atomic", {
+  const { data, error } = await admin.rpc("update_content_piece_atomic", {
     p_client_id: parsed.data.client_id,
     p_piece_id: parsed.data.id,
     p_actor_id: user.id,
@@ -311,7 +305,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     p_update_body: parsed.data.body !== undefined,
     p_expected_piece_updated_at: parsed.data.expected_updated_at ?? current.updated_at,
     p_expected_dna_updated_at: dnaUpdatedAt,
-    p_style_snapshot: styleSnapshot,
+    p_style_snapshot: styleSnapshot as Json,
   })
     .single();
 
@@ -394,8 +388,8 @@ export const PATCH = withAuth(async (req, { user }) => {
         beforeBody: current.body ?? "",
         afterBody: piece.body ?? "",
         channel: current.content_type,
-        contentType: typeof current.content_brief?.desiredFormat === "string"
-          ? current.content_brief.desiredFormat
+        contentType: typeof (current.content_brief as { desiredFormat?: unknown } | null)?.desiredFormat === "string"
+          ? (current.content_brief as { desiredFormat: string }).desiredFormat
           : current.content_type,
       });
     }

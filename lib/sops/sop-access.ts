@@ -6,6 +6,8 @@
  */
 import { NextResponse } from "next/server";
 import { assertClientAccess, type ApiUser } from "@/lib/api-auth";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 
 /** Authorise a write against a SOP's scope. Returns an error response or null. */
 export function authorizeScope(user: ApiUser, clientId: string | null): NextResponse | null {
@@ -21,8 +23,7 @@ export function authorizeScope(user: ApiUser, clientId: string | null): NextResp
   return assertClientAccess(user, clientId);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function syncSopAccess(admin: any, sopId: string, clientId: string | null, visibility: string, accessUserIds: string[] | undefined): Promise<void> {
+export async function syncSopAccess(admin: SupabaseClient<Database>, sopId: string, clientId: string | null, visibility: string, accessUserIds: string[] | undefined): Promise<void> {
   await admin.from("sop_access").delete().eq("sop_id", sopId);
   if (visibility !== "restricted" || !accessUserIds?.length) return;
   const { data: users } = await admin.from("users").select("id, role, client_id").in("id", accessUserIds.slice(0, 1000));

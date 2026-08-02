@@ -174,8 +174,7 @@ async function loadStyleAnalysis(clientId: string): Promise<StyleAnalysisRespons
   const admin = createAdminClient();
   // These tables are intentionally service-role only. The authenticated
   // tenant boundary is enforced before this loader is called.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const [
     { data: rows, error: analysisError },
     { data: sourceRows, error: sourceError },
@@ -302,8 +301,7 @@ export const POST = withAuth(async (request, { user }) => {
   }
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const { data: sourceRows, error: sourceError } = await db
     .from("vault_items")
     .select("id,title,source_url,raw_content,status,tags,created_at")
@@ -559,7 +557,7 @@ Every conclusion must be concise and evidence-based. Evidence IDs must exactly m
 
   return NextResponse.json({
     success: true,
-    draft: recordFromRow(saved as AnalysisRow),
+    draft: recordFromRow(saved as unknown as AnalysisRow),
   });
 });
 
@@ -577,8 +575,7 @@ export const PATCH = withAuth(async (request, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const { data: current, error: currentError } = await db
     .from("content_style_analyses")
     .select("*")
@@ -594,7 +591,7 @@ export const PATCH = withAuth(async (request, { user }) => {
   if (current.updated_at !== parsed.data.expected_updated_at) return conflict();
 
   const now = new Date().toISOString();
-  let draft = current as AnalysisRow;
+  let draft = current as unknown as AnalysisRow;
   if (current.status === "approved") {
     const { data: existingDraft, error: existingDraftError } = await db
       .from("content_style_analyses")
@@ -636,7 +633,7 @@ export const PATCH = withAuth(async (request, { user }) => {
         if (createError?.code === "23505") return conflict();
         return NextResponse.json({ error: "A review draft could not be created." }, { status: 500 });
       }
-      draft = created as AnalysisRow;
+      draft = created as unknown as AnalysisRow;
     }
   }
   if (!evidenceBelongsToSources(parsed.data.analysis, draft.source_item_ids ?? [])) {
@@ -677,12 +674,12 @@ export const PATCH = withAuth(async (request, { user }) => {
     }
     return NextResponse.json({
       success: true,
-      approved: recordFromRow(approved as AnalysisRow),
+      approved: recordFromRow(approved as unknown as AnalysisRow),
     });
   }
 
   return NextResponse.json({
     success: true,
-    draft: recordFromRow(saved as AnalysisRow),
+    draft: recordFromRow(saved as unknown as AnalysisRow),
   });
 });

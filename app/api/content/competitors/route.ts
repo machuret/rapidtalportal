@@ -55,8 +55,7 @@ export const GET = withAuth(async (req, { user }) => {
 
   const admin = createAdminClient();
   // Migration 095 tables are accessed before the next generated-type refresh.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const [
     { data: competitors, error },
     { data: sources, error: sourceError },
@@ -183,8 +182,7 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: id, error } = await (admin as any).rpc("create_competitor_with_source", {
+  const { data: id, error } = await admin.rpc("create_competitor_with_source", {
     p_client_id: parsed.data.client_id,
     p_actor_id: user.id,
     p_name: parsed.data.name,
@@ -215,8 +213,7 @@ export const PATCH = withAuth(async (req, { user }) => {
 
   const { client_id, id, ...updates } = parsed.data;
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const { data, error } = await db
     .from("competitors")
     .update(updates)
@@ -262,8 +259,7 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("competitors")
     .delete()
     .eq("id", parsed.data.id)

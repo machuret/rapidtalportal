@@ -16,6 +16,7 @@ import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { withAuth } from "@/lib/api/with-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { TablesUpdate } from "@/types/database";
 import { authorizeScope } from "@/lib/sops/sop-access";
 
 const ADMIN = { roles: ["client_admin", "super_admin"] };
@@ -31,8 +32,7 @@ export const GET = withAuth(async (req, { user }) => {
   const denied = authorizeScope(user, clientId);
   if (denied) return denied;
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await scoped((admin as any).from("sop_categories").select("kind, name, parent"), clientId);
+  const { data } = await scoped(admin.from("sop_categories").select("kind, name, parent"), clientId);
   return NextResponse.json({ managed: (data ?? []) as { kind: string; name: string; parent: string | null }[] });
 }, ADMIN);
 
@@ -53,8 +53,7 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any).from("sop_categories").insert({
+  const { error } = await admin.from("sop_categories").insert({
     client_id: clientId,
     kind: parsed.data.kind,
     name: parsed.data.name.trim(),
@@ -92,18 +91,14 @@ export const PATCH = withAuth(async (req, { user }) => {
   // to omit it, orphaning the renamed subcategory from its category.
   let parent: string | null = null;
   if (parsed.data.kind === "subcategory") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: existing } = await scoped((admin as any).from("sop_categories").select("parent").eq("kind", "subcategory").eq("name", from), clientId).maybeSingle();
+    const { data: existing } = await scoped(admin.from("sop_categories").select("parent").eq("kind", "subcategory").eq("name", from), clientId).maybeSingle();
     parent = (existing as { parent: string | null } | null)?.parent ?? null;
   }
   // Update SOPs whose field matches.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { count } = await scoped((admin as any).from("sops").update({ [parsed.data.kind]: toSop, updated_at: new Date().toISOString() }).eq(parsed.data.kind, from), clientId).select("id", { count: "exact" });
+  const { count } = await scoped(admin.from("sops").update({ [parsed.data.kind]: toSop, updated_at: new Date().toISOString() } as TablesUpdate<"sops">).eq(parsed.data.kind, from), clientId).select("id", { count: "exact" });
   // Update the managed entry: drop the old name, add the new (ignore dup = merge).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await scoped((admin as any).from("sop_categories").delete().eq("kind", parsed.data.kind).eq("name", from), clientId);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (admin as any).from("sop_categories").insert({ client_id: clientId, kind: parsed.data.kind, name: toName, parent });
+  await scoped(admin.from("sop_categories").delete().eq("kind", parsed.data.kind).eq("name", from), clientId);
+  await admin.from("sop_categories").insert({ client_id: clientId, kind: parsed.data.kind, name: toName, parent });
   return NextResponse.json({ updated: count ?? 0 });
 }, ADMIN);
 
@@ -123,7 +118,6 @@ export const DELETE = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await scoped((admin as any).from("sop_categories").delete().eq("kind", parsed.data.kind).eq("name", parsed.data.name.trim()), clientId);
+  await scoped(admin.from("sop_categories").delete().eq("kind", parsed.data.kind).eq("name", parsed.data.name.trim()), clientId);
   return NextResponse.json({ ok: true });
 }, ADMIN);

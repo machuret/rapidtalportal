@@ -177,8 +177,7 @@ export const GET = withAuth(async (request, { user }) => {
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any)
+  const { data, error } = await admin
     .from("content_voice_evaluations")
     .select("id,client_id,channel,status,brief,variant_a,variant_b,assignment,automated_evaluation,preferred_variant,reviewer_notes,reviewed_at,created_at")
     .eq("client_id", parsed.data.client_id)
@@ -203,8 +202,7 @@ export const POST = withAuth(async (request, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = admin as any;
+  const db = admin;
   const [{ data: goldenRows, error: goldenError }, { data: styleRow, error: styleError }, { data: competitorRows, error: competitorError }] = await Promise.all([
     db.from("content_golden_examples")
       .select("id,client_id,channel,title,body,source_url,published_at,content_type,represents_brand_strongly,voice_traits,structural_traits,vocabulary_preferences,admin_notes,evaluation_permission,status,content_hash,approved_at,created_at,updated_at")
@@ -239,7 +237,7 @@ export const POST = withAuth(async (request, { user }) => {
       error: `Approve at least five representative, permissioned ${parsed.data.channel} goldens before running a blind evaluation.`,
     }, { status: 422 });
   }
-  if (!profileResult?.success) {
+  if (!styleRow || !profileResult?.success) {
     return NextResponse.json({ error: "Approve a valid channel style profile before running a blind evaluation." }, { status: 422 });
   }
 
@@ -355,8 +353,7 @@ export const PATCH = withAuth(async (request, { user }) => {
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin as any).rpc("review_content_voice_evaluation", {
+  const { data, error } = await admin.rpc("review_content_voice_evaluation", {
     p_client_id: parsed.data.client_id,
     p_evaluation_id: parsed.data.id,
     p_actor_id: user.id,

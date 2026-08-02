@@ -97,8 +97,7 @@ export const POST = withAuth(async (req, { user }) => {
   const valid = checks.every((check) => check.warnings.length === 0);
   // Persist the verdict against the exact draft timestamp. The RPC locks the
   // project and rejects the write if the draft changed while checks ran.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: validation, error: validationError } = await (db as any)
+  const { data: validation, error: validationError } = await db
     .rpc("record_content_project_validation", {
       p_client_id: parsed.data.client_id,
       p_project_id: parsed.data.project_id,

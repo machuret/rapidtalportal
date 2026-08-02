@@ -34,8 +34,7 @@ export async function recordEditorialRevision(input: {
   channel: string;
   contentType?: string | null;
 }): Promise<EditorialSuggestion | null> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = input.admin as any;
+  const db = input.admin;
   const { data: priorRows, error: priorError } = await db
     .from("editorial_learning_suggestions")
     .select("dimensions")

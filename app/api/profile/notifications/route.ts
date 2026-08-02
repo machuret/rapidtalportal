@@ -17,8 +17,7 @@ const patchSchema = z.object({ prefs: z.record(z.string(), channelSchema) });
 
 export const GET = withAuth(async (_req, { user }) => {
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (admin as any).from("users").select("notification_prefs").eq("id", user.id).single();
+  const { data } = await admin.from("users").select("notification_prefs").eq("id", user.id).single();
   return NextResponse.json({ prefs: data?.notification_prefs ?? {} });
 });
 
@@ -32,8 +31,7 @@ export const PATCH = withAuth(async (req, { user }) => {
   const clean = Object.fromEntries(Object.entries(parsed.data.prefs).filter(([k]) => KNOWN.has(k)));
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin as any).from("users").update({ notification_prefs: clean }).eq("id", user.id);
+  const { error } = await admin.from("users").update({ notification_prefs: clean }).eq("id", user.id);
   if (error) return serverError(error);
   return NextResponse.json({ prefs: clean });
 });
