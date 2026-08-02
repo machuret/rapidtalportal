@@ -4,34 +4,13 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { brainContextSchema } from "@/lib/brain/context-contract";
+import { groupSourcesForDisplay } from "@/lib/source-display-groups";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const querySchema = z.object({
   clientId: z.string().uuid(),
   snapshotId: z.string().uuid(),
 });
-
-/**
- * Context snapshots retain every exact chunk for audit and reproducibility.
- * The read model groups those chunks by their immutable source identity so the
- * user sees one useful evidence card per source instead of a wall of excerpts.
- */
-function groupDisplaySources<T>(
-  sources: T[],
-  identity: (source: T) => string,
-): Array<T & { matchingExcerptCount: number }> {
-  const grouped = new Map<string, T & { matchingExcerptCount: number }>();
-  for (const source of sources) {
-    const key = identity(source);
-    const current = grouped.get(key);
-    if (current) {
-      current.matchingExcerptCount += 1;
-    } else {
-      grouped.set(key, { ...source, matchingExcerptCount: 1 });
-    }
-  }
-  return [...grouped.values()];
-}
 
 export const GET = withAuth(async (req, { user }) => {
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams));
@@ -117,20 +96,29 @@ export const GET = withAuth(async (req, { user }) => {
     companyKnowledge: {
       coverage: snapshot.knowledge.coverage,
       retrievalMethod: snapshot.knowledge.retrievalMethod,
-      sources: groupDisplaySources(snapshot.knowledge.sources.map((source) => ({
+      sources: groupSourcesForDisplay(snapshot.knowledge.sources.map((source) => ({
         itemId: source.itemId,
         chunkId: source.chunkId,
         title: source.title,
         excerpt: source.excerpt,
         sourceUrl: source.sourceUrl,
         selectionReason: source.selectionReason,
-      })), (source) => source.itemId),
+      })), {
+        namespace: () => "vault",
+        identity: (source) => source.itemId,
+        title: (source) => source.title,
+        url: (source) => source.sourceUrl,
+        excerpt: (source) => source.excerpt,
+      }).map((group) => ({
+        ...group.representative,
+        matchingExcerptCount: group.count,
+      })),
     },
     businessLibrary: {
       availability: snapshot.library.availability,
       coverage: snapshot.library.coverage,
       retrievalMethod: snapshot.library.retrievalMethod,
-      sources: groupDisplaySources(snapshot.library.sources.map((source) => ({
+      sources: groupSourcesForDisplay(snapshot.library.sources.map((source) => ({
         entryId: source.entryId,
         versionId: source.versionId,
         chunkId: source.chunkId,
@@ -140,7 +128,16 @@ export const GET = withAuth(async (req, { user }) => {
         category: source.category,
         sourceUrl: source.sourceUrl,
         selectionReason: source.selectionReason,
-      })), (source) => source.versionId),
+      })), {
+        namespace: (source) => `library:${source.versionNumber}`,
+        identity: (source) => source.versionId,
+        title: (source) => source.title,
+        url: (source) => source.sourceUrl,
+        excerpt: (source) => source.excerpt,
+      }).map((group) => ({
+        ...group.representative,
+        matchingExcerptCount: group.count,
+      })),
     },
     roleBoundary: snapshot.request.actor ? {
       coachRole: snapshot.request.actor.coachRole,

@@ -1,11 +1,12 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { errorMessage } from "@/lib/error-message";
 import { cn } from "@/lib/utils";
+import { groupSourcesForDisplay } from "@/lib/source-display-groups";
 import { Button } from "@/components/ui/button";
 import {
   AlertTriangle,
@@ -77,6 +78,10 @@ export const ChatTurn = memo(function ChatTurn({
   const [actionComplete, setActionComplete] = useState(turn.actionStatus === "completed");
   const [actionDraft, setActionDraft] = useState<CoachActionDraft | null>(turn.actionDraft ?? null);
   const deepAbortRef = useRef<AbortController | null>(null);
+  const citationGroupCount = useMemo(
+    () => groupCoachSources(turn.sources).length,
+    [turn.sources],
+  );
 
   // Abort an in-flight "Go deeper" stream if this turn unmounts mid-generation.
   useEffect(() => () => deepAbortRef.current?.abort(), []);
@@ -403,7 +408,7 @@ export const ChatTurn = memo(function ChatTurn({
               className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
             >
               <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showSources && "rotate-180")} />
-              {showSources ? "Hide citations" : `Citations (${turn.sources.length})`}
+              {showSources ? "Hide citations" : `Citations (${citationGroupCount})`}
             </button>
           )}
 
@@ -482,17 +487,23 @@ function CitationList({
   label: string;
 }) {
   if (!sources.length) return null;
+  const groups = groupCoachSources(sources);
   return (
     <div className="mt-3">
       <p className="mb-2 text-xs font-medium text-zinc-400">{label}</p>
       <ol className="grid gap-2 sm:grid-cols-2">
-        {sources.map((source) => (
+        {groups.map((group) => {
+          const source = group.representative;
+          const citationNumbers = group.sources.map((item) => item.n);
+          return (
           <li
-            key={`${source.n}:${source.kind}:${source.itemId ?? source.title}:${source.chunkId ?? "whole"}`}
+            key={`${source.kind}:${source.itemId ?? source.versionId ?? source.title}:${citationNumbers.join("-")}`}
             className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 text-xs text-zinc-300"
           >
             <div className="flex items-start gap-2">
-              <span className="font-mono text-orange-300">[{source.n}]</span>
+              <span className="font-mono text-orange-300">
+                {citationNumbers.map((number) => `[${number}]`).join(" ")}
+              </span>
               <div className="min-w-0 flex-1">
                 <p className="text-3xs uppercase tracking-wide text-zinc-500">{source.kindLabel}</p>
                 {source.sourceUrl ? (
@@ -513,11 +524,26 @@ function CitationList({
                     Version {source.versionNumber} · General guidance, not a company fact
                   </p>
                 )}
+                {group.count > 1 && (
+                  <p className="mt-1 text-3xs text-zinc-500">
+                    {group.count} related citations grouped
+                  </p>
+                )}
               </div>
             </div>
           </li>
-        ))}
+          );
+        })}
       </ol>
     </div>
   );
+}
+
+function groupCoachSources(sources: Source[]) {
+  return groupSourcesForDisplay(sources, {
+    namespace: (source) => source.kind,
+    identity: (source) => source.versionId ?? source.itemId,
+    title: (source) => source.title,
+    url: (source) => source.sourceUrl,
+  });
 }

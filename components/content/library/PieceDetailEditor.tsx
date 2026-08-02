@@ -40,6 +40,7 @@ import { BrainFeedback } from "@/components/brain/BrainFeedback";
 import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
 import { usePieceActions } from "./usePieceActions";
 import { buildLiveEditorialChecks } from "@/lib/content/live-checks";
+import { groupSourcesForDisplay } from "@/lib/source-display-groups";
 
 /* ── Detail editor ──────────────────────────────────────────────── */
 export function PieceDetailEditor({
@@ -51,6 +52,7 @@ export function PieceDetailEditor({
   onArtifactCreated,
   onPieceChanged,
   onDirtyChange,
+  backLabel = "Back to content history",
 }: {
   piece: ContentPieceFull;
   clientId: string;
@@ -60,6 +62,7 @@ export function PieceDetailEditor({
   onArtifactCreated: (piece: ContentPiece) => void;
   onPieceChanged: (piece: ContentPieceFull) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  backLabel?: string;
 }) {
   const [body, setBody] = useState(piece.body ?? "");
   const [persistedBody, setPersistedBody] = useState(piece.body ?? "");
@@ -157,6 +160,7 @@ export function PieceDetailEditor({
     adapt,
     exportText,
     handleStatusChange,
+    lifecycleNotice,
   } = usePieceActions({
     piece,
     clientId,
@@ -185,6 +189,15 @@ export function PieceDetailEditor({
     [body, piece.content_type, piece.style_snapshot],
   );
   const liveWarningCount = liveChecks.reduce((total, check) => total + check.warnings.length, 0);
+  const sourceGroups = useMemo(
+    () => groupSourcesForDisplay(piece.source_references ?? [], {
+      namespace: (source) => source.kind,
+      identity: (source) => source.itemId,
+      title: (source) => source.title,
+      excerpt: (source) => source.excerpt,
+    }),
+    [piece.source_references],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -192,7 +205,8 @@ export function PieceDetailEditor({
       <div className="flex items-center gap-3">
         <button
           type="button"
-          aria-label="Back to content history"
+          aria-label={backLabel}
+          title={backLabel}
           onClick={() => {
             if (!dirty || window.confirm("Discard your unsaved draft changes?")) onBack();
           }}
@@ -326,7 +340,11 @@ export function PieceDetailEditor({
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => handleStatusChange("archived")}
+            onClick={() => {
+              if (window.confirm("Archive this content? It will remain recoverable in the Library.")) {
+                void handleStatusChange("archived");
+              }
+            }}
             disabled={isUpdating || dirty}
             className="text-xs h-8 text-zinc-400 hover:text-zinc-200"
           >
@@ -348,6 +366,19 @@ export function PieceDetailEditor({
           </Button>
         )}
       </div>
+
+      {lifecycleNotice && (
+        <p
+          role="status"
+          className={`rounded-lg border px-3 py-2 text-xs ${
+            lifecycleNotice.kind === "success"
+              ? "border-green-500/25 bg-green-500/5 text-green-200"
+              : "border-red-500/25 bg-red-500/5 text-red-200"
+          }`}
+        >
+          {lifecycleNotice.message}
+        </p>
+      )}
 
       {/* Brief */}
       <BrainContextUsed
@@ -446,11 +477,14 @@ export function PieceDetailEditor({
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3">
           <p className="text-xs font-medium text-zinc-500 mb-2">Vault sources used</p>
           <div className="flex flex-wrap gap-1.5">
-            {piece.source_references.map((source: ContentSourceReference) => (
-              <span key={`${source.kind}:${source.itemId}`} title={source.excerpt} className="text-xs rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-400">
-                {source.title}
+            {sourceGroups.map((group) => {
+              const source: ContentSourceReference = group.representative;
+              return (
+              <span key={`${source.kind}:${source.itemId}`} title={group.sources.map((item) => item.excerpt).filter(Boolean).join("\n\n")} className="text-xs rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-400">
+                {source.title}{group.count > 1 ? ` · ${group.count} related sources` : ""}
               </span>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

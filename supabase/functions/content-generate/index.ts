@@ -1010,7 +1010,7 @@ export async function handleContentGenerateRequest(
     if (blockingWarnings.length && !evaluationStyleMode) {
       await releaseGenerationLease();
       return new Response(JSON.stringify({
-        error: "The draft could not satisfy a required Company DNA rule after the automatic rewrite. Review the listed issue or try again; your project is saved.",
+        error: "The draft could not satisfy its platform structure or a required Company DNA rule after automatic repair. No invalid draft was saved; review the listed issue and try again.",
         code: "content_rules_blocked",
         warnings: blockingWarnings,
         blockingWarnings,

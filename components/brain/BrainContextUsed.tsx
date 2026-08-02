@@ -138,7 +138,7 @@ export function BrainContextUsed({
                           <p className="text-xs font-medium text-zinc-200">{source.title}</p>
                           {source.matchingExcerptCount > 1 && (
                             <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-2xs text-zinc-500">
-                              {source.matchingExcerptCount} matching passages
+                              {source.matchingExcerptCount} related passages
                             </span>
                           )}
                         </div>
@@ -165,7 +165,7 @@ export function BrainContextUsed({
                           </p>
                           {source.matchingExcerptCount > 1 && (
                             <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-2xs text-zinc-500">
-                              {source.matchingExcerptCount} matching passages
+                              {source.matchingExcerptCount} related passages
                             </span>
                           )}
                         </div>

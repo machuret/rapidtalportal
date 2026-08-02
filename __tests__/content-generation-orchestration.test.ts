@@ -174,4 +174,80 @@ describe("content generation orchestration goldens", () => {
     ]);
     expect(result.systemPrompt).toContain("working title and objective are binding");
   });
+
+  test("automatically repairs a LinkedIn draft with two calls to action", async () => {
+    const dna = { company_name: "Example Co", brand_voice: "Clear and practical." };
+    const style = resolveContentStyle(dna, "linkedin", "professional", "Keep it short.");
+    const invalidBody = [
+      "A practical opening for business owners.",
+      "Clear preparation makes the next decision easier.",
+      "Contact us to continue.",
+      "What would you change?",
+    ].join("\n\n");
+    const repairedBody = [
+      "A practical opening for business owners.",
+      "Clear preparation makes the next decision easier.",
+      "What would you change?",
+    ].join("\n\n");
+    const calls: ContentModelRequest[] = [];
+    const result = await runContentGenerationOrchestration({
+      contentType: "linkedin",
+      title: "Practical preparation for business owners",
+      contentBrief: {
+        version: 1,
+        objective: "Explain practical preparation for business owners.",
+        tone: "professional",
+        length: "short",
+      },
+      context: "Company context.",
+      style,
+      dna,
+      sources: [],
+      complete: async (request) => {
+        calls.push(request);
+        if (request.phase === "draft") return invalidBody;
+        if (request.phase === "structure_repair") {
+          return JSON.stringify({ draft: repairedBody, issues: ["Removed the duplicate CTA."] });
+        }
+        return JSON.stringify({ issues: [], draft: invalidBody, sourceItemIds: [] });
+      },
+    });
+
+    expect(calls.map((call) => call.phase)).toEqual(["draft", "critique", "structure_repair"]);
+    expect(result.finalBody).toBe(repairedBody);
+    expect(result.qualityWarnings).toEqual([]);
+    expect(result.blockingWarnings).toEqual([]);
+  });
+
+  test("blocks a draft when automatic platform repair remains invalid", async () => {
+    const dna = { company_name: "Example Co" };
+    const style = resolveContentStyle(dna, "linkedin", "professional", "Keep it short.");
+    const invalidBody = [
+      "A practical opening for business owners.",
+      "Clear preparation makes the next decision easier.",
+      "Contact us to continue.",
+      "What would you change?",
+    ].join("\n\n");
+    const result = await runContentGenerationOrchestration({
+      contentType: "linkedin",
+      title: "Practical preparation for business owners",
+      contentBrief: {
+        version: 1,
+        objective: "Explain practical preparation for business owners.",
+        tone: "professional",
+        length: "short",
+      },
+      context: "Company context.",
+      style,
+      dna,
+      sources: [],
+      complete: async (request) => request.phase === "draft"
+        ? invalidBody
+        : JSON.stringify({ issues: [], draft: invalidBody, sourceItemIds: [] }),
+    });
+
+    expect(result.blockingWarnings).toContain(
+      "LinkedIn requires exactly 1 call-to-action or discussion question; found 2.",
+    );
+  });
 });

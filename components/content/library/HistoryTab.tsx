@@ -31,6 +31,7 @@ interface HistoryTabProps {
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore?: () => void | Promise<void>;
+  backLabel?: string;
 }
 
 /* ── List item ──────────────────────────────────────────────────── */
@@ -85,6 +86,7 @@ export const HistoryTab = memo(function HistoryTab({
   hasMore = false,
   loadingMore = false,
   onLoadMore,
+  backLabel,
 }: HistoryTabProps) {
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [selectedPiece, setSelectedPiece] = useState<ContentPieceFull | null>(null);
@@ -148,6 +150,7 @@ export const HistoryTab = memo(function HistoryTab({
         }}
         onPieceChanged={setSelectedPiece}
         onDirtyChange={onDirtyChange}
+        backLabel={backLabel}
       />
     );
   }

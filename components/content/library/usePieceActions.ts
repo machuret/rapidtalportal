@@ -56,6 +56,10 @@ export function usePieceActions({
   const [rewriteInstruction, setRewriteInstruction] = useState("");
   const [rewriting, setRewriting] = useState(false);
   const [derivedAction, setDerivedAction] = useState<"duplicate" | "adapt" | null>(null);
+  const [lifecycleNotice, setLifecycleNotice] = useState<{
+    kind: "success" | "error";
+    message: string;
+  } | null>(null);
   const derivedActionRef = useRef<"duplicate" | "adapt" | null>(null);
 
   const { updateStatus, isUpdating } = useUpdatePieceStatus();
@@ -181,8 +185,10 @@ export function usePieceActions({
 
   const handleStatusChange = useCallback(
     async (newStatus: ContentStatus) => {
+      setLifecycleNotice(null);
       if (dirty) {
         toast.error("Save or discard the current edit before changing status.");
+        setLifecycleNotice({ kind: "error", message: "Save or discard the current edit before changing status." });
         return;
       }
       try {
@@ -192,12 +198,30 @@ export function usePieceActions({
           status: newStatus,
           expected_updated_at: currentUpdatedAt || undefined,
         });
+        if (updated.status !== newStatus) {
+          throw new Error(`The server returned “${updated.status}” instead of “${newStatus}”.`);
+        }
         setPersistedBody(updated.body ?? persistedBody);
         setCurrentUpdatedAt(updated.updated_at ?? "");
         onStatusChanged(piece.id, newStatus);
         onPieceChanged(updated);
-      } catch {
-        // error toast handled by the mutation
+        setLifecycleNotice({
+          kind: "success",
+          message: newStatus === "archived"
+            ? "Content archived. It remains recoverable in the Library."
+            : newStatus === "approved"
+              ? "Content approved."
+              : "Content restored to draft.",
+        });
+      } catch (error) {
+        // The API client handles request failures globally; the persistent
+        // inline message prevents a lifecycle action from ever appearing inert.
+        setLifecycleNotice({
+          kind: "error",
+          message: error instanceof Error
+            ? `Status did not change: ${error.message}`
+            : "Status did not change. Reload the content and try again.",
+        });
       }
     },
     [dirty, updateStatus, clientId, piece.id, currentUpdatedAt, persistedBody, onStatusChanged, onPieceChanged, setPersistedBody, setCurrentUpdatedAt]
@@ -218,5 +242,6 @@ export function usePieceActions({
     adapt,
     exportText,
     handleStatusChange,
+    lifecycleNotice,
   };
 }

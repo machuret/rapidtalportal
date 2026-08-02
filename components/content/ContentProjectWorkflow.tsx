@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -165,6 +166,7 @@ export function ContentProjectWorkflow({
   onRegenerateIdeas,
   onContentGenerated,
 }: ContentProjectWorkflowProps) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
   const [draftDirty, setDraftDirty] = useState(false);
@@ -332,6 +334,13 @@ export function ContentProjectWorkflow({
       source.excerpt.toLocaleLowerCase().includes(query)
     ));
   }, [evidence, evidenceSearch]);
+  const validationWarnings = useMemo(
+    () => validation?.checks.flatMap((check) => check.warnings) ?? [],
+    [validation],
+  );
+  const visibleEditorialWarnings = validationWarnings.length
+    ? validationWarnings
+    : project.last_generation_warnings ?? [];
 
   const brief: ContentBrief = useMemo(() => ({
     version: 1,
@@ -676,6 +685,7 @@ export function ContentProjectWorkflow({
             onHistoryUpdate={setHistory}
             initialSelectedId={project.current_piece_id}
             onBackToWorkflow={onClose}
+            backLabel="Back to Content Studio"
             onPieceStatusChanged={handlePieceStatusChanged}
             hasMore={project.pieces_has_more}
             loadingMore={loadingMoreArtifacts}
@@ -695,13 +705,20 @@ export function ContentProjectWorkflow({
         </Button>
         <div className="text-right">
           <p className="text-sm font-semibold text-white">{project.title}</p>
-          <p className="text-xs text-zinc-500">
+          <p
+            className={`text-xs ${saveState === "error" ? "text-red-300" : visibleEditorialWarnings.length ? "text-amber-300" : "text-zinc-500"}`}
+            title={visibleEditorialWarnings[0] ?? operationFailure?.message ?? undefined}
+          >
             {saveState === "saving"
               ? "Saving project…"
               : saveState === "error"
-                ? "Project changes need attention"
+                ? `Not saved · ${operationFailure?.title ?? "retry required"}`
               : projectDirty
                 ? "Unsaved changes · saving shortly"
+                : visibleEditorialWarnings.length
+                  ? visibleEditorialWarnings.length === 1
+                    ? `Draft saved · ${visibleEditorialWarnings[0]}`
+                    : `Draft saved · ${visibleEditorialWarnings.length} editorial checks to fix`
                 : "Project saved · recoverable on any device"}
           </p>
         </div>
@@ -979,7 +996,8 @@ export function ContentProjectWorkflow({
             canApprove={false}
             onHistoryUpdate={setHistory}
             initialSelectedId={project.current_piece_id}
-            onBackToWorkflow={() => patchProject({ current_step: "generate" })}
+            onBackToWorkflow={() => router.push("/content/library")}
+            backLabel="Open content history"
             onDirtyChange={setDraftDirty}
             onArtifactCreated={handleDerivedArtifactCreated}
             hasMore={project.pieces_has_more}
@@ -1019,6 +1037,7 @@ export function ContentProjectWorkflow({
             onHistoryUpdate={setHistory}
             initialSelectedId={project.current_piece_id}
             onBackToWorkflow={() => patchProject({ current_step: "validate" })}
+            backLabel="Back to validation"
             onPieceStatusChanged={handlePieceStatusChanged}
             onDirtyChange={setDraftDirty}
             onArtifactCreated={handleDerivedArtifactCreated}

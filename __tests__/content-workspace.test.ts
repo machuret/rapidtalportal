@@ -82,7 +82,7 @@ describe("unified content engine", () => {
   test("quality validation runs before persistence and preserves section-only rewriting", () => {
     expect(orchestration).toContain("contentQualityWarnings({");
     expect(orchestration).toContain("contentBlockingWarnings({");
-    expect(generator).toContain("The draft could not satisfy a required Company DNA rule after the automatic rewrite.");
+    expect(generator).toContain("The draft could not satisfy its platform structure or a required Company DNA rule after automatic repair.");
     expect(generator.indexOf("if (blockingWarnings.length)")).toBeLessThan(
       generator.indexOf("if (persist)"),
     );
