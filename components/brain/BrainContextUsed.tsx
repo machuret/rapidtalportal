@@ -15,106 +15,9 @@ import {
   Sparkles,
   Target,
 } from "lucide-react";
-import { api } from "@/lib/api-client";
 import { errorMessage } from "@/lib/error-message";
+import { useBrainContextUsed } from "@/hooks/useBrainContextUsed";
 import { Button } from "@/components/ui/button";
-
-type BrainContextUsedResponse = {
-  id: string;
-  hash: string;
-  capturedAt: string;
-  companyKnowledge: {
-    coverage: "strong" | "partial" | "weak" | "none";
-    sources: Array<{
-      itemId: string;
-      chunkId: string | null;
-      title: string;
-      excerpt: string;
-      sourceUrl: string | null;
-      selectionReason: string;
-    }>;
-  };
-  businessLibrary: {
-    availability: "available" | "degraded" | "unavailable" | "not_requested";
-    coverage: "strong" | "partial" | "weak" | "none";
-    retrievalMethod: string;
-    sources: Array<{
-      entryId: string;
-      versionId: string;
-      chunkId: string | null;
-      versionNumber: number;
-      title: string;
-      excerpt: string;
-      category: string;
-      sourceUrl: string | null;
-      selectionReason: string;
-    }>;
-  };
-  roleBoundary: {
-    coachRole: "client" | "va";
-    conversationVisibility: "private_coach";
-    intendedAudience: "private" | "client" | "va_team" | "task_board";
-    permissions: string[];
-  } | null;
-  currentWork: {
-    availability: "available" | "unavailable" | "not_requested";
-    scope: "company" | "assigned_only" | "none";
-    tasks: Array<{
-      taskId: string;
-      title: string;
-      status: string;
-      dueDate: string | null;
-      assignedName: string | null;
-      selectionReason: string;
-    }>;
-    team: Array<{ userId: string; displayName: string; role: string }>;
-  };
-  privateCoaching: {
-    availability: "available" | "unavailable" | "not_requested";
-    goals: Array<{ goalId: string; title: string; status: string; progress: number; targetDate: string | null }>;
-    commitments: Array<{ commitmentId: string; commitment: string; status: string; dueDate: string | null; nextCheckInAt: string | null }>;
-    memories: Array<{ memoryId: string; kind: string; content: string; updatedAt: string | null }>;
-    feedback: Array<{ signalId: string; rating: 1 | -1; category: string; dimensions: string[]; createdAt: string | null }>;
-  };
-  companyVoice: {
-    source: string;
-    channel: string | null;
-    confidence: number | null;
-    instructions: string[];
-    hardRules: Array<Record<string, unknown>>;
-    fallbackReason: string | null;
-  };
-  learnedPreferences: Array<{
-    id: string;
-    kind: string;
-    content: string;
-    confidence: number;
-    reason: string;
-  }>;
-  marketContext: {
-    included: boolean;
-    snapshotIds: string[];
-    insights: Array<{ insightId: string; kind: string; summary: string; confidence: string }>;
-  };
-  contextualReadiness: {
-    channel: string | null;
-    channelReadiness: string;
-    voiceConfidence: string;
-    vaultCoverage: string;
-    relevantLessons: number;
-    marketUpdatedAt: string | null;
-  };
-  warnings: Array<{
-    code: string;
-    message: string;
-    severity: "info" | "warning" | "blocking";
-  }>;
-  recoverableWarnings: Array<{
-    code: string;
-    message: string;
-    severity: "info" | "warning" | "blocking";
-  }>;
-};
 
 export function BrainContextUsed({
   clientId,
@@ -124,32 +27,19 @@ export function BrainContextUsed({
   snapshotId: string | null | undefined;
 }) {
   const [open, setOpen] = useState(false);
-  const [data, setData] = useState<BrainContextUsedResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Lazy-on-open: the query stays disabled until the section is expanded, then
+  // fetches once (snapshots are immutable, so the cached result is reused).
+  const contextQuery = useBrainContextUsed(clientId, snapshotId, open);
+  const data = contextQuery.data ?? null;
+  const loading = contextQuery.isFetching && !contextQuery.data;
+  const error = contextQuery.isError && !contextQuery.isFetching
+    ? errorMessage(contextQuery.error, "The Brain context could not be loaded.")
+    : null;
 
   if (!snapshotId) return null;
 
-  async function load() {
-    if (data || loading) return;
-    setLoading(true);
-    setError(null);
-    try {
-      setData(await api.get<BrainContextUsedResponse>(
-        `/api/brain/context-used?clientId=${clientId}&snapshotId=${snapshotId}`,
-        { showErrorToast: false },
-      ));
-    } catch (loadError) {
-      setError(errorMessage(loadError, "The Brain context could not be loaded."));
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function toggle() {
-    const next = !open;
-    setOpen(next);
-    if (next) void load();
+    setOpen((value) => !value);
   }
 
   return (
@@ -180,7 +70,7 @@ export function BrainContextUsed({
           {error && (
             <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
               <p className="text-xs text-red-300">{error}</p>
-              <Button size="sm" variant="outline" onClick={() => { setData(null); void load(); }}>
+              <Button size="sm" variant="outline" onClick={() => void contextQuery.refetch()}>
                 <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Retry
               </Button>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   BrainCircuit,
   Check,
@@ -23,6 +24,7 @@ import type {
   BrainEffectivenessStatus,
   BrainOpportunity,
 } from "@/lib/brain/opportunities";
+import { brainOpportunityKeys, useBrainOpportunities } from "@/hooks/useBrainOpportunities";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -54,6 +56,8 @@ const STATUS_STYLE: Record<BrainOpportunity["status"], string> = {
 
 type View = "active" | "completed" | "all";
 
+const NO_OPPORTUNITIES: BrainOpportunity[] = [];
+
 export function BrainOpportunities({
   clientId,
   canManage,
@@ -65,15 +69,23 @@ export function BrainOpportunities({
   initialOpportunities: BrainOpportunity[];
   initialLoadFailed: boolean;
 }) {
-  const [opportunities, setOpportunities] = useState(initialOpportunities);
+  const queryClient = useQueryClient();
+  // SSR-seeded when the page load succeeded; on SSR failure no data is seeded
+  // so the unavailable/Retry state shows exactly as before (no auto-fetch —
+  // the hook keeps the query disabled and only refetch() loads).
+  const opportunitiesQuery = useBrainOpportunities(
+    clientId,
+    initialLoadFailed ? undefined : initialOpportunities,
+  );
+  const opportunities = opportunitiesQuery.data ?? NO_OPPORTUNITIES;
+  const refreshing = opportunitiesQuery.isFetching;
+  const loadFailed = opportunitiesQuery.isError || (initialLoadFailed && !opportunitiesQuery.isFetched);
   const [view, setView] = useState<View>("active");
   const [running, setRunning] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [outcomeId, setOutcomeId] = useState<string | null>(null);
   const [outcomeNote, setOutcomeNote] = useState("");
   const [effectiveness, setEffectiveness] = useState<BrainEffectivenessStatus>("effective");
-  const [loadFailed, setLoadFailed] = useState(initialLoadFailed);
-  const [refreshing, setRefreshing] = useState(false);
 
   const visible = useMemo(() => opportunities.filter((opportunity) => {
     if (view === "all") return true;
@@ -82,22 +94,8 @@ export function BrainOpportunities({
   }), [opportunities, view]);
 
   async function refresh(): Promise<boolean> {
-    if (refreshing) return false;
-    setRefreshing(true);
-    try {
-      const response = await api.get<{ opportunities: BrainOpportunity[] }>(
-        ROUTES.brain.opportunitiesForClient(clientId),
-        { showErrorToast: false },
-      );
-      setOpportunities(response.opportunities);
-      setLoadFailed(false);
-      return true;
-    } catch {
-      setLoadFailed(true);
-      return false;
-    } finally {
-      setRefreshing(false);
-    }
+    const result = await opportunitiesQuery.refetch();
+    return !result.isError;
   }
 
   async function runDiagnostic() {
@@ -137,8 +135,11 @@ export function BrainOpportunities({
         { clientId, action, outcome: outcome ?? {} },
         { showErrorToast: false },
       );
-      setOpportunities((current) => current.map((item) =>
-        item.id === opportunity.id ? response.opportunity : item));
+      queryClient.setQueryData<BrainOpportunity[]>(
+        brainOpportunityKeys.byClient(clientId),
+        (current) => (current ?? []).map((item) =>
+          item.id === opportunity.id ? response.opportunity : item),
+      );
       setOutcomeId(null);
       setOutcomeNote("");
       toast.success("Opportunity updated.");

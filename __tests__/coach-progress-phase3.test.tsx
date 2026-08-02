@@ -1,6 +1,7 @@
 /** @jest-environment jsdom */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CoachProgressPanel } from "@/components/vault/CoachProgressPanel";
@@ -12,6 +13,17 @@ jest.mock("@/lib/api-client", () => ({ api: { get: (...args: unknown[]) => mockG
 jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
+// The panel reads through React Query now — each render gets a fresh client so
+// the per-client query cache never leaks between tests.
+function renderPanel(timeZone?: string) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <CoachProgressPanel clientId="11111111-1111-4111-8111-111111111111" timeZone={timeZone} />
+    </QueryClientProvider>,
+  );
+}
+
 describe("Coach Phase 3 progress loop", () => {
   beforeEach(() => {
     mockGet.mockReset().mockResolvedValue({ goals: [], commitments: [] });
@@ -20,7 +32,7 @@ describe("Coach Phase 3 progress loop", () => {
   });
 
   it("requires an explicit save before a private goal exists", async () => {
-    render(<CoachProgressPanel clientId="11111111-1111-4111-8111-111111111111" />);
+    renderPanel();
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /my coaching plan/i }));
     fireEvent.click(screen.getByRole("button", { name: /add goal/i }));
@@ -39,7 +51,7 @@ describe("Coach Phase 3 progress loop", () => {
       goals: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", title: "Launch campaign", outcome: "", status: "paused", progress: 25, target_date: null }],
       commitments: [],
     });
-    render(<CoachProgressPanel clientId="11111111-1111-4111-8111-111111111111" />);
+    renderPanel();
     await waitFor(() => expect(screen.getByRole("button", { name: /my coaching plan/i })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /my coaching plan/i }));
     fireEvent.click(screen.getByRole("button", { name: "+25%" }));
@@ -59,7 +71,7 @@ describe("Coach Phase 3 progress loop", () => {
         next_check_in_at: "2026-08-09T23:00:00.000Z",
       }],
     });
-    render(<CoachProgressPanel clientId="11111111-1111-4111-8111-111111111111" timeZone="Australia/Sydney" />);
+    renderPanel("Australia/Sydney");
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /my coaching plan/i }));
     expect(screen.getByText(/Check-in 10 Aug 2026/i)).toBeInTheDocument();
@@ -70,7 +82,7 @@ describe("Coach Phase 3 progress loop", () => {
       goals: [{ id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", title: "Reach 50 leads", outcome: "", status: "achieved", progress: 100, target_date: null }],
       commitments: [{ id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", goal_id: null, commitment: "Publish landing page", status: "completed", due_date: null, next_check_in_at: null }],
     });
-    render(<CoachProgressPanel clientId="11111111-1111-4111-8111-111111111111" />);
+    renderPanel();
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /my coaching plan/i }));
     fireEvent.click(screen.getByText(/Recent wins/i));

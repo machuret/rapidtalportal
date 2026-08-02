@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -16,26 +17,13 @@ import {
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
+import {
+  brainLearningInboxKeys,
+  useBrainLearningInbox,
+  type LearningSuggestion,
+} from "@/hooks/useBrainLearningInbox";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { BrainMemoryItem } from "./BrainMemoryPanel";
-
-interface LearningSuggestion {
-  id: string;
-  piece_id: string;
-  classification: string;
-  proposed_outcome: string;
-  dimensions: string[];
-  summary: string;
-  lesson_content: string;
-  explanation: string;
-  before_excerpt: string;
-  after_excerpt: string;
-  proposed_scope: Record<string, unknown>;
-  confidence: number;
-  status: string;
-  created_at: string;
-  content_pieces?: { title?: string; content_type?: string } | Array<{ title?: string; content_type?: string }> | null;
-}
 
 function destination(outcome: string): { label: string; href?: string } {
   if (outcome === "company_dna_update") return { label: "Company DNA correction", href: "/company-dna" };
@@ -53,28 +41,14 @@ export function BrainLearningInbox({
   clientId: string;
   memories: BrainMemoryItem[];
 }) {
-  const [items, setItems] = useState<LearningSuggestion[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const inboxQuery = useBrainLearningInbox(clientId);
+  const items = inboxQuery.data ?? [];
+  const loading = inboxQuery.isFetching;
+  const error = inboxQuery.isError && !inboxQuery.isFetching
+    ? "The Brain learning inbox could not be loaded."
+    : null;
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const rows = await api.get<LearningSuggestion[]>(
-        ROUTES.brain.learningInboxForClient(clientId),
-        { showErrorToast: false },
-      );
-      setItems(rows);
-    } catch {
-      setError("The Brain learning inbox could not be loaded.");
-    } finally {
-      setLoading(false);
-    }
-  }, [clientId]);
-
-  useEffect(() => { void load(); }, [load]);
 
   async function review(id: string, action: "approve" | "reject") {
     if (busyId) return;
@@ -85,9 +59,11 @@ export function BrainLearningInbox({
         id,
         action,
       });
-      setItems((current) => current.map((item) =>
-        item.id === id ? { ...item, status: action === "approve" ? "approved" : "rejected" } : item
-      ));
+      queryClient.setQueryData<LearningSuggestion[]>(
+        brainLearningInboxKeys.byClient(clientId),
+        (current) => (current ?? []).map((item) =>
+          item.id === id ? { ...item, status: action === "approve" ? "approved" : "rejected" } : item),
+      );
       toast.success(action === "approve" ? "Learning approved and routed." : "Learning suggestion rejected.");
     } finally {
       setBusyId(null);
@@ -122,7 +98,7 @@ export function BrainLearningInbox({
             Deliberate editorial lessons and corrections waiting for a human decision.
           </p>
         </div>
-        <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void load()}>
+        <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void inboxQuery.refetch()}>
           <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
         </Button>
       </div>
@@ -144,7 +120,7 @@ export function BrainLearningInbox({
 
       {error ? (
         <div className="mt-4 rounded-lg border border-red-500/25 bg-red-500/5 p-4 text-sm text-red-200">
-          {error} <button type="button" className="underline" onClick={() => void load()}>Retry</button>
+          {error} <button type="button" className="underline" onClick={() => void inboxQuery.refetch()}>Retry</button>
         </div>
       ) : loading ? (
         <div className="flex items-center justify-center py-10 text-sm text-zinc-500">
@@ -189,7 +165,7 @@ export function BrainLearningInbox({
                       <summary className="cursor-pointer">Show the exact change</summary>
                       <div className="mt-2 grid gap-2 lg:grid-cols-2">
                         <div className="rounded bg-zinc-900 p-2"><span className="text-zinc-600">Before</span><p className="mt-1 text-zinc-400">{item.before_excerpt}</p></div>
-                        <div className="rounded bg-zinc-900 p-2"><span className="text-zinc-600">After</span><p className="mt-1 text-zinc-300">{item.after_excerpt}</p></div>
+                        <div className="rounded bg-zinc-900 p-2"><span className="text-zinc-600">After</span><p className="mt-1 text-xs text-zinc-300">{item.after_excerpt}</p></div>
                       </div>
                     </details>
                   </div>

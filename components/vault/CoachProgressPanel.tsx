@@ -1,24 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, Clock3, Flag, Loader2, Pause, Plus, Target } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { errorMessage } from "@/lib/error-message";
+import {
+  coachProgressKeys,
+  useCoachProgress,
+  type CoachCommitment,
+  type CoachGoal,
+} from "@/hooks/useCoachProgress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-
-type Goal = {
-  id: string; title: string; outcome: string; status: "active" | "paused" | "achieved" | "abandoned";
-  progress: number; target_date: string | null; achieved_at?: string | null; updated_at?: string;
-};
-type Commitment = {
-  id: string; goal_id: string | null; commitment: string;
-  status: "open" | "completed" | "snoozed" | "dismissed"; due_date: string | null;
-  next_check_in_at: string | null; completed_at?: string | null; updated_at?: string;
-};
 
 function calendarDateInZone(value: Date, timeZone: string) {
   let parts: Intl.DateTimeFormatPart[];
@@ -54,12 +51,14 @@ function formatInstantDate(value: string, timeZone: string) {
 }
 
 export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: string; timeZone?: string }) {
+  const queryClient = useQueryClient();
+  const progressQuery = useCoachProgress(clientId);
+  const goals = progressQuery.data?.goals ?? [];
+  const commitments = progressQuery.data?.commitments ?? [];
+  const loading = progressQuery.isFetching && !progressQuery.data;
+  const loadFailed = progressQuery.isError;
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [commitments, setCommitments] = useState<Commitment[]>([]);
   const [form, setForm] = useState<"none" | "goal" | "commitment">("none");
   const [goalTitle, setGoalTitle] = useState("");
   const [goalOutcome, setGoalOutcome] = useState("");
@@ -69,27 +68,18 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
   const [commitmentDue, setCommitmentDue] = useState("");
   const [checkInDate, setCheckInDate] = useState("");
 
-  const load = useCallback(async () => {
-    try {
-      const result = await api.get<{ goals: Goal[]; commitments: Commitment[] }>(
-        ROUTES.coach.progressForClient(clientId), { showErrorToast: false },
-      );
-      setGoals(result.goals);
-      setCommitments(result.commitments);
-      setLoadFailed(false);
-    } catch {
-      setLoadFailed(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [clientId]);
+  const invalidateProgress = () =>
+    queryClient.invalidateQueries({ queryKey: coachProgressKeys.byClient(clientId) });
 
+  // The Coach action path (AskVaultClient) announces executed progress actions
+  // through this window event — it is the current cross-component contract, so
+  // the panel keeps listening and now invalidates instead of hand-reloading.
   useEffect(() => {
-    void load();
-    const refresh = () => void load();
+    const refresh = () =>
+      void queryClient.invalidateQueries({ queryKey: coachProgressKeys.byClient(clientId) });
     window.addEventListener("coach-progress-changed", refresh);
     return () => window.removeEventListener("coach-progress-changed", refresh);
-  }, [load]);
+  }, [queryClient, clientId]);
 
   async function createGoal() {
     if (!goalTitle.trim() || busy) return;
@@ -100,7 +90,7 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
         targetDate: goalDate || null, sourceTurnId: null,
       }, { showErrorToast: false });
       setGoalTitle(""); setGoalOutcome(""); setGoalDate(""); setForm("none");
-      await load();
+      await invalidateProgress();
       toast.success("Goal added to your private coaching plan.");
     } catch (error) {
       toast.error(errorMessage(error, "The goal could not be saved."));
@@ -117,14 +107,14 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
         checkInDate: checkInDate || null, sourceTurnId: null,
       }, { showErrorToast: false });
       setCommitment(""); setCommitmentGoal(""); setCommitmentDue(""); setCheckInDate(""); setForm("none");
-      await load();
+      await invalidateProgress();
       toast.success(checkInDate ? "Commitment saved with weekly Coach check-ins until it is completed or dismissed." : "Commitment saved. The Coach will remember it.");
     } catch (error) {
       toast.error(errorMessage(error, "The commitment could not be saved."));
     } finally { setBusy(false); }
   }
 
-  async function updateGoal(goal: Goal, status: Goal["status"], progress = goal.progress) {
+  async function updateGoal(goal: CoachGoal, status: CoachGoal["status"], progress = goal.progress) {
     if (busy) return;
     setBusy(true);
     try {
@@ -132,12 +122,12 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
         kind: "goal", clientId, id: goal.id, status, progress,
         targetDate: goal.target_date,
       }, { showErrorToast: false });
-      await load();
+      await invalidateProgress();
     } catch (error) { toast.error(errorMessage(error, "The goal could not be updated.")); }
     finally { setBusy(false); }
   }
 
-  async function updateCommitment(item: Commitment, status: Commitment["status"], checkIn?: string | null) {
+  async function updateCommitment(item: CoachCommitment, status: CoachCommitment["status"], checkIn?: string | null) {
     if (busy) return;
     setBusy(true);
     try {
@@ -145,7 +135,7 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
         kind: "commitment", clientId, id: item.id, status,
         dueDate: item.due_date, checkInDate: checkIn ?? (item.next_check_in_at ? calendarDateInZone(new Date(item.next_check_in_at), timeZone) : null),
       }, { showErrorToast: false });
-      await load();
+      await invalidateProgress();
     } catch (error) { toast.error(errorMessage(error, "The commitment could not be updated.")); }
     finally { setBusy(false); }
   }
@@ -180,7 +170,7 @@ export function CoachProgressPanel({ clientId, timeZone = "UTC" }: { clientId: s
           {loadFailed && (
             <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
               <p className="text-xs text-amber-200/80">Your plan could not be loaded. The rest of Coach is still available, and no progress was changed.</p>
-              <Button size="sm" variant="outline" onClick={() => { setLoading(true); void load(); }} className="border-amber-500/30 text-xs">Retry</Button>
+              <Button size="sm" variant="outline" onClick={() => void progressQuery.refetch()} className="border-amber-500/30 text-xs">Retry</Button>
             </div>
           )}
           <div className="grid gap-4 lg:grid-cols-2">
