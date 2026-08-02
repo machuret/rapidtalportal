@@ -79,6 +79,43 @@ export type AnswerEvidence = Pick<
 
 export type HistoryItem = { question: string; answer: string };
 
+/** Row shape returned by GET /api/coach/threads (both initial and paged loads). */
+interface CoachTurnRow {
+  question: string;
+  answer: string;
+  coach_mode: CoachMode;
+  brain_context_snapshot_id: string;
+  sources: Source[];
+  suggestions: string[];
+  library_availability: LibraryAvailability;
+  warnings: ContextWarning[];
+  action_draft: CoachActionDraft | null;
+  action_status: Turn["actionStatus"];
+  created_at: string;
+}
+
+interface ThreadHistoryResponse {
+  thread: { id: string } | null;
+  turns: CoachTurnRow[];
+  hasMore: boolean;
+}
+
+function toTurn(turn: CoachTurnRow): Turn {
+  return {
+    question: turn.question,
+    answer: turn.answer,
+    coachMode: turn.coach_mode,
+    brainContextSnapshotId: turn.brain_context_snapshot_id,
+    sources: turn.sources ?? [],
+    suggestions: turn.suggestions ?? [],
+    libraryAvailability: turn.library_availability ?? "not_requested",
+    warnings: turn.warnings ?? [],
+    actionDraft: turn.action_draft ?? null,
+    actionStatus: turn.action_status ?? "none",
+    queriedKinds: [...new Set((turn.sources ?? []).map((source) => source.kind))],
+  };
+}
+
 const DEFAULT_QUERIED_KINDS: AskSourceKind[] = ["dna", "vault", "operation", "library", "memory"];
 
 function queriedKinds(question: string): AskSourceKind[] {
@@ -291,6 +328,9 @@ export function useCoachChat({
   const [loading, setLoading] = useState(false);
   const [interim, setInterim] = useState<Turn | null>(null);
   const [askFailure, setAskFailure] = useState<{ question: string; message: string; recoverable: boolean } | null>(null);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [historyBefore, setHistoryBefore] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -299,42 +339,38 @@ export function useCoachChat({
       return;
     }
     let cancelled = false;
-    void api.get<{
-      thread: { id: string } | null;
-      turns: Array<{
-        question: string;
-        answer: string;
-        coach_mode: CoachMode;
-        brain_context_snapshot_id: string;
-        sources: Source[];
-        suggestions: string[];
-        library_availability: LibraryAvailability;
-        warnings: ContextWarning[];
-        action_draft: CoachActionDraft | null;
-        action_status: Turn["actionStatus"];
-      }>;
-    }>(ROUTES.coach.threadsForClient(clientId), { showErrorToast: false })
+    void api.get<ThreadHistoryResponse>(ROUTES.coach.threadsForClient(clientId), { showErrorToast: false })
       .then((result) => {
         if (cancelled) return;
         setThreadId(result.thread?.id ?? null);
-        setTurns((result.turns ?? []).map((turn) => ({
-          question: turn.question,
-          answer: turn.answer,
-          coachMode: turn.coach_mode,
-          brainContextSnapshotId: turn.brain_context_snapshot_id,
-          sources: turn.sources ?? [],
-          suggestions: turn.suggestions ?? [],
-          libraryAvailability: turn.library_availability ?? "not_requested",
-          warnings: turn.warnings ?? [],
-          actionDraft: turn.action_draft ?? null,
-          actionStatus: turn.action_status ?? "none",
-          queriedKinds: [...new Set((turn.sources ?? []).map((source) => source.kind))],
-        })));
+        setTurns((result.turns ?? []).map(toTurn));
+        setHasMoreHistory(result.hasMore ?? false);
+        setHistoryBefore(result.turns?.[0]?.created_at ?? null);
       })
       .catch(() => { /* A new or temporarily unavailable history never blocks Coach. */ })
       .finally(() => { if (!cancelled) setHistoryLoading(false); });
     return () => { cancelled = true; };
   }, [clientId, persistConversation]);
+
+  /** "Load older messages": fetch the page before the oldest loaded turn and
+   *  PREPEND it — the visible conversation and the newest turn stay untouched. */
+  async function loadOlderTurns() {
+    if (!persistConversation || loadingOlder || !hasMoreHistory || !historyBefore) return;
+    setLoadingOlder(true);
+    try {
+      const result = await api.get<ThreadHistoryResponse>(
+        ROUTES.coach.threadsBefore(clientId, historyBefore),
+        { showErrorToast: false },
+      );
+      setTurns((prev) => [...(result.turns ?? []).map(toTurn), ...prev]);
+      setHasMoreHistory(result.hasMore ?? false);
+      setHistoryBefore(result.turns?.[0]?.created_at ?? null);
+    } catch {
+      toast.error("Older Coach messages could not be loaded.");
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
 
   async function persistTurn(turn: Turn) {
     if (!persistConversation || !turn.brainContextSnapshotId) return false;
@@ -373,6 +409,8 @@ export function useCoachChat({
     setThreadId(null);
     setTurns([]);
     setCoachMode("private");
+    setHasMoreHistory(false);
+    setHistoryBefore(null);
   }
 
   // A parent panel (golden questions) can push a question into the chat.
@@ -570,6 +608,9 @@ export function useCoachChat({
     turns,
     threadId,
     historyLoading,
+    hasMoreHistory,
+    loadingOlder,
+    loadOlderTurns,
     loading,
     interim,
     askFailure,

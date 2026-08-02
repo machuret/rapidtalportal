@@ -21,6 +21,9 @@ const sourceSchema = z.object({
   category: z.string().max(200).nullable(),
 });
 
+/** Turns per history page; the client offers "Load older messages" past this. */
+const PAGE_SIZE = 100;
+
 const saveSchema = z.object({
   clientId: z.string().uuid(),
   threadId: z.string().uuid().optional().nullable(),
@@ -60,6 +63,11 @@ export const GET = withAuth(async (req, { user, impersonating }) => {
   if (impersonating) return NextResponse.json({ error: "Coach history is unavailable while viewing as another user." }, { status: 409 });
   const clientId = req.nextUrl.searchParams.get("clientId");
   if (!clientId) return NextResponse.json({ error: "Missing clientId." }, { status: 400 });
+  // `before` pages backwards: return the PAGE_SIZE turns older than the cursor.
+  const before = req.nextUrl.searchParams.get("before");
+  if (before && Number.isNaN(Date.parse(before))) {
+    return NextResponse.json({ error: "Invalid before cursor." }, { status: 400 });
+  }
   const denied = assertClientAccess(user, clientId);
   if (denied) return denied;
 
@@ -69,14 +77,19 @@ export const GET = withAuth(async (req, { user, impersonating }) => {
     .eq("client_id", clientId).eq("owner_id", user.id).eq("status", "active")
     .maybeSingle();
   if (threadError) return serverError(threadError);
-  if (!thread) return NextResponse.json({ thread: null, turns: [] });
+  if (!thread) return NextResponse.json({ thread: null, turns: [], hasMore: false });
 
-  const { data: turns, error } = await db.from("coach_turns")
+  // One extra row tells us whether an older page exists without a count query.
+  let query = db.from("coach_turns")
     .select("id,question,answer,coach_mode,brain_context_snapshot_id,sources,suggestions,library_availability,warnings,action_draft,action_status,created_at")
-    .eq("thread_id", thread.id).eq("owner_id", user.id)
-    .order("created_at", { ascending: false }).limit(100);
+    .eq("thread_id", thread.id).eq("owner_id", user.id);
+  if (before) query = query.lt("created_at", before);
+  const { data: rows, error } = await query
+    .order("created_at", { ascending: false }).limit(PAGE_SIZE + 1);
   if (error) return serverError(error);
-  return NextResponse.json({ thread, turns: [...(turns ?? [])].reverse() });
+  const hasMore = (rows ?? []).length > PAGE_SIZE;
+  const turns = (rows ?? []).slice(0, PAGE_SIZE);
+  return NextResponse.json({ thread, turns: [...turns].reverse(), hasMore });
 });
 
 export const POST = withAuth(async (req, { user, impersonating }) => {

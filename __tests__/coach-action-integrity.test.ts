@@ -61,8 +61,9 @@ describe("Coach action integrity", () => {
 
   it("loads the newest 100 turns while preserving chronological display", () => {
     const threads = read("app/api/coach/threads/route.ts");
-    expect(threads).toContain('.order("created_at", { ascending: false }).limit(100)');
-    expect(threads).toContain("[...(turns ?? [])].reverse()");
+    expect(threads).toContain("const PAGE_SIZE = 100");
+    expect(threads).toContain('.order("created_at", { ascending: false }).limit(PAGE_SIZE + 1)');
+    expect(threads).toContain("[...turns].reverse()");
     expect(threads).toContain('error?.code === "23505"');
   });
 });

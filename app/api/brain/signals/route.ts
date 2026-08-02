@@ -13,6 +13,65 @@ import { EDITORIAL_DIMENSIONS } from "@/lib/brain/editorial-learning";
  * the official shared Brain Context resolver and later distils them into
  * curated memory.
  */
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+/**
+ * A team-visible 👎 on a Vault answer also lands in the Answers-to-review queue
+ * (vault_feedback), so admins can trace and fix the source — the signal alone
+ * only feeds distillation. Hard privacy boundary: `private_coach` feedback
+ * stays out of the team queue. Best-effort: a queue failure logs and never
+ * breaks the signal write. Re-rating the same artifact updates the existing
+ * unresolved row (matched on question + answer) instead of duplicating it.
+ */
+async function queueDownvoteForReview(
+  admin: AdminClient,
+  input: {
+    clientId: string;
+    userId: string;
+    surface: string;
+    rating: 1 | -1;
+    answer: string;
+    context: Record<string, unknown>;
+  },
+) {
+  if (input.rating !== -1 || input.surface !== "vault_answer") return;
+  if (input.context.visibility === "private_coach") return;
+  const rawQuestion = input.context.question;
+  const question = typeof rawQuestion === "string" ? rawQuestion.trim().slice(0, 2000) : "";
+  if (!question) return;
+  const answer = input.answer.slice(0, 8000);
+  const sources = (Array.isArray(input.context.sources) ? input.context.sources : []) as Json;
+  try {
+    const { data: prior, error: lookupError } = await admin
+      .from("vault_feedback").select("id")
+      .eq("client_id", input.clientId).eq("question", question).eq("answer", answer)
+      .eq("resolved", false)
+      .order("created_at", { ascending: false }).limit(1);
+    if (lookupError) throw lookupError;
+    const existing = (prior ?? [])[0] as { id: string } | undefined;
+    if (existing) {
+      const { error } = await admin
+        .from("vault_feedback")
+        .update({ rating: -1, sources, user_id: input.userId, created_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      if (error) throw error;
+      return;
+    }
+    const { error } = await admin.from("vault_feedback").insert({
+      client_id: input.clientId,
+      user_id: input.userId,
+      question,
+      answer,
+      rating: -1,
+      sources,
+      resolved: false,
+    });
+    if (error) throw error;
+  } catch (e) {
+    console.error("[brain/signals vault_feedback dual-write]", e);
+  }
+}
+
 const createSchema = z.object({
   client_id:     z.string().uuid(),
   surface:       z.enum(["content_topic", "vault_answer", "compose", "tool", "content_draft", "kb"]),
@@ -78,6 +137,14 @@ export const POST = withAuth(async (req, { user }) => {
         console.error("[brain/signals re-rate]", error.code, error.message);
         return serverError(error);
       }
+      await queueDownvoteForReview(admin, {
+        clientId: parsed.data.client_id,
+        userId: user.id,
+        surface: parsed.data.surface,
+        rating: parsed.data.rating,
+        answer: parsed.data.artifact_text,
+        context: parsed.data.context ?? {},
+      });
       return NextResponse.json(data, { status: 200 });
     }
   }
@@ -106,5 +173,13 @@ export const POST = withAuth(async (req, { user }) => {
     console.error("[brain/signals POST]", error.code, error.message);
     return serverError(error);
   }
+  await queueDownvoteForReview(admin, {
+    clientId: parsed.data.client_id,
+    userId: user.id,
+    surface: parsed.data.surface,
+    rating: parsed.data.rating,
+    answer: parsed.data.artifact_text,
+    context: parsed.data.context ?? {},
+  });
   return NextResponse.json(data, { status: 201 });
 });

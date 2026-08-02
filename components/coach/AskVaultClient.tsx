@@ -9,6 +9,7 @@ import {
   BookmarkPlus,
   Check,
   Flag,
+  History,
   ListTodo,
   LockKeyhole,
   Loader2,
@@ -30,6 +31,7 @@ import {
   type CoachRole,
   type CoachTaskOption,
   type CoachTeamMember,
+  type Turn,
 } from "./useCoachChat";
 
 const SUGGESTIONS = [
@@ -38,6 +40,9 @@ const SUGGESTIONS = [
   "How could we improve our Facebook Ads approach?",
   "What knowledge is missing from our Brain?",
 ];
+
+/** Distance from the bottom within which auto-scroll keeps following the stream. */
+const NEAR_BOTTOM_PX = 120;
 
 export function AskVaultClient({
   clientId,
@@ -72,6 +77,9 @@ export function AskVaultClient({
     setCoachMode,
     turns,
     historyLoading,
+    hasMoreHistory,
+    loadingOlder,
+    loadOlderTurns,
     loading,
     interim,
     askFailure,
@@ -81,13 +89,44 @@ export function AskVaultClient({
     newConversation,
   } = useCoachChat({ clientId, coachRole, actionsEnabled, persistConversation, externalAsk });
   const endRef = useRef<HTMLDivElement>(null);
+  // Auto-scroll stays "pinned" only while the user is near the bottom — scrolling
+  // up during a streamed answer must not yank them back down on every token.
+  const pinnedToBottomRef = useRef(true);
+  const prevLatestTurnRef = useRef<Turn | null>(null);
+  const prevInterimRef = useRef(false);
 
   // Kill any in-flight SSE stream when the page unmounts — otherwise the paid
   // LLM stream keeps running and onProgress fires against a dead component.
   useEffect(() => () => streamAbortRef.current?.abort(), [streamAbortRef]);
 
+  // Track the user's position: scrolling more than ~120px above the bottom
+  // unpins auto-scroll; scrolling back down re-pins it.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    const onScroll = () => {
+      const end = endRef.current;
+      if (!end) return;
+      pinnedToBottomRef.current =
+        end.getBoundingClientRect().bottom - window.innerHeight <= NEAR_BOTTOM_PX;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const latestTurn = turns.at(-1) ?? null;
+    // An appended turn (or a newly created interim bubble) always scrolls;
+    // a prepend ("Load older messages") must not move the reading position.
+    const appended = latestTurn !== prevLatestTurnRef.current;
+    const interimStarted = Boolean(interim) && !prevInterimRef.current;
+    prevLatestTurnRef.current = latestTurn;
+    prevInterimRef.current = Boolean(interim);
+    if (appended || interimStarted || pinnedToBottomRef.current) {
+      // Token-by-token following uses instant scrolling — a smooth animation
+      // lags behind the stream and would read as "scrolled up", unpinning itself.
+      const behavior: ScrollBehavior = appended || interimStarted ? "smooth" : "auto";
+      endRef.current?.scrollIntoView({ behavior });
+    }
   }, [turns, interim]);
 
   function onSubmit(e: React.FormEvent) {
@@ -161,6 +200,22 @@ export function AskVaultClient({
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {hasMoreHistory && (
+          <div className="flex justify-center">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={loadOlderTurns}
+              disabled={loadingOlder}
+              className="gap-1.5 border-zinc-700 text-xs"
+            >
+              {loadingOlder ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <History className="h-3.5 w-3.5" />}
+              Load older messages
+            </Button>
           </div>
         )}
 
