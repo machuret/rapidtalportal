@@ -392,18 +392,8 @@ export function useCoachChat({
     let resolvedMode = actionsEnabled
       ? inferredCoachMode(trimmed, coachRole, requestedMode)
       : "private";
-    // Regex stayed silent — ask the LLM router before defaulting to private.
-    // Advisory only: the edge function re-enforces role gates downstream.
-    if (actionsEnabled && requestedMode === "private" && resolvedMode === "private") {
-      try {
-        const routed = await api.post<{ mode: CoachMode }>(
-          ROUTES.coach.routeMode(),
-          { clientId, question: trimmed, coachRole },
-          { showErrorToast: false },
-        );
-        if (routed.mode && routed.mode !== "private") resolvedMode = routed.mode;
-      } catch { /* router failure never blocks a private answer */ }
-    }
+    // Show the searching bubble immediately — the router call below used to
+    // run first, leaving a dead pause on every unrouted question.
     setInterim({
       question: trimmed,
       answer: "",
@@ -415,6 +405,21 @@ export function useCoachChat({
       queriedKinds: requestedLayers,
       coachMode: resolvedMode,
     });
+    // Regex stayed silent — ask the LLM router before defaulting to private.
+    // Advisory only: the edge function re-enforces role gates downstream.
+    if (actionsEnabled && requestedMode === "private" && resolvedMode === "private") {
+      try {
+        const routed = await api.post<{ mode: CoachMode }>(
+          ROUTES.coach.routeMode(),
+          { clientId, question: trimmed, coachRole },
+          { showErrorToast: false },
+        );
+        if (routed.mode && routed.mode !== "private") {
+          resolvedMode = routed.mode;
+          setInterim((current) => current ? { ...current, coachMode: resolvedMode } : null);
+        }
+      } catch { /* router failure never blocks a private answer */ }
+    }
 
     // Action requests use strict JSON-schema output. Keeping them off the SSE
     // path means the UI never has to infer an executable action from prose.
