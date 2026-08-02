@@ -7,6 +7,7 @@ import {
   CONTENT_TYPE_INSTRUCTIONS,
   contentQualityWarnings,
   contentStructureWarnings,
+  repairExactCtaCardinality,
   normalizeContentForPlatform,
   unsupportedClaimWarnings,
 } from "@/supabase/functions/_shared/content-quality";
@@ -249,6 +250,27 @@ describe("platform structure contracts", () => {
       "Private credit can give property investors another way to assess time-sensitive opportunities.\n\nThe right structure depends on the asset, timeline and exit plan.\n\nWhat factors matter most in your next funding decision? Let’s discuss!",
       "linkedin",
     )).toEqual([]);
+  });
+
+  test("deterministically repairs duplicate or missing LinkedIn CTAs", () => {
+    const duplicate = [
+      "A practical opening for buyers.",
+      "Historical results can reveal useful patterns.",
+      "Contact us to learn more.",
+      "What would you examine first?",
+    ].join("\n\n");
+    const repairedDuplicate = repairExactCtaCardinality(duplicate, "linkedin");
+    expect(repairedDuplicate).not.toContain("Contact us to learn more.");
+    expect(contentStructureWarnings(repairedDuplicate, "linkedin")).toEqual([]);
+
+    const missing = [
+      "A practical opening for buyers.",
+      "Historical results can reveal useful patterns.",
+      "A careful comparison supports a more informed decision.",
+    ].join("\n\n");
+    const repairedMissing = repairExactCtaCardinality(missing, "linkedin");
+    expect(repairedMissing).toContain("What perspective would you add?");
+    expect(contentStructureWarnings(repairedMissing, "linkedin")).toEqual([]);
   });
 
   test.each([

@@ -219,7 +219,7 @@ describe("content generation orchestration goldens", () => {
     expect(result.blockingWarnings).toEqual([]);
   });
 
-  test("blocks a draft when automatic platform repair remains invalid", async () => {
+  test("deterministically repairs CTA cardinality when model repair remains invalid", async () => {
     const dna = { company_name: "Example Co" };
     const style = resolveContentStyle(dna, "linkedin", "professional", "Keep it short.");
     const invalidBody = [
@@ -246,8 +246,7 @@ describe("content generation orchestration goldens", () => {
         : JSON.stringify({ issues: [], draft: invalidBody, sourceItemIds: [] }),
     });
 
-    expect(result.blockingWarnings).toContain(
-      "LinkedIn requires exactly 1 call-to-action or discussion question; found 2.",
-    );
+    expect(result.finalBody).not.toContain("Contact us to continue.");
+    expect(result.blockingWarnings).toEqual([]);
   });
 });

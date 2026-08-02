@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Loader2, Zap } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "@/lib/api-client";
+import { api, ApiError } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,9 +92,13 @@ export function QuickDraftPage({
         ? `Draft ready with ${warningCount} editorial check${warningCount === 1 ? "" : "s"} to review.`
         : "Draft ready. You can edit it now.");
     } catch (error) {
-      toast.error(error instanceof Error
+      const exactWarning = error instanceof ApiError && Array.isArray(error.details.warnings)
+        ? error.details.warnings.find((warning): warning is string => typeof warning === "string")
+        : null;
+      const message = error instanceof Error
         ? error.message
-        : "The draft could not be generated. Your work has been saved.");
+        : "The draft could not be generated. Your work has been saved.";
+      toast.error(exactWarning ? `${message} ${exactWarning}` : message);
     } finally {
       quickCreatingRef.current = false;
       setQuickCreating(false);

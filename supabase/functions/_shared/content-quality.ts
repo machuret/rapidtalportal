@@ -128,6 +128,57 @@ function requireExactCtaCount(warnings: string[], body: string, label: string, e
   }
 }
 
+const EXACT_CTA_CONTENT_TYPES = new Set(["email", "linkedin", "facebook", "newsletter", "blog"]);
+
+/**
+ * Last-resort deterministic repair for the one-CTA contracts. A model gets the
+ * first opportunity to preserve and rewrite the prose naturally; this helper
+ * prevents an otherwise usable draft from failing solely because that repair
+ * left zero or duplicate CTA units behind.
+ */
+export function repairExactCtaCardinality(body: string, contentType: string): string {
+  if (!EXACT_CTA_CONTENT_TYPES.has(contentType)) return body.trim();
+
+  const detected = ctaUnits(body);
+  let repaired = body.trim();
+  if (detected.length > 1) {
+    const ranges: Array<{ start: number; end: number }> = [];
+    let cursor = 0;
+    for (const unit of detected.slice(0, -1)) {
+      const start = repaired.indexOf(unit, cursor);
+      if (start < 0) continue;
+      ranges.push({ start, end: start + unit.length });
+      cursor = start + unit.length;
+    }
+    for (const range of ranges.reverse()) {
+      repaired = `${repaired.slice(0, range.start)}${repaired.slice(range.end)}`;
+    }
+    repaired = repaired
+      .replace(/[ \t]+\n/gu, "\n")
+      .replace(/\n[ \t]+/gu, "\n")
+      .replace(/[ \t]{2,}/gu, " ")
+      .replace(/\n{3,}/gu, "\n\n")
+      .trim();
+  }
+
+  if (ctaUnits(repaired).length === 0) {
+    const fallback = contentType === "email"
+      ? "Please reply with the next step you would prefer."
+      : "What perspective would you add?";
+    if (contentType === "email") {
+      const blocks = paragraphs(repaired);
+      const signOffIndex = blocks.findIndex((block) => SIGN_OFF_PATTERN.test(block.split("\n")[0] ?? ""));
+      if (signOffIndex >= 0) blocks.splice(signOffIndex, 0, fallback);
+      else blocks.push(fallback);
+      repaired = blocks.join("\n\n");
+    } else {
+      repaired = `${repaired}\n\n${fallback}`.trim();
+    }
+  }
+
+  return repaired;
+}
+
 function compact(value: string, limit = 180): string {
   const oneLine = value.replace(/\s+/g, " ").trim();
   return oneLine.length > limit ? `${oneLine.slice(0, limit - 1)}…` : oneLine;

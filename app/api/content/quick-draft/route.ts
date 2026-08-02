@@ -206,11 +206,15 @@ export async function POST(req: NextRequest) {
   });
   const generatedBody = await generated.json().catch(() => ({})) as Record<string, unknown>;
   if (!generated.ok) {
+    const generationWarnings = Array.isArray(generatedBody.warnings)
+      ? generatedBody.warnings.filter((warning): warning is string => typeof warning === "string")
+      : [];
     await db.from("content_projects").update({
       last_operation: "quick_draft",
       last_error_code: typeof generatedBody.code === "string" ? generatedBody.code : `HTTP_${generated.status}`,
       last_error_message: typeof generatedBody.error === "string" ? generatedBody.error : "The draft could not be generated.",
       last_error_at: new Date().toISOString(),
+      last_generation_warnings: generationWarnings,
     }).eq("id", project.id).eq("client_id", input.clientId);
     return NextResponse.json({
       ...generatedBody,

@@ -10,7 +10,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    public code: string
+    public code: string,
+    public details: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = "ApiError";
@@ -80,7 +81,8 @@ export async function apiClient<T>(
         throw new ApiError(
           errorMessage(errorData, `Request failed with status ${response.status}`),
           response.status,
-          typeof errorData?.code === "string" ? errorData.code : "UNKNOWN_ERROR"
+          typeof errorData?.code === "string" ? errorData.code : "UNKNOWN_ERROR",
+          errorData && typeof errorData === "object" ? errorData : {},
         );
       }
       

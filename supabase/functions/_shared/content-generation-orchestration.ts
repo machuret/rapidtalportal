@@ -7,6 +7,7 @@ import {
   contentQualityWarnings,
   contentStructureWarnings,
   normalizeContentForPlatform,
+  repairExactCtaCardinality,
   type QualityContentType,
 } from "./content-quality.ts";
 
@@ -221,6 +222,14 @@ export async function runContentGenerationOrchestration(args: {
       console.warn("content-generate: deterministic structure repair skipped:", error);
     }
     remainingStructureWarnings = contentStructureWarnings(finalBody, args.contentType);
+    if (remainingStructureWarnings.some((warning) => warning.includes("requires exactly 1 call-to-action"))) {
+      const deterministicallyRepaired = repairExactCtaCardinality(finalBody, args.contentType);
+      if (deterministicallyRepaired !== finalBody) {
+        finalBody = normalizeContentForPlatform(deterministicallyRepaired, args.contentType);
+        critique.issues = [...critique.issues, "Repaired the platform CTA count."].slice(0, 8);
+      }
+      remainingStructureWarnings = contentStructureWarnings(finalBody, args.contentType);
+    }
   }
 
   const topicWarnings = topicAdherenceWarnings({
