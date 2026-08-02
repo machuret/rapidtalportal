@@ -7,7 +7,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import type { Competitor } from "@/types/competitors";
 import { useContentProjects } from "@/hooks/useContentProjects";
-import { CompetitorIntelligencePanel } from "./CompetitorIntelligencePanel";
+import { CompetitorIntelligencePanel } from "@/components/content/competitors/intelligence/CompetitorIntelligencePanel";
 import { ContentErrorBoundary } from "./ErrorBoundary";
 import { ProjectTakeover } from "./ProjectTakeover";
 

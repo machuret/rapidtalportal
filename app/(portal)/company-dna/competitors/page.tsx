@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, Radar, RefreshCw, BarChart3 } from "lucide-react";
 import { getCurrentUserAndClient } from "@/lib/auth";
-import { CompetitorsTab } from "@/components/content/CompetitorsTab";
+import { CompetitorsTab } from "@/components/content/competitors/CompetitorsTab";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { hasContentCapability } from "@/lib/auth/content-capabilities";
 
