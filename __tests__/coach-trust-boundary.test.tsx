@@ -3,7 +3,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CoachFeedback } from "@/components/brain/CoachFeedback";
+import { BrainFeedback } from "@/components/brain/BrainFeedback";
 
 const mockSendSignal = jest.fn();
 jest.mock("@/hooks/useBrainSignal", () => ({
@@ -18,11 +18,13 @@ describe("Coach trust boundary", () => {
 
   it("records specific negative feedback as private, reviewed learning", async () => {
     render(
-      <CoachFeedback
+      <BrainFeedback
+        variant="coach"
         clientId="11111111-1111-4111-8111-111111111111"
+        surface="vault_answer"
         question="What should we spend?"
-        answer="Spend $5,000."
-        snapshotId="22222222-2222-4222-8222-222222222222"
+        artifactText="Spend $5,000."
+        artifactId="22222222-2222-4222-8222-222222222222"
         coachRole="client"
         sources={[]}
       />,

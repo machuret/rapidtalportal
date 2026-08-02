@@ -324,6 +324,26 @@ export const NEGATIVE_FEEDBACK_REASONS = [
   "Other",
 ] as const;
 
+/** Reason chips for the private Coach-feedback variant (BrainFeedback variant="coach"). */
+export const COACH_POSITIVE_FEEDBACK_REASONS = [
+  "Accurate and relevant",
+  "Understood the business",
+  "Useful next steps",
+  "Good explanation",
+  "Right tone",
+] as const;
+
+export const COACH_NEGATIVE_FEEDBACK_REASONS = [
+  "Incorrect company fact",
+  "Outdated guidance",
+  "Missing information",
+  "Not relevant",
+  "Too vague",
+  "Wrong role or audience",
+  "Wrong tone",
+  "Other",
+] as const;
+
 export function dimensionsForFeedbackReason(reason: string): EditorialDimension[] {
   const mapping: Record<string, EditorialDimension[]> = {
     "Sounds like us": ["voice"],
@@ -343,6 +363,19 @@ export function dimensionsForFeedbackReason(reason: string): EditorialDimension[
     "Wrong audience": ["audience"],
     "Wrong structure": ["structure"],
     "Wrong CTA": ["cta"],
+    // Coach-variant reasons (previously a private map inside CoachFeedback).
+    "Accurate and relevant": ["claims", "topic"],
+    "Understood the business": ["audience", "useful_detail"],
+    "Useful next steps": ["cta", "useful_detail"],
+    "Good explanation": ["structure", "useful_detail"],
+    "Right tone": ["voice"],
+    "Incorrect company fact": ["claims"],
+    "Outdated guidance": ["claims"],
+    "Missing information": ["useful_detail"],
+    "Not relevant": ["topic"],
+    "Too vague": ["useful_detail"],
+    "Wrong role or audience": ["audience"],
+    "Wrong tone": ["voice"],
   };
   return mapping[reason] ?? [];
 }

@@ -8,6 +8,7 @@ import { ArrowLeft, Mail, Phone, CalendarDays, UserCircle, NotebookPen, Trending
 import { VaProfileEditor } from "@/components/team/VaProfileEditor";
 import { VaContractEditor, type ContractInit } from "@/components/team/VaContractEditor";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { MOOD_META, moodMeta } from "@/lib/daily-logs/mood";
 
 function fmtMs(ms: number) {
   const h = Math.floor(ms / 3600000);
@@ -15,18 +16,6 @@ function fmtMs(ms: number) {
   if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
   return `${m}m`;
 }
-
-const MOOD_META: Record<string, { emoji: string; label: string; color: string; bar: string }> = {
-  great:       { emoji: "🟢", label: "Great",       color: "text-green-400",  bar: "bg-green-400"  },
-  good:        { emoji: "🔵", label: "Good",        color: "text-blue-400",   bar: "bg-blue-400"   },
-  neutral:     { emoji: "🟡", label: "Neutral",     color: "text-yellow-400", bar: "bg-yellow-400" },
-  difficult:   { emoji: "🟠", label: "Difficult",   color: "text-orange-400", bar: "bg-orange-400" },
-  overwhelmed: { emoji: "🔴", label: "Overwhelmed", color: "text-red-400",    bar: "bg-red-400"    },
-};
-
-const MOOD_SCORE: Record<string, number> = {
-  great: 5, good: 4, neutral: 3, difficult: 2, overwhelmed: 1,
-};
 
 export default async function VaDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = await paramsPromise;
@@ -96,7 +85,7 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
     return acc;
   }, {});
   const avgMoodScore = logs.filter(l => l.mood).length
-    ? (logs.filter(l => l.mood).reduce((s, l) => s + (MOOD_SCORE[l.mood!] ?? 0), 0) / logs.filter(l => l.mood).length).toFixed(1)
+    ? (logs.filter(l => l.mood).reduce((s, l) => s + (moodMeta(l.mood)?.score ?? 0), 0) / logs.filter(l => l.mood).length).toFixed(1)
     : null;
 
   const initials = (va.full_name ?? va.email)
@@ -346,7 +335,7 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
         ) : (
           <div className="flex flex-col gap-3">
             {logs.map(log => {
-              const mood = log.mood ? MOOD_META[log.mood] : null;
+              const mood = moodMeta(log.mood);
               const hasContent = log.tasks_done || log.positives || log.challenges || log.goals_achieved || log.goals_tomorrow;
               return (
                 <details key={log.id} className="group rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">

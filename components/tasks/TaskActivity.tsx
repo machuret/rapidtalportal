@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { timeAgo } from "@/lib/time";
 import { Loader2, Send, MessageSquare } from "lucide-react";
 
 interface TaskEvent {
@@ -13,14 +14,6 @@ interface TaskEvent {
   who: string;
   mine: boolean;
   created_at: string;
-}
-
-function relTime(iso: string): string {
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
-  return formatDate(iso, { day: "numeric", month: "short" });
 }
 
 /** Comments + activity trail inside the task dialog. */
@@ -69,14 +62,14 @@ export function TaskActivity({ taskId, onCommented }: { taskId: string; onCommen
           {events.map((e) =>
             e.kind === "activity" ? (
               <p key={e.id} className="text-2xs text-zinc-500">
-                <span className="text-zinc-400">{e.who}</span> {e.body} · {relTime(e.created_at)}
+                <span className="text-zinc-400">{e.who}</span> {e.body} · {timeAgo(e.created_at)}
               </p>
             ) : (
               <div key={e.id} className={cn(
                 "rounded-lg px-3 py-2 text-sm max-w-[90%]",
                 e.mine ? "bg-orange-500/20 self-end" : "bg-zinc-800",
               )}>
-                <p className="text-2xs text-zinc-400 mb-0.5">{e.who} · {relTime(e.created_at)}</p>
+                <p className="text-2xs text-zinc-400 mb-0.5">{e.who} · {timeAgo(e.created_at)}</p>
                 <p className="text-zinc-200 whitespace-pre-wrap leading-snug">{e.body}</p>
               </div>
             ),

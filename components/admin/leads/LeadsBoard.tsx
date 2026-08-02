@@ -5,7 +5,8 @@ import { api } from "@/lib/api-client";
 import { useResource } from "@/hooks/useResource";
 import { useCrudDialog } from "@/hooks/useCrudDialog";
 import { ROUTES } from "@/lib/api/routes";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { timeAgo } from "@/lib/time";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,12 +33,6 @@ const STAGES: { key: string; label: string; accent: string }[] = [
 
 const money = (n: number | null | undefined) =>
   n == null ? "" : "$" + Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
-const relTime = (iso: string) => {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return formatDate(iso, { day: "numeric", month: "short" });
-};
 
 export function LeadsBoard({ initialLeads, owners, currentUserId }: { initialLeads: Lead[]; owners: LeadOwner[]; currentUserId: string }) {
   const { items: leads, create, update, remove } = useResource<Lead>({
@@ -268,7 +263,7 @@ function LeadTimeline({ leadId }: { leadId: string }) {
           <div key={e.id} className={cn("text-sm rounded-lg px-3 py-2", e.kind === "stage" ? "bg-zinc-800/40 text-zinc-400 italic" : "bg-zinc-800/70 text-zinc-200")}>
             <div className="flex items-center justify-between gap-2 mb-0.5">
               <span className="text-2xs font-medium uppercase tracking-wide text-zinc-500">{KIND_LABEL[e.kind] ?? e.kind}</span>
-              <span className="text-2xs text-zinc-600">{relTime(e.created_at)}</span>
+              <span className="text-2xs text-zinc-600">{timeAgo(e.created_at)}</span>
             </div>
             <p className="whitespace-pre-wrap">{e.body}</p>
           </div>

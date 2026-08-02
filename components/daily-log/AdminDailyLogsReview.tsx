@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useSubmitDailyLogFeedback } from "@/hooks/useDailyLog";
+import { MOOD_META } from "@/lib/daily-logs/mood";
 import type { Mood } from "./DailyLogStudio";
 
 interface LogWithUser {
@@ -23,18 +24,6 @@ interface LogWithUser {
   reviewed_at: string | null;
   users: { full_name: string | null; email: string } | null;
 }
-
-const MOOD_PILLS: Record<Mood, string> = {
-  great:       "bg-green-500/20 text-green-400",
-  good:        "bg-blue-500/20 text-blue-400",
-  neutral:     "bg-yellow-500/20 text-yellow-400",
-  difficult:   "bg-orange-500/20 text-orange-400",
-  overwhelmed: "bg-red-500/20 text-red-400",
-};
-
-const MOOD_EMOJI: Record<Mood, string> = {
-  great: "🟢", good: "🔵", neutral: "🟡", difficult: "🟠", overwhelmed: "🔴",
-};
 
 function Section({ label, value }: { label: string; value: string }) {
   if (!value?.trim()) return null;
@@ -78,8 +67,8 @@ function LogRow({ log, onFeedbackSaved }: { log: LogWithUser; onFeedbackSaved: (
           </div>
           <div>
             {log.mood ? (
-              <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${MOOD_PILLS[log.mood]}`}>
-                {MOOD_EMOJI[log.mood]} {log.mood.charAt(0).toUpperCase() + log.mood.slice(1)}
+              <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${MOOD_META[log.mood].pill}`}>
+                {MOOD_META[log.mood].emoji} {MOOD_META[log.mood].label}
               </span>
             ) : (
               <span className="text-xs text-zinc-600">No mood</span>

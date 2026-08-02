@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
-import { CoachFeedback } from "@/components/brain/CoachFeedback";
+import { BrainFeedback } from "@/components/brain/BrainFeedback";
 import { CoachProgressPanel } from "@/components/vault/CoachProgressPanel";
 import { CoachMemoryPanel } from "@/components/vault/CoachMemoryPanel";
 import {
@@ -1222,11 +1222,13 @@ function ChatTurn({
 
           {/* Feedback */}
           <div className="flex items-center gap-1 ml-auto">
-            <CoachFeedback
+            <BrainFeedback
+              variant="coach"
               clientId={clientId}
+              surface="vault_answer"
               question={turn.question}
-              answer={deepAnswer ?? turn.answer}
-              snapshotId={deepEvidence?.brainContextSnapshotId ?? turn.brainContextSnapshotId}
+              artifactText={deepAnswer ?? turn.answer}
+              artifactId={deepEvidence?.brainContextSnapshotId ?? turn.brainContextSnapshotId}
               coachRole={coachRole}
               sources={(deepEvidence?.sources ?? turn.sources).map((source) => ({
                 kind: source.kind,

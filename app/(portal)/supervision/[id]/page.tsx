@@ -4,14 +4,12 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ArrowLeft, NotebookPen, Clock, ListChecks, CheckCircle2 } from "lucide-react";
 import { sumWorkHours } from "@/lib/tasks/metrics";
+import { moodMeta } from "@/lib/daily-logs/mood";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 const WINDOW_DAYS = 30;
-const MOOD_LABEL: Record<string, string> = {
-  great: "😄 Great", good: "🙂 Good", neutral: "😐 Neutral", difficult: "😕 Difficult", overwhelmed: "😩 Overwhelmed",
-};
 
 export default async function SupervisionDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = await paramsPromise;
@@ -91,20 +89,23 @@ export default async function SupervisionDetailPage({ params: paramsPromise }: {
             <p className="text-sm text-zinc-500">No logs in this period.</p>
           ) : (
             <ul className="space-y-3">
-              {logs.map((l) => (
+              {logs.map((l) => {
+                const mood = moodMeta(l.mood);
+                return (
                 <li key={l.log_date} className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <span className="text-sm font-medium text-zinc-200">
                       {formatDate(l.log_date, { weekday: "short", day: "numeric", month: "short" })}
                     </span>
                     <span className="text-xs text-zinc-500">
-                      {l.mood ? MOOD_LABEL[l.mood] ?? l.mood : ""}
+                      {l.mood ? (mood ? `${mood.emoji} ${mood.label}` : l.mood) : ""}
                       {l.reviewed_at && <span className="ml-2 text-green-400">reviewed</span>}
                     </span>
                   </div>
                   {l.tasks_done?.trim() && <p className="text-xs text-zinc-400 line-clamp-3 whitespace-pre-wrap">{l.tasks_done}</p>}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </section>

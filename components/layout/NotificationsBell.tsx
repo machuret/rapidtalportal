@@ -6,6 +6,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { timeAgo } from "@/lib/time";
 import { Bell, CheckCheck, Loader2 } from "lucide-react";
 
 interface Notification {
@@ -16,14 +17,6 @@ interface Notification {
   href: string | null;
   read_at: string | null;
   created_at: string;
-}
-
-function relTime(iso: string): string {
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  if (mins < 1440) return `${Math.floor(mins / 60)}h`;
-  return `${Math.floor(mins / 1440)}d`;
 }
 
 export function NotificationsBell({ userId }: { userId: string }) {
@@ -158,7 +151,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
                       </p>
                       {n.body && <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{n.body}</p>}
                     </div>
-                    <span className="text-3xs text-zinc-600 shrink-0 mt-0.5">{relTime(n.created_at)}</span>
+                    <span className="text-3xs text-zinc-600 shrink-0 mt-0.5">{timeAgo(n.created_at)}</span>
                   </div>
                 </button>
               ))}

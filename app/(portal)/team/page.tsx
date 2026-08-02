@@ -6,13 +6,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { Users, NotebookPen, CalendarDays, Mail, Phone, ArrowRight } from "lucide-react";
 import { TeamLeaveApprovals, type PendingLeave } from "@/components/team/TeamLeaveApprovals";
+import { moodMeta } from "@/lib/daily-logs/mood";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "My Team — RapidTal" };
-
-const MOOD_EMOJI: Record<string, string> = {
-  great: "🟢", good: "🔵", neutral: "🟡", difficult: "🟠", overwhelmed: "🔴",
-};
 
 export default async function TeamPage() {
   const ctx = await getCurrentUserAndClient();
@@ -165,7 +162,7 @@ export default async function TeamPage() {
                             entry ? "bg-zinc-700" : "bg-zinc-800"
                           }`}
                         >
-                          {entry?.mood ? MOOD_EMOJI[entry.mood] ?? "•" : (
+                          {entry?.mood ? moodMeta(entry.mood)?.emoji ?? "•" : (
                             <span className="text-zinc-700 text-3xs">–</span>
                           )}
                         </div>

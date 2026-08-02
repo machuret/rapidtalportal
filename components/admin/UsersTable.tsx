@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { useUsers, type AdminUserRow } from "@/hooks/useUsers";
 import { ROLES, ROLE_OPTIONS, type UserRole } from "@/lib/taxonomy/roles";
 import { formatDate } from "@/lib/utils";
+import { timeAgo } from "@/lib/time";
 import { CreateUserDialog } from "./users/CreateUserDialog";
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -186,14 +187,6 @@ export function UsersTable({
 
   const [resetUser, setResetUser] = useState<UserRow | null>(null);
   const [resetResult, setResetResult] = useState<{ email: string; password: string } | null>(null);
-
-  const relTime = (iso: string | null | undefined) => {
-    if (!iso) return "never";
-    const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-    if (mins < 60) return `${Math.max(1, mins)}m ago`;
-    if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
-    return `${Math.floor(mins / 1440)}d ago`;
-  };
 
   /* ── Login as (impersonate) ────────────────────────────────── */
   const [impersonatingId, setImpersonatingId] = useState<string | null>(null);
@@ -406,7 +399,7 @@ export function UsersTable({
 
                     {/* Last active (joined date on hover) */}
                     <td className="px-4 py-3 text-zinc-500" title={`Joined ${formatDate(u.created_at)}`}>
-                      {relTime(lastActive[u.id])}
+                      {lastActive[u.id] ? timeAgo(lastActive[u.id]!) : "never"}
                     </td>
 
                     {/* Actions */}

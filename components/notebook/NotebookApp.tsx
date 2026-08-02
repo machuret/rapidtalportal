@@ -1,16 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import type { JSONContent } from "@tiptap/core";
-import { api } from "@/lib/api-client";
-import { ROUTES } from "@/lib/api/routes";
-import { createClient } from "@/lib/supabase/client";
 import { cn, formatDate } from "@/lib/utils";
 import { Editor } from "./Editor";
 import { RevisionDrawer } from "./RevisionDrawer";
 import type { NotebookPage } from "@/lib/notebook/types";
+import { useNotebookPages } from "@/hooks/useNotebookPages";
 import {
   Plus, FileText, ChevronRight, Search, Archive, ArchiveRestore, History,
   Check, Loader2, AlertTriangle, GripVertical,
@@ -29,8 +26,6 @@ interface Props {
   currentUserId: string;
 }
 
-type SaveState = "idle" | "saving" | "saved" | "error";
-
 function relTime(iso: string): string {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return "just now";
@@ -42,29 +37,25 @@ function relTime(iso: string): string {
 
 export function NotebookApp({ placements, activePlacementId, pages: initialPages, participants, currentUserId }: Props) {
   const router = useRouter();
-  const [pages, setPages] = useState<NotebookPage[]>(initialPages);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialPages.find((p) => !p.is_archived)?.id ?? initialPages[0]?.id ?? null,
-  );
-  const [editorKey, setEditorKey] = useState(0);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [stale, setStale] = useState(false);
   const [filter, setFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const dragId = useRef<string | null>(null);
 
-  const selected = pages.find((p) => p.id === selectedId) ?? null;
-
-  // Refs keep the debounced saver free of stale closures.
-  const contentRef = useRef<JSONContent | null>(null);
-  const titleRef = useRef<string>(selected?.title ?? "");
-  const updatedAtRef = useRef<string>(selected?.updated_at ?? "");
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Always points at the latest flush logic so any handler can drain a pending
-  // save before changing context (avoids losing edits inside the debounce window).
-  const flushRef = useRef<() => Promise<void>>(async () => {});
+  // Pages, selection, realtime and mutations live in the hook; this component
+  // keeps the tree rendering, filter, expanded state, placement switching and
+  // editor wiring.
+  const {
+    pages, selected, selectedId, editorKey, dragId,
+    selectPage, newPage, setArchived, reloadSelected, applyRestoredPage, setPageTitle, dropOn,
+    autosave,
+  } = useNotebookPages({
+    initialPages,
+    activePlacementId,
+    currentUserId,
+    onNewSubPage: (parentId) => setExpanded((e) => ({ ...e, [parentId]: true })),
+  });
+  const { saveState, stale, scheduleSave, flush, updateContent } = autosave;
 
   const nameFor = useCallback((uid: string | null) => {
     if (uid === participants.vaUserId) return participants.vaName;
@@ -72,142 +63,9 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
     return "RapidTal template";
   }, [participants]);
 
-  // ---- selection ----
-  const selectPage = useCallback(async (id: string) => {
-    await flushRef.current(); // persist any pending edits to the page we're leaving
-    const p = pages.find((x) => x.id === id);
-    setSelectedId(id);
-    setStale(false);
-    setSaveState("idle");
-    contentRef.current = (p?.content as JSONContent) ?? null;
-    titleRef.current = p?.title ?? "";
-    updatedAtRef.current = p?.updated_at ?? "";
-    setEditorKey((k) => k + 1);
-  }, [pages]);
-
-  // ---- autosave (debounce 1.5s) ----
-  const doSave = useCallback(async () => {
-    const id = selectedId;
-    if (!id) return;
-    setSaveState("saving");
-    try {
-      const res = await fetch(ROUTES.notebook.pages(), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, title: titleRef.current, content: contentRef.current, expectedUpdatedAt: updatedAtRef.current }),
-      });
-      if (res.status === 409) { setStale(true); setSaveState("idle"); return; }
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Save failed");
-      const saved = json as NotebookPage;
-      updatedAtRef.current = saved.updated_at;
-      setPages((prev) => prev.map((p) => (p.id === id ? { ...p, title: saved.title, updated_at: saved.updated_at, last_edited_by: saved.last_edited_by } : p)));
-      setSaveState("saved");
-    } catch {
-      setSaveState("error");
-    }
-  }, [selectedId]);
-
-  const scheduleSave = useCallback(() => {
-    if (stale) return;
-    setSaveState("saving");
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => { void doSave(); }, 1500);
-  }, [doSave, stale]);
-
-  // Drain a queued save immediately. Kept in a ref so stable callbacks (and the
-  // unmount cleanup) can flush without depending on the latest doSave identity.
-  flushRef.current = async () => {
-    if (timer.current) { clearTimeout(timer.current); timer.current = null; await doSave(); }
-  };
-
-  useEffect(() => () => { void flushRef.current(); }, []);
-
-  // ---- realtime: reflect the other party's changes ----
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`notebook:${activePlacementId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "notebook_pages", filter: `placement_id=eq.${activePlacementId}` },
-        (payload) => {
-          const row = payload.new as NotebookPage;
-          if (!row?.id) return;
-          if (row.last_edited_by === currentUserId) return; // ignore our own echo
-          setPages((prev) => {
-            const exists = prev.some((p) => p.id === row.id);
-            return exists ? prev.map((p) => (p.id === row.id ? row : p)) : [...prev, row];
-          });
-          if (row.id === selectedId) setStale(true); // they changed the open page
-        })
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [activePlacementId, selectedId, currentUserId]);
-
-  // ---- mutations ----
-  async function newPage(parentPageId: string | null) {
-    try {
-      const page = await api.post<NotebookPage>(ROUTES.notebook.pages(), { placementId: activePlacementId, parentPageId, title: "New page" });
-      setPages((p) => [...p, page]);
-      if (parentPageId) setExpanded((e) => ({ ...e, [parentPageId]: true }));
-      void selectPage(page.id);
-    } catch { /* api-client toasts */ }
-  }
-
-  async function setArchived(id: string, value: boolean) {
-    try {
-      const updated = await api.patch<NotebookPage>(ROUTES.notebook.pages(), { id, isArchived: value });
-      setPages((p) => p.map((x) => (x.id === id ? { ...x, is_archived: updated.is_archived, updated_at: updated.updated_at } : x)));
-      if (value && id === selectedId) {
-        const next = pages.find((p) => !p.is_archived && p.id !== id);
-        if (next) void selectPage(next.id); else setSelectedId(null);
-      }
-      toast.success(value ? "Page archived." : "Page restored.");
-    } catch { /* toasts */ }
-  }
-
-  async function reloadSelected() {
-    if (!selectedId) return;
-    try {
-      const res = await fetch(`${ROUTES.notebook.pages()}?id=${selectedId}`);
-      const fresh = (await res.json()) as NotebookPage;
-      if (!res.ok) throw new Error();
-      setPages((p) => p.map((x) => (x.id === fresh.id ? fresh : x)));
-      contentRef.current = fresh.content as JSONContent;
-      titleRef.current = fresh.title;
-      updatedAtRef.current = fresh.updated_at;
-      setStale(false);
-      setSaveState("idle");
-      setEditorKey((k) => k + 1);
-    } catch { toast.error("Couldn't reload the page."); }
-  }
-
   function onRestored(page: NotebookPage) {
-    setPages((p) => p.map((x) => (x.id === page.id ? page : x)));
-    contentRef.current = page.content as JSONContent;
-    titleRef.current = page.title;
-    updatedAtRef.current = page.updated_at;
-    setStale(false);
-    setEditorKey((k) => k + 1);
+    applyRestoredPage(page);
     setDrawerOpen(false);
-    toast.success("Revision restored.");
-  }
-
-  // ---- reorder within a level ----
-  async function dropOn(targetId: string) {
-    const src = dragId.current; dragId.current = null;
-    if (!src || src === targetId) return;
-    const srcPage = pages.find((p) => p.id === src);
-    const tgtPage = pages.find((p) => p.id === targetId);
-    if (!srcPage || !tgtPage || srcPage.parent_page_id !== tgtPage.parent_page_id) return; // same level only
-    const level = pages
-      .filter((p) => p.parent_page_id === srcPage.parent_page_id && !p.is_archived)
-      .sort((a, b) => a.sort_order - b.sort_order);
-    const without = level.filter((p) => p.id !== src);
-    const idx = without.findIndex((p) => p.id === targetId);
-    without.splice(idx, 0, srcPage);
-    const items = without.map((p, i) => ({ id: p.id, sortOrder: i, parentPageId: p.parent_page_id }));
-    setPages((prev) => prev.map((p) => { const it = items.find((i) => i.id === p.id); return it ? { ...p, sort_order: it.sortOrder } : p; }));
-    try { await api.post(ROUTES.notebook.pagesReorder(), { items }); } catch { /* toasts */ }
   }
 
   // ---- tree ----
@@ -232,7 +90,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
             <select
               value={activePlacementId}
               aria-label="Switch placement"
-              onChange={async (e) => { await flushRef.current(); router.push(`/notebook?placement=${e.target.value}`); }}
+              onChange={async (e) => { await flush(); router.push(`/notebook?placement=${e.target.value}`); }}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-2 h-8 text-sm text-zinc-200"
             >
               {placements.map((pl) => <option key={pl.id} value={pl.id}>{pl.counterpartName}{pl.clientName ? ` · ${pl.clientName}` : ""}</option>)}
@@ -297,12 +155,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
             <div className="flex items-center gap-3 px-5 pt-4 pb-2">
               <input
                 value={selected.title}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  titleRef.current = v;
-                  setPages((p) => p.map((x) => (x.id === selected.id ? { ...x, title: v } : x)));
-                  scheduleSave();
-                }}
+                onChange={(e) => setPageTitle(selected.id, e.target.value)}
                 placeholder="New page"
                 aria-label="Page title"
                 className="flex-1 bg-transparent text-2xl font-bold text-white outline-none placeholder:text-zinc-600"
@@ -336,7 +189,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
                 content={(selected.content as JSONContent) ?? undefined}
                 placementId={activePlacementId}
                 pageId={selected.id}
-                onChange={(json) => { contentRef.current = json; scheduleSave(); }}
+                onChange={(json) => { updateContent(json); scheduleSave(); }}
               />
             </div>
 
@@ -401,7 +254,7 @@ function PageRow({
           <button aria-label={isOpen ? "Collapse sub-pages" : "Expand sub-pages"} aria-expanded={isOpen}
             onClick={(e) => { e.stopPropagation(); onToggle(page.id, !isOpen); }}
             className="text-zinc-500 hover:text-white shrink-0">
-            <ChevronRight className={cn("w-3.5 h-3.5 transition-transform", isOpen && "rotate-90")} />
+            <ChevronRight className={cn("w-3 h-3 transition-transform", isOpen && "rotate-90")} />
           </button>
         ) : <span className="w-3.5 shrink-0" />}
         <GripVertical className="w-3 h-3 text-zinc-600 opacity-0 group-hover:opacity-100 shrink-0" />
