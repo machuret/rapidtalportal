@@ -203,7 +203,7 @@ export function BrainHome({ clientName, readiness, events }: BrainHomeProps) {
           </ul>
         )}
         <div className="mt-5 flex flex-wrap gap-4 border-t border-zinc-800 pt-4 text-sm">
-          <Link href="/brain-analytics" className="inline-flex items-center gap-1.5 text-orange-400 hover:text-orange-300">
+          <Link href="/brain/learning" className="inline-flex items-center gap-1.5 text-orange-400 hover:text-orange-300">
             Review learning and evaluations <ArrowRight className="h-3.5 w-3.5" />
           </Link>
           <Link href="/company-dna" className="inline-flex items-center gap-1.5 text-zinc-400 hover:text-white">
