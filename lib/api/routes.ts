@@ -45,6 +45,7 @@ export const ROUTES = {
     refreshDossier: () => "/api/vault/refresh-dossier",
     expand: () => "/api/vault/expand",
     unindexed: () => "/api/vault/unindexed",
+    indexBatch: () => "/api/vault/index-batch",
     text: () => "/api/vault/text",
     url: () => "/api/vault/url",
     linkedin: () => "/api/vault/linkedin",

@@ -20,7 +20,7 @@ import { VaultExpanded } from "./VaultExpanded";
 import { VaultItemRow } from "./VaultItemRow";
 import { useVaultList } from "@/hooks/useVaultList";
 import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
-import { CompetitorsTab } from "@/components/content/CompetitorsTab";
+import { CompetitorsTab } from "@/components/content/competitors/CompetitorsTab";
 import { VaultReadinessDashboard } from "./VaultReadinessDashboard";
 
 type TypeFilter = "all" | "text" | "url" | "pdf" | "docx";
@@ -94,55 +94,33 @@ function VaultClientInner({
   const [editItem, setEditItem] = useState<DbVaultItem | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reprocessing, setReprocessing] = useState<string | null>(null);
-  const [indexing, setIndexing] = useState<{ done: number; total: number } | null>(null);
 
   const hasFilters = debouncedSearch !== "" || typeFilter !== "all" || categoryFilter !== "all";
   const canReprocess = canWrite || role === "va";
 
-  // ── Backfill embeddings — index items so Ask the Brain can search them ──────
+  // ── Backfill embeddings — one server-side sweep indexes everything unindexed ──
+  // The work lives in /api/vault/index-batch (same selection + batching as the
+  // vault-index cron), so navigating away no longer aborts indexing. Busy state
+  // and the post-run readiness refresh are owned by VaultReadinessDashboard's
+  // runningAction; the list refreshes via useVaultList's realtime invalidation.
   const handleIndexAll = useCallback(async () => {
     try {
-      const { itemIds } = await api.get<{ itemIds: string[] }>(
-        `${ROUTES.vault.unindexed()}?clientId=${clientId}`,
+      const { processed, remaining } = await api.post<{ processed: number; remaining: number }>(
+        ROUTES.vault.indexBatch(),
+        { clientId },
+        { showErrorToast: false },
       );
-      if (!itemIds.length) {
+      if (processed === 0) {
         toast.success("Every source is ready for Ask and content generation.");
-        return;
-      }
-      setIndexing({ done: 0, total: itemIds.length });
-      let cursor = 0;
-      let completed = 0;
-      let succeeded = 0;
-      let failed = 0;
-      const CONCURRENCY = 3;
-      const worker = async () => {
-        for (;;) {
-          const index = cursor++;
-          if (index >= itemIds.length) break;
-          const id = itemIds[index];
-          if (!id) break;
-          try {
-            await api.post(ROUTES.vault.reprocess(id), { clientId }, { showErrorToast: false });
-            succeeded++;
-          } catch {
-            failed++;
-          } finally {
-            completed++;
-            setIndexing({ done: completed, total: itemIds.length });
-          }
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, itemIds.length) }, worker));
-      if (succeeded > 0) {
-        toast.success(`Prepared ${succeeded} source${succeeded !== 1 ? "s" : ""} for Ask and content generation.`);
-      }
-      if (failed > 0) {
-        toast.error(`${failed} source${failed !== 1 ? "s" : ""} could not be prepared. They remain marked for retry.`);
+      } else if (remaining > 0) {
+        toast.success(
+          `Indexing is running for ${processed} source${processed !== 1 ? "s" : ""} — ${remaining} still need${remaining !== 1 ? "" : "s"} embeddings. The background indexer finishes the rest automatically.`,
+        );
+      } else {
+        toast.success(`Prepared ${processed} source${processed !== 1 ? "s" : ""} for Ask and content generation.`);
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Indexing failed.");
-    } finally {
-      setIndexing(null);
     }
   }, [clientId]);
 
@@ -290,7 +268,7 @@ function VaultClientInner({
         clientId={clientId}
         canCurate={role === "client_admin" || role === "super_admin"}
         canIndex={canReprocess}
-        version={`${counts.total}:${counts.ready}:${counts.processing}:${counts.error}:${indexing?.done ?? "idle"}`}
+        version={`${counts.total}:${counts.ready}:${counts.processing}:${counts.error}`}
         onAdd={() => {
           setView("items");
           window.setTimeout(() => {
