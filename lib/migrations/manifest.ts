@@ -158,4 +158,5 @@ export const MIGRATIONS = [
   "20260802000142_coach_deep_answer_persistence.sql",
   "20260802000143_private_coach_usage_metrics.sql",
   "20260802000144_atomic_quick_content_create.sql",
+  "20260803000150_allow_content_archive_transition.sql",
 ] as const;
