@@ -340,11 +340,7 @@ export function PieceDetailEditor({
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => {
-              if (window.confirm("Archive this content? It will remain recoverable in the Library.")) {
-                void handleStatusChange("archived");
-              }
-            }}
+            onClick={() => void handleStatusChange("archived")}
             disabled={isUpdating || dirty}
             className="text-xs h-8 text-zinc-400 hover:text-zinc-200"
           >
