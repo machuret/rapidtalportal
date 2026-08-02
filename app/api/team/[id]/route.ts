@@ -3,8 +3,13 @@
  *
  * Only client_admin and super_admin can call this route.
  * The VA being updated must belong to the calling admin's client.
- * Fields: salary, payment_terms, payment_details, whatsapp, personal_email,
- *         address, timezone, skills, full_name, phone, birthday.
+ * Fields: whatsapp, personal_email, address, timezone, skills, full_name,
+ *         phone, birthday.
+ *
+ * NOTE (migration 147): salary / payment_terms / payment_details were dropped
+ * from this schema — va_job_contracts is the single source of truth for VA
+ * pay, written via /api/my-job/contract (see VaContractEditor). The legacy
+ * users columns are deprecated and written nowhere in app code.
  */
 
 import { NextResponse } from "next/server";
@@ -18,9 +23,6 @@ const patchSchema = z.object({
   full_name:       z.string().min(1).max(120).optional(),
   phone:           z.string().max(30).optional().nullable(),
   birthday:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
-  salary:          z.number().min(0).max(9999999).optional().nullable(),
-  payment_terms:   z.string().max(200).optional().nullable(),
-  payment_details: z.string().max(1000).optional().nullable(),
   whatsapp:        z.string().max(30).optional().nullable(),
   personal_email:  z.string().email().max(200).optional().nullable(),
   address:         z.string().max(500).optional().nullable(),
@@ -65,7 +67,7 @@ export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
     .from("users")
     .update(parsed.data)
     .eq("id", params.id)
-    .select("id, full_name, phone, birthday, salary, payment_terms, payment_details, whatsapp, personal_email, address, timezone, skills")
+    .select("id, full_name, phone, birthday, whatsapp, personal_email, address, timezone, skills")
     .single();
 
   if (error) return serverError(error);

@@ -17,9 +17,10 @@ interface VaProfileEditorProps {
     full_name: string | null;
     phone: string | null;
     birthday: string | null;
-    salary: number | null;
-    payment_terms: string | null;
-    payment_details: string | null;
+    // NOTE: compensation (rate / pay method) is intentionally NOT edited here —
+    // va_job_contracts is the single source of truth for VA pay, edited via
+    // VaContractEditor (migration 147). The legacy users.salary /
+    // payment_terms / payment_details columns are deprecated.
     whatsapp: string | null;
     personal_email: string | null;
     address: string | null;
@@ -36,10 +37,7 @@ export function VaProfileEditor({ vaId, initial }: VaProfileEditorProps) {
 
   const saveMutation = useMutation({
     mutationFn: (payload: typeof form) =>
-      api.patch(`/team/${vaId}`, {
-        ...payload,
-        salary: payload.salary != null ? Number(payload.salary) : null,
-      }),
+      api.patch(`/team/${vaId}`, payload),
     onSuccess: () => {
       toast.success("Profile updated.");
       setOpen(false);
@@ -135,42 +133,9 @@ export function VaProfileEditor({ vaId, initial }: VaProfileEditorProps) {
                 />
               </section>
 
-              {/* Compensation */}
-              <section>
-                <p className="label-section mb-3">Compensation</p>
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-zinc-400 text-xs">Salary (USD)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={form.salary ?? ""}
-                      onChange={e => set("salary", e.target.value ? Number(e.target.value) : null)}
-                      className="bg-zinc-900 border-zinc-700 text-zinc-100 h-8 text-sm"
-                      placeholder="e.g. 1200"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-zinc-400 text-xs">Payment Terms</Label>
-                    <Input
-                      value={form.payment_terms ?? ""}
-                      onChange={e => set("payment_terms", e.target.value || null)}
-                      className="bg-zinc-900 border-zinc-700 text-zinc-100 h-8 text-sm"
-                      placeholder="e.g. Monthly on the 1st"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-zinc-400 text-xs">Payment Details</Label>
-                    <Textarea
-                      value={form.payment_details ?? ""}
-                      onChange={e => set("payment_details", e.target.value || null)}
-                      rows={3}
-                      placeholder="Bank account, PayPal, Wise details…"
-                      className="bg-zinc-900 border-zinc-700 text-zinc-100 text-sm resize-none"
-                    />
-                  </div>
-                </div>
-              </section>
+              {/* Compensation was removed: VA pay (rate, currency, pay period,
+                  method, schedule) lives in va_job_contracts and is edited via
+                  VaContractEditor on the same page (migration 147). */}
 
               {/* Skills */}
               <section>

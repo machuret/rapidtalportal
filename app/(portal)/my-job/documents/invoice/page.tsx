@@ -50,7 +50,11 @@ export default async function InvoicePage({ searchParams: searchParamsPromise }:
   const paymentLine = contract?.payment_method
     ? `Method: ${contract.payment_method}${contract.payment_schedule ? ` · ${contract.payment_schedule}` : ""}`
     : "";
-  const notes = [paymentLine, p?.payment_details].filter(Boolean).join("\n");
+  // Migration 147: va_job_contracts is the pay source of truth. The legacy
+  // users.payment_details column only feeds the notes when the VA has no
+  // contract row at all, and is marked "(legacy)".
+  const legacyPaymentDetails = contract ? null : p?.payment_details;
+  const notes = [paymentLine, legacyPaymentDetails ? `(legacy) ${legacyPaymentDetails}` : null].filter(Boolean).join("\n");
 
   const initial: InvoiceInitial = {
     invoiceNo,

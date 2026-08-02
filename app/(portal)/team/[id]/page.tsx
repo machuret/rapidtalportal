@@ -9,6 +9,7 @@ import { VaProfileEditor } from "@/components/team/VaProfileEditor";
 import { VaContractEditor, type ContractInit } from "@/components/team/VaContractEditor";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { MOOD_META, moodMeta } from "@/lib/daily-logs/mood";
+import { fmtMoney } from "@/lib/my-job/pay";
 
 function fmtMs(ms: number) {
   const h = Math.floor(ms / 3600000);
@@ -91,7 +92,10 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
   const initials = (va.full_name ?? va.email)
     .split(" ").map((p: string) => p[0]).join("").slice(0, 2).toUpperCase();
 
-  // Cast va to include new fields
+  // Cast va to include new fields. salary / payment_terms / payment_details are
+  // DEPRECATED (migration 147): va_job_contracts is the source of truth for pay;
+  // these legacy columns only render as a marked "(legacy)" fallback when the
+  // VA has no contract row at all.
   const vaProfile = va as typeof va & {
     salary: number | null;
     payment_terms: string | null;
@@ -102,6 +106,17 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
     timezone: string | null;
     skills: string[] | null;
   };
+
+  // Compensation card source selection: the contract always wins when a row
+  // exists — even if it only carries some pay fields — so the two sources can
+  // never render side by side again.
+  const useLegacyPay = !contract;
+  const hasContractPay =
+    contract != null &&
+    (contract.rate != null || !!contract.payment_method || !!contract.payment_schedule);
+  const hasLegacyPay =
+    vaProfile.salary != null || !!vaProfile.payment_terms || !!vaProfile.payment_details;
+  const payCcy = contract?.currency ?? "USD";
 
   return (
     <div>
@@ -176,7 +191,7 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
             )}
             <span className="flex items-center gap-1.5 text-sm text-zinc-500">
               <UserCircle className="w-4 h-4 text-zinc-600" />
-              Joined {format(parseISO(va.created_at), "d MMM yyyy")}
+              Joined {va.created_at ? format(parseISO(va.created_at), "d MMM yyyy") : "—"}
             </span>
           </div>
 
@@ -190,7 +205,8 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
             </div>
           )}
 
-          {/* Admin edit button */}
+          {/* Admin edit button — compensation is edited via VaContractEditor
+              below (va_job_contracts is the pay source of truth, migration 147). */}
           <div className="mt-4">
             <VaProfileEditor
               vaId={va.id}
@@ -198,9 +214,6 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
                 full_name:       va.full_name,
                 phone:           va.phone,
                 birthday:        va.birthday,
-                salary:          vaProfile.salary,
-                payment_terms:   vaProfile.payment_terms,
-                payment_details: vaProfile.payment_details,
                 whatsapp:        vaProfile.whatsapp,
                 personal_email:  vaProfile.personal_email,
                 address:         vaProfile.address,
@@ -217,12 +230,47 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
         <VaContractEditor vaId={va.id} initial={contract} />
       </div>
 
-      {/* Compensation card — admin only */}
-      {(vaProfile.salary || vaProfile.payment_terms || vaProfile.payment_details) && (
+      {/* Compensation card — admin only. va_job_contracts is authoritative
+          (migration 147); the deprecated users.salary / payment_terms /
+          payment_details columns only render as a marked "(legacy)" fallback
+          when no contract row exists. */}
+      {!useLegacyPay && hasContractPay && (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-5 mb-6">
           <h2 className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
             <DollarSign className="w-4 h-4 text-zinc-500" />
             Compensation & Payment
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {contract?.rate != null && (
+              <div className="rounded-lg bg-zinc-800/60 border border-zinc-700 px-4 py-3">
+                <p className="text-xs text-zinc-500 mb-1">Rate</p>
+                <p className="text-lg font-bold text-green-400">
+                  {fmtMoney(contract.rate, payCcy)}
+                  <span className="text-xs font-normal text-zinc-500"> / {contract.pay_period ?? "monthly"}</span>
+                </p>
+              </div>
+            )}
+            {contract?.payment_method && (
+              <div className="rounded-lg bg-zinc-800/60 border border-zinc-700 px-4 py-3">
+                <p className="text-xs text-zinc-500 mb-1 flex items-center gap-1"><CreditCard className="w-3.5 h-3.5" /> Payment Method</p>
+                <p className="text-sm text-zinc-200">{contract.payment_method}</p>
+              </div>
+            )}
+            {contract?.payment_schedule && (
+              <div className="rounded-lg bg-zinc-800/60 border border-zinc-700 px-4 py-3">
+                <p className="text-xs text-zinc-500 mb-1">Payment Schedule</p>
+                <p className="text-sm text-zinc-200">{contract.payment_schedule}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {useLegacyPay && hasLegacyPay && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-5 mb-6">
+          <h2 className="text-sm font-semibold text-zinc-300 mb-4 flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-zinc-500" />
+            Compensation & Payment
+            <span className="text-xs font-normal text-zinc-500">(legacy)</span>
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {vaProfile.salary != null && (

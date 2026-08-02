@@ -152,4 +152,5 @@ export const MIGRATIONS = [
   "144_fix_multi_table_trigger_field_validation.sql",
   "145_vault_chunks_uniqueness.sql",
   "146_company_dna_field_provenance.sql",
+  "147_va_pay_single_source_of_truth.sql",
 ] as const;
