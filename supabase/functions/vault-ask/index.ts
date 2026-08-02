@@ -8,6 +8,11 @@
  *
  * Answer via OpenRouter (openai/gpt-4o-mini), grounded ONLY in retrieved context, cited.
  *
+ * Concise and deep answers may first run a bounded read-only tool loop
+ * (_shared/coach-tools.ts): up to 3 model rounds of tenant/role-scoped
+ * lookups (tasks, Vault, team), logged into the context snapshot's meta
+ * envelope. Action modes keep the single-shot strict-JSON path unchanged.
+ *
  * Secrets: OPENROUTER_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
  */
 
@@ -17,6 +22,11 @@ import {
   type BrainContextV1,
 } from "../_shared/brain-context.ts";
 import { embedBrainMemoryQuery } from "../_shared/brain-memory-embedding.ts";
+import {
+  COACH_TOOL_ADDENDUM,
+  persistCoachToolCallLog,
+  runCoachToolLoop,
+} from "../_shared/coach-tools.ts";
 import { corsHeaders, handleOptions, jsonResponse as json } from "../_shared/cors.ts";
 import { authorizeRequest, checkClientMembership } from "../_shared/auth.ts";
 
@@ -558,6 +568,17 @@ Deno.serve(async (req: Request) => {
     }
     let brainContext: BrainContextV1;
     let brainContextSnapshotId: string;
+    const embedQuery = async (value: string): Promise<number[]> => {
+      if (value === retrievalQuery.slice(0, 1_500) && embeddings[0]) {
+        return embeddings[0];
+      }
+      // deno-lint-ignore no-explicit-any
+      const session = new (globalThis as any).Supabase.ai.Session("gte-small");
+      return await session.run(value, {
+        mean_pool: true,
+        normalize: true,
+      }) as number[];
+    };
     try {
       brainContext = await resolveBrainContext({
         admin,
@@ -587,17 +608,7 @@ Deno.serve(async (req: Request) => {
         maxLibrary: deep ? 12 : 6,
         maxMemory: 20,
         memoryEmbed: embedBrainMemoryQuery,
-        embed: async (value) => {
-          if (value === retrievalQuery.slice(0, 1_500) && embeddings[0]) {
-            return embeddings[0];
-          }
-          // deno-lint-ignore no-explicit-any
-          const session = new (globalThis as any).Supabase.ai.Session("gte-small");
-          return await session.run(value, {
-            mean_pool: true,
-            normalize: true,
-          }) as number[];
-        },
+        embed: embedQuery,
       });
       const snapshot = await persistBrainContextSnapshot({
         admin,
@@ -783,43 +794,82 @@ Deno.serve(async (req: Request) => {
     const editablePrompt = deep
       ? await promptOverride(admin, "vault.ask.deep", DEEP_PROMPT)
       : await promptOverride(admin, "vault.ask.answer", ANSWER_PROMPT);
-    const systemPrompt = `${editablePrompt}\n\n${MANDATORY_BRAIN_POLICY}\n\n${coachRolePolicy(coachRole, requestedCoachMode)}`;
+    const systemPrompt = `${editablePrompt}\n\n${MANDATORY_BRAIN_POLICY}\n\n${coachRolePolicy(coachRole, requestedCoachMode)}${requestedCoachMode === "private" ? `\n\n${COACH_TOOL_ADDENDUM}` : ""}`;
 
     const responseFormat = coachActionResponseFormat(requestedCoachMode, coachRole);
     const effectiveStream = stream && requestedCoachMode === "private";
-    const chatRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${openrouterKey}`,
-        "HTTP-Referer": "https://rapidtal.online",
-        "X-Title": "RapidTal Portal",
-      },
-      body: JSON.stringify({
-        // Deep mode uses a stronger model for harder synthesis; concise stays
-        // on the fast/cheap model (it answers most questions well once the
-        // retrieval above hands it the right context).
-        model: deep ? DEEP_MODEL : CONCISE_MODEL,
-        max_tokens: deep ? 3000 : 550,
-        temperature: 0.4,
-        stream: effectiveStream,
-        ...(responseFormat ? { response_format: responseFormat } : {}),
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...history.flatMap((h) => {
-            const q = (h?.question ?? "").toString().trim();
-            const a = (h?.answer ?? "").toString().trim().slice(0, 600);
-            return q && a ? [{ role: "user", content: q }, { role: "assistant", content: a }] : [];
-          }),
-          { role: "user", content: `CONTEXT:\n${context}\n\nQUESTION: ${question}` },
-        ],
+    const baseMessages: Record<string, unknown>[] = [
+      { role: "system", content: systemPrompt },
+      ...history.flatMap((h) => {
+        const q = (h?.question ?? "").toString().trim();
+        const a = (h?.answer ?? "").toString().trim().slice(0, 600);
+        return q && a ? [{ role: "user", content: q }, { role: "assistant", content: a }] : [];
       }),
-    });
+      { role: "user", content: `CONTEXT:\n${context}\n\nQUESTION: ${question}` },
+    ];
+
+    // ── Bounded read-only tool loop (concise + deep answers only) ─────────────
+    // Action modes keep the single-shot strict-JSON path below untouched. The
+    // loop runs up to 3 model rounds of tenant/role-scoped read-only lookups;
+    // every executed call is logged into the context snapshot's meta envelope.
+    let loopMessages = baseMessages;
+    let loopAnswer: { content: string; usage: number } | null = null;
+    if (requestedCoachMode === "private") {
+      const loop = await runCoachToolLoop({
+        admin,
+        clientId,
+        actor: { userId: authUserId, coachRole },
+        openrouterKey,
+        model: deep ? DEEP_MODEL : CONCISE_MODEL,
+        maxTokens: deep ? 3000 : 550,
+        messages: baseMessages,
+        embed: embedQuery,
+      });
+      loopMessages = loop.messages;
+      // A streamed answer must come from a streaming call, so a loop-produced
+      // answer is only used directly on the non-streaming path; the streaming
+      // path re-asks through the streaming call below (tools omitted).
+      if (!effectiveStream) loopAnswer = loop.answer;
+      if (loop.log.length) {
+        await persistCoachToolCallLog({
+          admin,
+          snapshotId: brainContextSnapshotId,
+          context: brainContext,
+          model: deep ? DEEP_MODEL : CONCISE_MODEL,
+          iterations: loop.iterations,
+          log: loop.log,
+        });
+      }
+    }
+
+    let chatRes: Response | null = null;
+    if (loopAnswer === null) {
+      chatRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${openrouterKey}`,
+          "HTTP-Referer": "https://rapidtal.online",
+          "X-Title": "RapidTal Portal",
+        },
+        body: JSON.stringify({
+          // Deep mode uses a stronger model for harder synthesis; concise stays
+          // on the fast/cheap model (it answers most questions well once the
+          // retrieval above hands it the right context).
+          model: deep ? DEEP_MODEL : CONCISE_MODEL,
+          max_tokens: deep ? 3000 : 550,
+          temperature: 0.4,
+          stream: effectiveStream,
+          ...(responseFormat ? { response_format: responseFormat } : {}),
+          messages: loopMessages,
+        }),
+      });
+    }
 
     // ── Streaming: pipe OpenRouter's SSE straight through, sources in a header ────
     if (effectiveStream) {
       await logQuery(grounded.included.length);
-      if (!chatRes.ok || !chatRes.body) {
+      if (!chatRes || !chatRes.ok || !chatRes.body) {
         return json({
           error: "The Brain answer stream could not start. Please retry.",
           code: "brain_answer_stream_failed",
@@ -846,19 +896,30 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Non-streaming ───────────────────────────────────────────────────────────
-    const chatJson = await chatRes.json();
-    if (!chatRes.ok) {
-      return json({
-        error: `Answer generation failed: ${chatJson?.error?.message ?? "unknown"}`,
-        code: "brain_answer_generation_failed",
-        recoverable: true,
-        brainContextSnapshotId,
-        libraryAvailability: brainContext.library.availability,
-        warnings: brainContext.warnings,
-      }, 502);
+    // When the tool loop already produced the answer (private mode), chatRes
+    // was never issued — the loop's content and token usage are used directly.
+    let chatJson: {
+      choices?: Array<{ message?: { content?: string | null } }>;
+      usage?: { total_tokens?: number };
+      error?: { message?: string };
+    } | null = null;
+    if (loopAnswer === null) {
+      chatJson = await chatRes!.json();
+      if (!chatRes!.ok) {
+        return json({
+          error: `Answer generation failed: ${chatJson?.error?.message ?? "unknown"}`,
+          code: "brain_answer_generation_failed",
+          recoverable: true,
+          brainContextSnapshotId,
+          libraryAvailability: brainContext.library.availability,
+          warnings: brainContext.warnings,
+        }, 502);
+      }
     }
 
-    const rawAnswer: string = chatJson.choices?.[0]?.message?.content?.trim() ?? "";
+    const rawAnswer: string = loopAnswer !== null
+      ? loopAnswer.content
+      : chatJson?.choices?.[0]?.message?.content?.trim() ?? "";
     let answer = rawAnswer || "No answer generated.";
     let actionDraft: CoachActionDraft | null = null;
     if (requestedCoachMode !== "private") {
@@ -899,7 +960,7 @@ Deno.serve(async (req: Request) => {
         }, 502);
       }
     }
-    const tokensUsed: number = chatJson.usage?.total_tokens ?? 0;
+    const tokensUsed: number = loopAnswer !== null ? loopAnswer.usage : chatJson?.usage?.total_tokens ?? 0;
 
     await logQuery(grounded.included.length);
     return json({

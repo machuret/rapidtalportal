@@ -58,7 +58,7 @@ describe("Brain Phase 6 quality gate", () => {
     expect(libraryPosition).toBeGreaterThan(vaultPosition);
     expect(askEngine).toContain("company-specific source wins");
     expect(askEngine).toContain("NON-OVERRIDABLE BRAIN EVIDENCE POLICY");
-    expect(askEngine).toContain("`${editablePrompt}\\n\\n${MANDATORY_BRAIN_POLICY}\\n\\n${coachRolePolicy(coachRole, requestedCoachMode)}`");
+    expect(askEngine).toContain("`${editablePrompt}\\n\\n${MANDATORY_BRAIN_POLICY}\\n\\n${coachRolePolicy(coachRole, requestedCoachMode)}${requestedCoachMode === \"private\" ? `\\n\\n${COACH_TOOL_ADDENDUM}` : \"\"}`");
   });
 
   test("animates only layers that were actually queried", () => {
