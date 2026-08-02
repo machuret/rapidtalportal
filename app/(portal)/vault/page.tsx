@@ -3,6 +3,7 @@ import { getCurrentUserAndClient } from "@/lib/auth";
 import { VaultClient } from "@/components/vault/VaultClient";
 import { VaultTabs } from "@/components/vault/VaultTabs";
 import { PageIntro } from "@/components/layout/PageIntro";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Vault — RapidTal" };
@@ -15,6 +16,25 @@ export default async function VaultPage() {
   if (!user.client_id) redirect("/dashboard");
 
   const canWrite = user.role === "client_admin" || user.role === "super_admin" || user.role === "va";
+  const admin = createAdminClient();
+  const { data: dna } = await admin
+    .from("company_dna")
+    .select("website")
+    .eq("client_id", user.client_id)
+    .maybeSingle();
+
+  let companyWebsite: string | null = null;
+  const rawWebsite = dna?.website?.trim();
+  if (rawWebsite) {
+    try {
+      const parsed = new URL(/^https?:\/\//i.test(rawWebsite) ? rawWebsite : `https://${rawWebsite}`);
+      parsed.protocol = "https:";
+      companyWebsite = parsed.toString();
+    } catch {
+      // Invalid legacy DNA values remain editable in Company DNA, but are not
+      // offered as a one-click crawl target.
+    }
+  }
 
   return (
     <div>
@@ -25,6 +45,7 @@ export default async function VaultPage() {
         userId={user.id}
         role={user.role}
         canWrite={canWrite}
+        companyWebsite={companyWebsite}
       />
     </div>
   );

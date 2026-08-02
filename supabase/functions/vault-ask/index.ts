@@ -329,6 +329,7 @@ function sseOnce(
   libraryAvailability: BrainContextV1["library"]["availability"] = "not_requested",
   warnings: BrainContextV1["warnings"] = [],
   suggestions: string[] = [],
+  sources: unknown[] = [],
 ): Response {
   const enc = new TextEncoder();
   const stream = new ReadableStream({
@@ -342,7 +343,7 @@ function sseOnce(
     headers: {
       ...corsHeaders,
       "Content-Type": "text/event-stream",
-      "X-Vault-Sources": encodeSources([]),
+      "X-Vault-Sources": encodeSources(sources),
       ...(brainContextSnapshotId
         ? { "X-Brain-Context-Snapshot": brainContextSnapshotId }
         : {}),
@@ -834,10 +835,10 @@ Deno.serve(async (req: Request) => {
         embed: embedQuery,
       });
       loopMessages = loop.messages;
-      // A streamed answer must come from a streaming call, so a loop-produced
-      // answer is only used directly on the non-streaming path; the streaming
-      // path re-asks through the streaming call below (tools omitted).
-      if (!effectiveStream) loopAnswer = loop.answer;
+      // Reuse the loop's completed answer for both JSON and SSE callers. The
+      // browser can consume a completed answer through the same SSE envelope;
+      // asking OpenRouter to regenerate it would add cost, latency and drift.
+      loopAnswer = loop.answer;
       if (loop.log.length) {
         await persistCoachToolCallLog({
           admin,
@@ -874,9 +875,19 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // ── Streaming: pipe OpenRouter's SSE straight through, sources in a header ────
+    // ── Streaming: reuse a loop answer or pipe OpenRouter's SSE through ───────────
     if (effectiveStream) {
       await logQuery(grounded.included.length);
+      if (loopAnswer !== null) {
+        return sseOnce(
+          loopAnswer.content,
+          brainContextSnapshotId,
+          brainContext.library.availability,
+          brainContext.warnings,
+          suggestions,
+          sources,
+        );
+      }
       if (!chatRes || !chatRes.ok || !chatRes.body) {
         return json({
           error: "The Brain answer stream could not start. Please retry.",

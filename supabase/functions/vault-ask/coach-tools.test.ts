@@ -241,7 +241,7 @@ function createToolForcingFetch(bodies: Array<Record<string, unknown>>): typeof 
   }) as unknown as typeof fetch;
 }
 
-Deno.test("the tool loop stops after 3 forced tool-call rounds and the tools-less final call answers", async () => {
+Deno.test("the tool loop reserves its third and final call for the answer", async () => {
   const bodies: Array<Record<string, unknown>> = [];
   const fetchImpl = createToolForcingFetch(bodies);
   const { admin } = createMockAdmin({
@@ -261,34 +261,23 @@ Deno.test("the tool loop stops after 3 forced tool-call rounds and the tools-les
     embed: fakeEmbed,
     fetchImpl,
   });
-  // The mock would keep requesting tools forever (5+ rounds); the loop caps at 3.
-  assert(loop.answer === null, "no direct answer when the cap is exhausted");
+  // The first two calls may use tools; the third is forced to answer without
+  // tools, so the caller never needs a fourth paid completion.
+  assert(loop.answer?.content === "The final grounded answer.", "final budgeted call answers");
   assert(loop.iterations === 3, "exactly 3 iterations ran");
   assert(bodies.length === 3, "exactly 3 model calls ran inside the loop");
   assert(
-    bodies.every((body) => Array.isArray(body.tools)),
-    "every loop call offered the tools",
+    bodies.slice(0, 2).every((body) => Array.isArray(body.tools)),
+    "the first two calls offered tools",
   );
-  assert(loop.log.length === 3, "one tool log entry per round");
+  assert(!("tools" in bodies[2]), "the final budgeted call omits tools");
+  assert(loop.log.length === 2, "only the two lookup rounds create tool logs");
   assert(
     loop.log.every((entry) => entry.tool === "get_team" && entry.ok),
     "every executed call is logged with tool and status",
   );
   const toolMessages = loop.messages.filter((message) => message.role === "tool");
-  assert(toolMessages.length === 3, "tool results were appended to the conversation");
-
-  // The caller then forces the answer through its existing tools-less call.
-  const finalRes = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    body: JSON.stringify({ model: "openai/gpt-4o-mini", messages: loop.messages }),
-  });
-  const finalJson = await finalRes.json() as { choices: Array<{ message: { content: string } }> };
-  assert(bodies.length === 4, "the forced final call is the 4th model call");
-  assert(!("tools" in bodies[3]), "the forced final call omits tools");
-  assert(
-    finalJson.choices[0].message.content === "The final grounded answer.",
-    "the answer is produced after the 3rd capped round",
-  );
+  assert(toolMessages.length === 2, "tool results were appended to the conversation");
 });
 
 Deno.test("the tool loop returns the model's direct answer without tool calls", async () => {

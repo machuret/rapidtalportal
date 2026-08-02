@@ -5,7 +5,7 @@ import type { DbVaultItem, VaultCategory } from "@/types/database";
 import { toast } from "sonner";
 import {
   FileText, Trash2, Search, Loader2, CheckSquare, Square, X, Radar,
-  AlertTriangle, RefreshCw,
+  AlertTriangle, RefreshCw, Sparkles,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ interface VaultClientProps {
   userId: string;
   role: string;
   canWrite: boolean; // client_admin or super_admin
+  companyWebsite?: string | null;
   title?: string;
   subtitle?: string;
 }
@@ -54,6 +55,7 @@ export function VaultClient(props: VaultClientProps) {
 
 function VaultClientInner({
   clientId, userId, role, canWrite,
+  companyWebsite = null,
   title = "Company Knowledge",
   subtitle = "Approved company facts used by RapidTal Coach and content generation.",
 }: VaultClientProps) {
@@ -94,6 +96,7 @@ function VaultClientInner({
   const [editItem, setEditItem] = useState<DbVaultItem | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reprocessing, setReprocessing] = useState<string | null>(null);
+  const [startingWebsiteCrawl, setStartingWebsiteCrawl] = useState(false);
 
   const hasFilters = debouncedSearch !== "" || typeFilter !== "all" || categoryFilter !== "all";
   const canReprocess = canWrite || role === "va";
@@ -165,6 +168,24 @@ function VaultClientInner({
     }
   }, [clientId, reprocessItem]);
 
+  const handleCrawlCompanyWebsite = useCallback(async () => {
+    if (!companyWebsite || startingWebsiteCrawl) return;
+    setStartingWebsiteCrawl(true);
+    try {
+      const { job } = await api.post<{ job: CrawlJob }>(
+        ROUTES.vault.crawlSite(),
+        { url: companyWebsite, clientId },
+        { showErrorToast: false },
+      );
+      setCrawlJob(job);
+      toast.success("Website crawl started. It will keep running if you leave this page.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The website crawl could not start.");
+    } finally {
+      setStartingWebsiteCrawl(false);
+    }
+  }, [clientId, companyWebsite, startingWebsiteCrawl]);
+
   function toggleSelect(id: string) {
     setSelected(prev => {
       const n = new Set(prev);
@@ -211,6 +232,14 @@ function VaultClientInner({
   }
 
   const isEmptyVault = counts.total === 0 && !hasFilters;
+  let companyWebsiteHost: string | null = null;
+  if (companyWebsite) {
+    try {
+      companyWebsiteHost = new URL(companyWebsite).hostname.replace(/^www\./, "");
+    } catch {
+      companyWebsiteHost = null;
+    }
+  }
 
   return (
     <div>
@@ -387,7 +416,29 @@ function VaultClientInner({
             <FileText className="w-7 h-7 text-zinc-600" />
           </div>
           <p className="text-zinc-300 font-semibold text-lg mb-1">Your Vault is empty</p>
-          <p className="text-zinc-500 text-sm">Add a document, URL, or text above to get started.</p>
+          {canWrite && companyWebsite && companyWebsiteHost ? (
+            <>
+              <p className="mx-auto max-w-xl text-sm text-zinc-500">
+                Start with the website already saved in Company DNA. RapidTal will collect its useful pages and prepare them in the background.
+              </p>
+              <Button
+                type="button"
+                onClick={() => void handleCrawlCompanyWebsite()}
+                disabled={startingWebsiteCrawl}
+                className="mt-5 gap-2"
+              >
+                {startingWebsiteCrawl
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Sparkles className="h-4 w-4" />}
+                Crawl {companyWebsiteHost}
+              </Button>
+              <p className="mt-3 text-xs text-zinc-600">You can close this page after the crawl starts.</p>
+            </>
+          ) : (
+            <p className="text-zinc-500 text-sm">
+              Add a document, paste knowledge, or enter the company website above to get started.
+            </p>
+          )}
         </div>
       ) : items.length === 0 ? (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-10 text-center">

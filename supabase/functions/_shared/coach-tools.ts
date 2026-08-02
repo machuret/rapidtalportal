@@ -428,12 +428,11 @@ interface LoopCompletion {
 
 /**
  * The bounded agentic loop behind the concise/deep Coach answer. Runs at most
- * `maxIterations` non-streaming model calls that may request tool calls; each
- * request carries the three read-only tool definitions and is capped at
- * `perCallTimeoutMs`. Terminates as soon as the model answers with content;
- * on the cap (or any model-call failure) it returns the accumulated messages
- * — tool exchanges included — so the caller can force a final answer through
- * its existing tools-less call. Never throws.
+ * `maxIterations` non-streaming model calls. Every round except the last may
+ * request tools; the final budgeted round omits tools and therefore produces
+ * the answer instead of forcing the caller to pay for a fourth completion.
+ * Each request is capped at `perCallTimeoutMs`. Terminates as soon as the
+ * model answers with content. Never throws.
  */
 export async function runCoachToolLoop(args: {
   // deno-lint-ignore no-explicit-any
@@ -467,6 +466,7 @@ export async function runCoachToolLoop(args: {
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     iterations = iteration + 1;
+    const allowTools = iteration < maxIterations - 1;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let res: Response | null = null;
@@ -484,8 +484,9 @@ export async function runCoachToolLoop(args: {
           max_tokens: args.maxTokens,
           temperature: 0.4,
           stream: false,
-          tools: COACH_TOOL_DEFINITIONS,
-          tool_choice: "auto",
+          ...(allowTools
+            ? { tools: COACH_TOOL_DEFINITIONS, tool_choice: "auto" }
+            : {}),
           messages,
         }),
         signal: controller.signal,
@@ -513,7 +514,7 @@ export async function runCoachToolLoop(args: {
     }
     usageTotal += Number(payload.usage?.total_tokens ?? 0) || 0;
     const message = payload.choices?.[0]?.message;
-    const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+    const toolCalls = allowTools && Array.isArray(message?.tool_calls) ? message.tool_calls : [];
     if (!toolCalls.length) {
       const content = typeof message?.content === "string" ? message.content.trim() : "";
       if (content) {
