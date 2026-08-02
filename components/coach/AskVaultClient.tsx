@@ -178,6 +178,7 @@ export function AskVaultClient({
             history={turns.slice(Math.max(0, i - 4), i).map((p) => ({ question: p.question, answer: p.answer }))}
             onAsk={(value) => ask(value, "private")}
             onGoDeeper={goDeeper}
+            onActionComplete={() => setCoachMode("private")}
           />
         ))}
 

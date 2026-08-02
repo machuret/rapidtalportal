@@ -41,7 +41,7 @@ import type {
 /** One Q&A exchange — clean answer by default, with optional "Go deeper" + sources. */
 export const ChatTurn = memo(function ChatTurn({
   turn, clientId, history, canCurate, coachRole, speakerName,
-  teamMembers, actionsEnabled, onAsk, onGoDeeper,
+  teamMembers, actionsEnabled, onAsk, onGoDeeper, onActionComplete,
   taskOptions,
 }: {
   turn: Turn;
@@ -61,6 +61,8 @@ export const ChatTurn = memo(function ChatTurn({
     onAnswer: (answer: string) => void,
     onEvidence: (evidence: AnswerEvidence) => void,
   ) => Promise<boolean>;
+  /** Called after a confirmed action executes — the shell resets the composer mode. */
+  onActionComplete?: () => void;
 }) {
   const [showSources, setShowSources] = useState(true);
   const [deepAnswer, setDeepAnswer] = useState<string | null>(null);
@@ -157,6 +159,9 @@ export const ChatTurn = memo(function ChatTurn({
         toast.success("Task updated.");
       }
       setActionComplete(true);
+      // The mode was consumed — reset the composer to private so the user's
+      // next question doesn't silently become another action draft.
+      onActionComplete?.();
     } catch (error) {
       toast.error(errorMessage(error, "The Coach action could not be completed."));
     } finally {
