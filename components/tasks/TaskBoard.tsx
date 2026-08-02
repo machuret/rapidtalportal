@@ -10,7 +10,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { categoryColor } from "@/lib/tasks/category-colors";
 import { CategoryManager, type TaskCategory } from "./CategoryManager";
 import { RecurrenceManager, type TaskRecurrence } from "./RecurrenceManager";
-import { Plus, CalendarDays, Settings2, Repeat, MessageSquare } from "lucide-react";
+import { Plus, CalendarDays, Settings2, Repeat, MessageSquare, Archive, ChevronDown, CheckCircle2, Loader2 } from "lucide-react";
 import { TaskDialog } from "./TaskDialog";
 import type { Task, TaskStatus, BoardMember } from "./types";
 
@@ -55,6 +55,11 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
   const [managingCats, setManagingCats] = useState(false);
   const [managingRecur, setManagingRecur] = useState(false);
   const [live, setLive] = useState(false);
+  // "Archived" drawer: archived cards are fetched lazily on first expand, never
+  // on mount — most sessions never open it. null = not loaded yet.
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archived, setArchived] = useState<Task[] | null>(null);
+  const [archiveLoading, setArchiveLoading] = useState(false);
   const dragId = useRef<string | null>(null);
   const supabaseRef = useRef(createClient());
 
@@ -146,6 +151,21 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
     "inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 transition-colors border",
     active ? "bg-zinc-100 text-zinc-900 border-zinc-100" : "text-zinc-400 bg-zinc-900 border-zinc-700 hover:text-white hover:border-zinc-500",
   );
+
+  // First expand loads the archive; a failed load stays null so the next
+  // expand retries (api-client already toasted the reason).
+  async function toggleArchive() {
+    const next = !archiveOpen;
+    setArchiveOpen(next);
+    if (!next || archived !== null || archiveLoading) return;
+    setArchiveLoading(true);
+    try {
+      const rows = await api.get<Task[]>(ROUTES.tasksArchived(clientId));
+      setArchived(Array.isArray(rows) ? rows : []);
+    } catch { /* toast handled by api-client */ } finally {
+      setArchiveLoading(false);
+    }
+  }
 
   return (
     <>
@@ -305,6 +325,68 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/60">
+        <button
+          onClick={() => void toggleArchive()}
+          aria-expanded={archiveOpen}
+          className="w-full flex items-center justify-between px-3.5 py-2.5 text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
+        >
+          <span className="inline-flex items-center gap-2">
+            <Archive className="w-4 h-4 text-zinc-500" />
+            Archived
+            {archived !== null && (
+              <span className="inline-flex items-center text-2xs font-medium rounded-full px-2 py-0.5 text-zinc-400 bg-zinc-800">
+                {archived.length}
+              </span>
+            )}
+          </span>
+          <ChevronDown className={cn("w-4 h-4 text-zinc-500 transition-transform", archiveOpen && "rotate-180")} />
+        </button>
+        {archiveOpen && (
+          <div className="border-t border-zinc-800 p-2.5">
+            {archiveLoading && (
+              <p className="flex items-center gap-2 text-xs text-zinc-500 px-1 py-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading archived tasks…
+              </p>
+            )}
+            {!archiveLoading && archived !== null && archived.length === 0 && (
+              <p className="text-xs text-zinc-600 text-center py-4">No archived tasks yet — completed cards land here 30 days after they&apos;re done.</p>
+            )}
+            {!archiveLoading && archived !== null && archived.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                {archived.map((t) => {
+                  const cat = categoryById(t.category_id);
+                  return (
+                    // Read-only: archived cards can't be edited, moved or reopened.
+                    <div key={t.id} className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 opacity-70">
+                      <p className={cn("text-sm font-medium leading-snug", t.status === "done" ? "line-through text-zinc-400" : "text-zinc-100")}>
+                        {t.title}
+                      </p>
+                      {(t.completed_at || cat) && (
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          {cat && (
+                            <span className={cn("inline-flex items-center gap-1 text-2xs font-medium rounded-full px-2 py-0.5", categoryColor(cat.color).chip)}>
+                              <span className={cn("w-1.5 h-1.5 rounded-full", categoryColor(cat.color).dot)} />
+                              {cat.name}
+                            </span>
+                          )}
+                          {t.completed_at && (
+                            <span className="inline-flex items-center gap-1 text-2xs text-zinc-400 bg-zinc-800 rounded-full px-2 py-0.5">
+                              <CheckCircle2 className="w-3 h-3" />
+                              {formatDate(t.completed_at)}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {creatingIn && (

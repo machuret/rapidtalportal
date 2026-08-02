@@ -154,4 +154,5 @@ export const MIGRATIONS = [
   "146_company_dna_field_provenance.sql",
   "147_va_pay_single_source_of_truth.sql",
   "148_coach_tool_call_log.sql",
+  "149_notebook_revision_coalescing.sql",
 ] as const;

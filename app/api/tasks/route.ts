@@ -1,5 +1,8 @@
 /**
  * Task board API (shared Trello-style board per client).
+ * GET    — list a client's cards. Default: the live board (archived_at IS NULL).
+ *          ?archived=true returns ONLY archived cards (the cron's 30-day sweep),
+ *          newest completion first, capped at 200 — the board's "Archived" drawer.
  * POST   — create a task. VAs create for themselves; admins can assign anyone in the client.
  * PATCH  — update fields / move between columns. VAs only their own cards; admins any.
  * DELETE — remove a task. Creator, assignee, or admins.
@@ -58,6 +61,30 @@ const deleteSchema = z.object({ id: z.string().uuid() });
 const SELECT = "id, client_id, assigned_to, created_by, title, description, status, order_index, due_date, priority, completed_at, category_id, created_at, updated_at";
 
 const isAdmin = (role: string) => role === "client_admin" || role === "super_admin";
+
+export const GET = withAuth(async (req, { user }) => {
+  const clientId = req.nextUrl.searchParams.get("clientId");
+  if (!clientId || !z.string().uuid().safeParse(clientId).success) {
+    return NextResponse.json({ error: "clientId required." }, { status: 422 });
+  }
+  // The board is shared across the whole client, so scoping is client-level.
+  const denied = assertClientAccess(user, clientId);
+  if (denied) return denied;
+
+  const admin = createAdminClient();
+  const select = `${SELECT}, archived_at`;
+  const { data, error } = req.nextUrl.searchParams.get("archived") === "true"
+    // Archive view: only cards the cron swept off the board, newest completion
+    // first, bounded so a long-lived client can't pull unbounded history.
+    ? await admin.from("tasks").select(select).eq("client_id", clientId)
+        .not("archived_at", "is", null)
+        .order("completed_at", { ascending: false }).limit(200)
+    : await admin.from("tasks").select(select).eq("client_id", clientId)
+        .is("archived_at", null)
+        .order("status").order("order_index").order("created_at");
+  if (error) return serverError(error);
+  return NextResponse.json(data ?? []);
+});
 
 const STATUS_LABEL: Record<string, string> = {
   todo: "To Do", in_progress: "In Progress", review: "Review", done: "Done",
