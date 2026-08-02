@@ -42,6 +42,7 @@ import {
 } from "@/app/api/content/competitors/sources/route";
 import { POST as duplicate } from "@/app/api/content/duplicate/route";
 import { POST as generate } from "@/app/api/content/generate/route";
+import { POST as quickDraft } from "@/app/api/content/quick-draft/route";
 import {
   DELETE as deleteGolden,
   GET as getGoldens,
@@ -113,6 +114,16 @@ function jsonRequest(url: string, body: unknown): NextRequest {
 }
 
 const cases: { endpoint: string; call: () => Promise<Response> }[] = [
+  {
+    endpoint: "quick-draft:POST",
+    call: () => quickDraft(jsonRequest("https://portal.test/api/content/quick-draft", {
+      clientId: CLIENT_B,
+      idempotencyKey: "15151515-1515-4515-8515-151515151515",
+      title: "Cross-tenant quick draft",
+      contentType: "linkedin",
+      guidance: null,
+    })),
+  },
   {
     endpoint: "adapt:POST",
     call: () => adapt(jsonRequest("https://portal.test/api/content/adapt", {

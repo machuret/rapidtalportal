@@ -148,12 +148,13 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
 
   const notification = outcome.notification;
   if (!outcome.replayed && notification?.recipientIds?.length && notification.type && notification.title) {
+    const taskId = typeof outcome.result?.taskId === "string" ? outcome.result.taskId : null;
     void notify(notification.recipientIds, {
       clientId: parsed.data.clientId,
       type: notification.type,
       title: notification.title,
       body: notification.body ?? "",
-      href: notification.href ?? "/dashboard",
+      href: taskId ? `/tasks?card=${taskId}` : notification.href ?? "/dashboard",
     });
   }
   return NextResponse.json({ success: true, replayed: Boolean(outcome.replayed), result: outcome.result ?? {} });

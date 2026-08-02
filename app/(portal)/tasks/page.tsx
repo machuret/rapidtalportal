@@ -10,7 +10,11 @@ import { KanbanSquare } from "lucide-react";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Tasks — RapidTal" };
 
-export default async function TasksPage() {
+export default async function TasksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ card?: string }>;
+}) {
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user, client } = ctx;
@@ -59,6 +63,10 @@ export default async function TasksPage() {
 
   // "Achieved" summary: a VA sees their own completed work; an admin sees the team's.
   const allTasks = (tasks ?? []) as Task[];
+  const requestedCardId = (await searchParams).card ?? null;
+  const initialCardId = requestedCardId && allTasks.some((task) => task.id === requestedCardId)
+    ? requestedCardId
+    : null;
   const doneTasks = (doneRows ?? []) as (AchievedTask & { assigned_to: string | null })[];
   const achievedScope: "mine" | "team" = isAdmin ? "team" : "mine";
   const achieved = computeAchieved(
@@ -92,6 +100,7 @@ export default async function TasksPage() {
         categories={(cats ?? []) as TaskCategory[]}
         recurrences={(recRows ?? []) as TaskRecurrence[]}
         commentCounts={commentCounts}
+        initialCardId={initialCardId}
       />
     </div>
   );

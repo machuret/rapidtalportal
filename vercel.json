@@ -11,6 +11,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/vault-crawls",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/brain-distill",
       "schedule": "30 2 * * *"
     },

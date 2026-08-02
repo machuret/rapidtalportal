@@ -46,6 +46,47 @@ export const GET = withAuth(async (req, { user }) => {
     return NextResponse.json({ error: "Private Coach context belongs to another user." }, { status: 403 });
   }
 
+  let coachAction: {
+    type: string;
+    status: string;
+    result: Record<string, unknown> | null;
+    completedAt: string | null;
+  } | null = null;
+  if (snapshot.request.actor?.conversationVisibility === "private_coach") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Coach tables follow the generated schema snapshot
+    const db = admin as any;
+    const turnResult = await db.from("coach_turns")
+      .select("id,action_status,action_draft")
+      .eq("client_id", parsed.data.clientId)
+      .eq("owner_id", user.id)
+      .eq("brain_context_snapshot_id", parsed.data.snapshotId)
+      .maybeSingle();
+    if (turnResult.error) return serverError(turnResult.error);
+    if (turnResult.data?.id) {
+      const receiptResult = await db.from("coach_action_receipts")
+        .select("action_type,status,result,completed_at")
+        .eq("turn_id", turnResult.data.id)
+        .eq("owner_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (receiptResult.error) return serverError(receiptResult.error);
+      const draftType = turnResult.data.action_draft && typeof turnResult.data.action_draft === "object"
+        ? String(turnResult.data.action_draft.type ?? "coach_action")
+        : null;
+      if (receiptResult.data || draftType) {
+        coachAction = {
+          type: receiptResult.data?.action_type ?? draftType ?? "coach_action",
+          status: receiptResult.data?.status ?? turnResult.data.action_status ?? "draft",
+          result: receiptResult.data?.result && typeof receiptResult.data.result === "object"
+            ? receiptResult.data.result as Record<string, unknown>
+            : null,
+          completedAt: receiptResult.data?.completed_at ?? null,
+        };
+      }
+    }
+  }
+
   return NextResponse.json({
     id: data.id,
     hash: data.snapshot_hash,
@@ -85,6 +126,7 @@ export const GET = withAuth(async (req, { user }) => {
       intendedAudience: snapshot.request.actor.intendedAudience,
       permissions: snapshot.request.actor.permissions,
     } : null,
+    coachAction,
     currentWork: snapshot.operations ?? {
       availability: "not_requested",
       scope: "none",

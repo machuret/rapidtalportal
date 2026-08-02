@@ -40,6 +40,12 @@ export type BrainContextUsedResponse = {
     intendedAudience: "private" | "client" | "va_team" | "task_board";
     permissions: string[];
   } | null;
+  coachAction: {
+    type: string;
+    status: string;
+    result: Record<string, unknown> | null;
+    completedAt: string | null;
+  } | null;
   currentWork: {
     availability: "available" | "unavailable" | "not_requested";
     scope: "company" | "assigned_only" | "none";

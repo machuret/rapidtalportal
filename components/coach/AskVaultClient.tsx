@@ -16,6 +16,7 @@ import {
   MessageSquare,
   RotateCcw,
   Send,
+  Square,
   Sparkles,
   Target,
 } from "lucide-react";
@@ -325,13 +326,17 @@ export function AskVaultClient({
             onChange={(e) => setQuestion(e.target.value)}
             maxLength={4_000}
             placeholder={coachMode === "private" ? "Ask your Coach about the business or current work…" : "Tell the Coach what you want prepared…"}
-            disabled={loading}
             className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
           />
-          <Button type="submit" disabled={loading || question.trim().length < 3} className="gap-1.5 shrink-0">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Ask
-          </Button>
+          {loading ? (
+            <Button type="button" variant="outline" onClick={() => streamAbortRef.current?.abort()} className="gap-1.5 shrink-0">
+              <Square className="h-3.5 w-3.5 fill-current" /> Stop
+            </Button>
+          ) : (
+            <Button type="submit" disabled={question.trim().length < 3} className="gap-1.5 shrink-0">
+              <Send className="w-4 h-4" /> Ask
+            </Button>
+          )}
         </div>
       </form>
     </div>

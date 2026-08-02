@@ -13,6 +13,7 @@ export interface Source {
   kindLabel: string;
   title: string;
   itemId: string | null;
+  clientId: string | null;
   sourceUrl: string | null;
   versionId: string | null;
   versionNumber: number | null;
@@ -70,6 +71,8 @@ export interface Turn {
   coachMode: CoachMode;
   actionDraft?: CoachActionDraft | null;
   actionStatus?: "none" | "draft" | "processing" | "completed" | "failed";
+  deepAnswer?: string | null;
+  deepEvidence?: AnswerEvidence | null;
 }
 
 export type AnswerEvidence = Pick<
@@ -91,6 +94,12 @@ interface CoachTurnRow {
   warnings: ContextWarning[];
   action_draft: CoachActionDraft | null;
   action_status: Turn["actionStatus"];
+  deep_answer: string | null;
+  deep_brain_context_snapshot_id: string | null;
+  deep_sources: Source[];
+  deep_suggestions: string[];
+  deep_library_availability: LibraryAvailability | null;
+  deep_warnings: ContextWarning[];
   created_at: string;
 }
 
@@ -112,6 +121,14 @@ function toTurn(turn: CoachTurnRow): Turn {
     warnings: turn.warnings ?? [],
     actionDraft: turn.action_draft ?? null,
     actionStatus: turn.action_status ?? "none",
+    deepAnswer: turn.deep_answer ?? null,
+    deepEvidence: turn.deep_answer ? {
+      sources: turn.deep_sources ?? [],
+      brainContextSnapshotId: turn.deep_brain_context_snapshot_id ?? null,
+      libraryAvailability: turn.deep_library_availability ?? "not_requested",
+      warnings: turn.deep_warnings ?? [],
+      suggestions: turn.deep_suggestions ?? [],
+    } : null,
     queriedKinds: [...new Set((turn.sources ?? []).map((source) => source.kind))],
   };
 }

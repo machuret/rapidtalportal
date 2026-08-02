@@ -15,12 +15,12 @@
  * Drivers: the Vault UI polls while open; reopening the page resumes a paused
  * job. Firecrawl keeps crawling server-side either way.
  */
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { serverError } from "@/lib/api/errors";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { assertClientAccess } from "@/lib/api-auth";
-import { withAuth } from "@/lib/api/with-auth";
+import { assertClientAccess, requireApiAuth, type ApiUser } from "@/lib/api-auth";
+import { originRejected } from "@/lib/api/csrf";
 import { createHash } from "crypto";
 import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import {
@@ -97,6 +97,7 @@ async function llm(model: string, system: string, user: string, maxTokens: numbe
       temperature: 0.2,
       messages: [{ role: "system", content: system }, { role: "user", content: user }],
     }),
+    signal: AbortSignal.timeout(50_000),
   });
   const json = await res.json();
   if (!res.ok) throw new Error(errorMessage(json, `LLM call failed (${res.status})`));
@@ -109,7 +110,10 @@ async function fetchCrawlPages(firecrawlId: string, key: string): Promise<{ stat
   const pages: FirecrawlPage[] = [];
   let status = "scraping"; let total = 0; let completed = 0;
   for (let hop = 0; url && hop < 10; hop++) {
-    const res: Response = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
+    const res: Response = await fetch(url, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(50_000),
+    });
     const json = await res.json();
     if (!res.ok) throw new Error(errorMessage(json, `Firecrawl status check failed (${res.status})`));
     status = json.status ?? status;
@@ -121,7 +125,16 @@ async function fetchCrawlPages(firecrawlId: string, key: string): Promise<{ stat
   return { status, total, completed, pages };
 }
 
-export const POST = withAuth(async (req, { user }) => {
+export async function POST(req: NextRequest) {
+  const cronRequest = !!process.env.CRON_SECRET
+    && req.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`;
+  let authenticatedUser: ApiUser | null = null;
+  if (!cronRequest) {
+    if (originRejected(req)) return NextResponse.json({ error: "Cross-origin request blocked." }, { status: 403 });
+    const auth = await requireApiAuth();
+    if ("error" in auth) return auth.error;
+    authenticatedUser = auth.user;
+  }
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
   const parsed = schema.safeParse(body);
@@ -133,8 +146,18 @@ export const POST = withAuth(async (req, { user }) => {
   if (!jobRow) return NextResponse.json({ error: "Job not found." }, { status: 404 });
   const loadedJob = jobRow as unknown as CrawlJob;
 
-  const denied = assertClientAccess(user, loadedJob.client_id);
-  if (denied) return denied;
+  if (!cronRequest) {
+    const denied = assertClientAccess(authenticatedUser!, loadedJob.client_id);
+    if (denied) return denied;
+  }
+  const user = authenticatedUser ?? {
+    id: loadedJob.created_by,
+    role: "super_admin",
+    client_id: loadedJob.client_id,
+  };
+  if (!user.id) {
+    return NextResponse.json({ error: "The crawl has no owner and cannot be resumed automatically." }, { status: 409 });
+  }
 
   if (loadedJob.status === "done" || loadedJob.status === "error") {
     return NextResponse.json({ job: loadedJob });
@@ -521,4 +544,4 @@ export const POST = withAuth(async (req, { user }) => {
   }
 
   return NextResponse.json({ job: updated });
-});
+}

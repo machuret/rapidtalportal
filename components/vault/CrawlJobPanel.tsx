@@ -36,9 +36,8 @@ const PHASE_LABEL: Record<string, string> = {
 };
 
 /**
- * Shows the running site-crawl for this client and DRIVES it: each poll calls
- * the advance endpoint, which performs one unit of work. Closing the tab only
- * pauses ingestion (Firecrawl keeps crawling) — reopening the Vault resumes.
+ * Shows the durable site crawl. The UI advances it for immediate feedback and
+ * a scheduled worker keeps it moving after the user closes the browser.
  */
 export function CrawlJobPanel({ clientId, startedJob }: { clientId: string; startedJob?: CrawlJob | null }) {
   const queryClient = useQueryClient();
@@ -150,7 +149,7 @@ export function CrawlJobPanel({ clientId, startedJob }: { clientId: string; star
           {job.items_created > 0 && `${job.items_created} pages stored · `}
           {job.products_seen > 0 && `${job.products_seen} catalog pages → product summary · `}
           {job.pages_dropped > 0 && `${job.pages_dropped} skipped (no knowledge value) · `}
-          You can leave this page — the crawl resumes whenever the Vault is open.
+          You can leave this page — processing continues safely in the background.
         </p>
       )}
 

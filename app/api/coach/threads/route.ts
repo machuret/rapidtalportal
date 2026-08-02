@@ -59,6 +59,21 @@ const saveSchema = z.object({
   ]).nullable().default(null),
 });
 
+const deepAnswerSchema = z.object({
+  clientId: z.string().uuid(),
+  originalSnapshotId: z.string().uuid(),
+  deepAnswer: z.string().trim().min(1).max(60000),
+  deepSnapshotId: z.string().uuid(),
+  sources: z.array(sourceSchema).max(30).default([]),
+  suggestions: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
+  libraryAvailability: z.enum(["available", "degraded", "unavailable", "not_requested"]),
+  warnings: z.array(z.object({
+    code: z.string().max(100),
+    message: z.string().max(1000),
+    severity: z.enum(["info", "warning", "blocking"]),
+  })).max(20).default([]),
+});
+
 export const GET = withAuth(async (req, { user, impersonating }) => {
   if (impersonating) return NextResponse.json({ error: "Coach history is unavailable while viewing as another user." }, { status: 409 });
   const clientId = req.nextUrl.searchParams.get("clientId");
@@ -81,7 +96,7 @@ export const GET = withAuth(async (req, { user, impersonating }) => {
 
   // One extra row tells us whether an older page exists without a count query.
   let query = db.from("coach_turns")
-    .select("id,question,answer,coach_mode,brain_context_snapshot_id,sources,suggestions,library_availability,warnings,action_draft,action_status,created_at")
+    .select("id,question,answer,coach_mode,brain_context_snapshot_id,sources,suggestions,library_availability,warnings,action_draft,action_status,deep_answer,deep_brain_context_snapshot_id,deep_sources,deep_suggestions,deep_library_availability,deep_warnings,deep_updated_at,created_at")
     .eq("thread_id", thread.id).eq("owner_id", user.id);
   if (before) query = query.lt("created_at", before);
   const { data: rows, error } = await query
@@ -90,6 +105,60 @@ export const GET = withAuth(async (req, { user, impersonating }) => {
   const hasMore = (rows ?? []).length > PAGE_SIZE;
   const turns = (rows ?? []).slice(0, PAGE_SIZE);
   return NextResponse.json({ thread, turns: [...turns].reverse(), hasMore });
+});
+
+export const PATCH = withAuth(async (req, { user, impersonating }) => {
+  if (impersonating) return NextResponse.json({ error: "Coach history is unavailable while viewing as another user." }, { status: 409 });
+  let body: unknown;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON." }, { status: 400 }); }
+  const parsed = deepAnswerSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Invalid deep Coach answer." }, { status: 422 });
+  const denied = assertClientAccess(user, parsed.data.clientId);
+  if (denied) return denied;
+
+  const quality = evaluateCoachQuality({
+    role: user.role === "va" ? "va" : user.role === "client_admin" ? "client_admin" : "super_admin",
+    answer: parsed.data.deepAnswer,
+    snapshotId: parsed.data.deepSnapshotId,
+    libraryAvailability: parsed.data.libraryAvailability,
+    warningCodes: parsed.data.warnings.map((warning) => warning.code),
+    sources: parsed.data.sources,
+    action: null,
+  });
+  if (!quality.passed) {
+    return NextResponse.json({
+      error: "The deeper answer did not pass the required evidence boundary checks.",
+      recoverable: true,
+      qualityIssues: quality.issues.map((issue) => issue.code),
+    }, { status: 409 });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration follows generated schema snapshot
+  const db = createAdminClient() as any;
+  const { data: deepSnapshot, error: snapshotError } = await db.from("brain_context_snapshots")
+    .select("id").eq("id", parsed.data.deepSnapshotId).eq("client_id", parsed.data.clientId)
+    .eq("created_by", user.id).maybeSingle();
+  if (snapshotError) return serverError(snapshotError);
+  if (!deepSnapshot) return NextResponse.json({ error: "Verified deep Brain snapshot not found." }, { status: 409 });
+
+  const { data: turn, error } = await db.from("coach_turns")
+    .update({
+      deep_answer: parsed.data.deepAnswer,
+      deep_brain_context_snapshot_id: parsed.data.deepSnapshotId,
+      deep_sources: parsed.data.sources,
+      deep_suggestions: parsed.data.suggestions,
+      deep_library_availability: parsed.data.libraryAvailability,
+      deep_warnings: parsed.data.warnings,
+      deep_updated_at: new Date().toISOString(),
+    })
+    .eq("client_id", parsed.data.clientId)
+    .eq("owner_id", user.id)
+    .eq("brain_context_snapshot_id", parsed.data.originalSnapshotId)
+    .select("id,deep_updated_at")
+    .maybeSingle();
+  if (error) return serverError(error);
+  if (!turn) return NextResponse.json({ error: "The original Coach turn was not found." }, { status: 404 });
+  return NextResponse.json({ turn });
 });
 
 export const POST = withAuth(async (req, { user, impersonating }) => {

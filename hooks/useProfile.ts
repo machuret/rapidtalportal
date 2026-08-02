@@ -9,6 +9,7 @@ interface UpdateProfileInput {
   phone?: string | null;
   birthday?: string | null;
   avatar_url?: string | null;
+  timezone?: string | null;
 }
 
 interface ChangePasswordInput {

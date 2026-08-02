@@ -21,6 +21,7 @@ import {
   MessageSquare,
   RotateCcw,
   Send,
+  Square,
   Sparkles,
   Target,
 } from "lucide-react";
@@ -65,8 +66,8 @@ export const ChatTurn = memo(function ChatTurn({
   onActionComplete?: () => void;
 }) {
   const [showSources, setShowSources] = useState(true);
-  const [deepAnswer, setDeepAnswer] = useState<string | null>(null);
-  const [deepEvidence, setDeepEvidence] = useState<AnswerEvidence | null>(null);
+  const [deepAnswer, setDeepAnswer] = useState<string | null>(turn.deepAnswer ?? null);
+  const [deepEvidence, setDeepEvidence] = useState<AnswerEvidence | null>(turn.deepEvidence ?? null);
   const [deepLoading, setDeepLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [gapConsentOpen, setGapConsentOpen] = useState(false);
@@ -109,9 +110,44 @@ export const ChatTurn = memo(function ChatTurn({
     deepAbortRef.current?.abort();
     const deepAbort = new AbortController();
     deepAbortRef.current = deepAbort;
-    const aborted = await onGoDeeper(turn, history, deepAbort.signal, setDeepAnswer, setDeepEvidence);
-    if (aborted) return; // unmounted mid-stream — no fallback, no state writes
+    const completion: { answer: string; evidence: AnswerEvidence | null } = {
+      answer: "",
+      evidence: null,
+    };
+    const aborted = await onGoDeeper(
+      turn,
+      history,
+      deepAbort.signal,
+      (answer) => {
+        completion.answer = answer;
+        setDeepAnswer(answer);
+      },
+      (evidence) => {
+        completion.evidence = evidence;
+        setDeepEvidence(evidence);
+      },
+    );
     setDeepLoading(false);
+    if (aborted) return;
+    if (
+      completion.answer && completion.evidence?.brainContextSnapshotId
+      && turn.brainContextSnapshotId
+    ) {
+      try {
+        await api.patch(ROUTES.coach.threads(), {
+          clientId,
+          originalSnapshotId: turn.brainContextSnapshotId,
+          deepAnswer: completion.answer,
+          deepSnapshotId: completion.evidence.brainContextSnapshotId,
+          sources: completion.evidence.sources,
+          suggestions: completion.evidence.suggestions,
+          libraryAvailability: completion.evidence.libraryAvailability,
+          warnings: completion.evidence.warnings,
+        }, { showErrorToast: false, idempotent: true });
+      } catch {
+        toast.error("The deeper answer is visible, but it could not be saved to Coach history yet.");
+      }
+    }
   }
 
   async function saveToKb() {
@@ -318,6 +354,15 @@ export const ChatTurn = memo(function ChatTurn({
               {deepAnswer}
               {deepLoading && <span className="ml-0.5 animate-pulse">▍</span>}
             </p>
+            {deepLoading && (
+              <button
+                type="button"
+                onClick={() => deepAbortRef.current?.abort()}
+                className="mt-2 inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white"
+              >
+                <Square className="h-3.5 w-3.5 fill-current" /> Stop deeper answer
+              </button>
+            )}
             {deepEvidence?.libraryAvailability === "unavailable" && (
               <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/80">
                 The deeper answer used its own verified company snapshot while the Library was temporarily unavailable.

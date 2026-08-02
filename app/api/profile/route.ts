@@ -10,13 +10,21 @@ const patchSchema = z.object({
   phone:      z.string().max(30).optional().nullable(),
   birthday:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   avatar_url: z.string().url().max(500).optional().nullable(),
+  timezone: z.string().trim().min(1).max(100).refine((value) => {
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: value });
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Choose a valid timezone.").optional().nullable(),
 });
 
 export const GET = withAuth(async (_req, { user }) => {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("users")
-    .select("id, email, full_name, phone, birthday, avatar_url")
+    .select("id, email, full_name, phone, birthday, avatar_url, timezone")
     .eq("id", user.id)
     .single();
 
@@ -39,7 +47,7 @@ export const PATCH = withAuth(async (req, { user }) => {
     .from("users")
     .update(parsed.data)
     .eq("id", user.id)
-    .select("id, email, full_name, phone, birthday, avatar_url")
+    .select("id, email, full_name, phone, birthday, avatar_url, timezone")
     .single();
 
   if (error) return serverError(error);

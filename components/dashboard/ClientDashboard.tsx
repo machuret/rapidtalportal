@@ -188,7 +188,9 @@ export function ClientDashboard(props: ClientDashboardProps) {
           <ul className="flex flex-col gap-1.5">
             {props.overdue.map((t) => (
               <li key={t.id} className="flex items-center gap-2 text-sm">
-                <span className="text-zinc-200 truncate flex-1">{t.title}</span>
+                <Link href={`/tasks?card=${t.id}`} className="text-zinc-200 truncate flex-1 hover:text-white hover:underline">
+                  {t.title}
+                </Link>
                 {t.assigneeName && <span className="text-xs text-zinc-500 shrink-0">{t.assigneeName.split(" ")[0]}</span>}
                 <span className="text-xs font-medium text-red-400 shrink-0 tabular-nums">
                   {t.daysOverdue === 1 ? "1 day" : `${t.daysOverdue} days`} late
@@ -197,7 +199,9 @@ export function ClientDashboard(props: ClientDashboardProps) {
             ))}
             {props.dueSoon.map((t) => (
               <li key={t.id} className="flex items-center gap-2 text-sm">
-                <span className="text-zinc-200 truncate flex-1">{t.title}</span>
+                <Link href={`/tasks?card=${t.id}`} className="text-zinc-200 truncate flex-1 hover:text-white hover:underline">
+                  {t.title}
+                </Link>
                 {t.assigneeName && <span className="text-xs text-zinc-500 shrink-0">{t.assigneeName.split(" ")[0]}</span>}
                 <span className="text-xs font-medium text-amber-400 shrink-0 tabular-nums">{dueLabel(t.daysUntil)}</span>
               </li>

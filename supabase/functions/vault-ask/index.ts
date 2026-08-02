@@ -547,6 +547,13 @@ Deno.serve(async (req: Request) => {
           visibility: "private_coach",
           retention_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000).toISOString(),
         });
+        await admin.rpc("record_coach_question_metric", {
+          p_client_id: clientId,
+          p_coach_role: coachRole,
+          p_answer_mode: deep ? "deep" : "concise",
+          p_answered: sourcesCount > 0,
+          p_timezone: userTimeZone,
+        });
         // Best-effort rolling retention. The function is service-only and only
         // removes data whose explicit retention window has elapsed.
         await admin.rpc("purge_expired_coach_private_data");
@@ -783,6 +790,7 @@ Deno.serve(async (req: Request) => {
       kindLabel: SOURCE_LABEL[b.kind],
       title: b.title,
       itemId: b.itemId ?? null,
+      clientId,
       sourceUrl: b.sourceUrl ?? null,
       versionId: b.versionId ?? null,
       versionNumber: b.versionNumber ?? null,

@@ -95,6 +95,7 @@ export const ROUTES = {
       `/api/content/projects/evidence?client_id=${clientId}&project_id=${projectId}`,
     validate: () => "/api/content/validate",
     generate: () => "/api/content/generate",
+    quickDraft: () => "/api/content/quick-draft",
     styleAnalysis: () => "/api/content/style-analysis",
     styleAnalysisForClient: (clientId: string) => `/api/content/style-analysis?client_id=${clientId}`,
     goldens: () => "/api/content/goldens",

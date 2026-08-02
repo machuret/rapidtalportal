@@ -122,6 +122,7 @@ export const POST = withAuth(async (req, { user }) => {
       excludePaths: ["cart", "checkout", "account", "login", "register", "wishlist", "search"],
       scrapeOptions: { formats: ["markdown"], onlyMainContent: true, waitFor: 2000, timeout: 45000 },
     }),
+    signal: AbortSignal.timeout(50_000),
   });
   const fcJson = await fcRes.json().catch(() => ({}));
   if (!fcRes.ok || !fcJson?.id) {

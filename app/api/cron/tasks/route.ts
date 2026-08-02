@@ -83,10 +83,9 @@ export async function GET(req: NextRequest) {
         clientId: r.client_id,
         type: "task_assigned",
         title: `Recurring task: ${r.title.slice(0, 120)}`,
-        href: "/tasks",
+        href: `/tasks?card=${card.id}`,
       });
     }
-    void card; // id reserved for future activity logging
   }
 
   // ---- 2. Archive stale done cards --------------------------------------

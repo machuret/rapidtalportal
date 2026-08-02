@@ -214,14 +214,24 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
       setForm(prev => ({
         ...prev,
         company_name: scrapedData.company_name || prev.company_name,
+        company_description: scrapedData.company_description || prev.company_description,
         services: scrapedData.services || prev.services,
         values: scrapedData.values || prev.values,
+        location: scrapedData.location || prev.location,
+        address: scrapedData.address || prev.address,
         phone: scrapedData.phone || prev.phone,
         email: scrapedData.email || prev.email,
         website: scrapedData.website || prev.website,
         founders: scrapedData.founders || prev.founders,
         target_demographic: scrapedData.target_demographic || prev.target_demographic,
         client_type: scrapedData.client_type || prev.client_type,
+        business_goals: scrapedData.business_goals || prev.business_goals,
+        marketing_goals: scrapedData.marketing_goals || prev.marketing_goals,
+        team: scrapedData.team || prev.team,
+        tools_used: scrapedData.tools_used || prev.tools_used,
+        brand_voice: scrapedData.brand_voice || prev.brand_voice,
+        content_style: scrapedData.content_style || prev.content_style,
+        website_content: scrapedData.website_content || prev.website_content,
       }));
       markProvenance(
         (["company_name", "services", "values", "phone", "email", "website", "founders", "target_demographic", "client_type"] as const)

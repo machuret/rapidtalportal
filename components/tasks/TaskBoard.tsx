@@ -43,9 +43,10 @@ interface TaskBoardProps {
   categories?: TaskCategory[];
   recurrences?: TaskRecurrence[];
   commentCounts?: Record<string, number>;
+  initialCardId?: string | null;
 }
 
-export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, categories = [], recurrences = [], commentCounts }: TaskBoardProps) {
+export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, categories = [], recurrences = [], commentCounts, initialCardId = null }: TaskBoardProps) {
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [counts, setCounts] = useState<Record<string, number>>(commentCounts ?? {});
@@ -62,6 +63,19 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
   const [archiveLoading, setArchiveLoading] = useState(false);
   const dragId = useRef<string | null>(null);
   const supabaseRef = useRef(createClient());
+
+  useEffect(() => {
+    if (!initialCardId) return;
+    const requested = initialTasks.find((task) => task.id === initialCardId);
+    if (requested) setEditing(requested);
+  }, [initialCardId, initialTasks]);
+
+  function closeTask() {
+    setEditing(null);
+    if (typeof window !== "undefined" && new URL(window.location.href).searchParams.has("card")) {
+      router.replace("/tasks", { scroll: false });
+    }
+  }
 
   // Live updates: anything a teammate creates/moves/edits/deletes shows up here
   // without a refresh. Patches are idempotent so they tolerate the echo of our
@@ -411,9 +425,9 @@ export function TaskBoard({ initialTasks, clientId, userId, isAdmin, members, ca
           canWrite={canMove(editing)}
           members={members}
           categories={categories}
-          onClose={() => setEditing(null)}
-          onSaved={(t) => { setTasks((p) => p.map((x) => (x.id === t.id ? t : x))); setEditing(null); }}
-          onDeleted={(id) => { setTasks((p) => p.filter((x) => x.id !== id)); setEditing(null); }}
+          onClose={closeTask}
+          onSaved={(t) => { setTasks((p) => p.map((x) => (x.id === t.id ? t : x))); closeTask(); }}
+          onDeleted={(id) => { setTasks((p) => p.filter((x) => x.id !== id)); closeTask(); }}
           onCommented={() => setCounts((p) => ({ ...p, [editing.id]: (p[editing.id] ?? 0) + 1 }))}
         />
       )}

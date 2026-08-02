@@ -17,14 +17,23 @@ Analyze the provided website content and extract structured information about th
 Return a JSON object with EXACTLY these fields (leave empty string if not found):
 {
   "company_name": "Full company name",
+  "company_description": "Concise factual description of what the company does",
   "services": "Main services or products offered (detailed)",
   "values": "Company values or principles",
+  "location": "Primary city, region or service area",
+  "address": "Published business address",
   "phone": "Contact phone number",
   "email": "Contact email address",
   "website": "Company website URL",
   "founders": "Company founders or key leadership names",
   "target_demographic": "Target customers or market segment",
-  "client_type": "Type of clients they serve"
+  "client_type": "Type of clients they serve",
+  "business_goals": "Explicitly stated business priorities or goals",
+  "marketing_goals": "Explicitly stated marketing or growth priorities",
+  "team": "Key team members and roles",
+  "tools_used": "Named tools, platforms or technology used by the company",
+  "brand_voice": "Observable brand voice traits supported by the website copy",
+  "content_style": "Observable structural and writing-style traits"
 }
 
 Requirements:
@@ -195,17 +204,47 @@ Deno.serve(async (req: Request) => {
     console.log(`✅ Extracted data with ${tokensUsed} tokens`);
 
     // ── Step 3: Upsert company_dna ────────────────────────────────────────────
+    const { data: existingDna, error: existingError } = await admin
+      .from("company_dna")
+      .select("*")
+      .eq("client_id", clientId)
+      .maybeSingle();
+    if (existingError) {
+      return new Response(JSON.stringify({ error: "Failed to load existing company data." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const existing = (existingDna ?? {}) as Record<string, unknown>;
+    const extracted = (key: string, fallback = "") => {
+      const value = extractedData[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+      const current = existing[key];
+      return typeof current === "string" ? current : fallback;
+    };
     const dnaData = {
       client_id: clientId,
-      company_name: extractedData.company_name ?? "",
-      services: extractedData.services ?? "",
-      values: extractedData.values ?? "",
-      phone: extractedData.phone ?? "",
-      email: extractedData.email ?? "",
-      website: extractedData.website ?? url,
-      founders: extractedData.founders ?? "",
-      target_demographic: extractedData.target_demographic ?? "",
-      client_type: extractedData.client_type ?? "",
+      company_name: extracted("company_name"),
+      company_description: extracted("company_description"),
+      services: extracted("services"),
+      values: extracted("values"),
+      location: extracted("location"),
+      address: extracted("address"),
+      phone: extracted("phone"),
+      email: extracted("email"),
+      website: extracted("website", url) || url,
+      founders: extracted("founders"),
+      target_demographic: extracted("target_demographic"),
+      client_type: extracted("client_type"),
+      business_goals: extracted("business_goals"),
+      marketing_goals: extracted("marketing_goals"),
+      team: extracted("team"),
+      tools_used: extracted("tools_used"),
+      brand_voice: extracted("brand_voice"),
+      content_style: extracted("content_style"),
+      // Retain the actual source payload so future re-analysis, provenance and
+      // reviewable refreshes do not need to pay Firecrawl again.
+      website_content: websiteContent.slice(0, 250_000),
       updated_at: new Date().toISOString(),
     };
 

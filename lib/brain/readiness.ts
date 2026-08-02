@@ -103,6 +103,7 @@ export async function computeBrainReadiness(
     attemptsResult,
     contextsResult,
     queriesResult,
+    coachMetricsResult,
     competitorsResult,
     capturesResult,
     intelligenceResult,
@@ -134,6 +135,9 @@ export async function computeBrainReadiness(
       .select("answered,created_at")
       .eq("client_id", clientId).neq("visibility", "private_coach")
       .gte("created_at", recent).limit(1000),
+    db.from("coach_question_metrics_daily")
+      .select("answered,question_count,metric_date")
+      .eq("client_id", clientId).gte("metric_date", recent.slice(0, 10)).limit(1000),
     admin.from("competitors")
       .select("id,status").eq("client_id", clientId).eq("status", "active").limit(100),
     admin.from("competitor_content_items")
@@ -150,7 +154,7 @@ export async function computeBrainReadiness(
 
   const failed = [
     dnaResult, vaultResult, gapsResult, stylesResult, memoriesResult, lineageResult,
-    attemptsResult, contextsResult, queriesResult, competitorsResult, capturesResult,
+    attemptsResult, contextsResult, queriesResult, coachMetricsResult, competitorsResult, capturesResult,
     intelligenceResult, evaluationsResult,
   ].find((result) => result.error);
   if (failed?.error) throw new Error(`Brain readiness could not be measured: ${failed.error.message}`);
@@ -302,8 +306,13 @@ export async function computeBrainReadiness(
   const expiredAttempts = attempts.filter((row) => row.status === "running" && row.lease_until < now.toISOString()).length;
   const contextCount = (contextsResult.data ?? []).length;
   const recentQueries = (queriesResult.data ?? []) as Array<{ answered: boolean }>;
-  const retrievalSuccess = recentQueries.length
-    ? Math.round(ratio(recentQueries.filter((row) => row.answered).length, recentQueries.length) * 100)
+  const coachMetrics = (coachMetricsResult.data ?? []) as Array<{ answered: boolean; question_count: number }>;
+  const aggregateQuestions = coachMetrics.reduce((sum, row) => sum + row.question_count, 0);
+  const aggregateAnswered = coachMetrics.reduce((sum, row) => sum + (row.answered ? row.question_count : 0), 0);
+  const totalQuestions = recentQueries.length + aggregateQuestions;
+  const answeredQuestions = recentQueries.filter((row) => row.answered).length + aggregateAnswered;
+  const retrievalSuccess = totalQuestions
+    ? Math.round(ratio(answeredQuestions, totalQuestions) * 100)
     : null;
   const evaluations = (evaluationsResult.data ?? []) as Array<{
     status: string;

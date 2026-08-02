@@ -7,13 +7,19 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { ContentBrief, ContentProject, ContentProjectIdea, ContentType } from "@/types/content";
-import { generateQuickDraft } from "@/lib/content/quick-draft";
+import type { ContentPiece, ContentProject, ContentType } from "@/types/content";
 import { useContentProjects } from "@/hooks/useContentProjects";
 import { AppliedStylePreview } from "./AppliedStylePreview";
 import { ProjectTakeover } from "./ProjectTakeover";
 
 const CHANNELS: ContentType[] = ["linkedin", "facebook", "instagram", "x", "email", "newsletter", "blog"];
+
+interface QuickDraftResponse {
+  project: ContentProject;
+  piece: ContentPiece;
+  warnings?: string[];
+  recovered?: boolean;
+}
 
 /** /content/quick — generate a grounded draft in under a minute. */
 export function QuickDraftPage({
@@ -33,6 +39,7 @@ export function QuickDraftPage({
   const [quickType, setQuickType] = useState<ContentType>("linkedin");
   const [quickCreating, setQuickCreating] = useState(false);
   const quickCreatingRef = useRef(false);
+  const quickCreateKeyRef = useRef<string | null>(null);
   const [showManual, setShowManual] = useState(false);
 
   const handleManualIdea = useCallback(async () => {
@@ -66,44 +73,20 @@ export function QuickDraftPage({
 
     quickCreatingRef.current = true;
     setQuickCreating(true);
-    let created: ContentProject | null = null;
     try {
-      created = await api.post<ContentProject>(ROUTES.content.projects(), {
-        client_id: clientId,
-        idea: {
-          version: 1,
-          origin: "manual",
-          title,
-          channel: quickType,
-          rationale: "A direct content request from the editorial team.",
-          differentiation: "Use Company DNA, approved voice and the most relevant company evidence.",
-          evidenceSummary: "The engine will automatically shortlist relevant factual Vault sources.",
-          marketIntelligence: null,
-        } satisfies ContentProjectIdea,
-      }, { showErrorToast: false });
-
-      const brief: ContentBrief = {
-        version: 1,
-        objective: title,
-        audience: null,
-        angle: null,
-        desiredFormat: null,
-        keyPoints: [],
-        callToAction: null,
-        tone: "professional",
-        length: "medium",
-        mode: "new",
-        additionalGuidance: quickGuidance.trim() || null,
-        marketIntelligence: null,
-      };
-      const result = await generateQuickDraft({
+      const idempotencyKey = quickCreateKeyRef.current ?? crypto.randomUUID();
+      quickCreateKeyRef.current = idempotencyKey;
+      const result = await api.post<QuickDraftResponse>(ROUTES.content.quickDraft(), {
         clientId,
-        project: created,
-        brief,
-      });
+        idempotencyKey,
+        title,
+        contentType: quickType,
+        guidance: quickGuidance.trim() || null,
+      }, { showErrorToast: false, idempotent: true, retries: 2 });
       projects.updateProject(result.project);
       setQuickTitle("");
       setQuickGuidance("");
+      quickCreateKeyRef.current = null;
       const warningCount = result.warnings?.length ?? 0;
       toast.success(warningCount
         ? `Draft ready with ${warningCount} editorial check${warningCount === 1 ? "" : "s"} to review.`
@@ -112,12 +95,11 @@ export function QuickDraftPage({
       toast.error(error instanceof Error
         ? error.message
         : "The draft could not be generated. Your work has been saved.");
-      if (created) await projects.openProject(created.id);
     } finally {
       quickCreatingRef.current = false;
       setQuickCreating(false);
     }
-  }, [clientId, projects.openProject, projects.updateProject, quickGuidance, quickTitle, quickType]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clientId, projects.updateProject, quickGuidance, quickTitle, quickType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (projects.activeProject) {
     return (
@@ -155,7 +137,10 @@ export function QuickDraftPage({
         <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_180px_auto]">
           <Input
             value={quickTitle}
-            onChange={(event) => setQuickTitle(event.target.value)}
+            onChange={(event) => {
+              setQuickTitle(event.target.value);
+              quickCreateKeyRef.current = null;
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
@@ -170,7 +155,10 @@ export function QuickDraftPage({
           />
           <select
             value={quickType}
-            onChange={(event) => setQuickType(event.target.value as ContentType)}
+            onChange={(event) => {
+              setQuickType(event.target.value as ContentType);
+              quickCreateKeyRef.current = null;
+            }}
             disabled={quickCreating}
             aria-label="Content channel"
             className="h-11 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm capitalize text-white"
@@ -193,7 +181,10 @@ export function QuickDraftPage({
         </div>
         <Input
           value={quickGuidance}
-          onChange={(event) => setQuickGuidance(event.target.value)}
+          onChange={(event) => {
+            setQuickGuidance(event.target.value);
+            quickCreateKeyRef.current = null;
+          }}
           disabled={quickCreating}
           maxLength={2000}
           placeholder="Optional direction: audience, angle, key point or CTA"

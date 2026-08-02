@@ -3,7 +3,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { api } from "@/lib/api-client";
-import { generateQuickDraft } from "@/lib/content/quick-draft";
 import { QuickDraftPage } from "@/components/content/QuickDraftPage";
 import { ProjectsPage } from "@/components/content/ProjectsPage";
 import type { ContentPiece, ContentProject } from "@/types/content";
@@ -14,9 +13,6 @@ jest.mock("@/lib/api-client", () => ({
     post: jest.fn(),
     patch: jest.fn(),
   },
-}));
-jest.mock("@/lib/content/quick-draft", () => ({
-  generateQuickDraft: jest.fn(),
 }));
 jest.mock("@/components/content/ContentProjectWorkflow", () => ({
   ContentProjectWorkflow: () => <div>Draft editor</div>,
@@ -75,8 +71,7 @@ describe("Quick Draft page", () => {
       status: "draft",
       created_at: "2026-07-30T00:00:01.000Z",
     };
-    (api.post as jest.Mock).mockResolvedValue(created);
-    (generateQuickDraft as jest.Mock).mockResolvedValue({ project: ready, piece });
+    (api.post as jest.Mock).mockResolvedValue({ project: ready, piece });
 
     render(
       <QuickDraftPage
@@ -91,16 +86,16 @@ describe("Quick Draft page", () => {
     await user.type(screen.getByLabelText("Optional content direction"), "Write for property investors");
     await user.click(screen.getByRole("button", { name: "Generate draft" }));
 
-    await waitFor(() => expect(generateQuickDraft).toHaveBeenCalledWith(
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      "/api/content/quick-draft",
       expect.objectContaining({
         clientId: CLIENT_ID,
-        project: created,
-        brief: expect.objectContaining({
-          objective: "A useful company topic",
-          additionalGuidance: "Write for property investors",
-          callToAction: null,
-        }),
+        idempotencyKey: expect.any(String),
+        title: "A useful company topic",
+        contentType: "linkedin",
+        guidance: "Write for property investors",
       }),
+      expect.objectContaining({ idempotent: true, showErrorToast: false }),
     ));
     expect(screen.getByText("Draft editor")).toBeInTheDocument();
   });

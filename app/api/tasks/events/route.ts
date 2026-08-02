@@ -96,7 +96,7 @@ export const POST = withAuth(async (req, { user }) => {
       type: "task_comment",
       title: `New comment on: ${task.title.slice(0, 120)}`,
       body: parsed.data.body.slice(0, 200),
-      href: "/tasks",
+      href: `/tasks?card=${task.id}`,
     },
   );
 

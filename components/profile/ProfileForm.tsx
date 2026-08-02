@@ -28,6 +28,7 @@ export function ProfileForm({ user }: Props) {
   const [phone, setPhone]         = useState(user.phone ?? "");
   const [birthday, setBirthday]   = useState(user.birthday ?? "");
   const [avatarUrl, setAvatarUrl] = useState(user.avatar_url ?? "");
+  const [timezone, setTimezone]   = useState(user.timezone ?? "UTC");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [newPassword, setNewPassword]     = useState("");
@@ -41,6 +42,7 @@ export function ProfileForm({ user }: Props) {
         phone:      phone     || null,
         birthday:   birthday  || null,
         avatar_url: avatarUrl || null,
+        timezone:   timezone || "UTC",
       });
       toast.success("Profile updated.");
     } catch {
@@ -222,6 +224,33 @@ export function ProfileForm({ user }: Props) {
               </p>
             </div>
           )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="timezone">Timezone</Label>
+          <Input
+            id="timezone"
+            list="profile-timezones"
+            value={timezone}
+            onChange={(event) => setTimezone(event.target.value)}
+            placeholder="Australia/Sydney"
+            className="bg-zinc-800 border-zinc-700"
+          />
+          <datalist id="profile-timezones">
+            {["UTC", "Australia/Sydney", "Australia/Melbourne", "Australia/Brisbane", "Australia/Perth", "Pacific/Auckland", "Asia/Manila", "Asia/Singapore", "Asia/Kolkata", "Europe/London", "America/New_York", "America/Los_Angeles"].map((zone) => (
+              <option key={zone} value={zone} />
+            ))}
+          </datalist>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-zinc-500">Used for due dates, Daily Logs, Coach check-ins and reports.</p>
+            <button
+              type="button"
+              onClick={() => setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC")}
+              className="text-xs text-blue-400 hover:text-blue-300"
+            >
+              Use this device&apos;s timezone
+            </button>
+          </div>
         </div>
 
         <div className="flex justify-end pt-1">

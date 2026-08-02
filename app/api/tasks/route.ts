@@ -147,7 +147,7 @@ export const POST = withAuth(async (req, { user }) => {
       clientId: parsed.data.clientId,
       type: "task_assigned",
       title: `New task: ${parsed.data.title.trim().slice(0, 120)}`,
-      href: "/tasks",
+      href: `/tasks?card=${(data as { id: string }).id}`,
       email: {
         subject: `New task assigned: ${parsed.data.title.trim().slice(0, 80)}`,
         heading: "You've been assigned a new task",
@@ -250,7 +250,7 @@ export const PATCH = withAuth(async (req, { user }) => {
       clientId: updated.client_id,
       type: "task_assigned",
       title: `Task assigned to you: ${updated.title.slice(0, 120)}`,
-      href: "/tasks",
+      href: `/tasks?card=${parsed.data.id}`,
       email: {
         subject: `Task assigned to you: ${updated.title.slice(0, 80)}`,
         heading: "A task was assigned to you",
@@ -266,7 +266,7 @@ export const PATCH = withAuth(async (req, { user }) => {
         clientId: updated.client_id,
         type: "task_review",
         title: `Ready for review: ${updated.title.slice(0, 120)}`,
-        href: "/tasks",
+        href: `/tasks?card=${parsed.data.id}`,
         email: {
           subject: `Ready for your review: ${updated.title.slice(0, 80)}`,
           heading: "Work is ready for your review",

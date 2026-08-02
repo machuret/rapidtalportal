@@ -108,6 +108,23 @@ export function BrainContextUsed({
                 </div>
               )}
 
+              {data.coachAction && (
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-200">
+                    <ListTodo className="h-3.5 w-3.5" /> Coach action receipt
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">
+                    {data.coachAction.type.replaceAll("_", " ")} · {data.coachAction.status.replaceAll("_", " ")}
+                    {data.coachAction.completedAt ? ` · completed ${new Date(data.coachAction.completedAt).toLocaleString()}` : ""}
+                  </p>
+                  {data.coachAction.result && (
+                    <p className="mt-1 text-xs text-zinc-600">
+                      Result retained with the immutable action receipt for retry and audit.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <ContextSection
                 icon={BookOpen}
                 title="Company knowledge"

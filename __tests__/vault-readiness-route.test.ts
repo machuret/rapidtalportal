@@ -19,7 +19,7 @@ const routeCtx = { params: Promise.resolve({}) };
 function chain(result: { data: unknown; error: unknown; count?: number | null }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const builder: Record<string, any> = {};
-  for (const method of ["select", "eq", "neq", "in", "or", "order", "limit"]) {
+  for (const method of ["select", "eq", "neq", "in", "or", "gte", "order", "limit"]) {
     builder[method] = jest.fn(() => builder);
   }
   builder.then = (resolve: (value: unknown) => unknown) =>
@@ -86,6 +86,9 @@ test("returns deterministic readiness from tenant-scoped facts and query history
     }
     if (table === "vault_queries") {
       return chain({ data: null, error: null, count: 1 });
+    }
+    if (table === "coach_question_metrics_daily") {
+      return chain({ data: [], error: null });
     }
     throw new Error(`Unexpected table ${table}`);
   });

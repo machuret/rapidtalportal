@@ -18,7 +18,10 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  const [itemsResult, gapsResult, questionCountResult] = await Promise.all([
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- migration follows generated schema snapshot
+  const db = admin as any;
+  const metricsFrom = new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
+  const [itemsResult, gapsResult, questionCountResult, privateMetricResult] = await Promise.all([
     admin
       .from("vault_items")
       .select("id,title,status,category,tags,created_at,updated_at,indexed_at,evidence_role,authority_level,knowledge_status,time_sensitive,valid_from,valid_until,review_due_at,has_conflict")
@@ -37,10 +40,16 @@ export const GET = withAuth(async (req, { user }) => {
       .select("id", { count: "exact", head: true })
       .eq("client_id", clientId)
       .neq("visibility", "private_coach"),
+    db
+      .from("coach_question_metrics_daily")
+      .select("question_count")
+      .eq("client_id", clientId)
+      .gte("metric_date", metricsFrom),
   ]);
   if (itemsResult.error) return serverError(itemsResult.error);
   if (gapsResult.error) return serverError(gapsResult.error);
   if (questionCountResult.error) return serverError(questionCountResult.error);
+  if (privateMetricResult.error) return serverError(privateMetricResult.error);
 
   type GapRow = {
     id: string;
@@ -82,6 +91,7 @@ export const GET = withAuth(async (req, { user }) => {
   return NextResponse.json(evaluateVaultReadiness({
     items: (itemsResult.data ?? []) as VaultReadinessItem[],
     gaps: questions,
-    questionCount: questionCountResult.count ?? questions.length,
+    questionCount: (questionCountResult.count ?? 0) + (privateMetricResult.data ?? [])
+      .reduce((sum: number, row: { question_count: number }) => sum + row.question_count, 0),
   }));
 });

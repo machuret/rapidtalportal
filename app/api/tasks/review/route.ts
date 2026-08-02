@@ -73,7 +73,7 @@ export const POST = withAuth(async (req, { user }) => {
       type: approve ? "task_approved" : "task_changes",
       title: approve ? `Approved: ${task.title.slice(0, 110)}` : `Changes requested: ${task.title.slice(0, 100)}`,
       body: parsed.data.note?.trim()?.slice(0, 200),
-      href: "/tasks",
+      href: `/tasks?card=${parsed.data.id}`,
       email: {
         subject: approve ? `Approved: ${task.title.slice(0, 80)}` : `Changes requested: ${task.title.slice(0, 70)}`,
         heading: approve ? "Your work was approved" : "Changes were requested",
