@@ -4,12 +4,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { format, subDays, parseISO } from "date-fns";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Mail, Phone, CalendarDays, UserCircle, NotebookPen, TrendingUp, Clock, DollarSign, CreditCard, MessageCircle, MapPin, Globe, Wrench } from "lucide-react";
+import { ArrowLeft, Mail, Phone, CalendarDays, UserCircle, NotebookPen, TrendingUp, Clock, DollarSign, CreditCard, MessageCircle, MapPin, Globe, Wrench, ListChecks, CheckCircle2 } from "lucide-react";
 import { VaProfileEditor } from "@/components/team/VaProfileEditor";
 import { VaContractEditor, type ContractInit } from "@/components/team/VaContractEditor";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { MOOD_META, moodMeta } from "@/lib/daily-logs/mood";
 import { fmtMoney } from "@/lib/my-job/pay";
+import { sumWorkHours } from "@/lib/tasks/metrics";
 
 function fmtMs(ms: number) {
   const h = Math.floor(ms / 3600000);
@@ -30,12 +31,13 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
   const admin = createAdminClient();
 
   const since30 = format(subDays(new Date(), 29), "yyyy-MM-dd"); // logs window
-  const since14 = format(subDays(new Date(), 13), "yyyy-MM-dd"); // time-entries window
+  const since14 = format(subDays(new Date(), 13), "yyyy-MM-dd"); // time-entries table window
+  const since30Iso = new Date(Date.now() - 30 * 86_400_000).toISOString(); // SOP-runs window
 
-  // All keyed by params.id — fetch the VA profile, logs, time and contract in ONE
-  // round-trip (was 3 sequential), then verify access. Logs/time/contract for a
-  // wrong-tenant id simply return nothing and we notFound() before using them.
-  const [{ data: va }, { data: rawLogs }, { data: rawTimeEntries }, { data: contractRow }] = await Promise.all([
+  // All keyed by params.id — fetch the VA profile, logs, time, contract and SOP
+  // runs in ONE round-trip (was 3 sequential), then verify access. Data for a
+  // wrong-tenant id simply returns nothing and we notFound() before using it.
+  const [{ data: va }, { data: rawLogs }, { data: rawTimeEntries }, { data: contractRow }, { data: rawRuns }] = await Promise.all([
     admin
       .from("users")
       .select("id, full_name, email, phone, birthday, avatar_url, created_at, salary, payment_terms, payment_details, whatsapp, personal_email, address, timezone, skills")
@@ -45,21 +47,30 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
       .single(),
     admin
       .from("daily_logs")
-      .select("id, log_date, mood, tasks_done, positives, challenges, goals_achieved, goals_tomorrow, admin_feedback, updated_at")
+      .select("id, log_date, mood, tasks_done, positives, challenges, goals_achieved, goals_tomorrow, admin_feedback, reviewed_at, updated_at")
       .eq("user_id", params.id)
       .gte("log_date", since30)
       .order("log_date", { ascending: false }),
+    // 30-day window so the Activity stats below can total the month; the
+    // per-day table still renders only the last 14 days (filtered below).
     admin
       .from("time_entries")
       .select("id, work_date, phase, started_at, ended_at")
       .eq("user_id", params.id)
-      .gte("work_date", since14)
+      .gte("work_date", since30)
       .order("work_date", { ascending: false }),
     admin
       .from("va_job_contracts")
       .select("rate, currency, pay_period, payment_method, payment_schedule, start_date, weekly_hours, notice_period, next_review_date, annual_leave_days, contract_name")
       .eq("user_id", params.id)
       .maybeSingle(),
+    admin
+      .from("sop_runs")
+      .select("sop_id, status, steps_done, steps_total, created_at")
+      .eq("user_id", params.id)
+      .gte("created_at", since30Iso)
+      .order("created_at", { ascending: false })
+      .limit(15),
   ]);
 
   if (!va) notFound();
@@ -67,6 +78,20 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
   const logs = rawLogs ?? [];
   const timeEntries = rawTimeEntries ?? [];
   const contract = (contractRow as ContractInit | null) ?? null;
+  const runs = (rawRuns ?? []) as { sop_id: string; status: string; steps_done: number; steps_total: number; created_at: string }[];
+
+  // SOP titles for the runs
+  const sopTitles: Record<string, string> = {};
+  const runSopIds = Array.from(new Set(runs.map((r) => r.sop_id)));
+  if (runSopIds.length) {
+    const { data: sopRows } = await admin.from("sops").select("id, title").in("id", runSopIds);
+    for (const s of (sopRows ?? []) as { id: string; title: string }[]) sopTitles[s.id] = s.title;
+  }
+
+  // Total worked hours over the full 30-day window (same formula as the
+  // roster stats: sumWorkHours over work-phase entries).
+  const hours30 = sumWorkHours(timeEntries.filter((e) => e.phase === "work"));
+  const sopsCompleted = runs.filter((r) => r.status === "completed").length;
 
   // Aggregate time per day
   type DaySummary = { work: number; brk: number };
@@ -78,7 +103,9 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
     else acc[e.work_date].brk += ms;
     return acc;
   }, {});
-  const timeDays = Object.entries(timeSummary).sort(([a], [b]) => b.localeCompare(a));
+  const timeDays = Object.entries(timeSummary)
+    .filter(([date]) => date >= since14)
+    .sort(([a], [b]) => b.localeCompare(a));
 
   // Mood stats
   const moodCounts = logs.reduce<Record<string, number>>((acc, l) => {
@@ -340,6 +367,59 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
         </div>
       )}
 
+      {/* Activity — hours + SOP runs over 30 days (merged from Supervision) */}
+      <div className="mb-6">
+        <h2 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
+          <ListChecks className="w-4 h-4 text-zinc-500" />
+          Activity — Last 30 Days
+        </h2>
+        <div className="grid grid-cols-3 gap-3 mb-3">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 text-center">
+            <p className="text-3xl font-bold text-zinc-100">{hours30.toFixed(1)}h</p>
+            <p className="text-xs text-zinc-500 mt-1 flex items-center justify-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              Hours worked
+            </p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 text-center">
+            <p className="text-3xl font-bold text-zinc-100">{runs.length}</p>
+            <p className="text-xs text-zinc-500 mt-1 flex items-center justify-center gap-1.5">
+              <ListChecks className="w-3.5 h-3.5" />
+              SOPs run
+            </p>
+          </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 text-center">
+            <p className="text-3xl font-bold text-zinc-100">{sopsCompleted}</p>
+            <p className="text-xs text-zinc-500 mt-1 flex items-center justify-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              SOPs completed
+            </p>
+          </div>
+        </div>
+        {runs.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-8 text-center">
+            <p className="text-zinc-500 text-sm">No SOPs run in the last 30 days.</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">
+            {runs.map((r, i) => (
+              <div key={i} className="flex items-start gap-2.5 px-3 sm:px-5 py-3 border-b border-zinc-800/50 last:border-0">
+                {r.status === "completed"
+                  ? <CheckCircle2 className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+                  : <ListChecks className="w-4 h-4 text-zinc-500 mt-0.5 shrink-0" />}
+                <div className="min-w-0">
+                  <p className="text-sm text-zinc-200 truncate">{sopTitles[r.sop_id] ?? "Untitled SOP"}</p>
+                  <p className="text-xs text-zinc-500">
+                    {r.status === "completed" ? "Completed" : `${r.steps_done}/${r.steps_total} steps`}
+                    {" · "}{format(parseISO(r.created_at), "d MMM")}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Time entries */}
       <div className="mb-6">
         <h2 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
@@ -414,9 +494,12 @@ export default async function VaDetailPage({ params: paramsPromise }: { params: 
                       {log.tasks_done ? log.tasks_done.slice(0, 80) : "No tasks recorded"}
                     </p>
 
-                    {/* Admin feedback indicator */}
+                    {/* Admin feedback / review indicators */}
                     {log.admin_feedback && (
                       <span className="text-xs text-blue-400 shrink-0">Feedback given</span>
+                    )}
+                    {log.reviewed_at && (
+                      <span className="text-xs text-green-400 shrink-0">Reviewed</span>
                     )}
 
                     <span className="text-zinc-600 text-xs shrink-0 group-open:hidden">▶ Expand</span>

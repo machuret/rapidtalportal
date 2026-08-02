@@ -4,12 +4,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { format, subDays } from "date-fns";
 import Link from "next/link";
 import Image from "next/image";
-import { Users, NotebookPen, CalendarDays, Mail, Phone, ArrowRight } from "lucide-react";
+import { Users, NotebookPen, CalendarDays, Mail, Phone, ArrowRight, CheckCircle2, Target, Clock, AlertTriangle, Inbox } from "lucide-react";
 import { TeamLeaveApprovals, type PendingLeave } from "@/components/team/TeamLeaveApprovals";
+import { ExportCsv } from "@/components/team/ExportCsv";
 import { moodMeta } from "@/lib/daily-logs/mood";
+import { computeVaStats, blankVaStats, vaOnTimePct, vaFlags, type VaFlag } from "@/lib/va/stats";
+import { timeAgo } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "My Team — RapidTal" };
+
+const STATS_WINDOW_DAYS = 30;
 
 export default async function TeamPage() {
   const ctx = await getCurrentUserAndClient();
@@ -44,14 +49,18 @@ export default async function TeamPage() {
 
   // Single batch query for all VAs — avoids N+1
   const vaIds = vaList.map(v => v.id);
-  const { data: allLogs } = vaIds.length > 0
-    ? await admin
-        .from("daily_logs")
-        .select("user_id, log_date, mood, tasks_done")
-        .in("user_id", vaIds)
-        .gte("log_date", since)
-        .order("log_date", { ascending: false })
-    : { data: [] };
+  const [{ data: allLogs }, stats] = await Promise.all([
+    vaIds.length > 0
+      ? admin
+          .from("daily_logs")
+          .select("user_id, log_date, mood, tasks_done")
+          .in("user_id", vaIds)
+          .gte("log_date", since)
+          .order("log_date", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    // 30-day outcome stats (shared with the old Supervision page's formulas).
+    computeVaStats(admin, vaIds, user.client_id, STATS_WINDOW_DAYS),
+  ]);
 
   const summaryMap: Record<string, { user_id: string; log_date: string; mood: string | null; tasks_done: string | null }[]> = {};
   for (const log of allLogs ?? []) {
@@ -60,12 +69,37 @@ export default async function TeamPage() {
     summaryMap[l.user_id].push(l);
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+  const flagsFor = (id: string): VaFlag[] => vaFlags(stats[id], today);
+
+  // Action items first, then alphabetical (the DB order) — a stable roster
+  // where anyone needing attention floats to the top.
+  const sorted = [...vaList].sort((a, b) => flagsFor(b.id).length - flagsFor(a.id).length);
+
   // Pending leave (fetched above with the VAs) — map to display names now that
   // we have both. (Relocated here from My Job, which is an employee page a
   // client shouldn't have to visit.)
   const nameById = new Map(vaList.map((v) => [v.id, v.full_name ?? v.email]));
   const pendingLeave: PendingLeave[] = ((leaveRows ?? []) as { id: string; user_id: string; start_date: string; end_date: string; leave_type: string | null; reason: string | null }[])
     .map((r) => ({ id: r.id, userName: nameById.get(r.user_id) ?? "VA", start_date: r.start_date, end_date: r.end_date, leave_type: r.leave_type, reason: r.reason }));
+
+  // Same export the Supervision roster had, kept on the consolidated page.
+  const csvRows = sorted.map((va) => {
+    const s = stats[va.id] ?? blankVaStats();
+    return {
+      name: va.full_name ?? va.email,
+      email: va.email,
+      delivered_30d: s.delivered,
+      on_time_pct: vaOnTimePct(s) ?? "",
+      awaiting_review: s.reviewing,
+      in_progress: s.inProgress,
+      overdue: s.overdue,
+      due_soon: s.dueSoon,
+      hours_worked: Number(s.hours.toFixed(1)),
+      daily_logs: s.logs,
+      last_log: s.lastLog || "never",
+    };
+  });
 
   return (
     <div>
@@ -74,17 +108,18 @@ export default async function TeamPage() {
         <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
           <Users className="w-5 h-5 text-blue-400" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-3xl font-bold tracking-tight">My Team</h1>
           <p className="text-zinc-400 text-sm mt-0.5">
-            {vaList.length} VA{vaList.length !== 1 ? "s" : ""} · Daily log reports and activity
+            {vaList.length} VA{vaList.length !== 1 ? "s" : ""} · Outcomes, activity and profiles — last {STATS_WINDOW_DAYS} days
           </p>
         </div>
+        <ExportCsv rows={csvRows} filename={`team-${new Date().toISOString().slice(0, 10)}.csv`} />
       </div>
 
       <TeamLeaveApprovals initial={pendingLeave} />
 
-      {vaList.length === 0 ? (
+      {sorted.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-16 text-center">
           <Users className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
           <p className="text-zinc-300 font-semibold text-lg mb-1">No VAs assigned yet</p>
@@ -92,10 +127,11 @@ export default async function TeamPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {vaList.map(va => {
+          {sorted.map(va => {
             const logs = summaryMap[va.id] ?? [];
-            const logsThisWeek = logs.length;
-            const lastLog = logs[0];
+            const s = stats[va.id] ?? blankVaStats();
+            const pct = vaOnTimePct(s);
+            const flags = flagsFor(va.id);
             const initials = (va.full_name ?? va.email)
               .split(" ").map((p: string) => p[0]).join("").slice(0, 2).toUpperCase();
 
@@ -103,89 +139,123 @@ export default async function TeamPage() {
               <Link
                 key={va.id}
                 href={`/team/${va.id}`}
-                className="group flex items-center gap-5 rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-5 hover:border-zinc-600 hover:bg-zinc-800/60 transition-all"
+                className="group block rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-5 hover:border-zinc-600 hover:bg-zinc-800/60 transition-all"
               >
-                {/* Avatar */}
-                <div className="shrink-0">
-                  {va.avatar_url ? (
-                    <Image 
-                      src={va.avatar_url} 
-                      alt={va.full_name ?? ""} 
-                      width={48} 
-                      height={48} 
-                      className="w-12 h-12 rounded-full object-cover" 
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500/30 to-purple-500/30 border border-zinc-700 flex items-center justify-center text-sm font-bold text-zinc-200">
-                      {initials}
-                    </div>
-                  )}
-                </div>
-
-                {/* Name + contact */}
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-zinc-100 group-hover:text-white transition-colors">
-                    {va.full_name ?? "—"}
-                  </p>
-                  <div className="flex flex-wrap gap-3 mt-1">
-                    <span className="flex items-center gap-1.5 text-xs text-zinc-500">
-                      <Mail className="w-3 h-3" />
-                      {va.email}
-                    </span>
-                    {va.phone && (
-                      <span className="flex items-center gap-1.5 text-xs text-zinc-500">
-                        <Phone className="w-3 h-3" />
-                        {va.phone}
-                      </span>
-                    )}
-                    {va.birthday && (
-                      <span className="flex items-center gap-1.5 text-xs text-zinc-500">
-                        <CalendarDays className="w-3 h-3" />
-                        {va.birthday}
-                      </span>
+                <div className="flex items-center gap-5">
+                  {/* Avatar */}
+                  <div className="shrink-0">
+                    {va.avatar_url ? (
+                      <Image
+                        src={va.avatar_url}
+                        alt={va.full_name ?? ""}
+                        width={48}
+                        height={48}
+                        className="w-12 h-12 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500/30 to-purple-500/30 border border-zinc-700 flex items-center justify-center text-sm font-bold text-zinc-200">
+                        {initials}
+                      </div>
                     )}
                   </div>
-                </div>
 
-                {/* 7-day mood strip */}
-                <div className="shrink-0 flex flex-col items-center gap-1.5">
-                  <p className="text-xs text-zinc-600 font-medium">Last 7 days</p>
-                  <div className="flex gap-1">
-                    {Array.from({ length: 7 }).map((_, i) => {
-                      const date = format(subDays(new Date(), 6 - i), "yyyy-MM-dd");
-                      const entry = logs.find((l: { log_date: string; mood: string | null }) => l.log_date === date);
-                      return (
-                        <div
-                          key={date}
-                          title={entry ? `${date}: ${entry.mood ?? "no mood"}` : date}
-                          className={`w-5 h-5 rounded text-xs flex items-center justify-center ${
-                            entry ? "bg-zinc-700" : "bg-zinc-800"
-                          }`}
-                        >
-                          {entry?.mood ? moodMeta(entry.mood)?.emoji ?? "•" : (
-                            <span className="text-zinc-700 text-3xs">–</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Log stats */}
-                <div className="shrink-0 text-center w-20">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <NotebookPen className="w-4 h-4 text-zinc-500" />
-                    <p className="text-xl font-bold text-zinc-100">{logsThisWeek}</p>
-                  </div>
-                  <p className="text-xs text-zinc-600 mt-0.5">logs this week</p>
-                  {lastLog && (
-                    <p className="text-xs text-zinc-600 mt-0.5">
-                      Last: {format(new Date(lastLog.log_date), "dd MMM")}
+                  {/* Name + contact */}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-zinc-100 group-hover:text-white transition-colors">
+                      {va.full_name ?? "—"}
                     </p>
-                  )}
+                    <div className="flex flex-wrap gap-3 mt-1">
+                      <span className="flex items-center gap-1.5 text-xs text-zinc-500">
+                        <Mail className="w-3 h-3" />
+                        {va.email}
+                      </span>
+                      {va.phone && (
+                        <span className="flex items-center gap-1.5 text-xs text-zinc-500">
+                          <Phone className="w-3 h-3" />
+                          {va.phone}
+                        </span>
+                      )}
+                      {va.birthday && (
+                        <span className="flex items-center gap-1.5 text-xs text-zinc-500">
+                          <CalendarDays className="w-3 h-3" />
+                          {va.birthday}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1.5 text-xs text-zinc-500">
+                        <NotebookPen className="w-3 h-3" />
+                        Last log {s.lastLog ? timeAgo(s.lastLog) : "never"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Outcome stats (desktop) — outcomes first, hours secondary. */}
+                  <div className="hidden md:flex items-center gap-5 text-xs shrink-0">
+                    <span className="inline-flex items-center gap-1.5 text-zinc-200">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />{s.delivered} delivered
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 text-zinc-200">
+                      <Target className="w-3.5 h-3.5 text-blue-400" />{pct === null ? "—" : `${pct}%`} on time
+                    </span>
+                    {s.reviewing > 0 && (
+                      <span className="inline-flex items-center gap-1.5 text-amber-300">
+                        <Inbox className="w-3.5 h-3.5" />{s.reviewing} for you
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1.5 text-zinc-500">
+                      <Clock className="w-3.5 h-3.5" />{s.hours.toFixed(1)}h
+                    </span>
+                  </div>
+
+                  {/* 7-day mood strip */}
+                  <div className="shrink-0 flex flex-col items-center gap-1.5">
+                    <p className="text-xs text-zinc-600 font-medium">Last 7 days</p>
+                    <div className="flex gap-1">
+                      {Array.from({ length: 7 }).map((_, i) => {
+                        const date = format(subDays(new Date(), 6 - i), "yyyy-MM-dd");
+                        const entry = logs.find((l: { log_date: string; mood: string | null }) => l.log_date === date);
+                        return (
+                          <div
+                            key={date}
+                            title={entry ? `${date}: ${entry.mood ?? "no mood"}` : date}
+                            className={`w-5 h-5 rounded text-xs flex items-center justify-center ${
+                              entry ? "bg-zinc-700" : "bg-zinc-800"
+                            }`}
+                          >
+                            {entry?.mood ? moodMeta(entry.mood)?.emoji ?? "•" : (
+                              <span className="text-zinc-700 text-3xs">–</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 transition-colors shrink-0" />
                 </div>
 
-                <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 transition-colors shrink-0" />
+                {/* Flags lead with the most urgent signal. */}
+                {flags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {flags.map((f) => (
+                      <span key={f.text} className={
+                        f.kind === "alert"
+                          ? "inline-flex items-center gap-1 text-2xs font-medium text-red-300 bg-red-500/10 rounded-full px-2 py-0.5"
+                          : f.kind === "action"
+                            ? "inline-flex items-center gap-1 text-2xs font-medium text-blue-300 bg-blue-500/10 rounded-full px-2 py-0.5"
+                            : "inline-flex items-center gap-1 text-2xs font-medium text-amber-300 bg-amber-500/10 rounded-full px-2 py-0.5"}>
+                        {f.kind === "action" ? <Inbox className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />} {f.text}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Mobile: a compact outcome line. */}
+                <div className="md:hidden flex items-center gap-4 mt-2 text-xs text-zinc-400">
+                  <span className="inline-flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-400" />{s.delivered}</span>
+                  <span className="inline-flex items-center gap-1"><Target className="w-3 h-3 text-blue-400" />{pct === null ? "—" : `${pct}%`}</span>
+                  <span className="inline-flex items-center gap-1"><NotebookPen className="w-3 h-3" />{s.logs}</span>
+                  <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" />{s.hours.toFixed(1)}h</span>
+                </div>
               </Link>
             );
           })}

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   LayoutDashboard, Brain, KanbanSquare, NotebookPen, AlertTriangle, CheckCircle2,
-  Archive, Sparkles, Eye, ArrowRight, Users,
+  Archive, Sparkles, ArrowRight, Users,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -167,9 +167,9 @@ export default async function AdminOverviewPage() {
                     className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
                     <Sparkles className="w-4 h-4" />
                   </Link>
-                  <Link href="/supervision" title="Supervision"
+                  <Link href="/team" title="My Team"
                     className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
-                    <Eye className="w-4 h-4" />
+                    <Users className="w-4 h-4" />
                   </Link>
                 </div>
               </div>
