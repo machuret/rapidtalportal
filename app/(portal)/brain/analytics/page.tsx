@@ -7,6 +7,16 @@ import {
 import { KnowledgeGaps } from "@/components/vault/KnowledgeGaps";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { OutcomesPanel } from "@/components/brain/OutcomesPanel";
+import {
+  computeCoachActionOutcomes,
+  computeContentKept,
+  computeOpportunityEffectiveness,
+  type CoachReceiptRow,
+  type KeptPieceRow,
+  type OpportunityOutcomeRow,
+  type OutcomeTaskRow,
+} from "@/lib/brain/outcomes";
 import {
   loadBrainSignals,
   loadVaultFeedback,
@@ -17,6 +27,9 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Brain Analytics — RapidTal" };
 
 const WINDOW_DAYS = 30;
+// Outcomes need a longer look-back than usage stats: Coach-created tasks can
+// take weeks to finish, and opportunities are measured after completion.
+const OUTCOMES_WINDOW_DAYS = 90;
 
 export default async function BrainAnalyticsPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ client?: string }> }) {
   const searchParams = await searchParamsPromise;
@@ -30,8 +43,12 @@ export default async function BrainAnalyticsPage({ searchParams: searchParamsPro
   if (!clientId) redirect("/dashboard");
 
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const sinceOutcomes = new Date(Date.now() - OUTCOMES_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  // Coach-created tasks are matched against receipts created up to 90 days ago;
+  // one extra day of slack covers the ±60s title-match window at the edge.
+  const sinceOutcomeTasks = new Date(Date.now() - (OUTCOMES_WINDOW_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString();
 
-  const [queriesRes, feedback, signals, topicsRes] = await Promise.all([
+  const [queriesRes, feedback, signals, topicsRes, receiptsRes, outcomeTasksRes, keptPiecesRes, opportunitiesRes] = await Promise.all([
     // Narrow columns only — select("*") used to drag full answer text and
     // sources JSONB for rows we only count/group.
     admin.from("vault_queries").select("id, question, answered, dismissed, created_at")
@@ -43,7 +60,35 @@ export default async function BrainAnalyticsPage({ searchParams: searchParamsPro
     (admin as any).from("content_topics")
       .select("id, status, ai_fit_score, ai_flagged, created_at, updated_at")
       .eq("client_id", clientId).order("updated_at", { ascending: false }).limit(1000),
+    // Outcomes panel (reporting-only — none of this feeds back into learning).
+    admin.from("coach_action_receipts")
+      .select("id, action_type, status, owner_id, payload, result, created_at")
+      .eq("client_id", clientId).gte("created_at", sinceOutcomes)
+      .order("created_at", { ascending: false }).limit(1000),
+    admin.from("tasks")
+      .select("id, title, status, created_by, created_at, completed_at")
+      .eq("client_id", clientId).gte("created_at", sinceOutcomeTasks)
+      .order("created_at", { ascending: false }).limit(2000),
+    // Approved pieces with a captured AI draft — the kept-ratio needs both
+    // texts, so the row cap keeps this bounded.
+    admin.from("content_pieces")
+      .select("id, ai_original, body")
+      .eq("client_id", clientId).eq("status", "approved")
+      .not("ai_original", "is", null)
+      .gte("updated_at", sinceOutcomes).limit(500),
+    admin.from("brain_opportunities")
+      .select("id, status, effectiveness_status")
+      .eq("client_id", clientId).gte("created_at", sinceOutcomes).limit(1000),
   ]);
+
+  // ── Outcomes (reporting-only; migration 091 keeps efficacy out of learning) ─
+  const receipts = (receiptsRes.error ? [] : (receiptsRes.data ?? [])) as CoachReceiptRow[];
+  const outcomeTasks = (outcomeTasksRes.error ? [] : (outcomeTasksRes.data ?? [])) as OutcomeTaskRow[];
+  const keptPieces = (keptPiecesRes.error ? [] : (keptPiecesRes.data ?? [])) as KeptPieceRow[];
+  const opportunityRows = (opportunitiesRes.error ? [] : (opportunitiesRes.data ?? [])) as OpportunityOutcomeRow[];
+  const coachOutcomes = computeCoachActionOutcomes(receipts, outcomeTasks);
+  const contentKept = computeContentKept(keptPieces);
+  const opportunityEffectiveness = computeOpportunityEffectiveness(opportunityRows);
 
   // ── Content Brain measurement (Phase 4) ──────────────────────────────────
   type TopicRow = { status: string; ai_flagged: boolean | null; updated_at: string };
@@ -261,6 +306,13 @@ export default async function BrainAnalyticsPage({ searchParams: searchParamsPro
           </div>
         </div>
       </section>
+
+      <OutcomesPanel
+        coach={coachOutcomes}
+        kept={contentKept}
+        opportunities={opportunityEffectiveness}
+        windowDays={OUTCOMES_WINDOW_DAYS}
+      />
     </div>
   );
 }
