@@ -225,12 +225,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await loadResult(db, input.clientId, project.id);
-    if (!result?.piece) return NextResponse.json({
-      error: "The provider completed but the saved draft is not available yet.",
-      projectId: project.id,
-      recoverable: true,
-    }, { status: 503 });
     await db.from("content_projects").update({
       last_operation: null,
       last_error_code: null,
@@ -238,6 +232,15 @@ export async function POST(req: NextRequest) {
       last_error_at: null,
       last_generation_warnings: Array.isArray(generatedBody.warnings) ? generatedBody.warnings : [],
     }).eq("id", project.id).eq("client_id", input.clientId);
+    // Load only after the recovery-field update. content_projects.updated_at is
+    // refreshed by the database trigger, so returning the pre-update row makes
+    // the very next optimistic PATCH conflict even in a single browser tab.
+    const result = await loadResult(db, input.clientId, project.id);
+    if (!result?.piece) return NextResponse.json({
+      error: "The provider completed but the saved draft is not available yet.",
+      projectId: project.id,
+      recoverable: true,
+    }, { status: 503 });
     return NextResponse.json({ ...result, warnings: generatedBody.warnings ?? [] });
   } catch (error) { return serverError(error); }
 }

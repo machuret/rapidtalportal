@@ -9,6 +9,7 @@ const read = (file: string) =>
 describe("durable content operation recovery", () => {
   const migration = read("db/migrations/118_content_operation_recovery.sql");
   const generateRoute = read("app/api/content/generate/route.ts");
+  const quickDraftRoute = read("app/api/content/quick-draft/route.ts");
   const workflow = read("components/content/ContentProjectWorkflow.tsx");
   const intelligence = read("app/api/content/competitors/intelligence/route.ts");
 
@@ -19,6 +20,14 @@ describe("durable content operation recovery", () => {
     expect(generateRoute).toContain("last_generation_warnings");
     expect(workflow).toContain("Retry generation");
     expect(workflow).toContain("Your project, brief and selected Vault knowledge remain saved.");
+  });
+
+  test("quick create returns the project version written by its final recovery update", () => {
+    const recoveryUpdate = quickDraftRoute.indexOf("last_operation: null");
+    const finalResultLoad = quickDraftRoute.lastIndexOf("const result = await loadResult");
+    expect(recoveryUpdate).toBeGreaterThan(-1);
+    expect(finalResultLoad).toBeGreaterThan(recoveryUpdate);
+    expect(workflow).not.toContain("else if (project.current_piece) setOperationFailure(null)");
   });
 
   test("every read path returns the recovery fields — the retry UI is dead without them", () => {

@@ -233,7 +233,6 @@ export function ContentProjectWorkflow({
         setRetryOperation({ kind: "generate" });
       }
     }
-    else if (project.current_piece) setOperationFailure(null);
   }, [project]);
 
   const loadProject = useCallback(async () => {
