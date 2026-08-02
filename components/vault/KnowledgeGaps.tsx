@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { errorMessage } from "@/lib/error-message";
+import { useVaultSourceOptions } from "@/hooks/useVaultSourceOptions";
 import type {
   VaultGapImportance,
   VaultKnowledgeGap,
@@ -26,7 +27,6 @@ import {
 import Link from "next/link";
 
 type GapInput = string | VaultKnowledgeGap;
-type SourceOption = { id: string; title: string };
 
 const importanceClasses: Record<VaultGapImportance, string> = {
   low: "border-zinc-700 bg-zinc-800 text-zinc-400",
@@ -64,7 +64,11 @@ export function KnowledgeGaps({ gaps, clientId, canCurate, onChanged }: {
   const [answer, setAnswer] = useState("");
   const [importance, setImportance] = useState<VaultGapImportance>("normal");
   const [recommendedSource, setRecommendedSource] = useState("");
-  const [sources, setSources] = useState<SourceOption[]>([]);
+  // Loaded lazily on the first "Link source" click, then cached for the session.
+  const { options: sources, reload: reloadSources } = useVaultSourceOptions(clientId, {
+    activeOnly: true,
+    enabled: false,
+  });
   const [selectedSourceId, setSelectedSourceId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<Set<string>>(new Set());
@@ -142,17 +146,11 @@ export function KnowledgeGaps({ gaps, clientId, canCurate, onChanged }: {
     setSelectedSourceId("");
     if (sources.length) return;
     setBusy(gap.id);
-    try {
-      const result = await api.get<{ items: SourceOption[] }>(
-        `${ROUTES.vault.items()}?clientId=${clientId}&status=ready&evidenceRole=factual&knowledgeStatus=active&limit=50`,
-        { showErrorToast: false },
-      );
-      setSources(result.items ?? []);
-    } catch (error) {
+    const failure = await reloadSources();
+    setBusy(null);
+    if (failure) {
       setLinking(null);
-      toast.error(errorMessage(error, "Vault sources could not be loaded."));
-    } finally {
-      setBusy(null);
+      toast.error(errorMessage(failure, "Vault sources could not be loaded."));
     }
   }
 

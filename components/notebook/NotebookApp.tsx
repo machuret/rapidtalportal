@@ -3,7 +3,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { JSONContent } from "@tiptap/core";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { timeAgo } from "@/lib/time";
 import { Editor } from "./Editor";
 import { RevisionDrawer } from "./RevisionDrawer";
 import type { NotebookPage } from "@/lib/notebook/types";
@@ -24,15 +25,6 @@ interface Props {
   pages: NotebookPage[];
   participants: NotebookParticipants;
   currentUserId: string;
-}
-
-function relTime(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "just now";
-  const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24); if (d < 30) return `${d}d ago`;
-  return formatDate(iso);
 }
 
 export function NotebookApp({ placements, activePlacementId, pages: initialPages, participants, currentUserId }: Props) {
@@ -194,7 +186,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
             </div>
 
             <div className="border-t border-zinc-800 px-5 py-2 text-xs text-zinc-500">
-              Last edited by {nameFor(selected.last_edited_by)} · {relTime(selected.updated_at)}
+              Last edited by {nameFor(selected.last_edited_by)} · {timeAgo(selected.updated_at)}
             </div>
           </>
         ) : (

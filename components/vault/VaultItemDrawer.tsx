@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { vaultListKeys } from "@/hooks/useVaultList";
+import { useVaultSourceOptions } from "@/hooks/useVaultSourceOptions";
 import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
 import { cn, formatDate, formatNumber } from "@/lib/utils";
 
@@ -69,7 +70,9 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
   const [supersedesItemId, setSupersedesItemId] = useState(item.supersedes_item_id ?? "");
   const [hasConflict, setHasConflict] = useState(item.has_conflict ?? false);
   const [conflictNote, setConflictNote] = useState(item.conflict_note ?? "");
-  const [sourceOptions, setSourceOptions] = useState<Array<{ id: string; title: string }>>([]);
+  // Supersession stays optional: a source-list failure surfaces inside the
+  // hook and never blocks editing.
+  const { options: sourceOptions } = useVaultSourceOptions(clientId, { excludeId: item.id });
   const [versions, setVersions] = useState<VaultItemVersionSummary[]>([]);
 
   useEffect(() => {
@@ -85,14 +88,6 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
     }).catch(() => {
       // Content stays disabled and unsavable when it can't be fetched — an
       // unreachable document must fail closed, never be replaced by guesses.
-    });
-    void api.get<{ items: Array<{ id: string; title: string }> }>(
-      `${ROUTES.vault.items()}?clientId=${clientId}&evidenceRole=factual&limit=50`,
-      { showErrorToast: false },
-    ).then((result) => {
-      if (active) setSourceOptions(result.items.filter((source) => source.id !== item.id));
-    }).catch(() => {
-      // Supersession remains optional; a source-list failure must not block editing.
     });
     void api.get<{ versions: VaultItemVersionSummary[] }>(
       `${ROUTES.vault.itemVersions(item.id)}?clientId=${clientId}`,
