@@ -48,3 +48,16 @@ export function rankEvidenceCandidates<T extends EvidenceCandidate>(
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .map(({ candidate }) => candidate);
 }
+
+export function recommendedEvidenceIds<T extends { id: string; recommended?: boolean }>(
+  evidence: T[],
+  existingIds: Iterable<string>,
+  limit = 3,
+): string[] {
+  const existing = [...existingIds];
+  if (existing.length) return existing;
+  return evidence
+    .filter((source) => source.recommended)
+    .slice(0, Math.max(0, limit))
+    .map((source) => source.id);
+}

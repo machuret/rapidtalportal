@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   ArrowLeft,
   BookText,
@@ -39,6 +39,7 @@ import {
 import { BrainFeedback } from "@/components/brain/BrainFeedback";
 import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
 import { usePieceActions } from "./usePieceActions";
+import { buildLiveEditorialChecks } from "@/lib/content/live-checks";
 
 /* ── Detail editor ──────────────────────────────────────────────── */
 export function PieceDetailEditor({
@@ -179,6 +180,11 @@ export function PieceDetailEditor({
   const TypeIcon = TYPE_ICONS[piece.content_type] || BookText;
   const iconColor = TYPE_ICON_COLORS[piece.content_type] || "text-zinc-400";
   const statusStyle = CONTENT_STATUS_STYLES[piece.status] || CONTENT_STATUS_STYLES.draft;
+  const liveChecks = useMemo(
+    () => buildLiveEditorialChecks(body, piece.content_type, piece.style_snapshot),
+    [body, piece.content_type, piece.style_snapshot],
+  );
+  const liveWarningCount = liveChecks.reduce((total, check) => total + check.warnings.length, 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -510,6 +516,32 @@ export function PieceDetailEditor({
           </div>
         )}
       </div>
+
+      {editing && (
+        <div className={`rounded-xl border px-4 py-3 ${liveWarningCount
+          ? "border-amber-500/25 bg-amber-500/5"
+          : "border-green-500/20 bg-green-500/5"}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className={`flex items-center gap-1.5 text-sm font-medium ${liveWarningCount ? "text-amber-200" : "text-green-300"}`}>
+              <ShieldCheck className="h-4 w-4" />
+              {liveWarningCount ? `${liveWarningCount} live check${liveWarningCount === 1 ? "" : "s"} to review` : "Live checks passed"}
+            </p>
+            <p className="text-2xs text-zinc-600">Updates as you type · final validation runs after save</p>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            {liveChecks.map((check) => (
+              <div key={check.id} className="rounded-lg border border-zinc-800/80 bg-zinc-950/50 p-3">
+                <p className={`text-xs font-medium ${check.warnings.length ? "text-amber-200" : "text-green-300"}`}>
+                  {check.label} · {check.warnings.length ? "Review" : "Ready"}
+                </p>
+                {check.warnings.slice(0, 4).map((warning) => (
+                  <p key={warning} className="mt-1.5 text-xs leading-5 text-zinc-400">• {warning}</p>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {revisions.length > 0 && (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">

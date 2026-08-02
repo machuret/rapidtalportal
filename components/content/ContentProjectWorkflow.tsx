@@ -13,6 +13,7 @@ import {
   Loader2,
   Radar,
   Save,
+  Search,
   ShieldCheck,
   Sparkles,
   Zap,
@@ -40,6 +41,7 @@ import { HistoryTab } from "./library/HistoryTab";
 import { errorMessage } from "@/lib/error-message";
 import { AppliedStylePreview } from "./AppliedStylePreview";
 import { generateQuickDraft } from "@/lib/content/quick-draft";
+import { recommendedEvidenceIds } from "@/lib/content/evidence-ranking";
 
 const STEPS: Array<{ id: ContentProjectStep; label: string }> = [
   { id: "idea", label: "Idea" },
@@ -169,6 +171,8 @@ export function ContentProjectWorkflow({
   const [evidence, setEvidence] = useState<ContentEvidenceOption[]>([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const [evidenceSearch, setEvidenceSearch] = useState("");
+  const evidenceRecommendationsApplied = useRef(project.vault_source_ids.length > 0);
   const [retryOperation, setRetryOperation] = useState<RetryOperation | null>(null);
   const [operationFailure, setOperationFailure] = useState<OperationFailure | null>(
     generationFailureFromProject(project),
@@ -291,6 +295,11 @@ export function ContentProjectWorkflow({
         { showErrorToast: false },
       );
       setEvidence(rows);
+      if (!evidenceRecommendationsApplied.current) {
+        const recommended = recommendedEvidenceIds(rows, []);
+        if (recommended.length) setSelectedSourceIds(new Set(recommended));
+        evidenceRecommendationsApplied.current = true;
+      }
     } catch (error) {
       setEvidence([]);
       setEvidenceError(errorMessage(error, "Vault evidence could not be loaded."));
@@ -314,6 +323,15 @@ export function ContentProjectWorkflow({
   const styleSummary = Array.isArray(project.style_snapshot?.summary)
     ? project.style_snapshot.summary
     : [];
+  const filteredEvidence = useMemo(() => {
+    const query = evidenceSearch.trim().toLocaleLowerCase();
+    if (!query) return evidence;
+    return evidence.filter((source) => (
+      source.title.toLocaleLowerCase().includes(query) ||
+      source.category.toLocaleLowerCase().includes(query) ||
+      source.excerpt.toLocaleLowerCase().includes(query)
+    ));
+  }, [evidence, evidenceSearch]);
 
   const brief: ContentBrief = useMemo(() => ({
     version: 1,
@@ -854,6 +872,23 @@ export function ContentProjectWorkflow({
               <p className="mt-1 text-xs text-zinc-400">
                 Selected Vault material is treated as approved company knowledge. Company DNA is always applied.
               </p>
+              {!evidenceLoading && !evidenceError && evidence.length > 0 && (
+                <>
+                  <div className="relative mt-4">
+                    <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-600" />
+                    <Input
+                      value={evidenceSearch}
+                      onChange={(event) => setEvidenceSearch(event.target.value)}
+                      aria-label="Search Vault evidence"
+                      placeholder="Search titles, summaries or categories"
+                      className="h-9 bg-zinc-950 pl-9"
+                    />
+                  </div>
+                  <p className="mt-2 text-2xs text-zinc-600">
+                    The strongest semantic matches are recommended and pre-selected automatically. You remain in control.
+                  </p>
+                </>
+              )}
               <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
                 {evidenceLoading && <p className="py-8 text-center text-sm text-zinc-500">Loading factual Vault sources…</p>}
                 {!evidenceLoading && evidenceError && (
@@ -865,7 +900,10 @@ export function ContentProjectWorkflow({
                   </div>
                 )}
                 {!evidenceLoading && !evidenceError && evidence.length === 0 && <p className="py-8 text-center text-sm text-zinc-500">No additional Vault material is available. Company DNA will still guide the draft.</p>}
-                {evidence.map((source) => {
+                {!evidenceLoading && !evidenceError && evidence.length > 0 && filteredEvidence.length === 0 && (
+                  <p className="py-8 text-center text-sm text-zinc-500">No Vault evidence matches that search.</p>
+                )}
+                {filteredEvidence.map((source) => {
                   const selected = selectedSourceIds.has(source.id);
                   return (
                     <button key={source.id} type="button" onClick={() => setSelectedSourceIds((previous) => {
@@ -875,7 +913,15 @@ export function ContentProjectWorkflow({
                     })} className={`w-full rounded-lg border p-3 text-left ${selected ? "border-blue-400/50 bg-blue-500/10" : "border-zinc-800 bg-zinc-950"}`}>
                       <div className="flex items-start gap-2">
                         {selected ? <Check className="mt-0.5 h-4 w-4 text-blue-300" /> : <Circle className="mt-0.5 h-4 w-4 text-zinc-700" />}
-                        <div><p className="text-sm font-medium text-zinc-200">{source.title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{source.excerpt || "No summary available."}</p><span className="mt-1 inline-block text-2xs uppercase text-zinc-600">{source.category}</span></div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium text-zinc-200">{source.title}</p>
+                            {source.recommended && <span className="rounded-full border border-blue-500/25 bg-blue-500/10 px-2 py-0.5 text-2xs text-blue-200">Recommended</span>}
+                            {typeof source.relevance === "number" && <span className="text-2xs text-zinc-600">{Math.round(source.relevance * 100)}% match</span>}
+                          </div>
+                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{source.excerpt || "No summary available."}</p>
+                          <span className="mt-1 inline-block text-2xs uppercase text-zinc-600">{source.category}</span>
+                        </div>
                       </div>
                     </button>
                   );

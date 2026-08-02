@@ -8,6 +8,7 @@ import { proxyToEdgeFunction } from "@/lib/edge-proxy";
 import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rankEvidenceCandidates } from "@/lib/content/evidence-ranking";
+import { matchSemanticEvidence } from "@/lib/content/semantic-evidence";
 import { loadProjectStyleSnapshot } from "@/lib/content/project-style";
 import { recordWorkflowEvent, type PilotDbClient } from "@/lib/content/pilot-observability";
 import type { ContentBrief, ContentProjectIdea } from "@/types/content";
@@ -128,17 +129,42 @@ export async function POST(req: NextRequest) {
       .or(`review_due_at.is.null,review_due_at.gt.${today}`)
       .order("updated_at", { ascending: false }).limit(60);
     if (candidatesError) return serverError(candidatesError);
-    const selected = rankEvidenceCandidates(
-      `${input.title} ${input.guidance ?? ""}`,
-      (candidates ?? []) as QuickEvidenceCandidate[],
-    ).slice(0, 6);
+    const evidenceQuery = `${input.title} ${input.guidance ?? ""}`.trim();
+    const candidateRows = [...((candidates ?? []) as QuickEvidenceCandidate[])];
+    const semantic = await matchSemanticEvidence(db, input.clientId, evidenceQuery, 30);
+    const semanticIds = semantic.matches.map((match) => match.itemId);
+    const missingSemanticIds = semanticIds.filter(
+      (id) => !candidateRows.some((candidate) => candidate.id === id),
+    );
+    if (missingSemanticIds.length) {
+      const { data: semanticItems, error: semanticItemsError } = await db.from("vault_items")
+        .select("id,title,category,ai_summary,raw_content,source_url")
+        .eq("client_id", input.clientId).eq("status", "ready").eq("evidence_role", "factual")
+        .eq("knowledge_status", "active").eq("has_conflict", false)
+        .or(`valid_from.is.null,valid_from.lte.${today}`)
+        .or(`valid_until.is.null,valid_until.gte.${today}`)
+        .or(`review_due_at.is.null,review_due_at.gt.${today}`)
+        .in("id", missingSemanticIds);
+      if (semanticItemsError) return serverError(semanticItemsError);
+      candidateRows.push(...((semanticItems ?? []) as QuickEvidenceCandidate[]));
+    }
+    const candidateById = new Map(candidateRows.map((candidate) => [candidate.id, candidate]));
+    const semanticSelected = semantic.matches.flatMap((match) => {
+      const candidate = candidateById.get(match.itemId);
+      return candidate ? [candidate] : [];
+    });
+    const semanticSet = new Set(semanticSelected.map((candidate) => candidate.id));
+    const lexicalSelected = rankEvidenceCandidates(evidenceQuery, candidateRows)
+      .filter((candidate) => !semanticSet.has(candidate.id));
+    const selected = [...semanticSelected, ...lexicalSelected].slice(0, 6);
+    const semanticById = new Map(semantic.matches.map((match) => [match.itemId, match]));
     const sourceIds = selected.map((source) => source.id);
     const sourceReferences = selected.map((source) => ({
       itemId: source.id,
       title: source.title,
-      kind: "vault_item",
-      excerpt: (source.ai_summary || source.raw_content || "").slice(0, 700),
-      similarity: null,
+      kind: semanticById.has(source.id) ? "semantic" : "vault_item",
+      excerpt: (semanticById.get(source.id)?.excerpt || source.ai_summary || source.raw_content || "").slice(0, 700),
+      similarity: semanticById.get(source.id)?.similarity ?? null,
     }));
     let styleSnapshot;
     try {

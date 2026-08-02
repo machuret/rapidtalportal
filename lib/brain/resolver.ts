@@ -59,6 +59,23 @@ function buildEdgeEmbed(): ((query: string) => Promise<number[]>) | undefined {
 }
 
 /**
+ * Embed a Vault retrieval query in the same 384-dimensional space as
+ * `vault_chunks`. Content evidence selection uses this instead of comparing
+ * only words inside the newest documents. A null result is deliberately
+ * recoverable: callers retain their deterministic lexical fallback.
+ */
+export async function embedVaultQuery(query: string): Promise<number[] | null> {
+  const embed = buildEdgeEmbed();
+  if (!embed || !query.trim()) return null;
+  try {
+    return await embed(query.trim().slice(0, 1_500));
+  } catch (error) {
+    console.warn("[brain/resolver] Vault query embedding unavailable", error);
+    return null;
+  }
+}
+
+/**
  * Node/server resolver wrapper. The shared resolver is deliberately free of
  * Next.js and Deno dependencies; this wrapper adds strict contract validation
  * before a context is ever supplied to a model or persisted.

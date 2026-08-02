@@ -228,6 +228,9 @@ export interface ContentEvidenceOption {
   excerpt: string;
   category: string;
   sourceUrl: string | null;
+  relevance?: number | null;
+  selectionMethod?: "selected" | "semantic" | "lexical";
+  recommended?: boolean;
 }
 
 export interface AiSuggestion {
