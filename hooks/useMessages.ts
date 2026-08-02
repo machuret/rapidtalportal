@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
@@ -32,11 +32,11 @@ interface SendMessageInput {
 
 // Fetch via the server API (admin client, scoped in code) rather than the
 // browser client's RLS query — the latter was failing on /messages.
-async function fetchMessages(clientId: string): Promise<Message[]> {
-  const { messages } = await api.get<{ messages: Message[] }>(
-    ROUTES.messages.list(clientId),
-    { showErrorToast: false },
-  );
+async function fetchMessages(clientId: string, after?: string): Promise<Message[]> {
+  const url = after
+    ? `${ROUTES.messages.list(clientId)}&updated_after=${encodeURIComponent(after)}`
+    : ROUTES.messages.list(clientId);
+  const { messages } = await api.get<{ messages: Message[] }>(url, { showErrorToast: false });
   return messages ?? [];
 }
 
@@ -55,10 +55,21 @@ interface UseMessagesOptions {
 export function useMessages(clientId: string, options: UseMessagesOptions = {}) {
   const { initialMessages, refetchInterval } = options;
   const queryClient = useQueryClient();
+  // Newest message we've seen — polls ask only for the delta after it, so the
+  // 25s refresh costs ~0 payload instead of re-shipping the last 100 messages.
+  const latestRef = useRef<string | null>(initialMessages?.length ? initialMessages[initialMessages.length - 1].created_at : null);
 
   const messagesQuery = useQuery({
     queryKey: messageKeys.byClient(clientId),
-    queryFn: () => fetchMessages(clientId),
+    queryFn: async () => {
+      const after = latestRef.current ?? undefined;
+      const delta = await fetchMessages(clientId, after);
+      const prev = queryClient.getQueryData<Message[]>(messageKeys.byClient(clientId)) ?? [];
+      const seen = new Set(prev.map((m) => m.id));
+      const merged = after ? [...prev, ...delta.filter((m) => !seen.has(m.id))] : delta;
+      if (merged.length) latestRef.current = merged[merged.length - 1].created_at;
+      return merged;
+    },
     initialData: initialMessages,
     placeholderData: initialMessages,
     refetchInterval,
