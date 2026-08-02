@@ -1,9 +1,7 @@
 "use client";
 
-import { memo, useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  Clock,
-  ChevronRight,
   ArrowLeft,
   BookText,
   Copy,
@@ -11,7 +9,6 @@ import {
   CheckCircle,
   Archive,
   RefreshCw,
-  Search,
   Pencil,
   Save,
   ShieldCheck,
@@ -21,14 +18,11 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
 import { api } from "@/lib/api-client";
-import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Textarea } from "@/components/ui/textarea";
-import { usePieceDetail, useUpdateContentPiece, useUpdatePieceStatus } from "@/hooks/useContent";
 import type { ContentPieceFull } from "@/hooks/useContent";
 import type {
   ContentBrief,
@@ -41,66 +35,13 @@ import { TYPE_ICON_COLORS, TYPE_ICONS, CONTENT_STATUS_STYLES } from "@/types/con
 import {
   EditorialLearningPrompt,
   type EditorialLearningSuggestion,
-} from "./EditorialLearningPrompt";
+} from "../EditorialLearningPrompt";
 import { BrainFeedback } from "@/components/brain/BrainFeedback";
 import { BrainContextUsed } from "@/components/brain/BrainContextUsed";
+import { usePieceActions } from "./usePieceActions";
 
-/* ── Props ──────────────────────────────────────────────────────── */
-interface HistoryTabProps {
-  history: ContentPiece[];
-  clientId: string;
-  canApprove: boolean;
-  onHistoryUpdate: Dispatch<SetStateAction<ContentPiece[]>>;
-  initialSelectedId?: string | null;
-  onBackToWorkflow?: () => void;
-  onPieceStatusChanged?: (piece: ContentPieceFull) => void;
-  onDirtyChange?: (dirty: boolean) => void;
-  onArtifactCreated?: (piece: ContentPiece) => void;
-  hasMore?: boolean;
-  loadingMore?: boolean;
-  onLoadMore?: () => void | Promise<void>;
-}
-
-/* ── List item ──────────────────────────────────────────────────── */
-const HistoryItem = memo(function HistoryItem({
-  piece,
-  onClick,
-}: {
-  piece: ContentPiece;
-  onClick: (piece: ContentPiece) => void;
-}) {
-  const TypeIcon = TYPE_ICONS[piece.content_type] || BookText;
-  const iconColor = TYPE_ICON_COLORS[piece.content_type] || "text-zinc-400";
-  const statusStyle = CONTENT_STATUS_STYLES[piece.status] || CONTENT_STATUS_STYLES.draft;
-
-  const handleClick = useCallback(() => onClick(piece), [onClick, piece]);
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="w-full flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900 px-5 py-4 text-left hover:bg-zinc-800/70 transition-colors"
-    >
-      <TypeIcon className={`w-5 h-5 shrink-0 ${iconColor}`} />
-
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm truncate">{piece.title}</p>
-        <p className="text-xs text-zinc-500 mt-0.5">
-          {piece.content_type} · <LocalTime value={piece.created_at} opts={{ day: "numeric", month: "short", year: "numeric" }} />
-        </p>
-      </div>
-
-      <span className={`text-xs px-2 py-0.5 rounded-full border font-medium shrink-0 ${statusStyle}`}>
-        {piece.status}
-      </span>
-
-      <ChevronRight className="w-4 h-4 text-zinc-600 shrink-0" />
-    </button>
-  );
-});
-
-/* ── Detail view ────────────────────────────────────────────────── */
-function PieceDetail({
+/* ── Detail editor ──────────────────────────────────────────────── */
+export function PieceDetailEditor({
   piece,
   clientId,
   canApprove,
@@ -119,15 +60,10 @@ function PieceDetail({
   onPieceChanged: (piece: ContentPieceFull) => void;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const [copied, setCopied] = useState(false);
   const [body, setBody] = useState(piece.body ?? "");
   const [persistedBody, setPersistedBody] = useState(piece.body ?? "");
   const [currentUpdatedAt, setCurrentUpdatedAt] = useState(piece.updated_at ?? "");
   const [editing, setEditing] = useState(false);
-  const [rewriteInstruction, setRewriteInstruction] = useState("");
-  const [rewriting, setRewriting] = useState(false);
-  const [derivedAction, setDerivedAction] = useState<"duplicate" | "adapt" | null>(null);
-  const derivedActionRef = useRef<"duplicate" | "adapt" | null>(null);
   const [adaptType, setAdaptType] = useState<ContentType>(
     piece.content_type === "linkedin" ? "facebook" : "linkedin",
   );
@@ -144,9 +80,6 @@ function PieceDetail({
   const [learningSuggestion, setLearningSuggestion] = useState<EditorialLearningSuggestion | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const loadedPieceId = useRef(piece.id);
-
-  const { updateStatus, isUpdating } = useUpdatePieceStatus();
-  const { updatePiece, isUpdating: isSavingDraft } = useUpdateContentPiece();
 
   useEffect(() => {
     const changedPiece = loadedPieceId.current !== piece.id;
@@ -208,151 +141,44 @@ function PieceDetail({
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [dirty]);
 
+  const {
+    copied,
+    rewriteInstruction,
+    setRewriteInstruction,
+    rewriting,
+    derivedAction,
+    isUpdating,
+    isSavingDraft,
+    handleCopy,
+    saveDraft,
+    rewrite,
+    duplicate,
+    adapt,
+    exportText,
+    handleStatusChange,
+  } = usePieceActions({
+    piece,
+    clientId,
+    body,
+    persistedBody,
+    currentUpdatedAt,
+    dirty,
+    adaptType,
+    editorRef,
+    setBody,
+    setPersistedBody,
+    setCurrentUpdatedAt,
+    setEditing,
+    setLearningSuggestion,
+    loadRevisions,
+    onPieceChanged,
+    onStatusChanged,
+    onArtifactCreated,
+  });
+
   const TypeIcon = TYPE_ICONS[piece.content_type] || BookText;
   const iconColor = TYPE_ICON_COLORS[piece.content_type] || "text-zinc-400";
   const statusStyle = CONTENT_STATUS_STYLES[piece.status] || CONTENT_STATUS_STYLES.draft;
-
-  const handleCopy = useCallback(async () => {
-    if (!body) return;
-    await navigator.clipboard.writeText(body);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [body]);
-
-  const saveDraft = useCallback(async () => {
-    try {
-      const updated = await updatePiece({
-        client_id: clientId,
-        id: piece.id,
-        body,
-        expected_updated_at: currentUpdatedAt || undefined,
-      });
-      setPersistedBody(updated.body ?? "");
-      setCurrentUpdatedAt(updated.updated_at ?? "");
-      setLearningSuggestion(updated.learning_suggestion ?? null);
-      onPieceChanged(updated);
-      setEditing(false);
-      await loadRevisions();
-      toast.success("Draft saved.");
-      if (updated.editorial_warning) {
-        toast.warning("Draft saved, but its editorial learning record needs attention.");
-      }
-    } catch {
-      // mutation surfaces the error
-    }
-  }, [updatePiece, clientId, piece.id, body, currentUpdatedAt, loadRevisions, onPieceChanged]);
-
-  const rewrite = useCallback(async (scope: "full" | "section") => {
-    if (!rewriteInstruction.trim()) return;
-    const element = editorRef.current;
-    const selectedText = element && element.selectionEnd > element.selectionStart
-      ? body.slice(element.selectionStart, element.selectionEnd)
-      : "";
-    const selectionStart = element?.selectionStart ?? 0;
-    const selectionEnd = element?.selectionEnd ?? 0;
-    if (scope === "section" && !selectedText) {
-      toast.error("Select the section you want to rewrite first.");
-      return;
-    }
-    setRewriting(true);
-    try {
-      const result = await api.post<ContentPieceFull>(ROUTES.content.rewrite(), {
-        client_id: clientId,
-        id: piece.id,
-        scope,
-        instruction: rewriteInstruction.trim(),
-        expected_updated_at: currentUpdatedAt,
-        selectedText: scope === "section" ? selectedText : undefined,
-        selectionStart: scope === "section" ? selectionStart : undefined,
-        selectionEnd: scope === "section" ? selectionEnd : undefined,
-      });
-      setBody(result.body ?? "");
-      setPersistedBody(result.body ?? "");
-      setCurrentUpdatedAt(result.updated_at ?? "");
-      onPieceChanged(result);
-      setEditing(true);
-      setRewriteInstruction("");
-      await loadRevisions();
-      toast.success(scope === "section" ? "Section rewritten." : "Draft rewritten.");
-      if (result.editorial_warning) {
-        toast.warning("Rewrite saved, but its AI-rewrite lineage needs attention.");
-      }
-    } catch {
-      // API client surfaces the error.
-    } finally {
-      setRewriting(false);
-    }
-  }, [body, clientId, piece.id, rewriteInstruction, currentUpdatedAt, loadRevisions, onPieceChanged]);
-
-  const duplicate = useCallback(async () => {
-    if (derivedActionRef.current) return;
-    derivedActionRef.current = "duplicate";
-    setDerivedAction("duplicate");
-    try {
-      const created = await api.post<ContentPiece>(ROUTES.content.duplicate(), { client_id: clientId, id: piece.id });
-      onArtifactCreated(created);
-      toast.success("Draft duplicated. It is available in History.");
-    } catch {
-      // API client surfaces the error.
-    } finally {
-      derivedActionRef.current = null;
-      setDerivedAction(null);
-    }
-  }, [clientId, piece.id, onArtifactCreated]);
-
-  const adapt = useCallback(async () => {
-    if (derivedActionRef.current) return;
-    derivedActionRef.current = "adapt";
-    setDerivedAction("adapt");
-    try {
-      const created = await api.post<ContentPiece>(ROUTES.content.adapt(), {
-        client_id: clientId,
-        id: piece.id,
-        target_type: adaptType,
-      });
-      onArtifactCreated(created);
-      toast.success(`Adapted into one ${adaptType} draft.`);
-    } catch {
-      // API client surfaces the error.
-    } finally {
-      derivedActionRef.current = null;
-      setDerivedAction(null);
-    }
-  }, [clientId, piece.id, adaptType, onArtifactCreated]);
-
-  const exportText = useCallback(() => {
-    const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${piece.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "content"}.txt`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }, [body, piece.title]);
-
-  const handleStatusChange = useCallback(
-    async (newStatus: ContentStatus) => {
-      if (dirty) {
-        toast.error("Save or discard the current edit before changing status.");
-        return;
-      }
-      try {
-        const updated = await updateStatus({
-          client_id: clientId,
-          id: piece.id,
-          status: newStatus,
-          expected_updated_at: currentUpdatedAt || undefined,
-        });
-        setPersistedBody(updated.body ?? persistedBody);
-        setCurrentUpdatedAt(updated.updated_at ?? "");
-        onStatusChanged(piece.id, newStatus);
-        onPieceChanged(updated);
-      } catch {
-        // error toast handled by the mutation
-      }
-    },
-    [dirty, updateStatus, clientId, piece.id, currentUpdatedAt, persistedBody, onStatusChanged, onPieceChanged]
-  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -710,168 +536,3 @@ function PieceDetail({
     </div>
   );
 }
-
-/* ── Main component ─────────────────────────────────────────────── */
-export const HistoryTab = memo(function HistoryTab({
-  history,
-  clientId,
-  canApprove,
-  onHistoryUpdate,
-  initialSelectedId = null,
-  onBackToWorkflow,
-  onPieceStatusChanged,
-  onDirtyChange,
-  onArtifactCreated,
-  hasMore = false,
-  loadingMore = false,
-  onLoadMore,
-}: HistoryTabProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
-  const [selectedPiece, setSelectedPiece] = useState<ContentPieceFull | null>(null);
-  const [search, setSearch] = useState("");
-
-  const detailQuery = usePieceDetail(clientId, selectedId);
-  const isLoading = detailQuery.isLoading;
-
-  useEffect(() => {
-    setSelectedId(initialSelectedId);
-  }, [initialSelectedId]);
-
-  // Sync fetched detail into local selected piece (so status edits can patch it)
-  useEffect(() => {
-    if (detailQuery.data) {
-      setSelectedPiece(detailQuery.data);
-    }
-  }, [detailQuery.data]);
-
-  const handleItemClick = useCallback((piece: ContentPiece) => {
-    setSelectedPiece(null);
-    setSelectedId(piece.id);
-  }, []);
-
-  const handleBack = useCallback(() => {
-    if (onBackToWorkflow) {
-      onBackToWorkflow();
-      return;
-    }
-    setSelectedId(null);
-    setSelectedPiece(null);
-  }, [onBackToWorkflow]);
-
-  const handleStatusChanged = useCallback(
-    (id: string, status: ContentStatus) => {
-      // Update the piece in the list
-      onHistoryUpdate((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, status } : p))
-      );
-      const next = selectedPiece ? { ...selectedPiece, status } : null;
-      if (next) {
-        setSelectedPiece(next);
-        onPieceStatusChanged?.(next);
-      }
-    },
-    [onHistoryUpdate, onPieceStatusChanged, selectedPiece]
-  );
-
-  // Detail view
-  if (selectedPiece) {
-    return (
-      <PieceDetail
-        piece={selectedPiece}
-        clientId={clientId}
-        canApprove={canApprove}
-        onBack={handleBack}
-        onStatusChanged={handleStatusChanged}
-        onArtifactCreated={(created) => {
-          onHistoryUpdate((previous) => [created, ...previous]);
-          onArtifactCreated?.(created);
-        }}
-        onPieceChanged={setSelectedPiece}
-        onDirtyChange={onDirtyChange}
-      />
-    );
-  }
-
-  // Loading overlay
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <RefreshCw className="w-6 h-6 text-zinc-500 animate-spin" />
-      </div>
-    );
-  }
-
-  if (selectedId && detailQuery.isError) {
-    return (
-      <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-8 text-center">
-        <p className="font-medium text-red-200">This content could not be opened.</p>
-        <p className="mt-1 text-sm text-zinc-400">
-          {detailQuery.error instanceof Error
-            ? detailQuery.error.message
-            : "The detail request failed. Your content has not been removed."}
-        </p>
-        <div className="mt-4 flex justify-center gap-2">
-          <Button variant="outline" onClick={() => void detailQuery.refetch()}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${detailQuery.isFetching ? "animate-spin" : ""}`} />
-            Retry
-          </Button>
-          <Button variant="ghost" onClick={handleBack}>Back to History</Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Empty state
-  if (history.length === 0) {
-    return (
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-12 text-center">
-        <Clock className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
-        <p className="text-zinc-400">No content created yet. Return to Ideas or use Quick Create to generate a draft.</p>
-      </div>
-    );
-  }
-
-  // Filter
-  const filtered = search.trim()
-    ? history.filter(
-        (p) =>
-          p.title.toLowerCase().includes(search.toLowerCase()) ||
-          p.content_type.toLowerCase().includes(search.toLowerCase()) ||
-          p.status.toLowerCase().includes(search.toLowerCase())
-      )
-    : history;
-
-  return (
-    <div className="flex flex-col gap-3">
-      {/* Search bar */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by title, type, or status..."
-          className="pl-9 h-9 text-sm bg-zinc-900 border-zinc-700"
-        />
-      </div>
-
-      {filtered.length === 0 ? (
-        <p className="text-zinc-600 text-sm py-6 text-center">
-          No results for &ldquo;{search}&rdquo;
-        </p>
-      ) : (
-        filtered.map((piece) => (
-          <HistoryItem key={piece.id} piece={piece} onClick={handleItemClick} />
-        ))
-      )}
-      {hasMore && !search.trim() && onLoadMore && (
-        <Button
-          variant="outline"
-          disabled={loadingMore}
-          onClick={() => void onLoadMore()}
-        >
-          {loadingMore ? "Loading older content…" : "Load older content"}
-        </Button>
-      )}
-    </div>
-  );
-});

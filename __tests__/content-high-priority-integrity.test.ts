@@ -12,7 +12,11 @@ describe("Content Studio high-priority integrity repairs", () => {
   const topicsLib = read("lib/content/topics-generate.ts");
   const workflow = read("components/content/ContentProjectWorkflow.tsx");
   const takeover = read("components/content/ProjectTakeover.tsx");
-  const history = read("components/content/HistoryTab.tsx");
+  const history = [
+    "components/content/library/HistoryTab.tsx",
+    "components/content/library/PieceDetailEditor.tsx",
+    "components/content/library/usePieceActions.ts",
+  ].map(read).join("\n");
   const pieces = read("app/api/content/pieces/route.ts");
   const generator = read("supabase/functions/content-generate/index.ts");
   const migration = read("db/migrations/113_content_high_priority_integrity.sql");

@@ -36,7 +36,7 @@ import {
   type ContentProject,
   type ContentProjectStep,
 } from "@/types/content";
-import { HistoryTab } from "./HistoryTab";
+import { HistoryTab } from "./library/HistoryTab";
 import { errorMessage } from "@/lib/error-message";
 import { AppliedStylePreview } from "./AppliedStylePreview";
 import { generateQuickDraft } from "@/lib/content/quick-draft";

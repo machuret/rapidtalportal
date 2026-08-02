@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import type { ContentPiece } from "@/types/content";
-import { HistoryTab } from "./HistoryTab";
+import { HistoryTab } from "./library/HistoryTab";
 
 interface ContentPage<T> {
   items: T[];

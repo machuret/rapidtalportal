@@ -9,7 +9,11 @@ const read = (file: string) => readFileSync(path.join(root, file), "utf8");
 describe("Content Studio medium-priority integrity repairs", () => {
   const loaders = read("lib/content/server.ts");
   const projectsPage = read("components/content/ProjectsPage.tsx");
-  const history = read("components/content/HistoryTab.tsx");
+  const history = [
+    "components/content/library/HistoryTab.tsx",
+    "components/content/library/PieceDetailEditor.tsx",
+    "components/content/library/usePieceActions.ts",
+  ].map(read).join("\n");
   const projects = read("app/api/content/projects/route.ts");
   const pieces = read("app/api/content/pieces/route.ts");
   const validation = read("app/api/content/validate/route.ts");

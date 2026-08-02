@@ -99,7 +99,11 @@ describe("editorial workspace integrity", () => {
   const revisions = read("app/api/content/revisions/route.ts");
   const duplicate = read("app/api/content/duplicate/route.ts");
   const adapt = read("app/api/content/adapt/route.ts");
-  const history = read("components/content/HistoryTab.tsx");
+  const history = [
+    "components/content/library/HistoryTab.tsx",
+    "components/content/library/PieceDetailEditor.tsx",
+    "components/content/library/usePieceActions.ts",
+  ].map(read).join("\n");
 
   test("revision snapshots are tenant-scoped and captured before every material edit", () => {
     expect(migration).toContain("CREATE TABLE IF NOT EXISTS content_piece_revisions");
