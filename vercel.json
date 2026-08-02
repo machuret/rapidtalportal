@@ -37,6 +37,10 @@
     {
       "path": "/api/cron/competitor-sources",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/vault-governance",
+      "schedule": "45 3 * * *"
     }
   ]
 }

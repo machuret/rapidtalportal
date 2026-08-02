@@ -15,6 +15,9 @@
  *
  * Auth: withAuth — read: any user with client access; write: client_admin or creator.
  * Safeguards: Zod validation, assertClientAccess, created_by ownership check.
+ * Un-supersede: when supersedes_item_id moves away from an item (cleared or
+ * retargeted), the previously-pointed source is flipped back from 'superseded'
+ * to 'active' — mirror of the vault-delete safeguard.
  */
 
 import { NextResponse } from "next/server";
@@ -92,7 +95,7 @@ export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
   // Verify item exists and belongs to this client before updating
   const { data: existing, error: existingError } = await supabase
     .from("vault_items")
-    .select("id, client_id, created_by")
+    .select("id, client_id, created_by, supersedes_item_id")
     .eq("id", params.id)
     .eq("client_id", clientId)
     .maybeSingle();
@@ -147,6 +150,28 @@ export const PATCH = withAuth<{ id: string }>(async (req, { user, params }) => {
 
   if (updateErr) {
     return serverError(updateErr);
+  }
+
+  // Un-supersede: when the pointer moves away from an older source (cleared or
+  // retargeted), that source must not stay stranded in 'superseded' — nothing
+  // replaces it anymore. Flip only items still marked 'superseded'; an admin's
+  // deliberate state ('review_required' etc.) stands. Best-effort like the
+  // vault-delete mirror: a failure here must not fail the save that succeeded.
+  const previousSupersedes = (existing as { supersedes_item_id: string | null }).supersedes_item_id;
+  if (
+    updates.supersedes_item_id !== undefined &&
+    previousSupersedes &&
+    previousSupersedes !== updates.supersedes_item_id
+  ) {
+    const { error: reactivateError } = await supabase
+      .from("vault_items")
+      .update({ knowledge_status: "active" })
+      .eq("id", previousSupersedes)
+      .eq("client_id", clientId) // never flip another tenant's source
+      .eq("knowledge_status", "superseded");
+    if (reactivateError) {
+      console.error("[vault/[id]] un-supersede reactivation failed:", reactivateError.message);
+    }
   }
 
   // Fire vault-process in the background — do NOT await.

@@ -100,6 +100,20 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
     return () => { active = false; };
   }, [clientId, item.id]);
 
+  // Dialog semantics: Escape takes the same close path as the X — except when
+  // a select/textarea owns the key (native select popup, in-progress edits),
+  // or an inner control already consumed it (defaultPrevented).
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const tag = (document.activeElement?.tagName ?? "").toLowerCase();
+      if (tag === "select" || tag === "textarea") return;
+      onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   function parseTags(raw: string): string[] {
     return raw.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
   }
@@ -188,7 +202,12 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
         onClick={onClose}
       />
       {/* Drawer */}
-      <div className="modal-panel fixed right-0 top-0 h-full w-full max-w-xl border-l flex flex-col">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Edit Vault Item"
+        className="modal-panel fixed right-0 top-0 h-full w-full max-w-xl border-l flex flex-col"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-2">
@@ -197,6 +216,7 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -209,6 +229,7 @@ export function VaultItemDrawer({ item, clientId, onClose, onSaved }: VaultItemD
           <div className="flex flex-col gap-2">
             <Label className="label-section">Title</Label>
             <Input
+              autoFocus
               value={title}
               onChange={e => setTitle(e.target.value)}
               className="bg-zinc-900 border-zinc-700 text-zinc-100"

@@ -8,7 +8,8 @@
  * Called by: /api/vault/delete (POST, from VaultClient bulk-delete or single-delete)
  *
  * DB Reads:  vault_items — verify ALL itemIds belong to clientId before any delete
- * DB Writes: deletes rows from vault_items
+ * DB Writes: deletes rows from vault_items; reactivates predecessors whose
+ *            replacement was just deleted (knowledge_status 'superseded' → 'active')
  * Storage:   deletes objects from 'vault' bucket for pdf/docx items
  *
  * Auth:      Bearer JWT → getUser() → client_admin OR super_admin ONLY (VAs cannot delete)
@@ -81,7 +82,7 @@ Deno.serve(async (req: Request) => {
     // This prevents a malicious actor from injecting foreign item IDs.
     const { data: items, error: fetchErr } = await admin
       .from("vault_items")
-      .select("id, client_id, storage_path, source_type")
+      .select("id, client_id, storage_path, source_type, supersedes_item_id")
       .in("id", itemIds);
 
     if (fetchErr) {
@@ -96,6 +97,7 @@ Deno.serve(async (req: Request) => {
       client_id: string;
       storage_path: string | null;
       source_type: string;
+      supersedes_item_id: string | null;
     }>;
 
     // Ensure every fetched item belongs to the claimed clientId
@@ -144,12 +146,42 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    console.log(`✅ vault-delete: ${count} items deleted for client ${clientId}`);
+    // ── Un-supersede predecessors ─────────────────────────────────────────────
+    // Deleting a newer version must not strand the older source in 'superseded'
+    // — with its replacement gone it becomes the best knowledge again. Flip only
+    // items still marked 'superseded': an admin may have deliberately moved one
+    // to another state ('review_required' etc.) and that decision stands.
+    // Failure is logged, not fatal — the delete itself already succeeded.
+    const predecessorIds = [...new Set(
+      fetchedItems
+        .map(i => i.supersedes_item_id)
+        .filter((id): id is string => !!id),
+    )];
+    const unsuperseded: string[] = [];
+    if (predecessorIds.length > 0) {
+      const { data: reactivated, error: reactivateErr } = await admin
+        .from("vault_items")
+        .update({ knowledge_status: "active" })
+        .in("id", predecessorIds)
+        .eq("client_id", clientId) // never flip another tenant's source
+        .eq("knowledge_status", "superseded")
+        .select("id");
+      if (reactivateErr) {
+        console.error("⚠️ Un-supersede partial error:", reactivateErr.message);
+      } else {
+        for (const row of (reactivated ?? []) as Array<{ id: string }>) {
+          unsuperseded.push(row.id);
+        }
+      }
+    }
+
+    console.log(`✅ vault-delete: ${count} items deleted for client ${clientId} (${unsuperseded.length} predecessors reactivated)`);
 
     return new Response(JSON.stringify({
       success: true,
       deleted: count ?? itemIds.length,
       storageErrors,
+      meta: { unsuperseded },
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

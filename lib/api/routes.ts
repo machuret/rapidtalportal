@@ -140,6 +140,8 @@ export const ROUTES = {
   coach: {
     threads: () => "/api/coach/threads",
     threadsForClient: (clientId: string) => `/api/coach/threads?clientId=${clientId}`,
+    threadsBefore: (clientId: string, before: string) =>
+      `/api/coach/threads?clientId=${clientId}&before=${encodeURIComponent(before)}`,
     actions: () => "/api/coach/actions",
     routeMode: () => "/api/coach/route-mode",
     progress: () => "/api/coach/progress",
