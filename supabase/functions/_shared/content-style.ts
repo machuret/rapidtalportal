@@ -10,14 +10,16 @@ export const CONTENT_HARD_RULE_TYPES = [
 
 export type ContentHardRuleType = typeof CONTENT_HARD_RULE_TYPES[number];
 
-export interface ContentHardRule {
+// Type aliases (not interfaces) so these satisfy jsonb columns via
+// TypeScript's implicit index signature for object-literal aliases.
+export type ContentHardRule = {
   id: string;
   type: ContentHardRuleType;
   value?: string;
   limit?: number;
   /** Empty means every channel. */
   channels?: string[];
-}
+};
 
 export interface ResolvedContentStyle {
   /** Complete human-readable rule list shown beside the generated draft. */
@@ -34,7 +36,7 @@ export interface ResolvedContentStyle {
   styleAnalysis: ContentStyleAnalysisProvenance | null;
 }
 
-export interface ContentStyleAnalysisProvenance {
+export type ContentStyleAnalysisProvenance = {
   id: string;
   channel: string;
   summary: string;
@@ -48,9 +50,9 @@ export interface ContentStyleAnalysisProvenance {
   }>;
   analysedAt: string | null;
   approvedAt: string | null;
-}
+};
 
-export interface ContentStyleSnapshot {
+export type ContentStyleSnapshot = {
   channel: string;
   summary: string[];
   hardRules: ContentHardRule[];
@@ -66,7 +68,7 @@ export interface ContentStyleSnapshot {
     title: string;
     sourceUrl: string | null;
   }>;
-}
+};
 
 type Dna = Record<string, unknown> | null | undefined;
 

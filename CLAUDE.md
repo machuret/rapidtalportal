@@ -46,6 +46,24 @@ guarantee that admins have zero content access. Admins only ever see Notebook
   degrading vault search. Never hand-apply and forget — use the runner and
   check `/admin/health`.
 
+## Database types — generated snapshot + curated layer
+
+- `types/schema.generated.ts` is the **tracked** output of `pnpm gen:types`
+  (`supabase gen types typescript`). After migrations land, regenerate and
+  commit the diff — the typed clients in `lib/supabase/` follow the live
+  schema. (The old `types/database.generated.ts` slot stays gitignored for
+  stale local copies.)
+- `types/database.ts` derives `Database` from that snapshot and adds a small
+  curated layer: JSONB columns narrowed to validated shapes
+  (`sops.steps`, `company_dna.hard_rules`, …), trigger-filled columns optional
+  on insert, CHECK-constraint status unions, nullable RPC args (Postgres
+  params accept NULL; the generator can't express it), plus the `Db*` row
+  aliases app code uses. Keep overrides minimal — generated types win unless
+  existing code provably depends on a narrower shape.
+- Because the client knows the real schema, `(db as any)` is a code smell:
+  don't add casts for "missing" tables/columns — regenerate the snapshot. The
+  casts that remain are dynamic update bags and JSONB boundaries.
+
 ## Conventions you must follow
 
 - **Styling tokens only.** No arbitrary hex, no new inline styles, and **no new
