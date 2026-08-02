@@ -68,7 +68,12 @@ describe("Coach trust boundary", () => {
 
   it("uses schema-validated editable actions with idempotent receipts", () => {
     const engine = read("supabase/functions/vault-ask/index.ts");
-    const ui = read("components/vault/AskVaultClient.tsx");
+    const ui = [
+      "components/coach/AskVaultClient.tsx",
+      "components/coach/ChatTurn.tsx",
+      "components/coach/ActionDraftForms.tsx",
+      "components/coach/useCoachChat.ts",
+    ].map(read).join("\n");
     const actionRoute = read("app/api/coach/actions/route.ts");
     const resolver = read("supabase/functions/_shared/brain-context.ts");
 

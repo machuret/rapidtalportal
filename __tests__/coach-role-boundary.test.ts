@@ -8,7 +8,12 @@ describe("RapidTal Coach role boundary", () => {
   const resolver = read("supabase/functions/_shared/brain-context.ts");
   const engine = read("supabase/functions/vault-ask/index.ts");
   const sharedAuth = read("supabase/functions/_shared/auth.ts");
-  const ui = read("components/vault/AskVaultClient.tsx");
+  const ui = [
+    "components/coach/AskVaultClient.tsx",
+    "components/coach/ChatTurn.tsx",
+    "components/coach/ActionDraftForms.tsx",
+    "components/coach/useCoachChat.ts",
+  ].map(read).join("\n");
   const migration = read("db/migrations/133_role_aware_coach_context.sql");
 
   test("derives role and permissions from the authenticated account", () => {

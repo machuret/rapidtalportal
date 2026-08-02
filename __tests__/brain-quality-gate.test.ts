@@ -1,10 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const askUi = readFileSync(
-  join(process.cwd(), "components/vault/AskVaultClient.tsx"),
-  "utf8",
-);
+const askUi = [
+  "components/coach/AskVaultClient.tsx",
+  "components/coach/ChatTurn.tsx",
+  "components/coach/ActionDraftForms.tsx",
+  "components/coach/useCoachChat.ts",
+]
+  .map((path) => readFileSync(join(process.cwd(), path), "utf8"))
+  .join("\n");
 const flow = readFileSync(
   join(process.cwd(), "components/intelligence/AskBrainFlow.tsx"),
   "utf8",

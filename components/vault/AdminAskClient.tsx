@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AskVaultClient } from "./AskVaultClient";
+import { AskVaultClient } from "@/components/coach/AskVaultClient";
 import { GoldenQuestions } from "./GoldenQuestions";
 
 /** Ask-as-Client with the golden-questions panel wired into the chat. */

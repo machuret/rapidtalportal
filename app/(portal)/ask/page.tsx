@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserAndClient } from "@/lib/auth";
-import { AskVaultClient } from "@/components/vault/AskVaultClient";
+import { AskVaultClient } from "@/components/coach/AskVaultClient";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ShieldAlert } from "lucide-react";
