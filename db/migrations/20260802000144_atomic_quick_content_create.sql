@@ -1,3 +1,4 @@
+-- 20260802000144_atomic_quick_content_create.sql
 -- One idempotent transaction prepares Quick Create from idea to generation.
 ALTER TABLE content_projects
   ADD COLUMN IF NOT EXISTS quick_create_key UUID,

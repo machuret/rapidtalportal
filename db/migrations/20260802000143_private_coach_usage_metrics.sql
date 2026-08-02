@@ -1,5 +1,5 @@
 -- ============================================================
--- 143_private_coach_usage_metrics.sql
+-- 20260802000143_private_coach_usage_metrics.sql
 -- Count-only Coach usage for readiness and product health. No question,
 -- answer, source excerpt or user identity is stored in this aggregate.
 -- ============================================================

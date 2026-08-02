@@ -1,5 +1,5 @@
 -- ============================================================
--- 142_coach_deep_answer_persistence.sql
+-- 20260802000142_coach_deep_answer_persistence.sql
 -- Preserve the expensive, separately-grounded "Go deeper" answer on its
 -- original private Coach turn so refresh never discards it.
 -- ============================================================
