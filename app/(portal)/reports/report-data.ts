@@ -91,8 +91,11 @@ export async function buildClientReport(clientId: string, clientName: string, mo
   const nextIso = next.toISOString();
   const startDate = startIso.slice(0, 10);
   const nextDate = nextIso.slice(0, 10);
+  // Prior-month headline totals for the month-over-month comparison — the key
+  // is known up front, so it runs in the same batch as the main-month queries.
+  const prevKey = previousMonthKey(monthKey);
 
-  const [{ data: vaRows }, { data: cats }, { data: deliveredRows }, { count: requested }, { data: timeRows }, { count: content }, { count: toolRuns }] = await Promise.all([
+  const [{ data: vaRows }, { data: cats }, { data: deliveredRows }, { count: requested }, { data: timeRows }, { count: content }, { count: toolRuns }, prevTotals] = await Promise.all([
     admin.from("users").select("id, full_name, email").eq("client_id", clientId).eq("role", "va"),
     admin.from("task_categories").select("id, name, color").eq("client_id", clientId),
     admin.from("tasks").select("title, status, assigned_to, completed_at, due_date, category_id")
@@ -105,6 +108,7 @@ export async function buildClientReport(clientId: string, clientName: string, mo
       .eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
     admin.from("tool_runs").select("id", { count: "exact", head: true })
       .eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
+    monthTotals(admin, clientId, prevKey),
   ]);
 
   const vaName = new Map(((vaRows ?? []) as { id: string; full_name: string | null; email: string }[]).map((v) => [v.id, v.full_name ?? v.email]));
@@ -154,10 +158,6 @@ export async function buildClientReport(clientId: string, clientName: string, mo
     .sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""))
     .slice(0, 40)
     .map((t) => ({ title: t.title, completedAt: t.completed_at ?? "", vaName: t.assigned_to ? vaName.get(t.assigned_to) ?? null : null, category: t.category_id ? catById.get(t.category_id)?.name ?? null : null }));
-
-  // Prior-month headline totals for the month-over-month comparison.
-  const prevKey = previousMonthKey(monthKey);
-  const prevTotals = await monthTotals(admin, clientId, prevKey);
 
   return {
     clientName,

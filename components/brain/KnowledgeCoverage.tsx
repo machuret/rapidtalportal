@@ -48,7 +48,8 @@ export async function KnowledgeCoverage({
       .select("id, title, category, ai_summary, tags, source_type, updated_at, content_hash, status, knowledge_status, has_conflict, valid_from, valid_until, review_due_at")
       .eq("client_id", clientId)
       .eq("evidence_role", "factual")
-      .order("updated_at", { ascending: false }),
+      .order("updated_at", { ascending: false })
+      .limit(500),
     admin.from("kb_entries").select("*", { count: "exact", head: true }).eq("client_id", clientId),
     admin
       .from("vault_queries")
@@ -180,6 +181,20 @@ export async function KnowledgeCoverage({
   ];
   const identityKnown = identity.filter((f) => has(f.value));
 
+  // Cap the item cards actually rendered — the counts and stats above still
+  // reflect the full vault, but a large vault would otherwise dump hundreds of
+  // cards (and their ai_summary text) into one page.
+  const MAX_RENDERED_ITEMS = 100;
+  const shownByCat: Record<string, VaultItem[]> = {};
+  let renderBudget = MAX_RENDERED_ITEMS;
+  for (const cat of VAULT_CATEGORY_ORDER) {
+    const list = byCat[cat] ?? [];
+    if (list.length === 0 || renderBudget <= 0) continue;
+    shownByCat[cat] = list.slice(0, renderBudget);
+    renderBudget -= shownByCat[cat].length;
+  }
+  const hiddenItemCount = vaultItems.length - (MAX_RENDERED_ITEMS - renderBudget);
+
   return (
     <div>
       {/* Stats strip */}
@@ -284,12 +299,13 @@ export async function KnowledgeCoverage({
       {VAULT_CATEGORY_ORDER.map((cat) => {
         const list = byCat[cat] ?? [];
         const meta = VAULT_CATEGORIES[cat];
-        if (list.length === 0) return null;
+        const shown = shownByCat[cat] ?? [];
+        if (list.length === 0 || shown.length === 0) return null;
         return (
           <section key={cat} className="mb-8">
             <SectionHeader icon={meta.icon} title={meta.fullLabel} subtitle={meta.blurb} count={list.length} />
             <div className="grid grid-cols-1 gap-3">
-              {list.map((item) => (
+              {shown.map((item) => (
                 <div key={item.id} className="surface-card p-4">
                   <div className="flex items-center gap-2 mb-1">
                     <meta.icon className="w-4 h-4 text-zinc-500 shrink-0" />
@@ -321,9 +337,49 @@ export async function KnowledgeCoverage({
         );
       })}
 
+      {hiddenItemCount > 0 && (
+        <p className="text-xs text-zinc-500 mb-8">
+          + {hiddenItemCount} more usable item{hiddenItemCount === 1 ? "" : "s"} in the Vault — open the Vault to browse everything.
+        </p>
+      )}
+
       {allVaultItems.length === 0 && (
         <EmptyHint text={`The Vault is empty${clientName ? ` for ${clientName}` : ""}. Add documents, paste text, or import a URL — each item makes this report richer.`} />
       )}
+    </div>
+  );
+}
+
+/**
+ * Loading placeholder for a `<Suspense>` boundary around `KnowledgeCoverage`.
+ * Mirrors the stats strip and the first content cards so the page doesn't
+ * jump when the real report streams in.
+ */
+export function KnowledgeCoverageSkeleton() {
+  return (
+    <div className="animate-pulse" aria-hidden="true">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="surface-card px-5 py-4">
+            <div className="h-3 w-20 rounded bg-zinc-800 mb-3" />
+            <div className="h-7 w-12 rounded bg-zinc-800" />
+          </div>
+        ))}
+      </div>
+      <div className="surface-card p-6 mb-8">
+        <div className="h-5 w-44 rounded bg-zinc-800 mb-4" />
+        <div className="h-2.5 w-full rounded bg-zinc-800 mb-5" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2.5">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-4 w-3/4 rounded bg-zinc-800" />
+          ))}
+        </div>
+      </div>
+      <div className="surface-card p-6">
+        <div className="h-5 w-32 rounded bg-zinc-800 mb-4" />
+        <div className="h-4 w-full rounded bg-zinc-800 mb-2" />
+        <div className="h-4 w-2/3 rounded bg-zinc-800" />
+      </div>
     </div>
   );
 }

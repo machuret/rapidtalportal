@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 import { getCurrentUserAndClient } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeBrainReadiness } from "@/lib/brain/readiness";
 import { BrainHome, type BrainEventRow } from "@/components/brain/BrainHome";
-import { KnowledgeCoverage } from "@/components/brain/KnowledgeCoverage";
+import { KnowledgeCoverage, KnowledgeCoverageSkeleton } from "@/components/brain/KnowledgeCoverage";
 import { BrainOpportunities } from "@/components/brain/BrainOpportunities";
 import {
   listBrainOpportunities,
@@ -67,26 +68,32 @@ export default async function BrainPage({
     );
   }
 
-  const readiness = await computeBrainReadiness(admin, clientId);
+  // Readiness, journal events and opportunities are independent — fetch them
+  // in one parallel batch instead of three sequential round-trips. A failed
+  // opportunities load degrades gracefully so the rest of the page renders.
+  const opportunitiesPromise = listBrainOpportunities(admin, clientId)
+    .then((rows) => ({ rows, failed: false }))
+    .catch((error: unknown) => {
+      console.error("[brain] proactive opportunities unavailable", error);
+      return { rows: [] as BrainOpportunity[], failed: true };
+    });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const a = admin as any;
-  const eventsRes = await a.from("brain_events")
-    .select("id, kind, summary, meta, created_at")
-    .eq("client_id", clientId)
-    .eq("meaningful", true)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  const [readiness, eventsRes, opportunitiesResult] = await Promise.all([
+    computeBrainReadiness(admin, clientId),
+    a.from("brain_events")
+      .select("id, kind, summary, meta, created_at")
+      .eq("client_id", clientId)
+      .eq("meaningful", true)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    opportunitiesPromise,
+  ]);
 
   const events = (eventsRes.data ?? []) as BrainEventRow[];
-  let opportunities: BrainOpportunity[] = [];
-  let opportunitiesLoadFailed = false;
-  try {
-    opportunities = await listBrainOpportunities(admin, clientId);
-  } catch (error) {
-    opportunitiesLoadFailed = true;
-    console.error("[brain] proactive opportunities unavailable", error);
-  }
+  const opportunities = opportunitiesResult.rows;
+  const opportunitiesLoadFailed = opportunitiesResult.failed;
 
   return (
     <>
@@ -123,7 +130,9 @@ export default async function BrainPage({
       <div className="mt-10 pt-8 border-t border-zinc-800">
         <h2 className="text-xl font-bold text-white tracking-tight mb-1">What your brain knows</h2>
         <p className="text-zinc-400 text-sm mb-6">Coverage, gaps and the documents behind every answer — the more you add, the more complete it gets.</p>
-        <KnowledgeCoverage clientId={clientId} clientName={clientName} canCurate={user.role === "client_admin" || user.role === "super_admin"} />
+        <Suspense fallback={<KnowledgeCoverageSkeleton />}>
+          <KnowledgeCoverage clientId={clientId} clientName={clientName} canCurate={user.role === "client_admin" || user.role === "super_admin"} />
+        </Suspense>
       </div>
     </>
   );
