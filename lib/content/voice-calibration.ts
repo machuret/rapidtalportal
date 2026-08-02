@@ -254,6 +254,7 @@ export interface BlindVoiceEvaluation {
   automated_evaluation: Record<string, unknown>;
   preferred_variant: "a" | "b" | "tie" | null;
   reviewer_notes: string | null;
+  error?: string | null;
   revealed_winner?: "conditioned" | "baseline" | "tie" | null;
   revealed_assignment?: {
     variant_a: "conditioned" | "baseline" | null;

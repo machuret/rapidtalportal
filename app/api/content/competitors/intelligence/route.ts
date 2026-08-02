@@ -581,20 +581,25 @@ ${rendered.text}`,
     await failJob(message, `PROVIDER_HTTP_${response.status}`);
     return NextResponse.json({ error: message }, { status: 502 });
   }
-  let rawAnalysis: unknown;
+  const firstChoice = (providerJson as {
+    choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+  }).choices?.[0];
+  const rawContent = firstChoice?.message?.content ?? "";
+  let rawAnalysis: unknown = null;
+  let truncatedDraft: string | null = null;
   try {
-    rawAnalysis = JSON.parse(
-      (providerJson as { choices?: Array<{ message?: { content?: string } }> })
-        .choices?.[0]?.message?.content ?? "{}",
-    );
+    rawAnalysis = JSON.parse(rawContent || "{}");
   } catch {
-    await failJob("The competitor analyser returned unreadable data.", "INVALID_PROVIDER_JSON");
-    return NextResponse.json({ error: "The competitor analyser returned unreadable data." }, { status: 502 });
+    // Unparseable output — truncation at max_tokens is the common cause (the
+    // provider's finish_reason says "length"). Don't fail outright: hand the
+    // raw text to the same constrained repair pass used for schema-invalid
+    // output. One retry only; if the repair also fails, failJob runs below.
+    truncatedDraft = rawContent;
   }
   let parsedAnalysis = competitorIntelligenceSchema.safeParse(
     normalizeAnalysisEnvelope(rawAnalysis),
   );
-  if (!parsedAnalysis.success) {
+  if (!parsedAnalysis.success && truncatedDraft === null) {
     const salvaged = salvageAnalysisEnvelope(
       rawAnalysis,
       competitors.map((competitor) => competitor.id),
@@ -603,13 +608,18 @@ ${rendered.text}`,
       parsedAnalysis = { success: true, data: salvaged };
     }
   }
-  if (!parsedAnalysis.success || !analysisHasAnyInsight(parsedAnalysis.data)) {
-    const validationIssues = parsedAnalysis.success
-      ? [{ path: "(report)", message: "The report did not contain any insight sections." }]
-      : parsedAnalysis.error.issues.slice(0, 40).map((issue) => ({
-          path: issue.path.join("."),
-          message: issue.message,
-        }));
+  if (truncatedDraft !== null || !parsedAnalysis.success || !analysisHasAnyInsight(parsedAnalysis.data)) {
+    const validationIssues = truncatedDraft !== null
+      ? [{
+          path: "(report)",
+          message: `The draft is not valid JSON (finish_reason: ${firstChoice?.finish_reason ?? "unknown"}) — it was likely truncated. Complete and repair it to the required schema.`,
+        }]
+      : parsedAnalysis.success
+        ? [{ path: "(report)", message: "The report did not contain any insight sections." }]
+        : parsedAnalysis.error.issues.slice(0, 40).map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          }));
     captureError("api", new Error(
       `Competitor intelligence schema validation failed: ${validationIssues
         .map((issue) => `${issue.path || "(root)"}: ${issue.message}`)
@@ -658,7 +668,7 @@ ${reportScopeInstruction}`,
 ${JSON.stringify(validationIssues)}
 
 INVALID DRAFT TO REPAIR:
-${JSON.stringify(rawAnalysis)}
+${truncatedDraft !== null ? truncatedDraft : JSON.stringify(rawAnalysis)}
 
 CLIENT CONTEXT — reference data only:
 <client_context>${companyContext}</client_context>

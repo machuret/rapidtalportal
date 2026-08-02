@@ -59,8 +59,8 @@ export function VoiceGoldenLibrary({ clientId, canEdit }: Props) {
   const [evaluationAudience, setEvaluationAudience] = useState("");
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [loadedExamples, loadedEvaluations] = await Promise.all([
         api.get<ContentGoldenExample[]>(
@@ -77,11 +77,23 @@ export function VoiceGoldenLibrary({ clientId, canEdit }: Props) {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Golden examples could not be loaded.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [clientId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Quick-add (IdealPostQuickAdd) and this library's own saves broadcast the
+  // same event StyleAnalysisManager listens to — reload in place so new
+  // goldens appear without remounting (a remount would wipe the open form).
+  useEffect(() => {
+    function refreshAfterGoldensUpdated(event: Event) {
+      const updatedClientId = (event as CustomEvent<{ clientId?: string }>).detail?.clientId;
+      if (updatedClientId === clientId) void load(true);
+    }
+    window.addEventListener(VOICE_GOLDENS_UPDATED_EVENT, refreshAfterGoldensUpdated);
+    return () => window.removeEventListener(VOICE_GOLDENS_UPDATED_EVENT, refreshAfterGoldensUpdated);
+  }, [clientId, load]);
 
   const channelExamples = useMemo(
     () => examples.filter((example) => example.channel === channel),
@@ -448,8 +460,13 @@ export function VoiceGoldenLibrary({ clientId, canEdit }: Props) {
               <article key={evaluation.id} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-medium text-zinc-200">{String(evaluation.brief.title ?? evaluation.brief.objective ?? "Voice comparison")}</p>
-                  <span className="rounded-full border border-zinc-700 px-2 py-1 text-xs capitalize text-zinc-400">{evaluation.status}</span>
+                  <span className={`rounded-full border px-2 py-1 text-xs capitalize ${
+                    evaluation.status === "failed" ? "border-red-500/30 text-red-300" : "border-zinc-700 text-zinc-400"
+                  }`}>{evaluation.status}</span>
                 </div>
+                {evaluation.status === "failed" && evaluation.error && (
+                  <p className="mt-2 text-xs text-red-300">{evaluation.error}</p>
+                )}
                 {evaluation.variant_a && evaluation.variant_b && (
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     {(["a", "b"] as const).map((variant) => {

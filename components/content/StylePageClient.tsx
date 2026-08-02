@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Lightbulb, PenLine, CheckCircle2 } from "lucide-react";
+import { VOICE_GOLDENS_UPDATED_EVENT } from "@/lib/content/style-analysis";
 import { StyleAnalysisManager } from "./StyleAnalysisManager";
 import { VoiceGoldenLibrary } from "./VoiceGoldenLibrary";
 import { LinkedInVaultSourcePanel } from "@/components/vault/LinkedInVaultSourcePanel";
@@ -28,9 +27,6 @@ export function StylePageClient({
   linkedInUrl: string;
   approvedByChannel: Record<string, number>;
 }) {
-  const router = useRouter();
-  const [refreshKey, setRefreshKey] = useState(0);
-
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-3">
@@ -48,13 +44,17 @@ export function StylePageClient({
           clientId={clientId}
           approvedByChannel={approvedByChannel}
           onAdded={() => {
-            setRefreshKey((k) => k + 1);
-            router.refresh();
+            // No remount, no router.refresh(): both would wipe in-progress
+            // analysis edits and half-filled golden forms. Listeners reload
+            // their own data in place instead.
+            window.dispatchEvent(new CustomEvent(VOICE_GOLDENS_UPDATED_EVENT, {
+              detail: { clientId },
+            }));
           }}
         />
       )}
 
-      <div key={refreshKey} className="space-y-6">
+      <div className="space-y-6">
         {canEdit && (
           <LinkedInVaultSourcePanel
             clientId={clientId}

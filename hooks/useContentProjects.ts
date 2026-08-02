@@ -31,6 +31,12 @@ export function useContentProjects(
 ) {
   const [projects, setProjects] = useState<ContentProject[]>(initialProjects);
   const [projectsHasMore, setProjectsHasMore] = useState(initialHasMore);
+  // The server paginates by MUTABLE updated_at and answers each page with the
+  // offset the next call must use. Using projects.length instead drifts as
+  // updateProject prepends new/updated rows — older projects get skipped.
+  const [projectsNextOffset, setProjectsNextOffset] = useState<number | null>(
+    initialHasMore ? initialProjects.length : null,
+  );
   const [loadingMoreProjects, setLoadingMoreProjects] = useState(false);
   const [activeProject, setActiveProject] = useState<ContentProject | null>(null);
   const [openingProject, setOpeningProject] = useState<string | null>(null);
@@ -105,11 +111,11 @@ export function useContentProjects(
   }, [clientId]);
 
   const loadMoreProjects = useCallback(async () => {
-    if (loadingMoreProjects || !projectsHasMore) return;
+    if (loadingMoreProjects || !projectsHasMore || projectsNextOffset === null) return;
     setLoadingMoreProjects(true);
     try {
       const page = await api.get<ContentPage<ContentProject>>(
-        ROUTES.content.projectsPage(clientId, projects.length),
+        ROUTES.content.projectsPage(clientId, projectsNextOffset),
         { showErrorToast: false },
       );
       setProjects((previous) => [
@@ -117,12 +123,13 @@ export function useContentProjects(
         ...page.items.filter((item) => !previous.some((existing) => existing.id === item.id)),
       ]);
       setProjectsHasMore(page.hasMore);
+      setProjectsNextOffset(page.nextOffset);
     } catch {
       toast.error("Older content projects could not be loaded. Please try again.");
     } finally {
       setLoadingMoreProjects(false);
     }
-  }, [clientId, loadingMoreProjects, projects.length, projectsHasMore]);
+  }, [clientId, loadingMoreProjects, projectsHasMore, projectsNextOffset]);
 
   const handleTopicSelected = useCallback(async (topic: ContentTopic) => {
     const existing = projects.find((project) =>

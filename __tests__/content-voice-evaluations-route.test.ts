@@ -29,7 +29,7 @@ const routeCtx = { params: Promise.resolve({}) };
 function chain(result: { data: unknown; error: unknown }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const builder: Record<string, any> = {};
-  for (const method of ["select", "eq", "order", "limit", "insert", "update"]) {
+  for (const method of ["select", "eq", "lt", "order", "limit", "insert", "update"]) {
     builder[method] = jest.fn(() => builder);
   }
   builder.single = jest.fn().mockResolvedValue(result);

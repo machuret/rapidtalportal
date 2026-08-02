@@ -177,9 +177,26 @@ export const GET = withAuth(async (request, { user }) => {
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
   const admin = createAdminClient();
+  // Reap zombie "running" rows: a killed invocation (timeout, cold start)
+  // never reaches the failure update in POST, so anything still running past
+  // the maxDuration window is dead. Mark it failed — the UI shows a failed
+  // pill with the reason instead of a permanent spinner (same reaper pattern
+  // as the competitor-intelligence job leases).
+  const reapCutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+  await admin
+    .from("content_voice_evaluations")
+    .update({
+      status: "failed",
+      error: "The evaluation timed out before completing.",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("client_id", parsed.data.client_id)
+    // Never clobber a row a live invocation just completed.
+    .eq("status", "running")
+    .lt("updated_at", reapCutoff);
   const { data, error } = await admin
     .from("content_voice_evaluations")
-    .select("id,client_id,channel,status,brief,variant_a,variant_b,assignment,automated_evaluation,preferred_variant,reviewer_notes,reviewed_at,created_at")
+    .select("id,client_id,channel,status,brief,variant_a,variant_b,assignment,automated_evaluation,preferred_variant,reviewer_notes,reviewed_at,created_at,error")
     .eq("client_id", parsed.data.client_id)
     .order("created_at", { ascending: false })
     .limit(100);

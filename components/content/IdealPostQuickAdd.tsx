@@ -34,8 +34,11 @@ export function IdealPostQuickAdd({
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
+  // The page no longer re-renders on add (that remount wiped unsaved work in
+  // the tools below), so the /5 meter tracks this session's additions itself.
+  const [addedByChannel, setAddedByChannel] = useState<Record<string, number>>({});
 
-  const approved = approvedByChannel[channel] ?? 0;
+  const approved = (approvedByChannel[channel] ?? 0) + (addedByChannel[channel] ?? 0);
 
   async function submit() {
     if (busy) return;
@@ -66,6 +69,7 @@ export function IdealPostQuickAdd({
       setBody("");
       setJustAdded(true);
       setTimeout(() => setJustAdded(false), 3000);
+      setAddedByChannel((current) => ({ ...current, [channel]: (current[channel] ?? 0) + 1 }));
       toast.success(`Added as an approved ideal ${channel} post. The engine learns from it immediately.`);
       onAdded?.();
     } catch (error) {

@@ -265,6 +265,8 @@ function postDb(options: {
   contentReady?: boolean;
   modelAnalysis?: CompetitorIntelligence;
   modelResponses?: unknown[];
+  /** Verbatim message.content per provider call — for unparseable/truncated output. */
+  rawModelContents?: string[];
   evidenceOverride?: ReturnType<typeof evidenceRows>;
   claimError?: { code: string; message: string } | null;
   dnaError?: { code: string; message: string } | null;
@@ -362,6 +364,7 @@ function postDb(options: {
   (createAdminClient as jest.Mock).mockReturnValue({ from, rpc });
   let responseIndex = 0;
   jest.spyOn(global, "fetch").mockImplementation(() => {
+    const rawContent = options.rawModelContents?.[responseIndex];
     const responseValue = options.modelResponses?.[responseIndex] ??
       options.modelResponses?.at(-1) ??
       options.modelAnalysis ??
@@ -369,7 +372,10 @@ function postDb(options: {
     responseIndex += 1;
     return Promise.resolve(
       new Response(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify(responseValue) } }],
+        choices: [{
+          message: { content: rawContent ?? JSON.stringify(responseValue) },
+          finish_reason: rawContent !== undefined ? "length" : "stop",
+        }],
       }), { status: 200, headers: { "content-type": "application/json" } }),
     );
   });
@@ -702,6 +708,52 @@ test("repairs one incomplete model report and still applies deterministic eviden
       p_lease_token: LEASE_TOKEN,
     }),
   );
+});
+
+test("repairs a truncated model report instead of failing with INVALID_PROVIDER_JSON", async () => {
+  const truncated = JSON.stringify(analysis).slice(0, 400);
+  const { rpc } = postDb({
+    rawModelContents: [truncated],
+    modelResponses: [analysis],
+  });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(201);
+  expect(global.fetch).toHaveBeenCalledTimes(2);
+  const repairBody = JSON.parse(String(
+    ((global.fetch as jest.Mock).mock.calls[1][1] as RequestInit).body,
+  ));
+  expect(repairBody.messages[1].content).toContain("VALIDATION ERRORS");
+  expect(repairBody.messages[1].content).toContain("truncated");
+  // The unparseable raw text itself is the draft the repair pass completes.
+  expect(repairBody.messages[1].content).toContain(truncated.slice(0, 100));
+  expect(rpc).toHaveBeenCalledWith(
+    "complete_competitor_intelligence_job",
+    expect.objectContaining({
+      p_job_id: JOB_ID,
+      p_lease_token: LEASE_TOKEN,
+    }),
+  );
+});
+
+test("fails the job when a truncated report and its repair are both unparseable", async () => {
+  const truncated = JSON.stringify(analysis).slice(0, 400);
+  postDb({ rawModelContents: [truncated, truncated] });
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_ID,
+    competitor_ids: [COMPETITOR_ID],
+    window_days: 180,
+  }), routeCtx);
+
+  expect(response.status).toBe(502);
+  const json = await response.json();
+  expect(json.code).toBe("INVALID_ANALYSIS_AFTER_REPAIR");
 });
 
 test("preserves valid verified sections when another model section is malformed", async () => {

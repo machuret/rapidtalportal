@@ -299,6 +299,23 @@ export function PieceDetailEditor({
           </Button>
         )}
 
+        {canApprove && piece.status === "approved" && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              if (window.confirm("The piece goes back to draft and can be edited freely.")) {
+                void handleStatusChange("draft");
+              }
+            }}
+            disabled={isUpdating || dirty}
+            className="text-xs h-8 text-zinc-400 hover:text-zinc-200"
+          >
+            <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+            Restore to draft
+          </Button>
+        )}
+
         {canApprove && piece.status !== "archived" && (
           <Button
             size="sm"
