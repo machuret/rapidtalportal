@@ -12,16 +12,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   const db = createAdminClient();
+  const now = new Date().toISOString();
   const { data, error } = await db.from("prospecting_jobs")
     .select("id, client_id, next_attempt_at, cancel_requested_at")
     .in("status", ["queued", "running", "ingesting"])
+    .or(`cancel_requested_at.not.is.null,next_attempt_at.is.null,next_attempt_at.lte.${now}`)
     .order("updated_at", { ascending: true })
-    .limit(50);
+    .limit(8);
   if (error) return NextResponse.json({ error: "Lead collection jobs could not be loaded." }, { status: 500 });
-  const now = Date.now();
-  const eligible = (data ?? []).filter((row) =>
-    row.cancel_requested_at || !row.next_attempt_at || new Date(row.next_attempt_at).getTime() <= now
-  ).slice(0, 8);
+  const eligible = data ?? [];
   let advanced = 0;
   let completed = 0;
   let failures = 0;

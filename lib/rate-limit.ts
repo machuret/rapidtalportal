@@ -148,6 +148,20 @@ export const vaultUploadLimiter = new SlidingWindowLimiter(40, 5 * 60_000);
 // before they reach that durable boundary.
 export const leadGenerationLimiter = new SlidingWindowLimiter(5, 15 * 60_000);
 
+// Campaign definitions are free, but unbounded creation would pollute a tenant
+// and make the campaign workspace unusable even without starting an Actor.
+export const leadCampaignMutationLimiter = new SlidingWindowLimiter(30, 15 * 60_000);
+
+// Super-admin scraper smoke tests are intentionally tiny but still start paid
+// Actors. The allowance covers polling four concurrent checks without allowing
+// the health panel to become an unbounded provider runner.
+export const providerHealthLimiter = new SlidingWindowLimiter(120, 15 * 60_000);
+
+// Company enrichment also starts a paid Apify Actor. This is intentionally
+// more generous than full discovery while still stopping rapid bulk starts;
+// the database remains the durable tenant-wide daily boundary.
+export const leadEnrichmentLimiter = new SlidingWindowLimiter(20, 15 * 60_000);
+
 // Sending a message — fans out in-app notifications AND email to recipients, so
 // it's an email-bomb / spam vector. Plenty for a real conversation.
 export const messageSendLimiter = new SlidingWindowLimiter(30, 5 * 60_000);

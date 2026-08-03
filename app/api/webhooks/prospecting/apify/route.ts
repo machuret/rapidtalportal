@@ -45,8 +45,9 @@ export async function POST(req: NextRequest) {
 
   const run = await getApifyActorRun(runId);
   const db = createAdminClient();
-  const { data, error } = await db.rpc("reconcile_prospecting_provider_run", {
+  const { data, error } = await db.rpc("reconcile_prospecting_provider_run_v2", {
     p_job_id: jobId,
+    p_actor_provider_id: run.actId,
     p_actor_run_id: run.id,
     p_provider_status: run.status,
     p_actor_build_id: run.buildId,

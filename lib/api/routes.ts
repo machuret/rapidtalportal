@@ -27,6 +27,7 @@ export const ROUTES = {
     libraryAction: (id: string) => `/api/admin/library/${id}/action`,
     libraryIndex: () => "/api/admin/library/index",
     libraryQuality: () => "/api/admin/library/quality",
+    prospectingProviders: () => "/api/admin/prospecting/providers",
   },
   notebook: {
     pages: () => "/api/notebook/pages",
@@ -84,13 +85,15 @@ export const ROUTES = {
     campaignsForClient: (clientId: string, offset = 0, limit = 50) =>
       `/api/prospecting/campaigns?clientId=${clientId}&offset=${offset}&limit=${limit}`,
     runs: () => "/api/prospecting/runs",
-    advance: () => "/api/prospecting/runs/advance",
     cancel: () => "/api/prospecting/runs/cancel",
     leads: () => "/api/prospecting/leads",
-    leadsPage: (clientId: string, status: string, offset: number, limit = 30) =>
-      `/api/prospecting/leads?clientId=${clientId}&status=${status}&offset=${offset}&limit=${limit}`,
+    leadsPage: (clientId: string, status: string, fit: string, sort: string, offset: number, limit = 30) =>
+      `/api/prospecting/leads?clientId=${clientId}&status=${status}&fit=${fit}&sort=${sort}&offset=${offset}&limit=${limit}`,
     enrich: () => "/api/prospecting/enrich",
     promote: () => "/api/prospecting/promote",
+    activity: () => "/api/prospecting/activity",
+    activityForClient: (clientId: string, offset = 0, limit = 50) =>
+      `/api/prospecting/activity?clientId=${clientId}&offset=${offset}&limit=${limit}`,
   },
   content: {
     pieces: () => "/api/content/pieces",

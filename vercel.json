@@ -47,6 +47,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/prospecting-provider-health",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/vault-governance",
       "schedule": "45 3 * * *"
     }

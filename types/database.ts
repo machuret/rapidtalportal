@@ -234,6 +234,38 @@ type LibraryVersionUpdate = Omit<GeneratedTables["business_library_versions"]["U
   status?: LibraryVersionStatus;
 };
 
+type ProspectingDiscoveryCaptureRow = {
+  id: string; client_id: string; campaign_id: string; job_id: string; prospect_id: string;
+  source: string; canonical_key: string; dedupe_keys: string[]; normalized_payload: Json;
+  raw_payload: Json; payload_hash: string; actor_id: string; actor_provider_id: string | null;
+  actor_build_requested: string | null; actor_build_id: string | null; actor_run_id: string;
+  adapter_version: number; captured_at: string; created_at: string;
+};
+type ProspectingIdentityAliasRow = {
+  id: string; client_id: string; prospect_id: string; identity_type: string; identity_key: string;
+  is_primary: boolean; source: string; first_seen_at: string; last_seen_at: string;
+};
+type ProspectingMergeSuggestionRow = {
+  id: string; client_id: string; left_prospect_id: string; right_prospect_id: string;
+  status: "pending" | "accepted" | "dismissed"; confidence: number; evidence: Json;
+  created_at: string; updated_at: string;
+};
+type ProspectingProviderCheckRow = {
+  id: string; provider: "google_maps" | "google_search" | "linkedin_profiles" | "website_enrichment";
+  status: "queued" | "running" | "passed" | "warning" | "failed";
+  actor_id: string; actor_provider_id: string; actor_build_requested: string;
+  actor_build_id: string | null; actor_run_id: string | null; actor_dataset_id: string | null;
+  input_hash: string; requested_results: number; usable_results: number | null;
+  latency_ms: number | null; usage_total_usd: number | null; provider_status: string | null;
+  diagnostic: string | null; initiated_by: string | null; started_at: string;
+  completed_at: string | null; created_at: string; updated_at: string;
+};
+type ProspectingActivityEventRow = {
+  id: string; client_id: string; campaign_id: string | null; lead_id: string | null;
+  job_id: string | null; event_type: string; actor_id: string | null;
+  subject_user_id: string | null; detail: Json; created_at: string;
+};
+
 type CompatTables = Omit<
   GeneratedTables,
   | "company_dna" | "sops" | "daily_log_notes" | "kb_entries" | "kb_generation_runs"
@@ -288,6 +320,58 @@ type CompatTables = Omit<
     Update: Omit<GeneratedTables["tool_runs"]["Update"], "output"> & { output?: Record<string, unknown> | null };
     Relationships: GeneratedTables["tool_runs"]["Relationships"];
   };
+  prospecting_discovery_captures: {
+    Row: ProspectingDiscoveryCaptureRow;
+    Insert: Omit<ProspectingDiscoveryCaptureRow, "id" | "created_at"> & { id?: string; created_at?: string };
+    Update: Partial<ProspectingDiscoveryCaptureRow>;
+    Relationships: [];
+  };
+  prospecting_identity_aliases: {
+    Row: ProspectingIdentityAliasRow;
+    Insert: Omit<ProspectingIdentityAliasRow, "id" | "first_seen_at" | "last_seen_at"> & { id?: string; first_seen_at?: string; last_seen_at?: string };
+    Update: Partial<ProspectingIdentityAliasRow>;
+    Relationships: [];
+  };
+  prospecting_merge_suggestions: {
+    Row: ProspectingMergeSuggestionRow;
+    Insert: Omit<ProspectingMergeSuggestionRow, "id" | "status" | "created_at" | "updated_at"> & { id?: string; status?: ProspectingMergeSuggestionRow["status"]; created_at?: string; updated_at?: string };
+    Update: Partial<ProspectingMergeSuggestionRow>;
+    Relationships: [];
+  };
+  prospecting_provider_checks: {
+    Row: ProspectingProviderCheckRow;
+    Insert: Omit<ProspectingProviderCheckRow,
+      "id" | "status" | "actor_build_id" | "actor_run_id" | "actor_dataset_id" |
+      "usable_results" | "latency_ms" | "usage_total_usd" | "provider_status" |
+      "diagnostic" | "started_at" | "completed_at" | "created_at" | "updated_at"
+    > & Partial<Pick<ProspectingProviderCheckRow,
+      "id" | "status" | "actor_build_id" | "actor_run_id" | "actor_dataset_id" |
+      "usable_results" | "latency_ms" | "usage_total_usd" | "provider_status" |
+      "diagnostic" | "started_at" | "completed_at" | "created_at" | "updated_at"
+    >>;
+    Update: Partial<ProspectingProviderCheckRow>;
+    Relationships: [];
+  };
+  prospecting_campaigns: {
+    Row: GeneratedTables["prospecting_campaigns"]["Row"] & { search_fingerprint: string | null; owner_id: string | null };
+    Insert: GeneratedTables["prospecting_campaigns"]["Insert"] & { search_fingerprint?: string | null; owner_id?: string | null };
+    Update: GeneratedTables["prospecting_campaigns"]["Update"] & { search_fingerprint?: string | null; owner_id?: string | null };
+    Relationships: GeneratedTables["prospecting_campaigns"]["Relationships"];
+  };
+  prospecting_campaign_leads: {
+    Row: GeneratedTables["prospecting_campaign_leads"]["Row"] & { assigned_to: string | null; latest_enrichment_job_id: string | null };
+    Insert: GeneratedTables["prospecting_campaign_leads"]["Insert"] & { assigned_to?: string | null; latest_enrichment_job_id?: string | null };
+    Update: GeneratedTables["prospecting_campaign_leads"]["Update"] & { assigned_to?: string | null; latest_enrichment_job_id?: string | null };
+    Relationships: GeneratedTables["prospecting_campaign_leads"]["Relationships"];
+  };
+  prospecting_activity_events: {
+    Row: ProspectingActivityEventRow;
+    Insert: Omit<ProspectingActivityEventRow,"id"|"detail"|"created_at"> & {
+      id?: string; detail?: Json; created_at?: string;
+    };
+    Update: Partial<ProspectingActivityEventRow>;
+    Relationships: [];
+  };
 };
 
 /**
@@ -309,6 +393,123 @@ type CompatFunctions = Omit<GeneratedFunctionsNullable, "transition_business_lib
       p_version_id: string | null;
       p_action: "submit_review" | "return_draft" | "publish" | "new_version" | "retire";
       p_actor_id: string;
+    };
+    Returns: string;
+  };
+  release_prospecting_enrichment_reservation: {
+    Args: {
+      p_job_id: string;
+      p_client_id: string;
+      p_error_code?: string | null;
+      p_error_message?: string | null;
+    };
+    Returns: GeneratedTables["prospecting_jobs"]["Row"][];
+  };
+  update_prospecting_campaign_profile: {
+    Args: { p_campaign_id: string; p_client_id: string; p_profile: Json };
+    Returns: GeneratedTables["prospecting_campaigns"]["Row"][];
+  };
+  promote_prospecting_lead_to_crm_v2: {
+    Args: {
+      p_campaign_lead_id: string;
+      p_client_id: string;
+      p_actor_id: string;
+      p_selected_email?: string | null;
+      p_selected_phone?: string | null;
+    };
+    Returns: string;
+  };
+  prepare_prospecting_job: {
+    Args: {
+      p_job_id: string;
+      p_client_id: string;
+      p_actor_provider_id: string;
+      p_actor_build_requested: string;
+      p_input_payload: Json;
+      p_input_hash: string;
+    };
+    Returns: GeneratedTables["prospecting_jobs"]["Row"][];
+  };
+  reconcile_prospecting_provider_run_v2: {
+    Args: {
+      p_job_id: string;
+      p_actor_provider_id: string;
+      p_actor_run_id: string;
+      p_provider_status: string;
+      p_actor_build_id?: string | null;
+      p_actor_dataset_id?: string | null;
+      p_usage_total_usd?: number | null;
+    };
+    Returns: GeneratedTables["prospecting_jobs"]["Row"][];
+  };
+  ingest_prospecting_job_results_v2: {
+    Args: {
+      p_job_id: string;
+      p_lease_token: string;
+      p_results: Json;
+      p_usage_total_usd?: number | null;
+    };
+    Returns: GeneratedTables["prospecting_jobs"]["Row"][];
+  };
+  create_prospecting_campaign_once: {
+    Args: {
+      p_client_id: string;
+      p_name: string;
+      p_source: string;
+      p_queries: string[];
+      p_locations: string[];
+      p_country_code: string;
+      p_language_code: string;
+      p_max_results: number;
+      p_ideal_profile: Json;
+      p_created_by: string;
+    };
+    Returns: Json;
+  };
+  reserve_prepare_claim_prospecting_job: {
+    Args: {
+      p_campaign_id: string; p_client_id: string; p_actor_id: string; p_actor_identifier: string;
+      p_actor_provider_id: string; p_actor_build_requested: string; p_adapter_version: number;
+      p_input_payload: Json; p_input_hash: string; p_max_charge_usd: number;
+      p_daily_run_limit?: number; p_daily_result_limit?: number;
+    };
+    Returns: GeneratedTables["prospecting_jobs"]["Row"][];
+  };
+  reserve_prepare_claim_prospecting_enrichment: {
+    Args: {
+      p_lead_id: string; p_client_id: string; p_actor_id: string; p_actor_identifier: string;
+      p_actor_provider_id: string; p_actor_build_requested: string; p_adapter_version: number;
+      p_input_payload: Json; p_input_hash: string; p_max_charge_usd: number;
+      p_daily_enrichment_limit?: number;
+    };
+    Returns: GeneratedTables["prospecting_jobs"]["Row"][];
+  };
+  update_prospecting_lead_workflow: {
+    Args: {
+      p_lead_id: string; p_client_id: string; p_actor_id: string; p_status?: string | null;
+      p_set_assignee?: boolean; p_assigned_to?: string | null;
+    };
+    Returns: GeneratedTables["prospecting_campaign_leads"]["Row"][];
+  };
+  update_prospecting_campaign_workflow: {
+    Args: {
+      p_campaign_id: string; p_client_id: string; p_actor_id: string; p_set_owner?: boolean;
+      p_owner_id?: string | null; p_archived?: boolean | null;
+    };
+    Returns: GeneratedTables["prospecting_campaigns"]["Row"][];
+  };
+  record_prospecting_activity: {
+    Args: {
+      p_client_id: string; p_actor_id: string; p_event_type: string;
+      p_campaign_id?: string | null; p_lead_id?: string | null; p_job_id?: string | null;
+      p_subject_user_id?: string | null; p_detail?: Json;
+    };
+    Returns: string;
+  };
+  promote_prospecting_lead_to_crm_v3: {
+    Args: {
+      p_campaign_lead_id: string; p_client_id: string; p_actor_id: string;
+      p_selected_email?: string | null; p_selected_phone?: string | null;
     };
     Returns: string;
   };

@@ -30,12 +30,14 @@ describe("prospecting Actor adapters", () => {
     const adapter = getProspectingAdapter("google_maps");
     expect(adapter.validate(baseCriteria)).toEqual({ valid: true, errors: [], warnings: [] });
     expect(adapter.buildInput(baseCriteria)).toEqual(expect.objectContaining({
-      searchStringsArray: ["mortgage broker"],
-      locationQuery: "Sydney, Australia",
+      searchStringsArray: ["mortgage broker Sydney, Australia"],
       maxCrawledPlacesPerSearch: 10,
       maxReviews: 0,
       skipClosedPlaces: true,
+      scrapePlaceDetailPage: false,
+      maximumLeadsEnrichmentRecords: 0,
     }));
+    expect(adapter.buildInput(baseCriteria)).not.toHaveProperty("locationQuery");
     expect(adapter.validate({ ...baseCriteria, locations: [] })).toEqual(expect.objectContaining({
       valid: false,
       errors: ["Google Maps discovery requires exactly one location per run."],
@@ -60,12 +62,14 @@ describe("prospecting Actor adapters", () => {
       reviewCount: 87,
     }));
     expect(lead.canonicalKey).toHaveLength(64);
-    expect(lead.dedupeKeys).toEqual([lead.canonicalKey]);
+    expect(lead.dedupeKeys).toEqual(expect.arrayContaining([lead.canonicalKey]));
+    expect(lead.dedupeKeys.length).toBeGreaterThan(1);
+    expect(lead.identitySignals.filter((signal) => signal.primary)).toHaveLength(1);
     expect(lead.source).toEqual({
       source: "google_maps",
       actorId: "compass~crawler-google-places",
       actorBuildId: "build-maps-1",
-      adapterVersion: 1,
+      adapterVersion: 2,
       providerRunId: "run-maps-1",
       capturedAt: "2026-08-03T00:00:00.000Z",
       sourceUrl: "https://www.google.com/maps/place/?q=place_id:ChIJ-test-maps-place",

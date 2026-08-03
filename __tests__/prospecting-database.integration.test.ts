@@ -53,6 +53,10 @@ live("Prospecting live RLS and concurrency", () => {
         queries: ["accountant"],
         locations: ["Sydney"],
         max_results: 1,
+        ideal_profile: {
+          requiredKeywords: [], preferredKeywords: [], excludedKeywords: [],
+          minRating: 5, minReviewCount: 1000, mustHaveWebsite: false,
+        },
         created_by: ACTOR_ID!,
       })));
       expect(campaigns.error).toBeNull();
@@ -62,6 +66,8 @@ live("Prospecting live RLS and concurrency", () => {
         client_id: CLIENT_ID!,
         source: "google_maps",
         actor_id: "acceptance~actor",
+        actor_provider_id: "nwua9Gu5YrADL7ZDj",
+        actor_build_requested: "0.14.723",
         actor_run_id: `acceptance-run-${marker}-${index}`,
         actor_dataset_id: `acceptance-data-${marker}-${index}`,
         adapter_version: 1,
@@ -82,6 +88,7 @@ live("Prospecting live RLS and concurrency", () => {
         kind: "company",
         canonicalKey,
         dedupeKeys: [canonicalKey],
+        identitySignals: [{ type: "domain", key: canonicalKey, primary: true }],
         companyName: `Acceptance Company ${marker}`,
         websiteUrl: "https://acceptance.invalid",
         sourceUrl: "https://maps.invalid/acceptance",
@@ -95,7 +102,7 @@ live("Prospecting live RLS and concurrency", () => {
         },
         raw: { acceptance: true },
       }] as unknown as Json;
-      const ingestions = await Promise.all(jobIds.map((jobId, index) => admin!.rpc("ingest_prospecting_job_results", {
+      const ingestions = await Promise.all(jobIds.map((jobId, index) => admin!.rpc("ingest_prospecting_job_results_v2", {
         p_job_id: jobId,
         p_lease_token: claims[index].data![0].lease_token!,
         p_results: payload,
@@ -111,7 +118,17 @@ live("Prospecting live RLS and concurrency", () => {
       const leads = await admin!.from("prospecting_campaign_leads")
         .select("id, fit_score, fit_band, score_version").eq("client_id", CLIENT_ID!).eq("prospect_id", prospectId);
       expect(leads.data).toHaveLength(2);
-      expect(leads.data!.every((lead) => lead.fit_score !== null && lead.score_version === "prospecting-fit-v1")).toBe(true);
+      expect(leads.data!.every((lead) => lead.fit_score !== null && lead.score_version === "prospecting-fit-v3")).toBe(true);
+      expect(leads.data!.every((lead) => lead.fit_band === "weak" && lead.fit_score! <= 49)).toBe(true);
+      const captures = await admin!.from("prospecting_discovery_captures")
+        .select("id, prospect_id, payload_hash").eq("client_id", CLIENT_ID!).eq("prospect_id", prospectId);
+      expect(captures.error).toBeNull();
+      expect(captures.data).toHaveLength(2);
+      expect(captures.data!.every((capture) => capture.payload_hash.length === 64)).toBe(true);
+      const aliases = await admin!.from("prospecting_identity_aliases")
+        .select("id, prospect_id, identity_key").eq("client_id", CLIENT_ID!).eq("prospect_id", prospectId);
+      expect(aliases.error).toBeNull();
+      expect(aliases.data).toHaveLength(1);
 
       const reservations = await Promise.all([0, 1].map(() => admin!.rpc("reserve_prospecting_enrichment", {
         p_lead_id: leads.data![0].id,
@@ -124,6 +141,16 @@ live("Prospecting live RLS and concurrency", () => {
       })));
       expect(reservations.filter((reservation) => !reservation.error && reservation.data?.length === 1)).toHaveLength(1);
       expect(reservations.filter((reservation) => reservation.error)).toHaveLength(1);
+      const reserved = reservations.find((reservation) => !reservation.error)?.data?.[0];
+      const released = await admin!.rpc("release_prospecting_enrichment_reservation", {
+        p_job_id: reserved!.id,
+        p_client_id: CLIENT_ID!,
+        p_error_code: "acceptance_release",
+        p_error_message: "Acceptance test release",
+      });
+      expect(released.error).toBeNull();
+      expect(released.data?.[0]?.status).toBe("error");
+      expect(released.data?.[0]?.reservation_released_at).toBeTruthy();
 
       const promotions = await Promise.all(leads.data!.map((lead) => admin!.rpc("promote_prospecting_lead_to_crm", {
         p_campaign_lead_id: lead.id,

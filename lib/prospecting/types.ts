@@ -41,6 +41,11 @@ export interface NormalizedProspect {
   kind: ProspectKind;
   canonicalKey: string;
   dedupeKeys: string[];
+  identitySignals: Array<{
+    type: "google_place" | "domain" | "phone" | "name_address" | "linkedin" | "email" | "person_name_company";
+    key: string;
+    primary: boolean;
+  }>;
   companyName: string | null;
   personName: string | null;
   jobTitle: string | null;
@@ -79,6 +84,10 @@ export interface ProspectingNormalizationContext {
 export interface ProspectingActorAdapter {
   readonly source: ProspectingSource;
   readonly actorId: string;
+  /** Immutable Apify Actor id returned as `actId` on every run. */
+  readonly providerActorId: string;
+  /** Exact tested Actor build number. Never use a moving tag in production. */
+  readonly build: string;
   readonly version: number;
   readonly supportedKinds: ProspectKind[];
   validate(criteria: ProspectingSearchCriteria): ProspectingValidationResult;

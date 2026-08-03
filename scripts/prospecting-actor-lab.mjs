@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
+import providerCatalog from "../lib/prospecting/providers.json" with { type: "json" };
+import { providerInputBuilders } from "../lib/prospecting/provider-inputs.mjs";
+
 const APIFY_API = "https://api.apify.com/v2";
-const ALLOWED_SOURCES = new Set(["google_maps", "google_search", "linkedin_profiles"]);
+const ALLOWED_SOURCES = new Set(Object.keys(providerCatalog));
 
 function argument(name, fallback = null) {
   const prefix = `--${name}=`;
@@ -32,7 +35,7 @@ function numberArgument(name, fallback, minimum, maximum) {
 
 const source = argument("source");
 if (!source || !ALLOWED_SOURCES.has(source)) {
-  fail("Choose --source=google_maps, --source=google_search or --source=linkedin_profiles.");
+  fail("Choose --source=google_maps, --source=google_search, --source=linkedin_profiles or --source=website_enrichment.");
 }
 if (!process.argv.includes("--confirm-spend")) {
   fail("Add --confirm-spend after reviewing --max-items and --max-charge-usd.");
@@ -46,47 +49,17 @@ const location = argument("location", "Sydney, Australia");
 const maxItems = integerArgument("max-items", 10, 1, 25);
 const maxChargeUsd = numberArgument("max-charge-usd", 0.5, 0.5, 0.5);
 const timeoutSeconds = integerArgument("timeout-seconds", 120, 20, 180);
+const websiteUrl = argument("website-url", "https://www.rapidtal.online/");
 
-const definitions = {
-  google_maps: {
-    actorId: "compass~crawler-google-places",
-    input: {
-      searchStringsArray: [query],
-      locationQuery: location,
-      maxCrawledPlacesPerSearch: maxItems,
-      language: "en",
-      skipClosedPlaces: true,
-      maxReviews: 0,
-      scrapeImageAuthors: false,
-    },
-  },
-  google_search: {
-    actorId: "apify~google-search-scraper",
-    input: {
-      queries: `${query} ${location}`,
-      maxPagesPerQuery: 1,
-      resultsPerPage: 10,
-      countryCode: "au",
-      languageCode: "en",
-      includeUnfilteredResults: false,
-      saveHtml: false,
-      saveHtmlToKeyValueStore: false,
-    },
-  },
-  linkedin_profiles: {
-    actorId: "harvestapi~linkedin-profile-search",
-    input: {
-      profileScraperMode: "Short",
-      searchQuery: query,
-      maxItems,
-      takePages: 1,
-      startPage: 1,
-      locations: [location],
-      autoQuerySegmentation: false,
-      profileDeduplicationMode: "off",
-    },
-  },
+const criteria = {
+  queries: [query], locations: [location], maxResults: maxItems,
+  countryCode: "au", languageCode: "en",
 };
+const actorId = providerCatalog[source].actorId;
+const actorPath = actorId.replace(/\//gu, "~");
+const input = source === "website_enrichment"
+  ? providerInputBuilders.website_enrichment(websiteUrl)
+  : providerInputBuilders[source](criteria);
 
 async function apify(path, init = {}) {
   const response = await fetch(`${APIFY_API}${path}`, {
@@ -119,19 +92,18 @@ function fieldCoverage(rows, candidates) {
   return rows.length ? Math.round((present / rows.length) * 100) : 0;
 }
 
-const definition = definitions[source];
 const params = new URLSearchParams({
   waitForFinish: "0",
-  build: "latest",
+  build: providerCatalog[source].build,
   maxItems: String(maxItems),
   maxTotalChargeUsd: maxChargeUsd.toFixed(2),
 });
 const startedAt = Date.now();
 
 try {
-  const started = await apify(`/acts/${definition.actorId}/runs?${params}`, {
+  const started = await apify(`/acts/${encodeURIComponent(actorPath)}/runs?${params}`, {
     method: "POST",
-    body: JSON.stringify(definition.input),
+    body: JSON.stringify(input),
   });
   let run = started.data;
   const terminal = new Set(["SUCCEEDED", "FAILED", "TIMED-OUT", "ABORTED"]);
@@ -161,7 +133,7 @@ try {
   const allKeys = [...new Set(objectRows.flatMap((row) => Object.keys(row)))].sort();
   const summary = {
     source,
-    actorId: definition.actorId,
+    actorId,
     actorRunId: run.id,
     actorBuildId: run.buildId ?? null,
     datasetId: run.defaultDatasetId ?? null,

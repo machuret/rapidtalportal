@@ -97,6 +97,20 @@ describe("prospecting Apify client", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  test("treats a malformed successful start response as an ambiguous paid start", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(response({ data: { status: "READY" } }));
+    await expect(startApifyActorRun({
+      actorId: "compass~crawler-google-places",
+      input: {},
+      maxItems: 1,
+      maxTotalChargeUsd: 0.5,
+    })).rejects.toEqual(expect.objectContaining({
+      status: 502,
+      retryable: true,
+      requestMayHaveStarted: true,
+    }));
+  });
+
   test("polls runs, pages datasets and can cancel a run", async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce(response({ data: { id: "run12345", actId: "actor1", status: "RUNNING" } }))

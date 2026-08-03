@@ -1,8 +1,24 @@
 import { createHash } from "node:crypto";
 import type { NormalizedWebsiteEnrichment } from "@/lib/prospecting/types";
+import providers from "@/lib/prospecting/providers.json";
+import { providerInputBuilders } from "@/lib/prospecting/provider-inputs.mjs";
 
-export const WEBSITE_ENRICHMENT_ACTOR = "apify/website-content-crawler";
-export const WEBSITE_ENRICHMENT_ADAPTER_VERSION = 1;
+const WEBSITE_PROVIDER = providers.website_enrichment;
+export const WEBSITE_ENRICHMENT_ACTOR = WEBSITE_PROVIDER.actorId;
+export const WEBSITE_ENRICHMENT_PROVIDER_ACTOR_ID = WEBSITE_PROVIDER.providerActorId;
+export const WEBSITE_ENRICHMENT_BUILD = WEBSITE_PROVIDER.build;
+export const WEBSITE_ENRICHMENT_ADAPTER_VERSION = WEBSITE_PROVIDER.adapterVersion;
+
+export interface ProspectingEnrichmentAdapter {
+  readonly source: "website_enrichment";
+  readonly actorId: string;
+  readonly providerActorId: string;
+  readonly build: string;
+  readonly version: number;
+  readonly maxItems: number;
+  buildInput(websiteUrl: string): Record<string, unknown>;
+  normalize(websiteUrl: string, values: unknown[]): NormalizedWebsiteEnrichment;
+}
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -26,6 +42,25 @@ function safeHttpUrl(value: unknown): URL | null {
   } catch {
     return null;
   }
+}
+
+function normalizedHost(url: URL): string {
+  return url.hostname.toLowerCase().replace(/^www\./u, "");
+}
+
+function sameSite(left: URL, right: URL): boolean {
+  const a = normalizedHost(left);
+  const b = normalizedHost(right);
+  return a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`);
+}
+
+function pagePriority(url: URL, requested: URL): number {
+  const path = url.pathname.toLowerCase().replace(/\/+$/u, "") || "/";
+  if (sameSite(url, requested) && (path === "/" || url.toString() === requested.toString())) return 0;
+  if (/\/(about|about-us|company|who-we-are)(\/|$)/u.test(path)) return 1;
+  if (/\/(services|solutions|products|what-we-do)(\/|$)/u.test(path)) return 2;
+  if (/\/(contact|contact-us|get-in-touch)(\/|$)/u.test(path)) return 3;
+  return 4;
 }
 
 function unique(values: Array<string | null>, limit: number): string[] {
@@ -62,25 +97,7 @@ function socialLinksFrom(value: string): Record<string, string> {
 }
 
 export function buildWebsiteEnrichmentInput(websiteUrl: string): Record<string, unknown> {
-  const url = safeHttpUrl(websiteUrl);
-  if (!url) throw new Error("This lead has an invalid website URL.");
-  return {
-    startUrls: [{ url: url.toString() }],
-    crawlerType: "playwright:adaptive",
-    maxCrawlDepth: 1,
-    maxCrawlPages: 5,
-    maxResults: 5,
-    useSitemaps: false,
-    includeUrlGlobs: [`${url.origin}/**`],
-    excludeUrlGlobs: [
-      `${url.origin}/blog/**`, `${url.origin}/news/**`, `${url.origin}/privacy*`,
-      `${url.origin}/terms*`, `${url.origin}/login*`, `${url.origin}/cart*`,
-    ],
-    saveHtml: false,
-    saveMarkdown: true,
-    storeSkippedUrls: false,
-    proxyConfiguration: { useApifyProxy: true },
-  };
+  return providerInputBuilders.website_enrichment(websiteUrl);
 }
 
 export function normalizeWebsiteEnrichment(
@@ -93,7 +110,7 @@ export function normalizeWebsiteEnrichment(
     const row = record(value);
     const metadata = record(row.metadata);
     const pageUrl = safeHttpUrl(row.url ?? metadata.url);
-    if (!pageUrl || pageUrl.hostname.replace(/^www\./u, "") !== requested.hostname.replace(/^www\./u, "")) return [];
+    if (!pageUrl || !sameSite(pageUrl, requested)) return [];
     const content = text(row.markdown ?? row.text ?? row.content, 20_000);
     if (!content) return [];
     return [{
@@ -102,15 +119,18 @@ export function normalizeWebsiteEnrichment(
       description: text(metadata.description ?? row.description, 1_000),
       content,
     }];
+  }).sort((left, right) => {
+    const priority = pagePriority(new URL(left.url), requested) - pagePriority(new URL(right.url), requested);
+    return priority || left.url.localeCompare(right.url);
   }).slice(0, 5);
   if (!pages.length) throw new Error("The website provider returned no readable company pages.");
-  const combined = pages.map((page) => `${page.title ?? ""}\n${page.description ?? ""}\n${page.content}`).join("\n");
+  const combined = pages.map((page) => `${page.url}\n${page.title ?? ""}\n${page.description ?? ""}\n${page.content}`).join("\n");
   const title = pages.find((page) => page.title)?.title ?? null;
   const description = pages.find((page) => page.description)?.description
     ?? text(pages[0]?.content, 1_000);
   return {
     websiteUrl: requested.toString(),
-    canonicalDomain: requested.hostname.replace(/^www\./u, "").toLowerCase(),
+    canonicalDomain: normalizedHost(requested),
     pageCount: pages.length,
     pageUrls: unique(pages.map((page) => page.url), 5),
     title,
@@ -121,4 +141,25 @@ export function normalizeWebsiteEnrichment(
     socialLinks: socialLinksFrom(combined),
     contentHash: createHash("sha256").update(combined).digest("hex"),
   };
+}
+
+export const prospectingEnrichmentRegistry = Object.freeze({
+  website_enrichment: {
+    source: "website_enrichment",
+    actorId: WEBSITE_ENRICHMENT_ACTOR,
+    providerActorId: WEBSITE_ENRICHMENT_PROVIDER_ACTOR_ID,
+    build: WEBSITE_ENRICHMENT_BUILD,
+    version: WEBSITE_ENRICHMENT_ADAPTER_VERSION,
+    // The provider input hard-limits collection to the homepage plus four
+    // useful company pages. Normalisation still orders those pages defensively.
+    maxItems: 5,
+    buildInput: buildWebsiteEnrichmentInput,
+    normalize: normalizeWebsiteEnrichment,
+  } satisfies ProspectingEnrichmentAdapter,
+});
+
+export function getProspectingEnrichmentAdapter(
+  source: keyof typeof prospectingEnrichmentRegistry,
+): ProspectingEnrichmentAdapter {
+  return prospectingEnrichmentRegistry[source];
 }

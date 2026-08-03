@@ -1,4 +1,5 @@
 import type { ProspectingSource } from "@/lib/prospecting/types";
+import type { ProspectingActivityEventType } from "@/lib/prospecting/activity";
 
 export type ProspectingCampaignStatus = "ready" | "running" | "completed" | "failed" | "archived";
 export type ProspectingJobStatus = "queued" | "running" | "ingesting" | "done" | "error" | "cancelled";
@@ -30,6 +31,8 @@ export interface ProspectingCampaign {
   created_at: string;
   updated_at: string;
   archived_at: string | null;
+  search_fingerprint?: string | null;
+  owner_id?: string | null;
   latest_job?: ProspectingJob | null;
 }
 
@@ -44,9 +47,13 @@ export interface ProspectingJob {
   status: ProspectingJobStatus;
   provider_status: string | null;
   actor_id: string;
+  actor_provider_id: string | null;
+  actor_build_requested: string | null;
   actor_build_id: string | null;
   actor_run_id: string | null;
   actor_dataset_id: string | null;
+  input_payload: Record<string, unknown> | null;
+  input_hash: string | null;
   adapter_version: number;
   requested_results: number;
   returned_results: number;
@@ -73,6 +80,7 @@ export interface ProspectingLead {
   job_id: string;
   client_id: string;
   status: ProspectingLeadStatus;
+  assigned_to?: string | null;
   crm_contact_id: string | null;
   discovered_at: string;
   last_seen_at: string;
@@ -80,14 +88,36 @@ export interface ProspectingLead {
   fit_band: "strong" | "possible" | "weak" | null;
   fit_breakdown: {
     dimensions?: Record<string, { score: number; maximum: number }>;
-    criteria?: Record<string, number | boolean>;
+    criteria?: {
+      requiredMatched?: string[];
+      requiredMissing?: string[];
+      preferredMatched?: string[];
+      excludedMatched?: string[];
+      minimumRating?: number;
+      ratingObserved?: number | null;
+      minimumRatingApplicable?: boolean;
+      minimumRatingMet?: boolean;
+      minimumReviews?: number;
+      reviewsObserved?: number | null;
+      minimumReviewsApplicable?: boolean;
+      minimumReviewsMet?: boolean;
+      mustHaveWebsite?: boolean;
+      hasWebsite?: boolean;
+    };
+    coverage?: {
+      source?: string;
+      availableMaximum?: number;
+      normalizedForAvailableEvidence?: boolean;
+    };
     explanation?: string;
   };
   score_version: string | null;
   scored_at: string | null;
   latest_enrichment_id: string | null;
+  latest_enrichment_job_id?: string | null;
   latest_enrichment: ProspectingEnrichmentSnapshot | null;
   active_enrichment_job: ProspectingJob | null;
+  latest_enrichment_job?: ProspectingJob | null;
   prospect: {
     id: string;
     kind: "company" | "person";
@@ -147,4 +177,37 @@ export interface ProspectingCampaignPage {
     enrichments_started: number;
     enrichment_pages: number;
   };
+  active_jobs: ProspectingJob[];
+  collaborators: ProspectingCollaborator[];
+}
+
+export interface ProspectingCollaborator {
+  id: string;
+  full_name: string | null;
+  email: string;
+  role: "client_admin" | "va";
+}
+
+export interface ProspectingActivityEvent {
+  id: string;
+  client_id: string;
+  campaign_id: string | null;
+  lead_id: string | null;
+  job_id: string | null;
+  event_type: ProspectingActivityEventType;
+  actor_id: string | null;
+  actor_name: string | null;
+  campaign_name: string | null;
+  lead_name: string | null;
+  subject_user_id: string | null;
+  subject_name: string | null;
+  detail: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ProspectingActivityPage {
+  events: ProspectingActivityEvent[];
+  total: number;
+  offset: number;
+  limit: number;
 }

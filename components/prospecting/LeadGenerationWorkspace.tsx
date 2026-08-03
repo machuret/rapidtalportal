@@ -1,35 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import {
-  Archive,
-  Building2,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-  Globe2,
-  Info,
   Loader2,
-  MapPin,
-  Phone,
-  Play,
-  Search,
-  Star,
-  UserPlus,
-  X,
   StopCircle,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { errorMessage } from "@/lib/error-message";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/lib/api/routes";
+import { CampaignManager } from "@/components/prospecting/CampaignManager";
+import { LeadSearchForm } from "@/components/prospecting/LeadSearchForm";
+import {
+  LeadInbox,
+  type ProspectingFitFilter,
+  type ProspectingLeadSort,
+} from "@/components/prospecting/LeadInbox";
+import { ProspectingActivityTimeline } from "@/components/prospecting/ProspectingActivityTimeline";
+import { keywordList } from "@/components/prospecting/presentation";
+import {
+  discoverySourceCapabilities,
+  type EnabledDiscoverySource,
+} from "@/lib/prospecting/catalog";
 import type {
   ProspectingCampaign,
   ProspectingCampaignPage,
@@ -37,45 +30,15 @@ import type {
   ProspectingLead,
   ProspectingLeadPage,
   ProspectingLeadStatus,
+  ProspectingIdealProfile,
+  ProspectingActivityEvent,
+  ProspectingActivityPage,
+  ProspectingCollaborator,
 } from "@/types/prospecting";
 
-type Tab = "find" | "inbox" | "campaigns";
+type Tab = "find" | "inbox" | "campaigns" | "activity";
 const TERMINAL = new Set(["done", "error", "cancelled"]);
 const PAGE_SIZE = 30;
-
-function keywordList(value: string): string[] {
-  return Array.from(new Set(value.split(",").map((item) => item.trim()).filter(Boolean))).slice(0, 12);
-}
-
-function fitClass(band: ProspectingLead["fit_band"]): string {
-  if (band === "strong") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-  if (band === "possible") return "border-amber-500/30 bg-amber-500/10 text-amber-300";
-  return "border-zinc-700 bg-zinc-800 text-zinc-300";
-}
-
-function statusLabel(status: string): string {
-  return ({
-    ready: "Ready",
-    running: "Collecting",
-    completed: "Completed",
-    failed: "Needs retry",
-    done: "Completed",
-    error: "Needs retry",
-    cancelled: "Cancelled",
-    new: "New",
-    shortlisted: "Shortlisted",
-    dismissed: "Dismissed",
-    imported: "In CRM",
-  } as Record<string, string>)[status] ?? status;
-}
-
-function statusClass(status: string): string {
-  if (["completed", "done", "imported"].includes(status)) return "bg-emerald-500/10 text-emerald-300 border-emerald-500/20";
-  if (["running", "queued", "ingesting"].includes(status)) return "bg-blue-500/10 text-blue-300 border-blue-500/20";
-  if (["failed", "error"].includes(status)) return "bg-red-500/10 text-red-300 border-red-500/20";
-  if (status === "shortlisted") return "bg-orange-500/10 text-orange-300 border-orange-500/20";
-  return "bg-zinc-800 text-zinc-300 border-zinc-700";
-}
 
 export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   const [tab, setTab] = useState<Tab>("find");
@@ -84,10 +47,16 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [filter, setFilter] = useState<ProspectingLeadStatus | "all">("all");
+  const [fitFilter, setFitFilter] = useState<ProspectingFitFilter>("all");
+  const [leadSort, setLeadSort] = useState<ProspectingLeadSort>("fit");
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [activeJobs, setActiveJobs] = useState<ProspectingJob[]>([]);
   const [campaignTotal, setCampaignTotal] = useState(0);
+  const [collaborators, setCollaborators] = useState<ProspectingCollaborator[]>([]);
+  const [activity, setActivity] = useState<ProspectingActivityEvent[]>([]);
+  const [activityTotal, setActivityTotal] = useState(0);
+  const [loadingActivity, setLoadingActivity] = useState(false);
   const [usage, setUsage] = useState<ProspectingCampaignPage["usage"]>({
     runs_started: 0,
     results_reserved: 0,
@@ -99,7 +68,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   const [pollIssue, setPollIssue] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
-  const [source, setSource] = useState<"google_maps" | "google_search">("google_maps");
+  const [source, setSource] = useState<EnabledDiscoverySource>("google_maps");
   const [maxResults, setMaxResults] = useState(20);
   const [showMatching, setShowMatching] = useState(false);
   const [requiredKeywords, setRequiredKeywords] = useState("");
@@ -110,6 +79,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   const [mustHaveWebsite, setMustHaveWebsite] = useState(false);
   const [starting, setStarting] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [selectedContacts, setSelectedContacts] = useState<Record<string, { email: string; phone: string }>>({});
   const pollBusy = useRef(false);
   const pollFailures = useRef(0);
   const startBusy = useRef(false);
@@ -119,8 +89,8 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     activeJobsRef.current = activeJobs;
   }, [activeJobs]);
 
-  const loadCampaigns = useCallback(async (nextOffset = 0, append = false) => {
-    if (!append) setLoadingCampaigns(true);
+  const loadCampaigns = useCallback(async (nextOffset = 0, append = false, silent = false) => {
+    if (!append && !silent) setLoadingCampaigns(true);
     try {
       const result = await api.get<ProspectingCampaignPage>(
         ROUTES.prospecting.campaignsForClient(clientId, nextOffset),
@@ -128,33 +98,64 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
       );
       setCampaigns((current) => append ? [...current, ...result.campaigns] : result.campaigns);
       setCampaignTotal(result.total);
+      setCollaborators(result.collaborators ?? []);
       setUsage(result.usage);
-      const running = result.campaigns.map((campaign) => campaign.latest_job)
-        .filter((job): job is ProspectingJob => Boolean(job && !TERMINAL.has(job.status)));
       setActiveJobs((current) => {
-        const retained = append ? current : current.filter((job) => job.job_type === "enrichment");
+        const retained = append ? current : [];
         const byId = new Map(retained.map((job) => [job.id, job]));
-        for (const job of running) byId.set(job.id, job);
+        for (const job of result.active_jobs ?? []) byId.set(job.id, job);
         return Array.from(byId.values());
       });
+      return result;
     } catch (error) {
-      toast.error(errorMessage(error, "Campaigns could not be loaded."));
+      if (!silent) toast.error(errorMessage(error, "Campaigns could not be loaded."));
+      return null;
     } finally {
-      setLoadingCampaigns(false);
+      if (!silent) setLoadingCampaigns(false);
+    }
+  }, [clientId]);
+
+  const loadActivity = useCallback(async (nextOffset = 0, append = false) => {
+    setLoadingActivity(true);
+    try {
+      const result = await api.get<ProspectingActivityPage>(
+        ROUTES.prospecting.activityForClient(clientId, nextOffset),
+        { showErrorToast: false },
+      );
+      setActivity((current) => append ? [...current, ...result.events] : result.events);
+      setActivityTotal(result.total);
+    } catch (error) {
+      toast.error(errorMessage(error, "Lead activity could not be loaded."));
+    } finally {
+      setLoadingActivity(false);
     }
   }, [clientId]);
 
   const loadLeads = useCallback(async (
     nextOffset: number,
     nextFilter: ProspectingLeadStatus | "all",
+    nextFit: ProspectingFitFilter,
+    nextSort: ProspectingLeadSort,
   ) => {
     setLoadingLeads(true);
     try {
       const result = await api.get<ProspectingLeadPage>(
-        ROUTES.prospecting.leadsPage(clientId, nextFilter, nextOffset, PAGE_SIZE),
+        ROUTES.prospecting.leadsPage(clientId, nextFilter, nextFit, nextSort, nextOffset, PAGE_SIZE),
         { showErrorToast: false },
       );
       setLeads(result.leads);
+      setSelectedContacts((current) => {
+        const next: typeof current = {};
+        for (const lead of result.leads) {
+          const selected = current[lead.id];
+          if (!selected || !lead.latest_enrichment) continue;
+          next[lead.id] = {
+            email: lead.latest_enrichment.emails.includes(selected.email) ? selected.email : "",
+            phone: lead.latest_enrichment.phones.includes(selected.phone) ? selected.phone : "",
+          };
+        }
+        return next;
+      });
       setTotal(result.total);
       setOffset(result.offset);
       const enriching = result.leads.map((lead) => lead.active_enrichment_job)
@@ -166,67 +167,53 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
           return Array.from(byId.values());
         });
       }
+      return result;
     } catch (error) {
       toast.error(errorMessage(error, "Lead Inbox could not be loaded."));
+      return null;
     } finally {
       setLoadingLeads(false);
     }
   }, [clientId]);
 
   useEffect(() => {
-    void Promise.all([loadCampaigns(), loadLeads(0, "all")]);
+    void Promise.all([loadCampaigns(), loadLeads(0, "all", "all", "fit")]);
   }, [loadCampaigns, loadLeads]);
 
   const activeJobKey = activeJobs.map((job) => job.id).sort().join(",");
   useEffect(() => {
     if (!activeJobKey) return;
-    const advance = async () => {
+    const refreshProgress = async () => {
       if (pollBusy.current) return;
       pollBusy.current = true;
       try {
-        const settled = await Promise.allSettled(activeJobsRef.current.map(async (activeJob) => {
-          const result = await api.post<{ job: ProspectingJob | null; busy: boolean }>(
-            ROUTES.prospecting.advance(),
-            { clientId, jobId: activeJob.id },
-            { showErrorToast: false },
-          );
-          return result.job;
-        }));
-        const results = settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
-        const failedRefreshes = settled.filter((result) => result.status === "rejected").length;
-        if (failedRefreshes === 0) {
+        const previousJobs = [...activeJobsRef.current];
+        const result = await loadCampaigns(0, false, true);
+        if (result) {
           pollFailures.current = 0;
           setPollIssue(null);
+          const nextIds = new Set((result.active_jobs ?? []).map((job) => job.id));
+          const finished = previousJobs.filter((job) => !nextIds.has(job.id));
+          if (finished.length) {
+            const leadPage = await loadLeads(offset, filter, fitFilter, leadSort);
+            for (const job of finished) {
+              if (job.job_type === "enrichment") {
+                const finalJob = leadPage?.leads.find((lead) => lead.latest_enrichment_job?.id === job.id)?.latest_enrichment_job;
+                if (finalJob?.status === "done") toast.success("Company enrichment finished. The new details are ready to review.");
+                else if (finalJob?.status === "error") toast.error(finalJob.error_message || "Company enrichment failed. Open the lead to see what happened and try again.");
+                else if (finalJob?.status === "cancelled") toast.info("Company enrichment was cancelled.");
+              } else {
+                const finalJob = result.campaigns.find((campaign) => campaign.latest_job?.id === job.id)?.latest_job;
+                if (finalJob?.status === "done") toast.success(`Lead collection finished with ${finalJob.returned_results} usable ${finalJob.returned_results === 1 ? "lead" : "leads"}.`);
+                else if (finalJob?.status === "error") toast.error(finalJob.error_message || "Lead collection failed. Open Campaigns to retry it.");
+                else if (finalJob?.status === "cancelled") toast.info("Lead collection was cancelled.");
+              }
+            }
+          }
         } else {
           pollFailures.current += 1;
           if (!navigator.onLine) setPollIssue("You are offline. Collection is continuing in the background.");
           else if (pollFailures.current >= 3) setPollIssue("Some collection progress cannot be refreshed right now. Background recovery is still running.");
-        }
-        let refreshLeads = false;
-        for (const job of results) {
-          if (!job) continue;
-          if (job.status === "done") {
-            toast.success(job.job_type === "enrichment"
-              ? "Company enrichment is ready. Its fit score has been refreshed."
-              : `${job.returned_results} leads are ready to review.`);
-            refreshLeads = true;
-          } else if (job.status === "error") {
-            toast.error(job.error_message || (job.job_type === "enrichment"
-              ? "Company enrichment did not finish. Try enriching this lead again."
-              : "Lead collection did not finish. Run the campaign again."));
-            if (job.job_type === "enrichment") refreshLeads = true;
-          } else if (job.status === "cancelled") {
-            toast.success(job.job_type === "enrichment" ? "Company enrichment cancelled." : "Lead collection cancelled.");
-            if (job.job_type === "enrichment") refreshLeads = true;
-          }
-        }
-        setActiveJobs((current) => current.map((currentJob) =>
-          results.find((job) => job?.id === currentJob.id) ?? currentJob
-        ).filter((job) => !TERMINAL.has(job.status)));
-        if (results.some((job) => job && TERMINAL.has(job.status))) await loadCampaigns();
-        if (refreshLeads) {
-          setTab("inbox");
-          await loadLeads(0, "all");
         }
       } catch {
         pollFailures.current += 1;
@@ -236,15 +223,29 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
         pollBusy.current = false;
       }
     };
-    void advance();
-    const timer = window.setInterval(() => void advance(), 4_000);
+    void refreshProgress();
+    const timer = window.setInterval(() => void refreshProgress(), 5_000);
     return () => window.clearInterval(timer);
-  }, [activeJobKey, clientId, loadCampaigns, loadLeads]);
+  }, [activeJobKey, clientId, filter, fitFilter, leadSort, loadCampaigns, loadLeads, offset]);
 
   async function createAndRun() {
     if (startBusy.current) return;
     if (query.trim().length < 2 || location.trim().length < 2) {
       toast.error("Add what you are looking for and where to search.");
+      return;
+    }
+    const normalizeSearchPart = (value: string) => value.trim().replace(/\s+/gu, " ").toLowerCase();
+    const existing = campaigns.find((campaign) => (
+      campaign.source === source
+      && campaign.max_results === maxResults
+      && campaign.queries.length === 1
+      && normalizeSearchPart(campaign.queries[0] ?? "") === normalizeSearchPart(query)
+      && campaign.locations.length === 1
+      && normalizeSearchPart(campaign.locations[0] ?? "") === normalizeSearchPart(location)
+    ));
+    if (existing) {
+      setTab("campaigns");
+      toast.info(`“${existing.name}” already contains this search. Choose Run again to refresh it.`);
       return;
     }
     startBusy.current = true;
@@ -313,6 +314,24 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     }
   }
 
+  async function updateCampaignProfile(campaign: ProspectingCampaign, idealProfile: ProspectingIdealProfile) {
+    setPendingAction(`profile:${campaign.id}`);
+    try {
+      const result = await api.patch<{ campaign: ProspectingCampaign }>(ROUTES.prospecting.campaigns(), {
+        clientId,
+        id: campaign.id,
+        idealProfile,
+      });
+      setCampaigns((current) => current.map((item) => item.id === campaign.id ? result.campaign : item));
+      toast.success("Matching rules saved and existing leads rescored.");
+      await loadLeads(0, filter, fitFilter, leadSort);
+    } catch (error) {
+      toast.error(errorMessage(error, "Matching rules could not be saved."));
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   async function updateLead(lead: ProspectingLead, status: "new" | "shortlisted" | "dismissed") {
     setPendingAction(`${status}:${lead.id}`);
     try {
@@ -330,10 +349,48 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     }
   }
 
+  async function assignLead(lead: ProspectingLead, assignedTo: string | null) {
+    setPendingAction(`assign:${lead.id}`);
+    try {
+      const result = await api.patch<{ lead: ProspectingLead }>(ROUTES.prospecting.leads(), {
+        clientId, id: lead.id, assignedTo,
+      });
+      setLeads((current) => current.map((item) => item.id === lead.id
+        ? { ...item, assigned_to: result.lead.assigned_to }
+        : item));
+      toast.success(assignedTo ? "Lead assigned." : "Lead unassigned.");
+    } catch (error) {
+      toast.error(errorMessage(error, "Lead assignment could not be saved."));
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function assignCampaign(campaign: ProspectingCampaign, ownerId: string | null) {
+    setPendingAction(`owner:${campaign.id}`);
+    try {
+      const result = await api.patch<{ campaign: ProspectingCampaign }>(ROUTES.prospecting.campaigns(), {
+        clientId, id: campaign.id, ownerId,
+      });
+      setCampaigns((current) => current.map((item) => item.id === campaign.id ? result.campaign : item));
+      toast.success(ownerId ? "Campaign owner updated." : "Campaign owner removed.");
+    } catch (error) {
+      toast.error(errorMessage(error, "Campaign owner could not be saved."));
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   async function promoteLead(lead: ProspectingLead) {
     setPendingAction(`promote:${lead.id}`);
     try {
-      await api.post(ROUTES.prospecting.promote(), { clientId, leadId: lead.id });
+      const selected = selectedContacts[lead.id];
+      await api.post(ROUTES.prospecting.promote(), {
+        clientId,
+        leadId: lead.id,
+        selectedEmail: selected?.email || null,
+        selectedPhone: selected?.phone || null,
+      });
       if (filter !== "all" && filter !== "imported") {
         setLeads((current) => current.filter((item) => item.id !== lead.id));
         setTotal((current) => Math.max(0, current - 1));
@@ -376,7 +433,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
       });
       if (TERMINAL.has(result.job.status)) {
         setActiveJobs((current) => current.filter((item) => item.id !== job.id));
-        await Promise.all([loadCampaigns(), loadLeads(offset, filter)]);
+        await Promise.all([loadCampaigns(), loadLeads(offset, filter, fitFilter, leadSort)]);
       } else {
         setActiveJobs((current) => current.map((item) => item.id === job.id ? result.job : item));
       }
@@ -401,13 +458,17 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
           ["find", "Find Leads"],
           ["inbox", "Lead Inbox"],
           ["campaigns", "Campaigns"],
+          ["activity", "Activity"],
         ] as Array<[Tab, string]>).map(([value, label]) => (
           <button
             key={value}
             type="button"
             role="tab"
             aria-selected={tab === value}
-            onClick={() => setTab(value)}
+            onClick={() => {
+              setTab(value);
+              if (value === "activity") void loadActivity();
+            }}
             className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
               tab === value ? "bg-orange-500 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
             }`}
@@ -453,278 +514,104 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
       {pollIssue && <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200" role="alert">{pollIssue}</p>}
 
       {tab === "find" && (
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 md:p-6">
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-white">Who do you want to find?</h2>
-            <p className="mt-1 text-sm text-zinc-400">Describe the business type and location. Everything else is optional.</p>
-          </div>
-          <div className="grid gap-5 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="lead-query">Business type or service</Label>
-              <Input id="lead-query" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="e.g. Mortgage brokers" maxLength={300} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lead-location">Location</Label>
-              <Input id="lead-location" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="e.g. Sydney, Australia" maxLength={300} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lead-source">Where to search</Label>
-              <select
-                id="lead-source"
-                value={source}
-                onChange={(event) => setSource(event.target.value as typeof source)}
-                className="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 focus:border-orange-500 focus:outline-none"
-              >
-                <option value="google_maps">Google Maps — best for local businesses</option>
-                <option value="google_search">Web search — broader company discovery</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lead-count">How many results?</Label>
-              <select
-                id="lead-count"
-                value={maxResults}
-                onChange={(event) => setMaxResults(Number(event.target.value))}
-                className="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 focus:border-orange-500 focus:outline-none"
-              >
-                {[10, 20, 50, 100].map((value) => <option key={value} value={value}>{value} leads</option>)}
-              </select>
-            </div>
-          </div>
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Button onClick={() => void createAndRun()} disabled={starting}>
-              {starting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-              Find leads
-            </Button>
-              <p className="text-xs text-zinc-500">Results are reviewed here first. Nothing is added to CRM automatically.</p>
-            </div>
-            {source === "google_search" && (
-              <p className="mt-3 text-xs text-amber-300">Web search is broader and may return website candidates that need closer review.</p>
-            )}
-            <div className="mt-5 border-t border-zinc-800 pt-5">
-              <button type="button" className="flex items-center gap-2 text-sm font-medium text-zinc-200 hover:text-white" onClick={() => setShowMatching((value) => !value)} aria-expanded={showMatching}>
-                <Sparkles className="h-4 w-4 text-orange-400" />
-                {showMatching ? "Hide ideal-customer matching" : "Improve matching (optional)"}
-              </button>
-              {showMatching && (
-                <div className="mt-4 grid gap-4 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="lead-required">Required terms</Label>
-                    <Input id="lead-required" value={requiredKeywords} onChange={(event) => setRequiredKeywords(event.target.value)} placeholder="e.g. commercial lending, brokers" />
-                    <p className="text-2xs text-zinc-500">Comma-separated. Missing required terms caps the fit score.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lead-preferred">Preferred terms</Label>
-                    <Input id="lead-preferred" value={preferredKeywords} onChange={(event) => setPreferredKeywords(event.target.value)} placeholder="e.g. property, private credit" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lead-excluded">Exclude terms</Label>
-                    <Input id="lead-excluded" value={excludedKeywords} onChange={(event) => setExcludedKeywords(event.target.value)} placeholder="e.g. residential only, recruitment" />
-                    <p className="text-2xs text-zinc-500">A matched exclusion caps the result as a weak fit.</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="lead-rating">Minimum rating</Label>
-                      <select id="lead-rating" value={minRating} onChange={(event) => setMinRating(Number(event.target.value))} className="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm">
-                        {[0, 3.5, 4, 4.5].map((value) => <option key={value} value={value}>{value ? `${value}+` : "Any"}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lead-reviews">Minimum reviews</Label>
-                      <select id="lead-reviews" value={minReviewCount} onChange={(event) => setMinReviewCount(Number(event.target.value))} className="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm">
-                        {[0, 10, 25, 50, 100].map((value) => <option key={value} value={value}>{value || "Any"}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <label className="flex items-center gap-2 text-sm text-zinc-300 md:col-span-2">
-                    <input type="checkbox" checked={mustHaveWebsite} onChange={(event) => setMustHaveWebsite(event.target.checked)} className="h-4 w-4 rounded border-zinc-700 bg-zinc-900" />
-                    A website is required for a good fit
-                  </label>
-                  <p className="flex items-start gap-2 text-xs text-zinc-500 md:col-span-2"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />Fit scores are rule-based and show their components. Enrichment improves the evidence; it never changes your criteria.</p>
-                </div>
-              )}
-            </div>
-        </section>
+        <LeadSearchForm
+          query={query}
+          location={location}
+          source={source}
+          maxResults={maxResults}
+          starting={starting}
+          showMatching={showMatching}
+          requiredKeywords={requiredKeywords}
+          preferredKeywords={preferredKeywords}
+          excludedKeywords={excludedKeywords}
+          minRating={minRating}
+          minReviewCount={minReviewCount}
+          mustHaveWebsite={mustHaveWebsite}
+          onQuery={setQuery}
+          onLocation={setLocation}
+          onSource={(nextSource) => {
+            setSource(nextSource);
+            if (!discoverySourceCapabilities(nextSource).supportsRatings) {
+              setMinRating(0);
+              setMinReviewCount(0);
+            }
+          }}
+          onMaxResults={setMaxResults}
+          onToggleMatching={() => setShowMatching((value) => !value)}
+          onRequiredKeywords={setRequiredKeywords}
+          onPreferredKeywords={setPreferredKeywords}
+          onExcludedKeywords={setExcludedKeywords}
+          onMinRating={setMinRating}
+          onMinReviewCount={setMinReviewCount}
+          onMustHaveWebsite={setMustHaveWebsite}
+          onSubmit={() => void createAndRun()}
+        />
       )}
 
       {tab === "inbox" && (
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-white">Lead Inbox</h2>
-              <p className="text-sm text-zinc-400">Review, shortlist or add suitable companies to CRM.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="lead-status" className="sr-only">Filter lead status</Label>
-              <select
-                id="lead-status"
-                value={filter}
-                onChange={(event) => {
-                  const next = event.target.value as typeof filter;
-                  setFilter(next);
-                  void loadLeads(0, next);
-                }}
-                className="h-9 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-200"
-              >
-                <option value="all">All leads</option>
-                <option value="new">New</option>
-                <option value="shortlisted">Shortlisted</option>
-                <option value="imported">In CRM</option>
-                <option value="dismissed">Dismissed</option>
-              </select>
-            </div>
-          </div>
-          {loadingLeads ? (
-            <div className="flex min-h-48 items-center justify-center rounded-xl border border-zinc-800"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" aria-label="Loading leads" /></div>
-          ) : leads.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-700 p-10 text-center">
-              <Building2 className="mx-auto h-9 w-9 text-zinc-600" />
-              <p className="mt-3 font-medium text-zinc-200">No leads in this view</p>
-              <p className="mt-1 text-sm text-zinc-500">Run a search or choose a different status.</p>
-              <Button variant="outline" className="mt-4" onClick={() => setTab("find")}>Find leads</Button>
-            </div>
-          ) : (
-            <>
-              <div className="grid gap-3">
-                {leads.map((lead) => {
-                  const prospect = lead.prospect;
-                  const title = prospect.person_name || prospect.company_name || "Unnamed lead";
-                  const busy = pendingAction?.endsWith(lead.id);
-                  return (
-                    <article key={lead.id} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-                      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-semibold text-zinc-100">{title}</h3>
-                            <span className={`rounded-full border px-2 py-0.5 text-2xs font-medium ${statusClass(lead.status)}`}>{statusLabel(lead.status)}</span>
-                            <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-2xs text-zinc-400">{lead.campaign.name}</span>
-                            {lead.fit_score !== null && (
-                              <span className={`rounded-full border px-2 py-0.5 text-2xs font-semibold ${fitClass(lead.fit_band)}`}>
-                                {lead.fit_score}/100 · {lead.fit_band ?? "unrated"} fit
-                              </span>
-                            )}
-                          </div>
-                          {prospect.industry && <p className="mt-1 text-xs text-zinc-400">{prospect.industry}</p>}
-                          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zinc-400">
-                            {(prospect.address || prospect.locality) && <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{prospect.address || prospect.locality}</span>}
-                            {prospect.phone && <a className="flex items-center gap-1.5 hover:text-white" href={`tel:${prospect.phone}`}><Phone className="h-3.5 w-3.5" />{prospect.phone}</a>}
-                            {prospect.rating !== null && <span className="flex items-center gap-1.5"><Star className="h-3.5 w-3.5 text-amber-400" />{prospect.rating}{prospect.review_count ? ` (${prospect.review_count})` : ""}</span>}
-                            {prospect.website_url && <a className="flex items-center gap-1.5 text-orange-300 hover:text-orange-200" href={prospect.website_url} target="_blank" rel="noreferrer">Website <ExternalLink className="h-3.5 w-3.5" /></a>}
-                          </div>
-                          {lead.fit_breakdown?.explanation && <p className="mt-2 text-xs text-zinc-400">{lead.fit_breakdown.explanation}</p>}
-                          {lead.fit_breakdown?.dimensions && (
-                            <details className="mt-2 text-xs text-zinc-500">
-                              <summary className="cursor-pointer hover:text-zinc-300">Why this score</summary>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {Object.entries(lead.fit_breakdown.dimensions).map(([name, value]) => (
-                                  <span key={name} className="rounded-md bg-zinc-950 px-2 py-1">{name.replace(/([A-Z])/gu, " $1")}: {value.score}/{value.maximum}</span>
-                                ))}
-                              </div>
-                            </details>
-                          )}
-                          {lead.latest_enrichment && (
-                            <p className="mt-2 flex items-center gap-1.5 text-xs text-blue-300">
-                              <Globe2 className="h-3.5 w-3.5" />
-                              Enriched from {lead.latest_enrichment.page_count} company pages
-                              {lead.latest_enrichment.emails.length ? ` · ${lead.latest_enrichment.emails.length} email found` : ""}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {prospect.website_url && lead.status !== "imported" && (
-                            <Button size="sm" variant="outline" disabled={busy || Boolean(lead.active_enrichment_job)} onClick={() => void enrichLead(lead)}>
-                              {pendingAction === `enrich:${lead.id}` || lead.active_enrichment_job
-                                ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-                              {lead.active_enrichment_job ? "Enriching" : lead.latest_enrichment ? "Refresh details" : "Enrich company"}
-                            </Button>
-                          )}
-                          {lead.status !== "shortlisted" && lead.status !== "imported" && (
-                            <Button size="sm" variant="outline" disabled={busy} onClick={() => void updateLead(lead, "shortlisted")}><Check className="mr-1.5 h-3.5 w-3.5" />Shortlist</Button>
-                          )}
-                          {lead.status !== "dismissed" && lead.status !== "imported" && (
-                            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void updateLead(lead, "dismissed")}><X className="mr-1.5 h-3.5 w-3.5" />Dismiss</Button>
-                          )}
-                          {lead.status === "dismissed" && (
-                            <Button size="sm" variant="outline" disabled={busy} onClick={() => void updateLead(lead, "new")}>Restore</Button>
-                          )}
-                          {lead.status === "imported" ? (
-                            <Link href="/crm" className={cn(buttonVariants({ size: "sm", variant: "outline" }))}>View CRM</Link>
-                          ) : (
-                            <Button size="sm" disabled={busy} onClick={() => void promoteLead(lead)}>
-                              {pendingAction === `promote:${lead.id}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <UserPlus className="mr-1.5 h-3.5 w-3.5" />}
-                              Add to CRM
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-              <div className="flex items-center justify-between text-xs text-zinc-500">
-                <span>Showing {offset + 1}–{Math.min(offset + leads.length, total)} of {total}</span>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" aria-label="Previous lead page" disabled={offset === 0} onClick={() => void loadLeads(Math.max(0, offset - PAGE_SIZE), filter)}><ChevronLeft className="h-4 w-4" /></Button>
-                  <Button size="sm" variant="outline" aria-label="Next lead page" disabled={offset + PAGE_SIZE >= total} onClick={() => void loadLeads(offset + PAGE_SIZE, filter)}><ChevronRight className="h-4 w-4" /></Button>
-                </div>
-              </div>
-            </>
-          )}
-        </section>
+        <LeadInbox
+          leads={leads}
+          total={total}
+          offset={offset}
+          pageSize={PAGE_SIZE}
+          loading={loadingLeads}
+          filter={filter}
+          fitFilter={fitFilter}
+          sort={leadSort}
+          collaborators={collaborators}
+          pendingAction={pendingAction}
+          selectedContacts={selectedContacts}
+          onFilter={(next) => {
+            setFilter(next);
+            void loadLeads(0, next, fitFilter, leadSort);
+          }}
+          onFitFilter={(next) => {
+            setFitFilter(next);
+            void loadLeads(0, filter, next, leadSort);
+          }}
+          onSort={(next) => {
+            setLeadSort(next);
+            void loadLeads(0, filter, fitFilter, next);
+          }}
+          onFindLeads={() => setTab("find")}
+          onPage={(nextOffset) => void loadLeads(nextOffset, filter, fitFilter, leadSort)}
+          onSelectEmail={(leadId, email) => setSelectedContacts((current) => ({
+            ...current,
+            [leadId]: { email, phone: current[leadId]?.phone ?? "" },
+          }))}
+          onSelectPhone={(leadId, phone) => setSelectedContacts((current) => ({
+            ...current,
+            [leadId]: { email: current[leadId]?.email ?? "", phone },
+          }))}
+          onAssign={(lead, assignee) => void assignLead(lead, assignee)}
+          onEnrich={(lead) => void enrichLead(lead)}
+          onStatus={(lead, status) => void updateLead(lead, status)}
+          onPromote={(lead) => void promoteLead(lead)}
+        />
+      )}
+      {tab === "campaigns" && (
+        <CampaignManager
+          campaigns={campaigns}
+          total={campaignTotal}
+          usage={usage}
+          collaborators={collaborators}
+          loading={loadingCampaigns}
+          pendingAction={pendingAction}
+          onRun={(campaign) => void runCampaign(campaign)}
+          onArchive={(campaign) => void archiveCampaign(campaign)}
+          onAssign={(campaign, ownerId) => void assignCampaign(campaign, ownerId)}
+          onUpdateProfile={updateCampaignProfile}
+          onLoadMore={() => void loadCampaigns(campaigns.length, true)}
+        />
       )}
 
-      {tab === "campaigns" && (
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-white">Campaigns</h2>
-              <p className="text-sm text-zinc-400">Reuse successful searches without entering the criteria again.</p>
-            </div>
-            <p className="text-xs text-zinc-500">
-              Today: {usage.runs_started} searches · {usage.results_returned} leads · {usage.enrichments_started} enrichments · ${Number(usage.reported_cost_usd).toFixed(2)} reported cost
-            </p>
-          </div>
-          {loadingCampaigns ? (
-            <div className="flex min-h-40 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" aria-label="Loading campaigns" /></div>
-          ) : campaigns.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-700 p-8 text-center text-sm text-zinc-400">No campaigns yet. Your first search will be saved automatically.</div>
-          ) : (
-            <div className="grid gap-3">
-              {campaigns.map((campaign) => {
-                const job = campaign.latest_job;
-                const busy = pendingAction?.endsWith(campaign.id) || campaign.status === "running";
-                return (
-                  <article key={campaign.id} className="flex flex-col justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 md:flex-row md:items-center">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-medium text-zinc-100">{campaign.name}</h3>
-                        <span className={`rounded-full border px-2 py-0.5 text-2xs ${statusClass(campaign.status)}`}>{statusLabel(campaign.status)}</span>
-                      </div>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        {campaign.source === "google_maps" ? "Google Maps" : "Web search"} · Up to {campaign.max_results} results
-                        {job?.status === "done" ? ` · ${job.returned_results} found` : ""}
-                      </p>
-                      {job?.error_message && <p className="mt-1 text-xs text-red-300">{job.error_message}</p>}
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" disabled={busy} onClick={() => void runCampaign(campaign)}>
-                        {pendingAction === `run:${campaign.id}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1.5 h-3.5 w-3.5" />}
-                        Run again
-                      </Button>
-                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => void archiveCampaign(campaign)}><Archive className="mr-1.5 h-3.5 w-3.5" />Archive</Button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-          {!loadingCampaigns && campaigns.length < campaignTotal && (
-            <div className="flex justify-center">
-              <Button variant="outline" onClick={() => void loadCampaigns(campaigns.length, true)}>Load more campaigns</Button>
-            </div>
-          )}
-        </section>
+      {tab === "activity" && (
+        <ProspectingActivityTimeline
+          events={activity}
+          total={activityTotal}
+          loading={loadingActivity}
+          onLoadMore={() => void loadActivity(activity.length, true)}
+        />
       )}
     </div>
   );

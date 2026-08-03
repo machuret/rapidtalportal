@@ -1,0 +1,50 @@
+{
+  "google_maps": {
+    "enabled": true,
+    "kind": "discovery",
+    "label": "Google Maps",
+    "description": "Best for local businesses",
+    "supportsRatings": true,
+    "supportsReviewCounts": true,
+    "actorId": "compass~crawler-google-places",
+    "providerActorId": "nwua9Gu5YrADL7ZDj",
+    "build": "0.14.723",
+    "adapterVersion": 2
+  },
+  "google_search": {
+    "enabled": true,
+    "kind": "discovery",
+    "label": "Web search",
+    "description": "Broader company discovery",
+    "supportsRatings": false,
+    "supportsReviewCounts": false,
+    "actorId": "apify~google-search-scraper",
+    "providerActorId": "nFJndFXA5zjCTuudP",
+    "build": "0.0.418",
+    "adapterVersion": 2
+  },
+  "linkedin_profiles": {
+    "enabled": false,
+    "kind": "discovery",
+    "label": "LinkedIn people",
+    "description": "Person discovery for a later controlled release",
+    "supportsRatings": false,
+    "supportsReviewCounts": false,
+    "actorId": "harvestapi~linkedin-profile-search",
+    "providerActorId": "M2FMdjRVeF1HPGFcc",
+    "build": "0.0.249",
+    "adapterVersion": 1
+  },
+  "website_enrichment": {
+    "enabled": true,
+    "kind": "enrichment",
+    "label": "Company website enrichment",
+    "description": "Collects a small, prioritised set of public company pages",
+    "supportsRatings": false,
+    "supportsReviewCounts": false,
+    "actorId": "apify/website-content-crawler",
+    "providerActorId": "aYG0l9s7dbB7j3gbS",
+    "build": "0.3.93",
+    "adapterVersion": 1
+  }
+}

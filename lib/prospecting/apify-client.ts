@@ -139,7 +139,17 @@ export async function startApifyActorRun(options: StartApifyActorRunOptions): Pr
     method: "POST",
     body: JSON.stringify(options.input),
   });
-  return parseRun(json);
+  try {
+    return parseRun(json);
+  } catch (error) {
+    // A 2xx POST may already have created a paid run even if its response was
+    // malformed. Keep the job recoverable through its signed webhook instead
+    // of treating this as a definitive no-run failure and starting a duplicate.
+    if (error instanceof ApifyClientError) {
+      throw new ApifyClientError(error.message, error.status, error.retryable, true);
+    }
+    throw error;
+  }
 }
 
 export async function getApifyActorRun(runId: string): Promise<ApifyActorRun> {

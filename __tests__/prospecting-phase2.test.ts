@@ -7,12 +7,14 @@ import {
 } from "@/lib/prospecting/enrichment";
 
 describe("Lead Generation Phase 2 company enrichment", () => {
-  test("uses the maintained Apify crawler with a hard five-page boundary", () => {
+  test("uses a bounded candidate crawl before selecting the five best company pages", () => {
     expect(WEBSITE_ENRICHMENT_ACTOR).toBe("apify/website-content-crawler");
     expect(buildWebsiteEnrichmentInput("https://example.com/about")).toMatchObject({
       startUrls: [{ url: "https://example.com/about" }],
       maxCrawlDepth: 1,
       maxCrawlPages: 5,
+      maxResults: 5,
+      crawlerType: "cheerio",
       useSitemaps: false,
       saveHtml: false,
     });

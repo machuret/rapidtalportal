@@ -6097,6 +6097,7 @@ export type Database = {
           job_id: string
           last_seen_at: string
           latest_enrichment_id: string | null
+          latest_enrichment_job_id: string | null
           prospect_id: string
           score_version: string | null
           scored_at: string | null
@@ -6115,6 +6116,7 @@ export type Database = {
           job_id: string
           last_seen_at?: string
           latest_enrichment_id?: string | null
+          latest_enrichment_job_id?: string | null
           prospect_id: string
           score_version?: string | null
           scored_at?: string | null
@@ -6133,6 +6135,7 @@ export type Database = {
           job_id?: string
           last_seen_at?: string
           latest_enrichment_id?: string | null
+          latest_enrichment_job_id?: string | null
           prospect_id?: string
           score_version?: string | null
           scored_at?: string | null
@@ -6174,6 +6177,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "prospecting_enrichment_snapshots"
             referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "prospecting_campaign_leads_latest_enrichment_job_fkey"
+            columns: ["latest_enrichment_job_id"]
+            isOneToOne: false
+            referencedRelation: "prospecting_jobs"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "prospecting_campaign_leads_prospect_id_client_id_fkey"
@@ -6380,8 +6390,10 @@ export type Database = {
       prospecting_jobs: {
         Row: {
           actor_build_id: string | null
+          actor_build_requested: string | null
           actor_dataset_id: string | null
           actor_id: string
+          actor_provider_id: string | null
           actor_run_id: string | null
           adapter_version: number
           campaign_id: string
@@ -6396,6 +6408,8 @@ export type Database = {
           error_message: string | null
           failure_count: number
           id: string
+          input_hash: string | null
+          input_payload: Json | null
           job_type: string
           lead_id: string | null
           lease_token: string | null
@@ -6417,8 +6431,10 @@ export type Database = {
         }
         Insert: {
           actor_build_id?: string | null
+          actor_build_requested?: string | null
           actor_dataset_id?: string | null
           actor_id: string
+          actor_provider_id?: string | null
           actor_run_id?: string | null
           adapter_version: number
           campaign_id: string
@@ -6433,6 +6449,8 @@ export type Database = {
           error_message?: string | null
           failure_count?: number
           id?: string
+          input_hash?: string | null
+          input_payload?: Json | null
           job_type?: string
           lead_id?: string | null
           lease_token?: string | null
@@ -6454,8 +6472,10 @@ export type Database = {
         }
         Update: {
           actor_build_id?: string | null
+          actor_build_requested?: string | null
           actor_dataset_id?: string | null
           actor_id?: string
+          actor_provider_id?: string | null
           actor_run_id?: string | null
           adapter_version?: number
           campaign_id?: string
@@ -6470,6 +6490,8 @@ export type Database = {
           error_message?: string | null
           failure_count?: number
           id?: string
+          input_hash?: string | null
+          input_payload?: Json | null
           job_type?: string
           lead_id?: string | null
           lease_token?: string | null
@@ -6545,6 +6567,7 @@ export type Database = {
           description: string | null
           email: string | null
           employee_count: number | null
+          field_provenance: Json
           first_seen_at: string
           id: string
           industry: string | null
@@ -6583,6 +6606,7 @@ export type Database = {
           description?: string | null
           email?: string | null
           employee_count?: number | null
+          field_provenance?: Json
           first_seen_at?: string
           id?: string
           industry?: string | null
@@ -6621,6 +6645,7 @@ export type Database = {
           description?: string | null
           email?: string | null
           employee_count?: number | null
+          field_provenance?: Json
           first_seen_at?: string
           id?: string
           industry?: string | null

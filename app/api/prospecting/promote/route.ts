@@ -5,7 +5,12 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { serverError } from "@/lib/api/errors";
 
-const schema = z.object({ clientId: z.string().uuid(), leadId: z.string().uuid() });
+const schema = z.object({
+  clientId: z.string().uuid(),
+  leadId: z.string().uuid(),
+  selectedEmail: z.string().trim().email().max(320).nullable().optional(),
+  selectedPhone: z.string().trim().min(5).max(50).nullable().optional(),
+});
 
 export const POST = withAuth(async (req, { user }) => {
   let body: unknown;
@@ -17,10 +22,12 @@ export const POST = withAuth(async (req, { user }) => {
   const denied = assertClientAccess(user, parsed.data.clientId);
   if (denied) return denied;
   const db = createAdminClient();
-  const { data, error } = await db.rpc("promote_prospecting_lead_to_crm", {
+  const { data, error } = await db.rpc("promote_prospecting_lead_to_crm_v3", {
     p_campaign_lead_id: parsed.data.leadId,
     p_client_id: parsed.data.clientId,
     p_actor_id: user.id,
+    p_selected_email: parsed.data.selectedEmail ?? null,
+    p_selected_phone: parsed.data.selectedPhone ?? null,
   });
   if (error || !data) return serverError(error, { userId: user.id, clientId: parsed.data.clientId, url: req.nextUrl.pathname });
   return NextResponse.json({ contactId: data });

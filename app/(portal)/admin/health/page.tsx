@@ -6,6 +6,8 @@ import { isEncryptionConfigured } from "@/lib/crypto/credentials";
 import { cn } from "@/lib/utils";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Activity, CheckCircle2, XCircle, AlertTriangle, Database, Clock, Brain, KeyRound } from "lucide-react";
+import { ProspectingProviderHealth } from "@/components/admin/ProspectingProviderHealth";
+import providers from "@/lib/prospecting/providers.json";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "System Health — RapidTal Admin" };
@@ -20,7 +22,7 @@ export default async function AdminHealthPage() {
 
   const admin = createAdminClient();
 
-  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, tallyRes, { count: recentErrorCount }] = await Promise.all([
+  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, tallyRes, { count: recentErrorCount }, providerCheckRes] = await Promise.all([
     admin.from("schema_migrations").select("version"),
     admin.rpc("health_schema_check"),
     admin.from("cron_heartbeats").select("name, ran_at, detail"),
@@ -34,6 +36,8 @@ export default async function AdminHealthPage() {
     (admin as any).rpc("health_vault_tallies"),
     admin.from("app_errors").select("id", { count: "exact", head: true })
       .gte("created_at", new Date(Date.now() - 24 * 3_600_000).toISOString()),
+    admin.from("prospecting_provider_checks").select("provider, status, completed_at, created_at")
+      .order("created_at", { ascending: false }).limit(100),
   ]);
 
   // ── Migration drift ────────────────────────────────────────────────────────
@@ -73,6 +77,7 @@ export default async function AdminHealthPage() {
     { name: "brain-distill", staleAfterH: 26 }, // daily at 02:30
     { name: "error-alert", staleAfterH: 2 },   // every 30 min (spike alerting)
     { name: "competitor-sources", staleAfterH: 1 }, // every 15 min
+    { name: "prospecting-provider-health", staleAfterH: 1 }, // every 10 min; live checks run only when due
   ];
   const beatByName = new Map(((beats ?? []) as { name: string; ran_at: string; detail: Record<string, unknown> }[]).map((b) => [b.name, b]));
 
@@ -117,6 +122,21 @@ export default async function AdminHealthPage() {
   if (!encryptionReady) issues.push("Credential encryption not configured — the Access feature can't store logins (set CREDENTIALS_ENCRYPTION_KEY)");
   if (degradedClients.length) issues.push(`${degradedClients.length} client brain(s) degraded`);
   if (recentErrorCount && recentErrorCount > 0) issues.push(`${recentErrorCount} error(s) logged in the last 24h`);
+  if (!process.env.APIFY_API_TOKEN) issues.push("Apify API is not configured — lead scrapers cannot run");
+  if (!providerCheckRes.error) {
+    const latestProviderCheck = new Map<string, { status: string; completed_at: string | null; created_at: string }>();
+    for (const check of (providerCheckRes.data ?? []) as Array<{ provider: string; status: string; completed_at: string | null; created_at: string }>) {
+      if (!latestProviderCheck.has(check.provider)) latestProviderCheck.set(check.provider, check);
+    }
+    const unhealthyProviders = Object.entries(providers).flatMap(([id, provider]) => {
+      if (!provider.enabled) return [];
+      const check = latestProviderCheck.get(id);
+      const checkedAt = check?.completed_at ?? check?.created_at;
+      const stale = !checkedAt || Date.now() - new Date(checkedAt).getTime() > 7 * 24 * 60 * 60_000;
+      return !check || check.status !== "passed" || stale ? [provider.label] : [];
+    });
+    if (unhealthyProviders.length) issues.push(`Lead scraper checks need attention: ${unhealthyProviders.join(", ")}`);
+  }
 
   return (
     <div>
@@ -271,6 +291,9 @@ export default async function AdminHealthPage() {
             </span>
           </div>
         </section>
+
+        {/* Per-client brain health */}
+        <ProspectingProviderHealth />
 
         {/* Per-client brain health */}
         <section className="surface-card p-4 lg:col-span-2">
