@@ -85,6 +85,7 @@ export const ROUTES = {
     campaignsForClient: (clientId: string, offset = 0, limit = 50) =>
       `/api/prospecting/campaigns?clientId=${clientId}&offset=${offset}&limit=${limit}`,
     runs: () => "/api/prospecting/runs",
+    advance: () => "/api/prospecting/runs/advance",
     cancel: () => "/api/prospecting/runs/cancel",
     leads: () => "/api/prospecting/leads",
     leadsPage: (clientId: string, status: string, fit: string, sort: string, offset: number, limit = 30) =>

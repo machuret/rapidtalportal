@@ -421,6 +421,7 @@ describe("prospecting API tenant checks", () => {
     const routes = [
       "app/api/prospecting/campaigns/route.ts",
       "app/api/prospecting/runs/route.ts",
+      "app/api/prospecting/runs/advance/route.ts",
       "app/api/prospecting/runs/cancel/route.ts",
       "app/api/prospecting/leads/route.ts",
       "app/api/prospecting/enrich/route.ts",

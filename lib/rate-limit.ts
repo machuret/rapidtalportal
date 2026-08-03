@@ -148,6 +148,11 @@ export const vaultUploadLimiter = new SlidingWindowLimiter(40, 5 * 60_000);
 // before they reach that durable boundary.
 export const leadGenerationLimiter = new SlidingWindowLimiter(5, 15 * 60_000);
 
+// Signed-in progress polling reconciles the provider while the user is
+// watching. One bulk request every ten seconds leaves room for normal tab
+// refreshes without turning the status endpoint into an unbounded proxy.
+export const leadProgressLimiter = new SlidingWindowLimiter(120, 15 * 60_000);
+
 // Campaign definitions are free, but unbounded creation would pollute a tenant
 // and make the campaign workspace unusable even without starting an Actor.
 export const leadCampaignMutationLimiter = new SlidingWindowLimiter(30, 15 * 60_000);

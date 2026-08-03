@@ -188,6 +188,13 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
       pollBusy.current = true;
       try {
         const previousJobs = [...activeJobsRef.current];
+        if (previousJobs.length) {
+          await api.post(
+            ROUTES.prospecting.advance(),
+            { clientId, jobIds: previousJobs.slice(0, 8).map((job) => job.id) },
+            { showErrorToast: false, idempotent: true, retries: 1 },
+          ).catch(() => null);
+        }
         const result = await loadCampaigns(0, false, true);
         if (result) {
           pollFailures.current = 0;
@@ -224,7 +231,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
       }
     };
     void refreshProgress();
-    const timer = window.setInterval(() => void refreshProgress(), 5_000);
+    const timer = window.setInterval(() => void refreshProgress(), 10_000);
     return () => window.clearInterval(timer);
   }, [activeJobKey, clientId, filter, fitFilter, leadSort, loadCampaigns, loadLeads, offset]);
 

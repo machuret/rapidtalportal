@@ -33,10 +33,11 @@ describe("Lead Generation modularity and regression audit", () => {
       includeUrlGlobs: string[]; maxCrawlPages: number; maxResults: number;
     };
     expect(input.includeUrlGlobs).toEqual(expect.arrayContaining([
-      "http://example.com/about/**",
-      "https://www.example.com/services/**",
-      "https://*.example.com/contact/**",
+      "http://example.com/about",
+      "https://www.example.com/services/",
+      "https://*.example.com/contact?*",
     ]));
+    expect(input.includeUrlGlobs.some((pattern) => pattern.includes("/services/**"))).toBe(false);
     expect(input.maxCrawlPages).toBe(5);
     expect(input.maxResults).toBe(5);
   });
@@ -78,6 +79,17 @@ describe("Lead Generation modularity and regression audit", () => {
     expect(handlers).toContain("prospectingJobCompletionHandlers");
     expect(handlers).toContain("collection: completeCollection");
     expect(handlers).toContain("enrichment: completeEnrichment");
+  });
+
+  test("reconciles active provider runs from signed-in polling with cron fallback", () => {
+    const route = read("app/api/prospecting/runs/advance/route.ts");
+    const workspace = read("components/prospecting/LeadGenerationWorkspace.tsx");
+    expect(route).toContain("withAuth");
+    expect(route).toContain("assertClientAccess(user");
+    expect(route).toContain("leadProgressLimiter.check");
+    expect(route).toContain("advanceProspectingJob");
+    expect(workspace).toContain("ROUTES.prospecting.advance()");
+    expect(workspace).toContain("10_000");
   });
 
   test("starts jobs atomically, preserves immutable input and refunds definitive no-run failures", () => {

@@ -49,9 +49,14 @@ describe("Lead Generation provider reliability", () => {
 });
 
 describe("Lead Generation durable lifecycle", () => {
-  test("keeps paid advancement server-owned and selects due recovery work before limiting", () => {
+  test("keeps provider advancement behind a tenant-scoped server route with cron recovery", () => {
     const workspace = read("components/prospecting/LeadGenerationWorkspace.tsx");
-    expect(workspace).not.toContain("ROUTES.prospecting.advance()");
+    const advanceRoute = read("app/api/prospecting/runs/advance/route.ts");
+    expect(workspace).toContain("ROUTES.prospecting.advance()");
+    expect(workspace).not.toContain("getApifyActorRun");
+    expect(advanceRoute).toContain("withAuth");
+    expect(advanceRoute).toContain("assertClientAccess(user");
+    expect(advanceRoute).toContain("leadProgressLimiter.check");
     const cron = read("app/api/cron/prospecting-jobs/route.ts");
     expect(cron).toContain("next_attempt_at.lte");
     expect(cron).toContain(".limit(8)");
