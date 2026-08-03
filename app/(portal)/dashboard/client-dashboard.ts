@@ -6,6 +6,7 @@ import {
 } from "@/lib/onboarding/client-first-success";
 import { loadClientFirstSuccessProgress } from "@/lib/onboarding/server";
 import { withPortalDataTimeout } from "@/lib/server-data-timeout";
+import { dedupeAttentionItems } from "@/lib/dashboard/attention";
 import type { ClientAttentionItem, ClientDashboardProps } from "@/components/dashboard/ClientDashboard";
 
 /** Local-midnight of the most recent Monday. */
@@ -116,7 +117,7 @@ export async function renderClientDashboard(clientId: string, fullName: string, 
   const recentDelivered = ((deliveredRows ?? []) as TaskRow[])
     .map((t) => ({ id: t.id, title: t.title, completedAt: t.completed_at as string, assigneeName: t.assigned_to ? nameById.get(t.assigned_to) ?? null : null }));
 
-  const attention: ClientAttentionItem[] = [
+  const attention: ClientAttentionItem[] = dedupeAttentionItems([
     ...overdue.map((task) => ({ id: `overdue:${task.id}`, title: task.title, detail: `${task.daysOverdue === 1 ? "1 day" : `${task.daysOverdue} days`} late${task.assigneeName ? ` · ${task.assigneeName}` : ""}`, href: `/tasks?card=${task.id}`, severity: "critical" as const })),
     ...awaiting.slice(0, 6).map((task) => ({ id: `review:${task.id}`, title: task.title, detail: "VA work is waiting for your approval", href: `/tasks?card=${task.id}`, severity: "action" as const })),
     ...dueSoon.map((task) => ({ id: `due:${task.id}`, title: task.title, detail: `${dueLabelForDashboard(task.daysUntil)}${task.assigneeName ? ` · ${task.assigneeName}` : ""}`, href: `/tasks?card=${task.id}`, severity: "warning" as const })),
@@ -125,7 +126,7 @@ export async function renderClientDashboard(clientId: string, fullName: string, 
     ...((competitorFailureRows ?? []) as Array<{ id: string; url: string }>).map((source) => ({ id: `competitor:${source.id}`, title: source.url, detail: "Competitor collection needs retry", href: "/competitors", severity: "warning" as const })),
     ...((leadFailureRows ?? []) as Array<{ id: string; error_message: string | null }>).map((job) => ({ id: `lead:${job.id}`, title: "Lead collection needs attention", detail: job.error_message || "Open Lead Generation to retry", href: "/lead-generation", severity: "warning" as const })),
     ...((unreadMessages ?? 0) > 0 ? [{ id: "messages:unread", title: `${unreadMessages} unread message${unreadMessages === 1 ? "" : "s"}`, detail: "Your VA may be waiting for a response", href: "/messages", severity: "action" as const }] : []),
-  ].sort((left, right) => attentionPriority(left.severity) - attentionPriority(right.severity)).slice(0, 12);
+  ]).sort((left, right) => attentionPriority(left.severity) - attentionPriority(right.severity)).slice(0, 12);
 
   const hoursThisWeek = workHours((timeRows ?? []) as { started_at: string; ended_at: string | null }[]);
 
