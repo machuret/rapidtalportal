@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { DbVaultItem, VaultCategory } from "@/types/database";
 import { toast } from "sonner";
 import {
@@ -22,6 +22,7 @@ import { useVaultList } from "@/hooks/useVaultList";
 import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-categories";
 import { CompetitorsTab } from "@/components/content/competitors/CompetitorsTab";
 import { VaultReadinessDashboard } from "./VaultReadinessDashboard";
+import { reportClientExperience, reportClientFeatureReady } from "@/lib/client-experience";
 
 type TypeFilter = "all" | "text" | "url" | "pdf" | "docx";
 
@@ -89,6 +90,16 @@ function VaultClientInner({
     type: typeFilter,
     evidenceRole: "factual",
   });
+  const reportedReadiness = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isLoading) return;
+    const state = vaultLoadFailed ? "error" : "ready";
+    if (reportedReadiness.current === state) return;
+    reportedReadiness.current = state;
+    if (state === "ready") reportClientFeatureReady("/vault", "vault_items");
+    else reportClientExperience({ eventType: "feature_error", path: "/vault", metadata: { feature: "vault_items" } });
+  }, [isLoading, vaultLoadFailed]);
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [crawlJob, setCrawlJob] = useState<CrawlJob | null>(null);

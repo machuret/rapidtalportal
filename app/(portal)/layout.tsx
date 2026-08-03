@@ -11,6 +11,7 @@ import { FeatureVideosProvider } from "@/components/layout/FeatureVideosProvider
 import { getFeatureVideos } from "@/lib/tutorials/server";
 import PortalLoading from "./loading";
 import { ClientExperienceMonitor } from "@/components/layout/ClientExperienceMonitor";
+import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 
 export default async function PortalLayout({
   children,
@@ -24,7 +25,11 @@ export default async function PortalLayout({
   // One auth lookup on the happy path (cache()d, so pages calling it again are
   // free). Previously the layout ran its own getUser AND getCurrentUserAndClient's
   // — two remote auth round-trips before any page work, on top of middleware's.
-  const ctx = await getCurrentUserAndClient();
+  const [ctx, featureVideos] = await withPortalDataTimeout(
+    Promise.all([getCurrentUserAndClient(), featureVideosPromise]),
+    "Portal shell",
+    12_000,
+  );
   if (!ctx) {
     // Rare path: either no session, or a session whose users row is missing.
     // Distinguish with one raw auth check so the debug panel can name the email.
@@ -52,8 +57,6 @@ export default async function PortalLayout({
       </div>
     );
   }
-
-  const featureVideos = await featureVideosPromise;
 
   return (
     <div className="flex min-h-screen bg-zinc-950 text-zinc-50 print:bg-white print:min-h-0">

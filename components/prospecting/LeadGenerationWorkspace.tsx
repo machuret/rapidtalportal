@@ -15,6 +15,7 @@ import {
 import { ProspectingActivityTimeline } from "@/components/prospecting/ProspectingActivityTimeline";
 import { ProspectingLoadFailure } from "@/components/prospecting/ProspectingLoadFailure";
 import { ProspectingActiveJob } from "@/components/prospecting/ProspectingActiveJob";
+import { reportClientExperience, reportClientFeatureReady } from "@/lib/client-experience";
 import { keywordList } from "@/components/prospecting/presentation";
 import {
   discoverySourceCapabilities,
@@ -84,13 +85,18 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   const pollFailures = useRef(0);
   const startBusy = useRef(false);
   const activeJobsRef = useRef<ProspectingJob[]>([]);
+  const reportedFeatureState = useRef<string | null>(null);
 
   useEffect(() => {
     activeJobsRef.current = activeJobs;
   }, [activeJobs]);
 
   const loadCampaigns = useCallback(async (nextOffset = 0, append = false, silent = false) => {
-    if (!append && !silent) setLoadingCampaigns(true);
+    if (!append && !silent) {
+      setCampaignLoadError(null);
+      setLoadingCampaigns(true);
+      reportedFeatureState.current = null;
+    }
     try {
       const result = await api.get<ProspectingCampaignPage>(
         ROUTES.prospecting.campaignsForClient(clientId, nextOffset),
@@ -121,6 +127,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   }, [clientId]);
 
   const loadActivity = useCallback(async (nextOffset = 0, append = false) => {
+    setActivityLoadError(null);
     setLoadingActivity(true);
     try {
       const result = await api.get<ProspectingActivityPage>(
@@ -145,7 +152,9 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     nextFit: ProspectingFitFilter,
     nextSort: ProspectingLeadSort,
   ) => {
+    setLeadLoadError(null);
     setLoadingLeads(true);
+    reportedFeatureState.current = null;
     try {
       const result = await api.get<ProspectingLeadPage>(
         ROUTES.prospecting.leadsPage(clientId, nextFilter, nextFit, nextSort, nextOffset, PAGE_SIZE),
@@ -190,6 +199,19 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   useEffect(() => {
     void Promise.all([loadCampaigns(), loadLeads(0, "all", "all", "fit")]);
   }, [loadCampaigns, loadLeads]);
+
+  useEffect(() => {
+    if (loadingCampaigns || loadingLeads) return;
+    const state = campaignLoadError || leadLoadError ? "error" : "ready";
+    if (reportedFeatureState.current === state) return;
+    reportedFeatureState.current = state;
+    if (state === "ready") reportClientFeatureReady("/lead-generation", "lead_generation");
+    else reportClientExperience({
+      eventType: "feature_error",
+      path: "/lead-generation",
+      metadata: { feature: "lead_generation" },
+    });
+  }, [campaignLoadError, leadLoadError, loadingCampaigns, loadingLeads]);
 
   const activeJobKey = activeJobs.map((job) => job.id).sort().join(",");
   useEffect(() => {

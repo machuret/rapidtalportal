@@ -39,14 +39,23 @@ describe("client experience event route", () => {
   });
 
   test("attributes timing to the authenticated tenant and actor", async () => {
-    const response = await POST(request({ eventType: "page_slow", path: "/reports", durationMs: 3100 }), { params: Promise.resolve({}) });
+    const response = await POST(request({
+      eventType: "feature_ready",
+      path: "/reports",
+      durationMs: 3100,
+      navigationId: "33333333-3333-4333-8333-333333333333",
+      attempt: 1,
+      metadata: { feature: "monthly_reports" },
+    }), { params: Promise.resolve({}) });
     expect(response.status).toBe(204);
     expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({
       client_id: "22222222-2222-4222-8222-222222222222",
       user_id: "11111111-1111-4111-8111-111111111111",
-      event_type: "page_slow",
+      event_type: "feature_ready",
       path: "/reports",
       duration_ms: 3100,
+      navigation_id: "33333333-3333-4333-8333-333333333333",
+      attempt: 1,
     }));
   });
 

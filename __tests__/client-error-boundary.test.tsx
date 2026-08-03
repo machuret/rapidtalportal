@@ -4,7 +4,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import PortalError from "@/app/(portal)/error";
 
 jest.mock("@/lib/report-client-error", () => ({ reportClientError: jest.fn() }));
-jest.mock("@/lib/client-experience", () => ({ reportClientExperience: jest.fn() }));
+jest.mock("@/lib/client-experience", () => ({
+  reportClientExperience: jest.fn(),
+  retryClientNavigation: jest.fn(),
+}));
 
 describe("client portal error recovery", () => {
   test("does not expose internal provider messages and offers two recovery paths", () => {

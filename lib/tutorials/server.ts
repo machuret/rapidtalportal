@@ -7,6 +7,7 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PAGE_INTROS } from "@/lib/page-intros";
+import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 
 /** The features that can carry a tutorial video — the known PageIntro slugs. */
 export const FEATURE_SLUGS = Object.keys(PAGE_INTROS);
@@ -28,7 +29,11 @@ export async function getFeatureVideos(): Promise<FeatureVideoMap> {
   let map: FeatureVideoMap = {};
   try {
     const admin = createAdminClient();
-    const { data } = await admin.from("feature_videos").select("slug, loom_url");
+    const { data } = await withPortalDataTimeout(
+      (signal) => admin.from("feature_videos").select("slug, loom_url").abortSignal(signal),
+      "Tutorial help",
+      2_000,
+    );
     map = Object.fromEntries(((data ?? []) as { slug: string; loom_url: string }[]).map((r) => [r.slug, r.loom_url]));
   } catch {
     map = {}; // never let a help lookup break the portal

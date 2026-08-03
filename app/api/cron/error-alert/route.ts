@@ -95,11 +95,20 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Experience telemetry is operational data, not a permanent audit record.
+  // Keep a rolling 90-day window as part of an already-monitored daily-safe
+  // cron instead of letting the table grow forever.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: experienceEventsPurged } = await (admin as any).rpc(
+    "purge_portal_experience_events",
+    { p_retention_days: 90 },
+  );
+
   await admin.from("cron_heartbeats").upsert({
     name: "error-alert",
     ran_at: new Date(now).toISOString(),
-    detail: { errors, threshold, alerted, lastAlertAt: alerted ? now : lastAlertAt },
+    detail: { errors, threshold, alerted, experienceEventsPurged, lastAlertAt: alerted ? now : lastAlertAt },
   });
 
-  return NextResponse.json({ errors, threshold, alerted, cooldown: inCooldown });
+  return NextResponse.json({ errors, threshold, alerted, cooldown: inCooldown, experienceEventsPurged });
 }

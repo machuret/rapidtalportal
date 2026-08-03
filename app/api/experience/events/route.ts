@@ -11,6 +11,8 @@ const schema = z.object({
   path: z.string().startsWith("/").max(300),
   durationMs: z.number().int().min(0).max(300_000).optional(),
   metadata: z.record(z.string().max(80), metadataValue).optional(),
+  navigationId: z.string().uuid().optional(),
+  attempt: z.number().int().min(0).max(20).optional(),
 }).strict();
 
 export const POST = withAuth(async (request, { user }) => {
@@ -34,6 +36,8 @@ export const POST = withAuth(async (request, { user }) => {
     path: parsed.data.path,
     duration_ms: parsed.data.durationMs ?? null,
     metadata: parsed.data.metadata ?? {},
+    navigation_id: parsed.data.navigationId ?? null,
+    attempt: parsed.data.attempt ?? 0,
   });
   if (error) throw error;
 

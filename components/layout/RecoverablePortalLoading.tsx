@@ -6,7 +6,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { Clock3, RefreshCw } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { clientLoadingCopy, reportClientExperience } from "@/lib/client-experience";
+import {
+  clientLoadingCopy,
+  reportClientExperience,
+  retryClientNavigation,
+} from "@/lib/client-experience";
 
 const SLOW_AFTER_MS = 3_000;
 const DELAYED_AFTER_MS = 10_000;
@@ -15,6 +19,7 @@ export function RecoverablePortalLoading({ feature }: { feature?: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [elapsed, setElapsed] = useState<"normal" | "slow" | "delayed">("normal");
+  const [attempt, setAttempt] = useState(0);
   const copy = clientLoadingCopy(pathname);
   const label = feature ?? copy.label;
 
@@ -29,11 +34,13 @@ export function RecoverablePortalLoading({ feature }: { feature?: string }) {
       window.clearTimeout(slowTimer);
       window.clearTimeout(delayedTimer);
     };
-  }, [pathname]);
+  }, [attempt, pathname]);
 
   function retry() {
+    retryClientNavigation(pathname);
     reportClientExperience({ eventType: "page_retry", path: pathname });
     setElapsed("normal");
+    setAttempt((current) => current + 1);
     router.refresh();
   }
 

@@ -9,6 +9,7 @@ import type { CrmContact } from "@/types/crm";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { withPortalDataTimeout } from "@/lib/server-data-timeout";
+import { FeatureReadyReporter } from "@/components/layout/FeatureReadyReporter";
 
 // Canonical home is types/crm.ts — re-exported for existing importers.
 export type { CrmContact } from "@/types/crm";
@@ -22,15 +23,17 @@ export default async function CrmPage() {
 
   const { user, client } = ctx;
   if (!user.client_id) redirect("/dashboard");
+  const clientId = user.client_id;
 
   const admin = createAdminClient();
   const { data: contacts, error: contactsError } = await withPortalDataTimeout(
-    admin
+    (signal) => admin
       .from("crm_contacts")
       .select("id, client_id, first_name, last_name, email, phone, company, job_title, status, source, tags, notes, archived_at, created_at, updated_at")
-      .eq("client_id", user.client_id)
+      .eq("client_id", clientId)
       .order("created_at", { ascending: false })
-      .limit(500),
+      .limit(500)
+      .abortSignal(signal),
     "CRM contacts",
   );
   if (contactsError) throw new Error("CRM contacts could not be loaded.", { cause: contactsError });
@@ -39,6 +42,7 @@ export default async function CrmPage() {
 
   return (
     <div>
+      <FeatureReadyReporter feature="crm_contacts" />
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold">CRM</h1>
@@ -57,7 +61,7 @@ export default async function CrmPage() {
       <PageIntro id="crm" />
       <CrmBoard
         contacts={(contacts ?? []) as CrmContact[]}
-        clientId={user.client_id}
+        clientId={clientId}
         userId={user.id}
         isAdmin={isAdmin}
       />

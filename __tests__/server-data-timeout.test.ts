@@ -11,7 +11,11 @@ describe("portal server-data deadline", () => {
   });
 
   test("rejects a stalled page read with an identifiable operation", async () => {
-    const pending = withPortalDataTimeout(new Promise<never>(() => undefined), "Monthly report", 100);
+    let wasAborted = false;
+    const pending = withPortalDataTimeout((operationSignal) => {
+      operationSignal.addEventListener("abort", () => { wasAborted = true; });
+      return new Promise<never>(() => undefined);
+    }, "Monthly report", 100);
     const rejection = expect(pending).rejects.toEqual(expect.objectContaining<Partial<PortalDataTimeoutError>>({
       name: "PortalDataTimeoutError",
       operation: "Monthly report",
@@ -19,5 +23,6 @@ describe("portal server-data deadline", () => {
     }));
     await jest.advanceTimersByTimeAsync(100);
     await rejection;
+    expect(wasAborted).toBe(true);
   });
 });

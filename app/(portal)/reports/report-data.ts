@@ -36,6 +36,7 @@ async function monthTotals(
   admin: any,
   clientId: string,
   monthKey: string,
+  signal?: AbortSignal,
 ): Promise<ReportTotals> {
   const [y, m] = monthKey.split("-").map(Number);
   const startIso = new Date(Date.UTC(y, m - 1, 1)).toISOString();
@@ -43,12 +44,14 @@ async function monthTotals(
   const startDate = startIso.slice(0, 10);
   const nextDate = nextIso.slice(0, 10);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const abort = (query: any) => signal ? query.abortSignal(signal) : query;
   const [doneResult, requestedResult, timeResult, contentResult, toolRunsResult] = await Promise.all([
-    admin.from("tasks").select("completed_at, due_date").eq("client_id", clientId).eq("status", "done").gte("completed_at", startIso).lt("completed_at", nextIso),
-    admin.from("tasks").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
-    admin.from("time_entries").select("started_at, ended_at").eq("client_id", clientId).eq("phase", "work").gte("work_date", startDate).lt("work_date", nextDate),
-    admin.from("content_pieces").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
-    admin.from("tool_runs").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
+    abort(admin.from("tasks").select("completed_at, due_date").eq("client_id", clientId).eq("status", "done").gte("completed_at", startIso).lt("completed_at", nextIso)),
+    abort(admin.from("tasks").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso)),
+    abort(admin.from("time_entries").select("started_at, ended_at").eq("client_id", clientId).eq("phase", "work").gte("work_date", startDate).lt("work_date", nextDate)),
+    abort(admin.from("content_pieces").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso)),
+    abort(admin.from("tool_runs").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso)),
   ]);
   const queryError = doneResult.error ?? requestedResult.error ?? timeResult.error ?? contentResult.error ?? toolRunsResult.error;
   if (queryError) throw new Error("Monthly comparison data could not be loaded.", { cause: queryError });
@@ -89,7 +92,7 @@ export function recentMonths(n = 6): { key: string; label: string }[] {
 
 interface TaskRow { title: string; status: string; assigned_to: string | null; completed_at: string | null; due_date: string | null; category_id: string | null }
 
-export async function buildClientReport(clientId: string, clientName: string, monthKey: string): Promise<ClientReportData> {
+export async function buildClientReport(clientId: string, clientName: string, monthKey: string, signal?: AbortSignal): Promise<ClientReportData> {
   const admin = createAdminClient();
   const [y, m] = monthKey.split("-").map(Number);
   const start = new Date(Date.UTC(y, m - 1, 1));
@@ -102,20 +105,22 @@ export async function buildClientReport(clientId: string, clientName: string, mo
   // is known up front, so it runs in the same batch as the main-month queries.
   const prevKey = previousMonthKey(monthKey);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const abort = (query: any) => signal ? query.abortSignal(signal) : query;
   const [vaResult, categoriesResult, deliveredResult, requestedResult, timeResult, contentResult, toolRunsResult, prevTotals] = await Promise.all([
-    admin.from("users").select("id, full_name, email").eq("client_id", clientId).eq("role", "va"),
-    admin.from("task_categories").select("id, name, color").eq("client_id", clientId),
-    admin.from("tasks").select("title, status, assigned_to, completed_at, due_date, category_id")
-      .eq("client_id", clientId).eq("status", "done").gte("completed_at", startIso).lt("completed_at", nextIso),
-    admin.from("tasks").select("id", { count: "exact", head: true })
-      .eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
-    admin.from("time_entries").select("user_id, started_at, ended_at").eq("client_id", clientId).eq("phase", "work")
-      .gte("work_date", startDate).lt("work_date", nextDate),
-    admin.from("content_pieces").select("id", { count: "exact", head: true })
-      .eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
-    admin.from("tool_runs").select("id", { count: "exact", head: true })
-      .eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
-    monthTotals(admin, clientId, prevKey),
+    abort(admin.from("users").select("id, full_name, email").eq("client_id", clientId).eq("role", "va")),
+    abort(admin.from("task_categories").select("id, name, color").eq("client_id", clientId)),
+    abort(admin.from("tasks").select("title, status, assigned_to, completed_at, due_date, category_id")
+      .eq("client_id", clientId).eq("status", "done").gte("completed_at", startIso).lt("completed_at", nextIso)),
+    abort(admin.from("tasks").select("id", { count: "exact", head: true })
+      .eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso)),
+    abort(admin.from("time_entries").select("user_id, started_at, ended_at").eq("client_id", clientId).eq("phase", "work")
+      .gte("work_date", startDate).lt("work_date", nextDate)),
+    abort(admin.from("content_pieces").select("id", { count: "exact", head: true })
+      .eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso)),
+    abort(admin.from("tool_runs").select("id", { count: "exact", head: true })
+      .eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso)),
+    monthTotals(admin, clientId, prevKey, signal),
   ]);
   const queryError = vaResult.error ?? categoriesResult.error ?? deliveredResult.error
     ?? requestedResult.error ?? timeResult.error ?? contentResult.error ?? toolRunsResult.error;

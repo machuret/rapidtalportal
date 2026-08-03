@@ -267,8 +267,9 @@ type ProspectingActivityEventRow = {
 };
 type PortalExperienceEventRow = {
   id: string; client_id: string; user_id: string;
-  event_type: "page_ready" | "page_slow" | "page_retry" | "page_error";
-  path: string; duration_ms: number | null; metadata: Json; created_at: string;
+  event_type: "page_ready" | "feature_ready" | "feature_error" | "page_slow" | "page_retry" | "page_error";
+  path: string; duration_ms: number | null; metadata: Json;
+  navigation_id: string | null; attempt: number; created_at: string;
 };
 
 type CompatTables = Omit<
@@ -379,8 +380,8 @@ type CompatTables = Omit<
   };
   portal_experience_events: {
     Row: PortalExperienceEventRow;
-    Insert: Omit<PortalExperienceEventRow, "id" | "duration_ms" | "metadata" | "created_at"> & {
-      id?: string; duration_ms?: number | null; metadata?: Json; created_at?: string;
+    Insert: Omit<PortalExperienceEventRow, "id" | "duration_ms" | "metadata" | "navigation_id" | "attempt" | "created_at"> & {
+      id?: string; duration_ms?: number | null; metadata?: Json; navigation_id?: string | null; attempt?: number; created_at?: string;
     };
     Update: Partial<PortalExperienceEventRow>;
     Relationships: [];

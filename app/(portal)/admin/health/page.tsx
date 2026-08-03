@@ -22,7 +22,7 @@ export default async function AdminHealthPage() {
 
   const admin = createAdminClient();
 
-  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, tallyRes, { count: recentErrorCount }, providerCheckRes] = await Promise.all([
+  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, tallyRes, { count: recentErrorCount }, providerCheckRes, experienceRes] = await Promise.all([
     admin.from("schema_migrations").select("version"),
     admin.rpc("health_schema_check"),
     admin.from("cron_heartbeats").select("name, ran_at, detail"),
@@ -38,7 +38,18 @@ export default async function AdminHealthPage() {
       .gte("created_at", new Date(Date.now() - 24 * 3_600_000).toISOString()),
     admin.from("prospecting_provider_checks").select("provider, status, completed_at, created_at")
       .order("created_at", { ascending: false }).limit(100),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (admin as any).rpc("health_portal_experience", {
+      p_since: new Date(Date.now() - 24 * 3_600_000).toISOString(),
+    }),
   ]);
+
+  type ExperienceHealthRow = {
+    path: string; route_ready: number; feature_ready: number; slow: number;
+    errors: number; retries: number; average_feature_ms: number; p95_feature_ms: number;
+  };
+  const experienceRows = (experienceRes.error ? [] : (experienceRes.data ?? [])) as ExperienceHealthRow[];
+  const unhealthyExperience = experienceRows.filter((row) => Number(row.errors) > 0 || Number(row.p95_feature_ms) > 8_000);
 
   // ── Migration drift ────────────────────────────────────────────────────────
   const applied = new Set(((appliedRows ?? []) as { version: string }[]).map((r) => r.version));
@@ -122,6 +133,7 @@ export default async function AdminHealthPage() {
   if (!encryptionReady) issues.push("Credential encryption not configured — the Access feature can't store logins (set CREDENTIALS_ENCRYPTION_KEY)");
   if (degradedClients.length) issues.push(`${degradedClients.length} client brain(s) degraded`);
   if (recentErrorCount && recentErrorCount > 0) issues.push(`${recentErrorCount} error(s) logged in the last 24h`);
+  if (unhealthyExperience.length) issues.push(`${unhealthyExperience.length} client route(s) slow or failing in the last 24h`);
   if (!process.env.APIFY_API_TOKEN) issues.push("Apify API is not configured — lead scrapers cannot run");
   if (!providerCheckRes.error) {
     const latestProviderCheck = new Map<string, { status: string; completed_at: string | null; created_at: string }>();
@@ -169,6 +181,37 @@ export default async function AdminHealthPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section className="surface-card p-4 lg:col-span-2">
+          <p className="label-section mb-1 flex items-center gap-2"><Activity className="w-4 h-4" /> Client experience — last 24 hours</p>
+          <p className="mb-3 text-xs text-zinc-500">Feature-ready time measures when required workspace data is usable, separately from the route shell.</p>
+          {experienceRes.error ? (
+            <p className="text-sm text-amber-300">Experience reporting is unavailable. Apply the latest client-experience migration.</p>
+          ) : experienceRows.length === 0 ? (
+            <p className="text-sm text-zinc-500">No client navigation events recorded yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-zinc-800 text-xs text-zinc-500">
+                  <tr><th className="py-2 text-left">Route</th><th className="py-2 text-right">Ready</th><th className="py-2 text-right">Average</th><th className="py-2 text-right">P95</th><th className="py-2 text-right">Slow</th><th className="py-2 text-right">Errors</th><th className="py-2 text-right">Retries</th></tr>
+                </thead>
+                <tbody>
+                  {experienceRows.slice(0, 12).map((row) => (
+                    <tr key={row.path} className="border-b border-zinc-800/60 last:border-0">
+                      <td className="py-2 font-mono text-xs text-zinc-300">{row.path}</td>
+                      <td className="py-2 text-right tabular-nums text-zinc-400">{Number(row.feature_ready)}</td>
+                      <td className="py-2 text-right tabular-nums text-zinc-400">{Number(row.average_feature_ms) ? `${(Number(row.average_feature_ms) / 1000).toFixed(1)}s` : "—"}</td>
+                      <td className={cn("py-2 text-right tabular-nums", Number(row.p95_feature_ms) > 8_000 ? "text-red-300" : "text-zinc-400")}>{Number(row.p95_feature_ms) ? `${(Number(row.p95_feature_ms) / 1000).toFixed(1)}s` : "—"}</td>
+                      <td className="py-2 text-right tabular-nums text-amber-300">{Number(row.slow)}</td>
+                      <td className="py-2 text-right tabular-nums text-red-300">{Number(row.errors)}</td>
+                      <td className="py-2 text-right tabular-nums text-zinc-400">{Number(row.retries)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
         {/* Migrations */}
         <section className="surface-card p-4">
           <p className="label-section mb-3 flex items-center gap-2"><Database className="w-4 h-4" /> Migrations</p>

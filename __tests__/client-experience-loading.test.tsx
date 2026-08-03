@@ -35,6 +35,12 @@ describe("recoverable client loading", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(global.fetch).toHaveBeenCalledWith("/api/experience/events", expect.objectContaining({ method: "POST" }));
+
+    // A refresh can preserve the Suspense fallback. Recovery must re-arm for
+    // the same pathname instead of returning to a permanent spinner.
+    act(() => jest.advanceTimersByTime(3_100));
+    expect(screen.getByText("This is taking longer than expected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
   test("explains a prolonged delay instead of spinning forever", () => {

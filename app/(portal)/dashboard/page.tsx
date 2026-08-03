@@ -6,6 +6,8 @@ import { ClientDashboard } from "@/components/dashboard/ClientDashboard";
 import { renderClientDashboard } from "./client-dashboard";
 import { workHours } from "@/lib/tasks/metrics";
 import { DEFAULT_PORTAL_TIMEZONE, todayInTimezone } from "@/lib/date-tz";
+import { withPortalDataTimeout } from "@/lib/server-data-timeout";
+import { FeatureReadyReporter } from "@/components/layout/FeatureReadyReporter";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard — RapidTal" };
@@ -21,8 +23,11 @@ export default async function DashboardPage() {
   // Clients get a purpose-built home (request / approve / value delivered),
   // not the VA workspace dashboard.
   if (user.role === "client_admin" && user.client_id) {
-    const data = await renderClientDashboard(user.client_id, user.full_name ?? user.email);
-    return <ClientDashboard {...data} clientName={client?.name ?? ""} />;
+    const data = await withPortalDataTimeout(
+      renderClientDashboard(user.client_id, user.full_name ?? user.email),
+      "Client dashboard",
+    );
+    return <><FeatureReadyReporter feature="client_dashboard" /><ClientDashboard {...data} clientName={client?.name ?? ""} /></>;
   }
 
   // Any non-super user must belong to a client; without one there's nothing to
@@ -52,7 +57,7 @@ export default async function DashboardPage() {
   const [
     { data: taskRows }, { data: myLog }, { data: timeWeek }, { data: contract },
     { count: unread }, { data: eventRows }, { data: catRows }, { data: userRows },
-  ] = await Promise.all([
+  ] = await withPortalDataTimeout(Promise.all([
     supabase.from("tasks").select("id, title, status, due_date, priority, category_id").eq("client_id", clientId).eq("assigned_to", user.id).neq("status", "done").order("due_date", { ascending: true, nullsFirst: false }),
     supabase.from("daily_logs").select("id").eq("user_id", user.id).eq("log_date", today).maybeSingle(),
     supabase.from("time_entries").select("started_at, ended_at").eq("user_id", user.id).eq("phase", "work").gte("work_date", wkStart),
@@ -61,7 +66,7 @@ export default async function DashboardPage() {
     supabase.from("task_events").select("id, kind, body, user_id, created_at, task_id").eq("client_id", clientId).order("created_at", { ascending: false }).limit(6),
     supabase.from("task_categories").select("id, name").eq("client_id", clientId),
     supabase.from("users").select("id, full_name, email").eq("client_id", clientId),
-  ]);
+  ]), "VA dashboard");
 
   const myTasks = (taskRows ?? []) as { id: string; title: string; status: string; due_date: string | null; priority: number; category_id: string | null }[];
   const catName = new Map(((catRows ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
@@ -103,7 +108,7 @@ export default async function DashboardPage() {
   });
 
   return (
-    <VaDashboard
+    <><FeatureReadyReporter feature="va_dashboard" /><VaDashboard
       firstName={(user.full_name ?? user.email).split(" ")[0]}
       dateLabel={dateLabel}
       todayIso={today}
@@ -121,6 +126,6 @@ export default async function DashboardPage() {
       activeTasks={activeTasks}
       activity={activity}
       loggedToday={!!myLog}
-    />
+    /></>
   );
 }

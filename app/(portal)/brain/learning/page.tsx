@@ -12,6 +12,7 @@ import {
   resolveBrainPicker,
 } from "../loaders";
 import { withPortalDataTimeout } from "@/lib/server-data-timeout";
+import { FeatureReadyReporter } from "@/components/layout/FeatureReadyReporter";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Brain Learning — RapidTal" };
@@ -51,6 +52,7 @@ export default async function BrainLearningPage({ searchParams: searchParamsProm
 
   return (
     <div>
+      <FeatureReadyReporter feature="brain_learning" />
       <div className="flex items-center gap-4 mb-8">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
           <GraduationCap className="w-6 h-6 text-white" />

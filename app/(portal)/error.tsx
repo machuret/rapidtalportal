@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { reportClientError } from "@/lib/report-client-error";
-import { reportClientExperience } from "@/lib/client-experience";
+import { reportClientExperience, retryClientNavigation } from "@/lib/client-experience";
 import { cn } from "@/lib/utils";
 
 export default function PortalError({
@@ -26,6 +26,7 @@ export default function PortalError({
   }, [error]);
 
   function retry() {
+    retryClientNavigation(window.location.pathname);
     reportClientExperience({ eventType: "page_retry", path: window.location.pathname, metadata: { from: "error" } });
     reset();
   }

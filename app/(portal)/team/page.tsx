@@ -11,6 +11,7 @@ import { moodMeta } from "@/lib/daily-logs/mood";
 import { computeVaStats, blankVaStats, vaOnTimePct, vaFlags, type VaFlag } from "@/lib/va/stats";
 import { timeAgo } from "@/lib/time";
 import { withPortalDataTimeout } from "@/lib/server-data-timeout";
+import { FeatureReadyReporter } from "@/components/layout/FeatureReadyReporter";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "My Team — RapidTal" };
@@ -46,19 +47,19 @@ export default async function TeamPage({ searchParams: searchParamsPromise }: { 
   // VAs and the client's pending leave are independent (both scoped by
   // client_id) — fetch together. The per-VA logs below need the VA ids, so they
   // follow.
-  const [vasResult, leaveResult] = await withPortalDataTimeout(Promise.all([
+  const [vasResult, leaveResult] = await withPortalDataTimeout((signal) => Promise.all([
     admin
       .from("users")
       .select("id, full_name, email, phone, birthday, avatar_url, created_at")
       .eq("client_id", clientId)
       .eq("role", "va")
-      .order("full_name"),
+      .order("full_name").abortSignal(signal),
     admin
       .from("va_leave_requests")
       .select("id, user_id, start_date, end_date, leave_type, reason, status")
       .eq("client_id", clientId)
       .eq("status", "pending")
-      .order("start_date"),
+      .order("start_date").abortSignal(signal),
   ]), "Team roster");
   if (vasResult.error || leaveResult.error) {
     throw new Error("Team information could not be loaded.", { cause: vasResult.error ?? leaveResult.error });
@@ -70,17 +71,17 @@ export default async function TeamPage({ searchParams: searchParamsPromise }: { 
 
   // Single batch query for all VAs — avoids N+1
   const vaIds = vaList.map(v => v.id);
-  const [logsResult, stats] = await withPortalDataTimeout(Promise.all([
+  const [logsResult, stats] = await withPortalDataTimeout((signal) => Promise.all([
     vaIds.length > 0
       ? admin
           .from("daily_logs")
           .select("user_id, log_date, mood, tasks_done")
           .in("user_id", vaIds)
           .gte("log_date", since)
-          .order("log_date", { ascending: false })
+          .order("log_date", { ascending: false }).abortSignal(signal)
       : Promise.resolve({ data: [] }),
     // 30-day outcome stats (shared with the old Supervision page's formulas).
-    computeVaStats(admin, vaIds, clientId, STATS_WINDOW_DAYS),
+    computeVaStats(admin, vaIds, clientId, STATS_WINDOW_DAYS, signal),
   ]), "Team activity");
   if ("error" in logsResult && logsResult.error) {
     throw new Error("Team activity could not be loaded.", { cause: logsResult.error });
@@ -128,6 +129,7 @@ export default async function TeamPage({ searchParams: searchParamsPromise }: { 
 
   return (
     <div>
+      <FeatureReadyReporter feature="team_workspace" />
       {/* Header */}
       <div className="flex items-center gap-3 mb-8">
         <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">

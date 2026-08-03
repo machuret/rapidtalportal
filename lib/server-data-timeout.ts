@@ -15,17 +15,22 @@ export class PortalDataTimeoutError extends Error {
  * screen; the operation name remains server-side for diagnostics.
  */
 export async function withPortalDataTimeout<T>(
-  work: PromiseLike<T>,
+  work: PromiseLike<T> | ((signal: AbortSignal) => PromiseLike<T>),
   operation: string,
   timeoutMs = DEFAULT_PORTAL_DATA_TIMEOUT_MS,
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const controller = new AbortController();
   try {
+    const pending = typeof work === "function" ? work(controller.signal) : work;
     return await Promise.race([
-      Promise.resolve(work),
+      Promise.resolve(pending),
       new Promise<never>((_, reject) => {
         timer = setTimeout(
-          () => reject(new PortalDataTimeoutError(operation, timeoutMs)),
+          () => {
+            controller.abort();
+            reject(new PortalDataTimeoutError(operation, timeoutMs));
+          },
           timeoutMs,
         );
       }),

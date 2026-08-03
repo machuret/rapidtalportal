@@ -2,9 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { reportClientExperience } from "@/lib/client-experience";
-
-const NAVIGATION_START_KEY = "rapidtal:navigation-start";
+import {
+  beginClientNavigation,
+  ensureClientNavigation,
+  reportClientExperience,
+} from "@/lib/client-experience";
 
 function initialNavigationStartedAt(): number {
   if (typeof window === "undefined") return Date.now();
@@ -26,26 +28,40 @@ export function ClientExperienceMonitor() {
       if (!(anchor instanceof HTMLAnchorElement)) return;
       if (anchor.target === "_blank" || anchor.origin !== window.location.origin) return;
       if (anchor.pathname === window.location.pathname && anchor.search === window.location.search) return;
-      try { sessionStorage.setItem(NAVIGATION_START_KEY, String(Date.now())); } catch { /* ignore */ }
+      beginClientNavigation(anchor.pathname, Date.now(), true);
     }
+    const originalPushState = window.history.pushState.bind(window.history);
+    const originalReplaceState = window.history.replaceState.bind(window.history);
+    window.history.pushState = function pushState(data, unused, url) {
+      if (url) beginClientNavigation(new URL(String(url), window.location.href).pathname);
+      return originalPushState(data, unused, url);
+    };
+    window.history.replaceState = function replaceState(data, unused, url) {
+      if (url) beginClientNavigation(new URL(String(url), window.location.href).pathname);
+      return originalReplaceState(data, unused, url);
+    };
+    const rememberPopState = () => beginClientNavigation(window.location.pathname, Date.now(), true);
     document.addEventListener("click", rememberNavigationStart, true);
-    return () => document.removeEventListener("click", rememberNavigationStart, true);
+    window.addEventListener("popstate", rememberPopState);
+    return () => {
+      document.removeEventListener("click", rememberNavigationStart, true);
+      window.removeEventListener("popstate", rememberPopState);
+      window.history.pushState = originalPushState;
+      window.history.replaceState = originalReplaceState;
+    };
   }, []);
 
   useEffect(() => {
-    let startedAt = firstRender.current ? initialNavigationStartedAt() : Date.now();
+    const fallbackStartedAt = firstRender.current ? initialNavigationStartedAt() : Date.now();
     firstRender.current = false;
-    try {
-      const stored = Number(sessionStorage.getItem(NAVIGATION_START_KEY));
-      if (Number.isFinite(stored) && stored > 0) startedAt = stored;
-      sessionStorage.removeItem(NAVIGATION_START_KEY);
-    } catch { /* ignore */ }
+    const navigation = ensureClientNavigation(pathname, fallbackStartedAt);
 
     const frame = window.requestAnimationFrame(() => {
       reportClientExperience({
         eventType: "page_ready",
         path: pathname,
-        durationMs: Math.max(0, Date.now() - startedAt),
+        durationMs: Math.max(0, Date.now() - navigation.startedAt),
+        metadata: { stage: "route_shell" },
       });
     });
     return () => window.cancelAnimationFrame(frame);

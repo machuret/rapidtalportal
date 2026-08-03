@@ -23,6 +23,7 @@ import {
   resolveBrainPicker,
 } from "../loaders";
 import { withPortalDataTimeout } from "@/lib/server-data-timeout";
+import { FeatureReadyReporter } from "@/components/layout/FeatureReadyReporter";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Brain Analytics — RapidTal" };
@@ -175,6 +176,7 @@ export default async function BrainAnalyticsPage({ searchParams: searchParamsPro
 
   return (
     <div>
+      <FeatureReadyReporter feature="brain_analytics" />
       <div className="flex items-center gap-4 mb-8">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
           <BarChart3 className="w-6 h-6 text-white" />

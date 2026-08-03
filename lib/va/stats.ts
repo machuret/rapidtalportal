@@ -63,6 +63,7 @@ export async function computeVaStats(
   vaIds: string[],
   clientId: string | null,
   windowDays: number,
+  signal?: AbortSignal,
 ): Promise<Record<string, VaStats>> {
   const stats: Record<string, VaStats> = {};
   if (vaIds.length === 0) return stats;
@@ -83,6 +84,11 @@ export async function computeVaStats(
     logsQuery = logsQuery.eq("client_id", clientId);
     timeQuery = timeQuery.eq("client_id", clientId);
     tasksQuery = tasksQuery.eq("client_id", clientId);
+  }
+  if (signal) {
+    logsQuery = logsQuery.abortSignal(signal);
+    timeQuery = timeQuery.abortSignal(signal);
+    tasksQuery = tasksQuery.abortSignal(signal);
   }
 
   const [logsRes, timeRes, tasksRes] = await Promise.all([logsQuery, timeQuery, tasksQuery]);

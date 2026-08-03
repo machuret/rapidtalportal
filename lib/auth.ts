@@ -9,6 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // below and re-exported so existing `import { IMPERSONATE_COOKIE } from "@/lib/auth"`
 // callers keep working.
 import { IMPERSONATE_COOKIE } from "@/lib/impersonation";
+import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 
 export { IMPERSONATE_COOKIE };
 
@@ -45,8 +46,7 @@ async function loadClient(admin: SupabaseClient<Database>, clientId: string | nu
  * admin in `actualUser`. The cookie is only ever honoured for a real
  * super_admin session, so it can't be used for privilege escalation.
  */
-export const getCurrentUserAndClient = cache(
-  async (): Promise<CurrentUserAndClient | null> => {
+async function loadCurrentUserAndClient(): Promise<CurrentUserAndClient | null> {
     const supabase = await createClient();
     const {
       data: { user: authUser },
@@ -89,7 +89,10 @@ export const getCurrentUserAndClient = cache(
     }
 
     return { user: realUser, client: await loadClient(admin, realUser.client_id) };
-  }
+}
+
+export const getCurrentUserAndClient = cache(
+  () => withPortalDataTimeout(loadCurrentUserAndClient(), "Account and client", 10_000),
 );
 
 export async function requireRole(

@@ -18,10 +18,22 @@ export class ApiError extends Error {
   }
 }
 
-interface RequestConfig extends RequestInit {
+export type ApiRequestClass = "read" | "mutation" | "ai" | "extended_ai" | "background";
+
+export const API_REQUEST_TIMEOUTS: Record<ApiRequestClass, number> = {
+  read: 20_000,
+  mutation: 30_000,
+  ai: 75_000,
+  extended_ai: 190_000,
+  background: 310_000,
+};
+
+export interface RequestConfig extends RequestInit {
   retries?: number;
   showErrorToast?: boolean;
-  /** Total deadline across all attempts. Prevents a stalled read hanging a page indefinitely. */
+  /** Named operation budget. Prefer this over a one-off timeout. */
+  requestClass?: ApiRequestClass;
+  /** Explicit total deadline across all attempts, for exceptional endpoints. */
   timeoutMs?: number;
   /**
    * Allow automatic retries for a non-GET request. Off by default: retrying a
@@ -35,7 +47,44 @@ interface RequestConfig extends RequestInit {
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
-export const DEFAULT_API_TIMEOUT_MS = 20_000;
+
+const EXTENDED_AI_ROUTES = [
+  "/api/content/topics/generate",
+  "/api/content/competitors/intelligence",
+  "/api/content/voice-evaluations",
+  "/api/content/style-analysis",
+  "/api/content/generate",
+  "/api/content/quick-draft",
+  "/api/content/rewrite",
+  "/api/content/adapt",
+  "/api/brain/opportunities",
+  "/api/vault/linkedin",
+  "/api/company-dna/scrape",
+  "/api/kb/generate",
+  "/api/admin/library/index",
+];
+const AI_ROUTES = [
+  "/api/vault/ask",
+  "/api/vault/expand",
+  "/api/vault/refresh-dossier",
+  "/api/brain/onboard",
+  "/api/brain/memory/distill",
+  "/api/vault/crawl-site/advance",
+  "/api/sops/generate",
+  "/api/sops/suggestions/produce",
+];
+const BACKGROUND_ROUTES = ["/api/vault/index-batch"];
+
+export function apiRequestClassFor(url: string, method: string): ApiRequestClass {
+  const path = url.split("?")[0];
+  if (method === "GET" || method === "HEAD") return "read";
+  if (BACKGROUND_ROUTES.some((route) => path === route)) return "background";
+  if (EXTENDED_AI_ROUTES.some((route) => path === route)) return "extended_ai";
+  if (/^\/api\/vault\/[^/]+\/reprocess$/u.test(path)
+    || /^\/api\/admin\/library\/[^/]+\/action$/u.test(path)) return "extended_ai";
+  if (path.startsWith("/api/tools/") || AI_ROUTES.some((route) => path === route)) return "ai";
+  return "mutation";
+}
 
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -49,7 +98,8 @@ export async function apiClient<T>(
     retries = MAX_RETRIES,
     showErrorToast = true,
     idempotent,
-    timeoutMs = DEFAULT_API_TIMEOUT_MS,
+    requestClass,
+    timeoutMs,
     ...fetchConfig
   } = config;
 
@@ -59,7 +109,7 @@ export async function apiClient<T>(
   // already committed would create a duplicate record.
   const method = (fetchConfig.method ?? "GET").toUpperCase();
   const canRetry = idempotent ?? (method === "GET" || method === "HEAD");
-  const maxAttempts = canRetry ? retries : 1;
+  const maxAttempts = canRetry ? Math.max(1, retries) : 1;
 
   // Normalise to exactly one "/api" prefix. Call sites are inconsistent — most
   // pass "/kb/generate" or "sops", a few pass "/api/admin/users" — but every
@@ -68,6 +118,8 @@ export async function apiClient<T>(
   // most mutations across the app.
   const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const url = path === "/api" || path.startsWith("/api/") ? path : `/api${path}`;
+  const resolvedClass = requestClass ?? apiRequestClassFor(url, method);
+  const resolvedTimeoutMs = timeoutMs ?? API_REQUEST_TIMEOUTS[resolvedClass];
   
   const defaultHeaders: HeadersInit = {
     "Content-Type": "application/json",
@@ -79,7 +131,7 @@ export async function apiClient<T>(
   const deadlineTimer = setTimeout(() => {
     didTimeout = true;
     deadline.abort();
-  }, timeoutMs);
+  }, resolvedTimeoutMs);
   const callerSignal = fetchConfig.signal;
   const abortFromCaller = () => deadline.abort(callerSignal?.reason);
   if (callerSignal?.aborted) abortFromCaller();
@@ -121,6 +173,10 @@ export async function apiClient<T>(
             408,
             "REQUEST_TIMEOUT",
           );
+          break;
+        }
+        if (callerSignal?.aborted) {
+          lastError = error instanceof Error ? error : new DOMException("Aborted", "AbortError");
           break;
         }
         lastError = error instanceof Error ? error : new Error(String(error));

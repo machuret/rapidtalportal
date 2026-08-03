@@ -4,6 +4,7 @@ import { VaultClient } from "@/components/vault/VaultClient";
 import { VaultTabs } from "@/components/vault/VaultTabs";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Vault — RapidTal" };
@@ -14,14 +15,16 @@ export default async function VaultPage() {
 
   const { user } = ctx;
   if (!user.client_id) redirect("/dashboard");
+  const clientId = user.client_id;
 
   const canWrite = user.role === "client_admin" || user.role === "super_admin" || user.role === "va";
   const admin = createAdminClient();
-  const { data: dna } = await admin
-    .from("company_dna")
-    .select("website")
-    .eq("client_id", user.client_id)
-    .maybeSingle();
+  const dnaResult = await withPortalDataTimeout(
+    (signal) => admin.from("company_dna").select("website").eq("client_id", clientId).abortSignal(signal).maybeSingle(),
+    "Vault company website",
+    5_000,
+  ).catch(() => ({ data: null, error: null }));
+  const dna = dnaResult.data;
 
   let companyWebsite: string | null = null;
   const rawWebsite = dna?.website?.trim();
@@ -41,7 +44,7 @@ export default async function VaultPage() {
       <VaultTabs active="documents" />
       <PageIntro id="vault" />
       <VaultClient
-        clientId={user.client_id}
+        clientId={clientId}
         userId={user.id}
         role={user.role}
         canWrite={canWrite}
