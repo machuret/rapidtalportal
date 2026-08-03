@@ -56,11 +56,12 @@ function sameSite(left: URL, right: URL): boolean {
 
 function pagePriority(url: URL, requested: URL): number {
   const path = url.pathname.toLowerCase().replace(/\/+$/u, "") || "/";
-  if (sameSite(url, requested) && (path === "/" || url.toString() === requested.toString())) return 0;
-  if (/\/(about|about-us|company|who-we-are)(\/|$)/u.test(path)) return 1;
-  if (/\/(services|solutions|products|what-we-do)(\/|$)/u.test(path)) return 2;
-  if (/\/(contact|contact-us|get-in-touch)(\/|$)/u.test(path)) return 3;
-  return 4;
+  if (sameSite(url, requested) && url.toString() === requested.toString()) return 0;
+  if (sameSite(url, requested) && path === "/") return 1;
+  if (/\/(about|about-us|company|who-we-are)(\/|$)/u.test(path)) return 2;
+  if (/\/(services|solutions|products|what-we-do)(\/|$)/u.test(path)) return 3;
+  if (/\/(contact|contact-us|get-in-touch)(\/|$)/u.test(path)) return 4;
+  return 5;
 }
 
 function unique(values: Array<string | null>, limit: number): string[] {

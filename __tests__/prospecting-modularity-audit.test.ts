@@ -28,6 +28,16 @@ describe("Lead Generation modularity and regression audit", () => {
     expect(result.pageUrls).toHaveLength(5);
   });
 
+  test("prefers the exact lead page over generic homepage metadata", () => {
+    const result = normalizeWebsiteEnrichment("https://example.com/locations/sydney", [
+      { url: "https://example.com/", metadata: { description: "Melbourne services" }, markdown: "Generic home" },
+      { url: "https://example.com/about", markdown: "About the national company" },
+      { url: "https://example.com/locations/sydney", metadata: { description: "Sydney services" }, markdown: "Sydney branch" },
+    ]);
+    expect(result.pageUrls[0]).toBe("https://example.com/locations/sydney");
+    expect(result.description).toBe("Sydney services");
+  });
+
   test("allows HTTP, HTTPS, apex, www and other same-company subdomain crawl candidates", () => {
     const input = buildWebsiteEnrichmentInput("http://www.example.com") as {
       includeUrlGlobs: string[]; maxCrawlPages: number; maxResults: number;
