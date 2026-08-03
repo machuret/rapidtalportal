@@ -1,0 +1,22 @@
+{
+  "searchQuery": {
+    "term": "commercial mortgage broker Sydney"
+  },
+  "organicResults": [
+    {
+      "title": "Harbour Commercial Finance",
+      "url": "https://harbour-commercial.example/services/commercial-finance",
+      "description": "Commercial lending and asset finance specialists in Sydney."
+    },
+    {
+      "title": "Harbour Commercial Finance — About",
+      "url": "https://www.harbour-commercial.example/about",
+      "description": "Meet the team."
+    },
+    {
+      "title": "Northern Business Loans",
+      "url": "https://northern-loans.example/",
+      "description": "Business finance for growing Australian companies."
+    }
+  ]
+}

@@ -231,6 +231,23 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     blurb: "Practical, everyday helpers that keep the wheels turning.",
     items: [
       {
+        title: "Lead Generation",
+        what: "A review-first workspace for finding suitable businesses by type and location, then adding only the right ones to CRM.",
+        why: "The goal is to make prospecting fast without filling the CRM with unreviewed lists. Searches keep running in the background, repeated results are deduplicated, and nothing enters CRM until you choose it.",
+        can: [
+          "Find local businesses through Google Maps or use broader web discovery.",
+          "Shortlist, dismiss and review source details in the Lead Inbox.",
+          "Save searches as reusable campaigns and run them again.",
+          "Add a selected lead to CRM with one click.",
+        ],
+        how: [
+          "Open Lead Generation and enter the business type and location.",
+          "Review the results in Lead Inbox.",
+          "Shortlist promising businesses, then add the right ones to CRM.",
+        ],
+        tip: "Start with 10–20 results while refining a search; increase it after the first batch looks relevant.",
+      },
+      {
         title: "Content",
         what: "A guided content workspace — quick drafts, grounded ideas, competitor opportunities, projects and approvals, each on its own page under the Content menu.",
         why: "The goal is to keep ideas, briefs, Vault evidence, competitor inspiration, voice settings, drafts and approvals connected in one recoverable workflow — without everything competing for space on one screen.",

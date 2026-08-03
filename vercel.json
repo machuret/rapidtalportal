@@ -43,6 +43,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/prospecting-jobs",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/vault-governance",
       "schedule": "45 3 * * *"
     }

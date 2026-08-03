@@ -1,0 +1,240 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { ProspectingCampaign, ProspectingJob } from "@/types/prospecting";
+
+const startActor = jest.fn();
+const getRun = jest.fn();
+const getItems = jest.fn();
+
+jest.mock("@/lib/prospecting/apify-client", () => {
+  class MockApifyClientError extends Error {
+    constructor(message: string, public status: number, public retryable: boolean) {
+      super(message);
+    }
+  }
+  return {
+    ApifyClientError: MockApifyClientError,
+    startApifyActorRun: (...args: unknown[]) => startActor(...args),
+    getApifyActorRun: (...args: unknown[]) => getRun(...args),
+    getApifyDatasetItems: (...args: unknown[]) => getItems(...args),
+  };
+});
+
+import { advanceProspectingJob, startProspectingRun, type ProspectingDb } from "@/lib/prospecting/jobs";
+
+const migration = readFileSync(
+  join(process.cwd(), "db/migrations/20260803000200_prospecting_phase1.sql"),
+  "utf8",
+);
+
+const campaign: ProspectingCampaign = {
+  id: "11111111-1111-4111-8111-111111111111",
+  client_id: "22222222-2222-4222-8222-222222222222",
+  name: "Mortgage brokers in Sydney",
+  source: "google_maps",
+  queries: ["mortgage broker"],
+  locations: ["Sydney, Australia"],
+  country_code: "au",
+  language_code: "en",
+  max_results: 1,
+  status: "ready",
+  last_job_id: null,
+  created_by: "33333333-3333-4333-8333-333333333333",
+  created_at: "2026-08-03T00:00:00.000Z",
+  updated_at: "2026-08-03T00:00:00.000Z",
+  archived_at: null,
+};
+
+const baseJob: ProspectingJob = {
+  id: "44444444-4444-4444-8444-444444444444",
+  campaign_id: campaign.id,
+  client_id: campaign.client_id,
+  source: "google_maps",
+  status: "queued",
+  provider_status: null,
+  actor_id: "compass~crawler-google-places",
+  actor_build_id: null,
+  actor_run_id: null,
+  actor_dataset_id: null,
+  adapter_version: 1,
+  requested_results: 1,
+  returned_results: 0,
+  created_results: 0,
+  deduplicated_results: 0,
+  max_charge_usd: 0.5,
+  usage_total_usd: null,
+  error_code: null,
+  error_message: null,
+  created_at: "2026-08-03T00:00:00.000Z",
+  updated_at: "2026-08-03T00:00:00.000Z",
+  completed_at: null,
+};
+
+describe("prospecting Phase 1 database boundary", () => {
+  test("keeps the domain separate and tenant-isolated", () => {
+    for (const table of [
+      "prospecting_campaigns",
+      "prospecting_jobs",
+      "prospecting_prospects",
+      "prospecting_campaign_leads",
+      "prospecting_usage",
+    ]) {
+      expect(migration).toContain(`CREATE TABLE IF NOT EXISTS ${table}`);
+      expect(migration).toContain(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+      expect(migration).toContain(`${table}'`);
+    }
+    expect(migration).not.toContain("CREATE POLICY prospecting_campaigns_tenant_write");
+    expect(migration).toContain("FOR SELECT USING (client_id = current_user_client_id())");
+  });
+
+  test("enforces durable budgets, one active run, leases and serialized deduplication", () => {
+    expect(migration).toContain("prospecting_jobs_one_active_campaign");
+    expect(migration).toContain("Daily lead collection budget reached.");
+    expect(migration).toContain("lease_until > clock_timestamp()");
+    expect(migration).toContain("pg_advisory_xact_lock");
+    expect(migration).toContain("dedupe_keys && v_keys");
+    expect(migration).toContain("ON CONFLICT (campaign_id, prospect_id) DO UPDATE");
+  });
+
+  test("allows only service role to execute orchestration and CRM promotion", () => {
+    for (const fn of [
+      "reserve_prospecting_job",
+      "claim_prospecting_job",
+      "checkpoint_prospecting_job",
+      "ingest_prospecting_job_results",
+      "promote_prospecting_lead_to_crm",
+    ]) {
+      expect(migration).toMatch(new RegExp(`REVOKE ALL ON FUNCTION ${fn}\\([\\s\\S]*?FROM PUBLIC, anon, authenticated;`));
+      expect(migration).toMatch(new RegExp(`GRANT EXECUTE ON FUNCTION ${fn}\\([\\s\\S]*?TO service_role;`));
+    }
+    expect(migration).toContain("IF v_lead.crm_contact_id IS NOT NULL THEN RETURN v_lead.crm_contact_id");
+    expect(migration).toContain("Actor does not belong to this client.");
+  });
+});
+
+describe("prospecting Phase 1 orchestration", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("reserves and claims before starting a paid Actor", async () => {
+    const rpc = jest.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === "reserve_prospecting_job") return { data: [baseJob], error: null };
+      if (name === "claim_prospecting_job") return { data: [{ ...baseJob, lease_token: "55555555-5555-4555-8555-555555555555" }], error: null };
+      if (name === "checkpoint_prospecting_job") {
+        return { data: [{ ...baseJob, status: args.p_status, actor_run_id: args.p_actor_run_id }], error: null };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    });
+    startActor.mockResolvedValue({
+      id: "apify-run-1",
+      actId: "actor-1",
+      status: "READY",
+      defaultDatasetId: "dataset-1",
+      startedAt: null,
+      finishedAt: null,
+      buildId: "build-1",
+      usageTotalUsd: null,
+    });
+
+    const job = await startProspectingRun({ rpc, from: jest.fn() } as unknown as ProspectingDb, campaign, campaign.created_by!);
+    expect(job.status).toBe("running");
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual([
+      "reserve_prospecting_job",
+      "claim_prospecting_job",
+      "checkpoint_prospecting_job",
+    ]);
+    expect(startActor).toHaveBeenCalledWith(expect.objectContaining({
+      actorId: "compass~crawler-google-places",
+      maxItems: 1,
+      maxTotalChargeUsd: 0.5,
+    }));
+  });
+
+  test("normalizes, caps and atomically ingests a completed dataset", async () => {
+    const runningJob = {
+      ...baseJob,
+      status: "running" as const,
+      actor_run_id: "apify-run-1",
+      actor_dataset_id: "dataset-1",
+    };
+    const jobQuery = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: runningJob, error: null }),
+    };
+    const campaignQuery = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: campaign, error: null }),
+    };
+    const from = jest.fn((table: string) => table === "prospecting_jobs" ? jobQuery : campaignQuery);
+    const rpc = jest.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === "claim_prospecting_job") {
+        return { data: [{ ...runningJob, lease_token: "55555555-5555-4555-8555-555555555555" }], error: null };
+      }
+      if (name === "ingest_prospecting_job_results") {
+        return { data: [{ ...runningJob, status: "done", returned_results: (args.p_results as unknown[]).length }], error: null };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    });
+    getRun.mockResolvedValue({
+      id: "apify-run-1",
+      actId: "actor-1",
+      status: "SUCCEEDED",
+      defaultDatasetId: "dataset-1",
+      startedAt: null,
+      finishedAt: null,
+      buildId: "build-live-1",
+      usageTotalUsd: 0.002,
+    });
+    getItems.mockResolvedValue([
+      { title: "One Finance", placeId: "place-1", website: "https://one.example", url: "https://maps.example/one" },
+      { title: "Two Finance", placeId: "place-2", website: "https://two.example", url: "https://maps.example/two" },
+    ]);
+
+    const job = await advanceProspectingJob({ rpc, from } as unknown as ProspectingDb, runningJob.id, campaign.client_id);
+    expect(job?.status).toBe("done");
+    const ingest = rpc.mock.calls.find(([name]) => name === "ingest_prospecting_job_results");
+    expect(ingest).toBeDefined();
+    const args = ingest![1] as Record<string, unknown>;
+    expect(args.p_results).toHaveLength(1);
+    expect(args.p_results).toEqual([
+      expect.objectContaining({
+        companyName: "One Finance",
+        dedupeKeys: expect.any(Array),
+        source: expect.objectContaining({
+          providerRunId: "apify-run-1",
+          actorBuildId: "build-live-1",
+          adapterVersion: 1,
+        }),
+      }),
+    ]);
+    expect(from).not.toHaveBeenCalledWith("crm_contacts");
+  });
+});
+
+describe("prospecting API tenant checks", () => {
+  test("every signed-in prospecting route checks client access", () => {
+    const routes = [
+      "app/api/prospecting/campaigns/route.ts",
+      "app/api/prospecting/runs/route.ts",
+      "app/api/prospecting/runs/advance/route.ts",
+      "app/api/prospecting/leads/route.ts",
+      "app/api/prospecting/promote/route.ts",
+    ];
+    for (const route of routes) {
+      const source = readFileSync(join(process.cwd(), route), "utf8");
+      expect(source).toContain("withAuth(");
+      expect(source).toContain("assertClientAccess(user");
+    }
+  });
+
+  test("the UI explains review-first CRM promotion and background recovery", () => {
+    const source = readFileSync(join(process.cwd(), "components/prospecting/LeadGenerationWorkspace.tsx"), "utf8");
+    expect(source).toContain("Nothing is added to CRM automatically.");
+    expect(source).toContain("You can leave this page; RapidTal will keep working.");
+    expect(source).toContain("Add to CRM");
+    expect(source).toContain("aria-label=\"Previous lead page\"");
+  });
+});

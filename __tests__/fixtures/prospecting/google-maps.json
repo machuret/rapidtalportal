@@ -1,0 +1,18 @@
+{
+  "title": "Harbour Finance Brokers",
+  "placeId": "ChIJ-test-maps-place",
+  "categoryName": "Mortgage broker",
+  "address": "100 George Street, Sydney NSW 2000",
+  "city": "Sydney",
+  "state": "New South Wales",
+  "countryCode": "AU",
+  "website": "https://www.harbour-finance.example/",
+  "phoneUnformatted": "+61290001111",
+  "url": "https://www.google.com/maps/place/?q=place_id:ChIJ-test-maps-place",
+  "totalScore": 4.8,
+  "reviewsCount": 87,
+  "location": {
+    "lat": -33.8688,
+    "lng": 151.2093
+  }
+}

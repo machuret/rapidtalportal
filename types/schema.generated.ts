@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.4"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       access_credential_reveals: {
@@ -2525,6 +2550,44 @@ export type Database = {
           },
         ]
       }
+      coach_question_metrics_daily: {
+        Row: {
+          answer_mode: string
+          answered: boolean
+          client_id: string
+          coach_role: string
+          metric_date: string
+          question_count: number
+          updated_at: string
+        }
+        Insert: {
+          answer_mode: string
+          answered: boolean
+          client_id: string
+          coach_role: string
+          metric_date: string
+          question_count?: number
+          updated_at?: string
+        }
+        Update: {
+          answer_mode?: string
+          answered?: boolean
+          client_id?: string
+          coach_role?: string
+          metric_date?: string
+          question_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_question_metrics_daily_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coach_threads: {
         Row: {
           client_id: string
@@ -2583,6 +2646,13 @@ export type Database = {
           client_id: string
           coach_mode: string
           created_at: string
+          deep_answer: string | null
+          deep_brain_context_snapshot_id: string | null
+          deep_library_availability: string
+          deep_sources: Json
+          deep_suggestions: Json
+          deep_updated_at: string | null
+          deep_warnings: Json
           id: string
           library_availability: string
           origin: string
@@ -2602,6 +2672,13 @@ export type Database = {
           client_id: string
           coach_mode?: string
           created_at?: string
+          deep_answer?: string | null
+          deep_brain_context_snapshot_id?: string | null
+          deep_library_availability?: string
+          deep_sources?: Json
+          deep_suggestions?: Json
+          deep_updated_at?: string | null
+          deep_warnings?: Json
           id?: string
           library_availability?: string
           origin?: string
@@ -2621,6 +2698,13 @@ export type Database = {
           client_id?: string
           coach_mode?: string
           created_at?: string
+          deep_answer?: string | null
+          deep_brain_context_snapshot_id?: string | null
+          deep_library_availability?: string
+          deep_sources?: Json
+          deep_suggestions?: Json
+          deep_updated_at?: string | null
+          deep_warnings?: Json
           id?: string
           library_availability?: string
           origin?: string
@@ -2645,6 +2729,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_turns_deep_snapshot_tenant_fkey"
+            columns: ["deep_brain_context_snapshot_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "brain_context_snapshots"
+            referencedColumns: ["id", "client_id"]
           },
           {
             foreignKeyName: "coach_turns_owner_id_fkey"
@@ -4296,6 +4387,8 @@ export type Database = {
           last_error_message: string | null
           last_generation_warnings: Json
           last_operation: string | null
+          quick_create_key: string | null
+          quick_create_request_hash: string | null
           status: string
           style_snapshot: Json
           title: string
@@ -4321,6 +4414,8 @@ export type Database = {
           last_error_message?: string | null
           last_generation_warnings?: Json
           last_operation?: string | null
+          quick_create_key?: string | null
+          quick_create_request_hash?: string | null
           status?: string
           style_snapshot?: Json
           title: string
@@ -4346,6 +4441,8 @@ export type Database = {
           last_error_message?: string | null
           last_generation_warnings?: Json
           last_operation?: string | null
+          quick_create_key?: string | null
+          quick_create_request_hash?: string | null
           status?: string
           style_snapshot?: Json
           title?: string
@@ -5983,6 +6080,423 @@ export type Database = {
             columns: ["va_user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prospecting_campaign_leads: {
+        Row: {
+          campaign_id: string
+          client_id: string
+          crm_contact_id: string | null
+          discovered_at: string
+          id: string
+          job_id: string
+          last_seen_at: string
+          prospect_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          campaign_id: string
+          client_id: string
+          crm_contact_id?: string | null
+          discovered_at?: string
+          id?: string
+          job_id: string
+          last_seen_at?: string
+          prospect_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          campaign_id?: string
+          client_id?: string
+          crm_contact_id?: string | null
+          discovered_at?: string
+          id?: string
+          job_id?: string
+          last_seen_at?: string
+          prospect_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospecting_campaign_leads_campaign_id_client_id_fkey"
+            columns: ["campaign_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "prospecting_campaigns"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "prospecting_campaign_leads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospecting_campaign_leads_crm_contact_id_fkey"
+            columns: ["crm_contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospecting_campaign_leads_job_id_client_id_fkey"
+            columns: ["job_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "prospecting_jobs"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "prospecting_campaign_leads_prospect_id_client_id_fkey"
+            columns: ["prospect_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "prospecting_prospects"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      prospecting_campaigns: {
+        Row: {
+          archived_at: string | null
+          client_id: string
+          country_code: string
+          created_at: string
+          created_by: string | null
+          id: string
+          language_code: string
+          last_job_id: string | null
+          locations: string[]
+          max_results: number
+          name: string
+          queries: string[]
+          source: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          client_id: string
+          country_code?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          language_code?: string
+          last_job_id?: string | null
+          locations?: string[]
+          max_results?: number
+          name: string
+          queries: string[]
+          source: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          client_id?: string
+          country_code?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          language_code?: string
+          last_job_id?: string | null
+          locations?: string[]
+          max_results?: number
+          name?: string
+          queries?: string[]
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospecting_campaigns_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospecting_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospecting_campaigns_last_job_id_fkey"
+            columns: ["last_job_id"]
+            isOneToOne: false
+            referencedRelation: "prospecting_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prospecting_jobs: {
+        Row: {
+          actor_build_id: string | null
+          actor_dataset_id: string | null
+          actor_id: string
+          actor_run_id: string | null
+          adapter_version: number
+          campaign_id: string
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          created_results: number
+          deduplicated_results: number
+          error_code: string | null
+          error_message: string | null
+          id: string
+          lease_token: string | null
+          lease_until: string | null
+          max_charge_usd: number
+          provider_status: string | null
+          requested_results: number
+          returned_results: number
+          source: string
+          status: string
+          updated_at: string
+          usage_total_usd: number | null
+        }
+        Insert: {
+          actor_build_id?: string | null
+          actor_dataset_id?: string | null
+          actor_id: string
+          actor_run_id?: string | null
+          adapter_version: number
+          campaign_id: string
+          client_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          created_results?: number
+          deduplicated_results?: number
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          lease_token?: string | null
+          lease_until?: string | null
+          max_charge_usd: number
+          provider_status?: string | null
+          requested_results: number
+          returned_results?: number
+          source: string
+          status?: string
+          updated_at?: string
+          usage_total_usd?: number | null
+        }
+        Update: {
+          actor_build_id?: string | null
+          actor_dataset_id?: string | null
+          actor_id?: string
+          actor_run_id?: string | null
+          adapter_version?: number
+          campaign_id?: string
+          client_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          created_results?: number
+          deduplicated_results?: number
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          lease_token?: string | null
+          lease_until?: string | null
+          max_charge_usd?: number
+          provider_status?: string | null
+          requested_results?: number
+          returned_results?: number
+          source?: string
+          status?: string
+          updated_at?: string
+          usage_total_usd?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospecting_jobs_campaign_id_client_id_fkey"
+            columns: ["campaign_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "prospecting_campaigns"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "prospecting_jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospecting_jobs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prospecting_prospects: {
+        Row: {
+          actor_build_id: string | null
+          actor_id: string
+          actor_run_id: string | null
+          adapter_version: number
+          address: string | null
+          canonical_key: string
+          captured_at: string
+          client_id: string
+          company_name: string | null
+          country_code: string | null
+          created_at: string
+          dedupe_keys: string[]
+          description: string | null
+          email: string | null
+          employee_count: number | null
+          first_seen_at: string
+          id: string
+          industry: string | null
+          job_title: string | null
+          kind: string
+          last_seen_at: string
+          latitude: number | null
+          linkedin_url: string | null
+          locality: string | null
+          longitude: number | null
+          person_name: string | null
+          phone: string | null
+          rating: number | null
+          raw_payload: Json
+          region: string | null
+          review_count: number | null
+          source: string
+          source_url: string | null
+          updated_at: string
+          website_url: string | null
+        }
+        Insert: {
+          actor_build_id?: string | null
+          actor_id: string
+          actor_run_id?: string | null
+          adapter_version: number
+          address?: string | null
+          canonical_key: string
+          captured_at: string
+          client_id: string
+          company_name?: string | null
+          country_code?: string | null
+          created_at?: string
+          dedupe_keys: string[]
+          description?: string | null
+          email?: string | null
+          employee_count?: number | null
+          first_seen_at?: string
+          id?: string
+          industry?: string | null
+          job_title?: string | null
+          kind: string
+          last_seen_at?: string
+          latitude?: number | null
+          linkedin_url?: string | null
+          locality?: string | null
+          longitude?: number | null
+          person_name?: string | null
+          phone?: string | null
+          rating?: number | null
+          raw_payload?: Json
+          region?: string | null
+          review_count?: number | null
+          source: string
+          source_url?: string | null
+          updated_at?: string
+          website_url?: string | null
+        }
+        Update: {
+          actor_build_id?: string | null
+          actor_id?: string
+          actor_run_id?: string | null
+          adapter_version?: number
+          address?: string | null
+          canonical_key?: string
+          captured_at?: string
+          client_id?: string
+          company_name?: string | null
+          country_code?: string | null
+          created_at?: string
+          dedupe_keys?: string[]
+          description?: string | null
+          email?: string | null
+          employee_count?: number | null
+          first_seen_at?: string
+          id?: string
+          industry?: string | null
+          job_title?: string | null
+          kind?: string
+          last_seen_at?: string
+          latitude?: number | null
+          linkedin_url?: string | null
+          locality?: string | null
+          longitude?: number | null
+          person_name?: string | null
+          phone?: string | null
+          rating?: number | null
+          raw_payload?: Json
+          region?: string | null
+          review_count?: number | null
+          source?: string
+          source_url?: string | null
+          updated_at?: string
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospecting_prospects_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prospecting_usage: {
+        Row: {
+          client_id: string
+          reported_cost_usd: number
+          results_reserved: number
+          results_returned: number
+          runs_started: number
+          updated_at: string
+          usage_date: string
+        }
+        Insert: {
+          client_id: string
+          reported_cost_usd?: number
+          results_reserved?: number
+          results_returned?: number
+          runs_started?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Update: {
+          client_id?: string
+          reported_cost_usd?: number
+          results_reserved?: number
+          results_returned?: number
+          runs_started?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospecting_usage_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
@@ -7630,6 +8144,53 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      checkpoint_prospecting_job: {
+        Args: {
+          p_actor_build_id?: string
+          p_actor_dataset_id?: string
+          p_actor_run_id?: string
+          p_error_code?: string
+          p_error_message?: string
+          p_job_id: string
+          p_lease_token: string
+          p_provider_status?: string
+          p_status: string
+          p_usage_total_usd?: number
+        }
+        Returns: {
+          actor_build_id: string | null
+          actor_dataset_id: string | null
+          actor_id: string
+          actor_run_id: string | null
+          adapter_version: number
+          campaign_id: string
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          created_results: number
+          deduplicated_results: number
+          error_code: string | null
+          error_message: string | null
+          id: string
+          lease_token: string | null
+          lease_until: string | null
+          max_charge_usd: number
+          provider_status: string | null
+          requested_results: number
+          returned_results: number
+          source: string
+          status: string
+          updated_at: string
+          usage_total_usd: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "prospecting_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       claim_brain_signals: {
         Args: {
           p_client_id: string
@@ -7767,6 +8328,46 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "coach_commitments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      claim_prospecting_job: {
+        Args: {
+          p_client_id: string
+          p_job_id: string
+          p_lease_seconds?: number
+        }
+        Returns: {
+          actor_build_id: string | null
+          actor_dataset_id: string | null
+          actor_id: string
+          actor_run_id: string | null
+          adapter_version: number
+          campaign_id: string
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          created_results: number
+          deduplicated_results: number
+          error_code: string | null
+          error_message: string | null
+          id: string
+          lease_token: string | null
+          lease_until: string | null
+          max_charge_usd: number
+          provider_status: string | null
+          requested_results: number
+          returned_results: number
+          source: string
+          status: string
+          updated_at: string
+          usage_total_usd: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "prospecting_jobs"
           isOneToOne: false
           isSetofReturn: true
         }
@@ -8289,6 +8890,47 @@ export type Database = {
           total: number
         }[]
       }
+      ingest_prospecting_job_results: {
+        Args: {
+          p_job_id: string
+          p_lease_token: string
+          p_results: Json
+          p_usage_total_usd?: number
+        }
+        Returns: {
+          actor_build_id: string | null
+          actor_dataset_id: string | null
+          actor_id: string
+          actor_run_id: string | null
+          adapter_version: number
+          campaign_id: string
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          created_results: number
+          deduplicated_results: number
+          error_code: string | null
+          error_message: string | null
+          id: string
+          lease_token: string | null
+          lease_until: string | null
+          max_charge_usd: number
+          provider_status: string | null
+          requested_results: number
+          returned_results: number
+          source: string
+          status: string
+          updated_at: string
+          usage_total_usd: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "prospecting_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       match_brain_memories: {
         Args: {
           p_audience?: string
@@ -8383,6 +9025,53 @@ export type Database = {
         Args: { p_page: string }
         Returns: boolean
       }
+      prepare_quick_content_project: {
+        Args: {
+          p_actor_id: string
+          p_client_id: string
+          p_content_brief: Json
+          p_idea: Json
+          p_idempotency_key: string
+          p_request_hash: string
+          p_style_snapshot: Json
+          p_title: string
+          p_vault_source_ids: string[]
+          p_vault_source_references: Json
+        }
+        Returns: {
+          brain_context_snapshot_id: string | null
+          client_id: string
+          competitor_signals: Json
+          content_brief: Json
+          created_at: string
+          created_by: string | null
+          current_piece_id: string | null
+          current_step: string
+          generation_lease_token: string | null
+          generation_lease_until: string | null
+          id: string
+          idea_snapshot: Json
+          last_error_at: string | null
+          last_error_code: string | null
+          last_error_message: string | null
+          last_generation_warnings: Json
+          last_operation: string | null
+          quick_create_key: string | null
+          quick_create_request_hash: string | null
+          status: string
+          style_snapshot: Json
+          title: string
+          updated_at: string
+          vault_source_ids: string[]
+          vault_source_references: Json
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "content_projects"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       promote_content_campaign_slot: {
         Args: { p_actor_id: string; p_client_id: string; p_slot_id: string }
         Returns: {
@@ -8403,6 +9092,8 @@ export type Database = {
           last_error_message: string | null
           last_generation_warnings: Json
           last_operation: string | null
+          quick_create_key: string | null
+          quick_create_request_hash: string | null
           status: string
           style_snapshot: Json
           title: string
@@ -8417,6 +9108,14 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      promote_prospecting_lead_to_crm: {
+        Args: {
+          p_actor_id: string
+          p_campaign_lead_id: string
+          p_client_id: string
+        }
+        Returns: string
+      }
       purge_expired_coach_private_data: { Args: never; Returns: number }
       question_analytics: {
         Args: { p_role_id?: string }
@@ -8425,6 +9124,16 @@ export type Database = {
           question_id: string
           total: number
         }[]
+      }
+      record_coach_question_metric: {
+        Args: {
+          p_answer_mode: string
+          p_answered: boolean
+          p_client_id: string
+          p_coach_role: string
+          p_timezone?: string
+        }
+        Returns: undefined
       }
       record_content_project_validation: {
         Args: {
@@ -8490,6 +9199,51 @@ export type Database = {
           p_project_id: string
         }
         Returns: string
+      }
+      reserve_prospecting_job: {
+        Args: {
+          p_actor_id: string
+          p_actor_identifier: string
+          p_adapter_version: number
+          p_campaign_id: string
+          p_client_id: string
+          p_daily_result_limit?: number
+          p_daily_run_limit?: number
+          p_max_charge_usd: number
+        }
+        Returns: {
+          actor_build_id: string | null
+          actor_dataset_id: string | null
+          actor_id: string
+          actor_run_id: string | null
+          adapter_version: number
+          campaign_id: string
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          created_results: number
+          deduplicated_results: number
+          error_code: string | null
+          error_message: string | null
+          id: string
+          lease_token: string | null
+          lease_until: string | null
+          max_charge_usd: number
+          provider_status: string | null
+          requested_results: number
+          returned_results: number
+          source: string
+          status: string
+          updated_at: string
+          usage_total_usd: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "prospecting_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       resolve_brain_memory_conflict: {
         Args: {
@@ -8886,6 +9640,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

@@ -240,6 +240,23 @@ export const VA_GUIDE: GuideGroup[] = [
     blurb: "Practical helpers for the day-to-day of supporting your client.",
     items: [
       {
+        title: "Lead Generation",
+        what: "A review-first workspace for finding businesses by type and location before adding suitable leads to the client's CRM.",
+        why: "The goal is to turn prospecting into a repeatable VA workflow while keeping the CRM clean. Collection continues in the background, duplicate businesses are recognized, and you decide what is worth pursuing.",
+        can: [
+          "Search Google Maps or the web for businesses in a target location.",
+          "Review, shortlist or dismiss results in the Lead Inbox.",
+          "Reuse saved campaigns for recurring prospecting work.",
+          "Promote reviewed leads into CRM.",
+        ],
+        how: [
+          "Open Lead Generation and define the business type and location.",
+          "Wait for the background collection to finish, or safely continue other work.",
+          "Review the Lead Inbox and add suitable businesses to CRM.",
+        ],
+        tip: "Check the website and location before promoting a lead—the CRM should contain qualified opportunities, not every scraped result.",
+      },
+      {
         title: "CRM",
         what: "A simple way to track the client's contacts and leads as they move from first contact to closed — with notes and a full history.",
         why: "The goal is to make sure no lead is ever lost and no follow-up forgotten on your watch. Keeping the pipeline tidy is visible, valuable work — your client sees opportunities being managed, not dropped.",

@@ -1,0 +1,15 @@
+{
+  "firstName": "Alex",
+  "lastName": "Morgan",
+  "linkedinUrl": "https://www.linkedin.com/in/alex-morgan-test/?trk=public_profile",
+  "location": "Sydney, New South Wales, Australia",
+  "industry": "Manufacturing",
+  "summary": "Finance leader focused on sustainable manufacturing growth.",
+  "currentPositions": [
+    {
+      "title": "Finance Director",
+      "companyName": "Harbour Manufacturing",
+      "current": true
+    }
+  ]
+}

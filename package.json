@@ -21,6 +21,7 @@
     "db:baseline": "node scripts/apply-migrations.mjs --baseline",
     "db:apply": "node scripts/apply-migrations.mjs --apply",
     "functions:deploy": "node scripts/deploy-functions.mjs",
+    "prospecting:actor-lab": "node scripts/prospecting-actor-lab.mjs",
     "gen:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > types/schema.generated.ts"
   },
   "dependencies": {

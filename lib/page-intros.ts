@@ -44,6 +44,11 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
     body: "The CRM tracks contacts and leads through stages from lead to closed. Move contacts between columns as they progress, add notes, and every change is logged so the whole team stays in sync.",
     guide: "CRM",
   },
+  "lead-generation": {
+    title: "What is Lead Generation?",
+    body: "Lead Generation finds businesses that match a target and keeps them in a review-first inbox. Searches continue safely in the background, duplicate results are recognized, and nothing is added to CRM until you choose it.",
+    guide: "Lead Generation",
+  },
   content: {
     title: "What is the Content studio?",
     body: "The Content studio generates marketing drafts — blogs, posts, emails — grounded in your company's Vault and brand. Create a draft, refine it, and an admin approves it before it goes out.",

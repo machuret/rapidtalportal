@@ -143,6 +143,11 @@ export const scrapeLimiter = new SlidingWindowLimiter(6, 15 * 60_000);
 // indexing from one caller.
 export const vaultUploadLimiter = new SlidingWindowLimiter(40, 5 * 60_000);
 
+// Lead discovery starts paid Apify Actors. The database also enforces a
+// tenant-wide daily run/result budget; this limiter stops rapid repeat clicks
+// before they reach that durable boundary.
+export const leadGenerationLimiter = new SlidingWindowLimiter(5, 15 * 60_000);
+
 // Sending a message — fans out in-app notifications AND email to recipients, so
 // it's an email-bomb / spam vector. Plenty for a real conversation.
 export const messageSendLimiter = new SlidingWindowLimiter(30, 5 * 60_000);
