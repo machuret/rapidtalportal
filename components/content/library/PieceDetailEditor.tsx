@@ -52,6 +52,8 @@ export function PieceDetailEditor({
   onArtifactCreated,
   onPieceChanged,
   onDirtyChange,
+  approvalWarnings = [],
+  approvalPending = false,
   backLabel = "Back to content library",
 }: {
   piece: ContentPieceFull;
@@ -62,6 +64,8 @@ export function PieceDetailEditor({
   onArtifactCreated: (piece: ContentPiece) => void;
   onPieceChanged: (piece: ContentPieceFull) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  approvalWarnings?: string[];
+  approvalPending?: boolean;
   backLabel?: string;
 }) {
   const [body, setBody] = useState(piece.body ?? "");
@@ -189,6 +193,13 @@ export function PieceDetailEditor({
     [body, piece.content_type, piece.style_snapshot],
   );
   const liveWarningCount = liveChecks.reduce((total, check) => total + check.warnings.length, 0);
+  const approvalBlockingWarnings = useMemo(
+    () => Array.from(new Set([
+      ...liveChecks.flatMap((check) => check.warnings),
+      ...approvalWarnings,
+    ])),
+    [approvalWarnings, liveChecks],
+  );
   const sourceGroups = useMemo(
     () => groupSourcesForDisplay(piece.source_references ?? [], {
       namespace: (source) => source.kind,
@@ -311,8 +322,12 @@ export function PieceDetailEditor({
           <Button
             size="sm"
             onClick={() => handleStatusChange("approved")}
-            disabled={isUpdating || dirty || liveWarningCount > 0}
-            title={liveWarningCount > 0 ? "Resolve the displayed channel, voice or hard-rule checks before approval." : "Approve this draft"}
+            disabled={isUpdating || dirty || approvalPending || approvalBlockingWarnings.length > 0}
+            title={approvalPending
+              ? "Checking the current saved draft before approval."
+              : approvalBlockingWarnings.length > 0
+                ? "Resolve the displayed validation checks before approval."
+                : "Approve this draft"}
             className="bg-green-600 hover:bg-green-700 text-white border-0 text-xs h-8"
           >
             {isUpdating ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5 mr-1.5" />}
@@ -377,19 +392,25 @@ export function PieceDetailEditor({
         </p>
       )}
 
-      {canApprove && piece.status === "draft" && !editing && liveWarningCount > 0 && (
+      {canApprove && piece.status === "draft" && !editing && approvalBlockingWarnings.length > 0 && (
         <div role="alert" className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3">
           <p className="text-sm font-medium text-amber-200">
-            Approval is blocked until {liveWarningCount} editorial check{liveWarningCount === 1 ? " is" : "s are"} resolved.
+            Approval is blocked until {approvalBlockingWarnings.length} current check{approvalBlockingWarnings.length === 1 ? " is" : "s are"} resolved.
           </p>
           <div className="mt-2 space-y-1">
-            {liveChecks.flatMap((check) => check.warnings).slice(0, 6).map((warning) => (
+            {approvalBlockingWarnings.slice(0, 6).map((warning) => (
               <p key={warning} className="text-xs leading-5 text-zinc-400">• {warning}</p>
             ))}
           </div>
           <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setEditing(true)}>
             Edit and fix draft
           </Button>
+        </div>
+      )}
+
+      {canApprove && piece.status === "draft" && !editing && approvalPending && (
+        <div role="status" className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-200">
+          Checking the current saved draft before approval…
         </div>
       )}
 

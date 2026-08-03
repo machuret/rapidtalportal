@@ -180,6 +180,7 @@ export function ContentProjectWorkflow({
     generationFailureFromProject(project),
   );
   const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [loadingMoreArtifacts, setLoadingMoreArtifacts] = useState(false);
   const autosaveTimer = useRef<number | null>(null);
   const [history, setHistory] = useState<ContentPiece[]>(
@@ -337,9 +338,9 @@ export function ContentProjectWorkflow({
     () => validation?.checks.flatMap((check) => check.warnings) ?? [],
     [validation],
   );
-  const visibleEditorialWarnings = validationWarnings.length
+  const visibleEditorialWarnings = project.current_step === "validate" || project.current_step === "approve"
     ? validationWarnings
-    : project.last_generation_warnings ?? [];
+    : [];
 
   const brief: ContentBrief = useMemo(() => ({
     version: 1,
@@ -577,6 +578,7 @@ export function ContentProjectWorkflow({
   const runValidation = useCallback(async () => {
     if (!project.current_piece_id) return;
     setBusy(true);
+    setValidationError(null);
     try {
       const result = await api.post<ValidationResult>(ROUTES.content.validate(), {
         client_id: clientId,
@@ -584,15 +586,18 @@ export function ContentProjectWorkflow({
         piece_id: project.current_piece_id,
       });
       setValidation(result);
-    } catch {
+    } catch (error) {
       setValidation(null);
+      setValidationError(errorMessage(error, "The current draft could not be checked."));
     } finally {
       setBusy(false);
     }
   }, [clientId, project.current_piece_id, project.id]);
 
   useEffect(() => {
-    if (project.current_step === "validate") void runValidation();
+    if (project.current_step === "validate" || project.current_step === "approve") {
+      void runValidation();
+    }
   }, [project.current_step, runValidation]);
 
   const handlePieceStatusChanged = useCallback(async (piece: ContentPieceFull) => {
@@ -755,22 +760,6 @@ export function ContentProjectWorkflow({
         </div>
       )}
       <ProjectProgress project={project} />
-      {!!project.current_piece && !!project.last_generation_warnings?.length && (
-        <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4">
-          <p className="text-sm font-semibold text-amber-200">
-            Draft created with editorial checks
-          </p>
-          <p className="mt-1 text-xs text-zinc-400">
-            These checks did not block your draft. Review them before approval.
-          </p>
-          <ul className="mt-2 space-y-1 text-xs leading-5 text-amber-100/80">
-            {project.last_generation_warnings.slice(0, 6).map((warning) => (
-              <li key={warning}>• {warning}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {project.current_step === "idea" && (
         <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
           <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
@@ -1025,9 +1014,31 @@ export function ContentProjectWorkflow({
 
       {project.current_step === "approve" && project.current_piece_id && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-4">
-            <p className="flex items-center gap-2 font-medium text-green-300"><FileText className="h-4 w-4" /> Final approval</p>
-            <p className="mt-1 text-xs text-zinc-400">{canApprove ? "Review the connected draft, then approve it below." : "A client approver must complete this final step."}</p>
+          <div className={`rounded-xl border p-4 ${validationError || (validation && !validation.valid) ? "border-amber-500/25 bg-amber-500/5" : "border-green-500/20 bg-green-500/5"}`}>
+            <p className={`flex items-center gap-2 font-medium ${validationError || (validation && !validation.valid) ? "text-amber-200" : "text-green-300"}`}>
+              <FileText className="h-4 w-4" />
+              {validationError
+                ? "Approval check needs retry"
+                : validation && !validation.valid
+                  ? "Fix the current draft before approval"
+                  : "Final approval"}
+            </p>
+            <p className="mt-1 text-xs text-zinc-400">
+              {validationError
+                ? validationError
+                : validation && !validation.valid
+                  ? `${validationWarnings.length} current check${validationWarnings.length === 1 ? "" : "s"} need attention below.`
+                  : busy || !validation
+                    ? "Checking the current saved draft…"
+                    : canApprove
+                      ? "The current saved draft passed validation and is ready for your decision."
+                      : "A client approver must complete this final step."}
+            </p>
+            {validationError && (
+              <Button className="mt-3" size="sm" variant="outline" disabled={busy} onClick={runValidation}>
+                {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Retry check
+              </Button>
+            )}
           </div>
           <HistoryTab
             history={history}
@@ -1038,7 +1049,10 @@ export function ContentProjectWorkflow({
             onBackToWorkflow={() => patchProject({ current_step: "validate" })}
             backLabel="Back to validation"
             onPieceStatusChanged={handlePieceStatusChanged}
+            onPieceChanged={() => { void runValidation(); }}
             onDirtyChange={setDraftDirty}
+            approvalWarnings={validationWarnings}
+            approvalPending={busy || !validation || Boolean(validationError)}
             onArtifactCreated={handleDerivedArtifactCreated}
             hasMore={project.pieces_has_more}
             loadingMore={loadingMoreArtifacts}

@@ -33,10 +33,13 @@ describe("client experience bug repairs", () => {
 
   test("approval, Vault indexing and Notebook failures are explicit", () => {
     const editor = readFileSync(join(process.cwd(), "components/content/library/PieceDetailEditor.tsx"), "utf8");
+    const workflow = readFileSync(join(process.cwd(), "components/content/ContentProjectWorkflow.tsx"), "utf8");
     const vaultRow = readFileSync(join(process.cwd(), "components/vault/VaultItemRow.tsx"), "utf8");
     const notebook = readFileSync(join(process.cwd(), "app/(portal)/notebook/page.tsx"), "utf8");
-    expect(editor).toContain("liveWarningCount > 0");
+    expect(editor).toContain("approvalBlockingWarnings.length > 0");
     expect(editor).toContain("Approval is blocked until");
+    expect(workflow).toContain('project.current_step === "validate" || project.current_step === "approve"');
+    expect(workflow).toContain("approvalPending={busy || !validation || Boolean(validationError)}");
     expect(vaultRow).toContain("Awaiting AI search");
     expect(notebook).toContain("withPortalDataTimeout");
     expect(notebook).toContain("Notebook pages could not be loaded");

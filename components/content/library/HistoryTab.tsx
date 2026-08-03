@@ -26,12 +26,15 @@ interface HistoryTabProps {
   initialSelectedId?: string | null;
   onBackToWorkflow?: () => void;
   onPieceStatusChanged?: (piece: ContentPieceFull) => void;
+  onPieceChanged?: (piece: ContentPieceFull) => void;
   onDirtyChange?: (dirty: boolean) => void;
   onArtifactCreated?: (piece: ContentPiece) => void;
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore?: () => void | Promise<void>;
   backLabel?: string;
+  approvalWarnings?: string[];
+  approvalPending?: boolean;
 }
 
 /* ── List item ──────────────────────────────────────────────────── */
@@ -81,12 +84,15 @@ export const HistoryTab = memo(function HistoryTab({
   initialSelectedId = null,
   onBackToWorkflow,
   onPieceStatusChanged,
+  onPieceChanged,
   onDirtyChange,
   onArtifactCreated,
   hasMore = false,
   loadingMore = false,
   onLoadMore,
   backLabel,
+  approvalWarnings = [],
+  approvalPending = false,
 }: HistoryTabProps) {
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [selectedPiece, setSelectedPiece] = useState<ContentPieceFull | null>(null);
@@ -148,8 +154,13 @@ export const HistoryTab = memo(function HistoryTab({
           onHistoryUpdate((previous) => [created, ...previous]);
           onArtifactCreated?.(created);
         }}
-        onPieceChanged={setSelectedPiece}
+        onPieceChanged={(updated) => {
+          setSelectedPiece(updated);
+          onPieceChanged?.(updated);
+        }}
         onDirtyChange={onDirtyChange}
+        approvalWarnings={approvalWarnings}
+        approvalPending={approvalPending}
         backLabel={backLabel}
       />
     );
