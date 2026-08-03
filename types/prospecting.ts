@@ -4,6 +4,15 @@ export type ProspectingCampaignStatus = "ready" | "running" | "completed" | "fai
 export type ProspectingJobStatus = "queued" | "running" | "ingesting" | "done" | "error" | "cancelled";
 export type ProspectingLeadStatus = "new" | "shortlisted" | "dismissed" | "imported";
 
+export interface ProspectingIdealProfile {
+  requiredKeywords: string[];
+  preferredKeywords: string[];
+  excludedKeywords: string[];
+  minRating: number;
+  minReviewCount: number;
+  mustHaveWebsite: boolean;
+}
+
 export interface ProspectingCampaign {
   id: string;
   client_id: string;
@@ -14,6 +23,7 @@ export interface ProspectingCampaign {
   country_code: string;
   language_code: string;
   max_results: number;
+  ideal_profile: ProspectingIdealProfile | Record<string, never>;
   status: ProspectingCampaignStatus;
   last_job_id: string | null;
   created_by: string | null;
@@ -27,7 +37,10 @@ export interface ProspectingJob {
   id: string;
   campaign_id: string;
   client_id: string;
-  source: ProspectingCampaign["source"];
+  source: ProspectingCampaign["source"] | "website_enrichment";
+  job_type: "collection" | "enrichment";
+  lead_id: string | null;
+  prospect_id: string | null;
   status: ProspectingJobStatus;
   provider_status: string | null;
   actor_id: string;
@@ -63,6 +76,18 @@ export interface ProspectingLead {
   crm_contact_id: string | null;
   discovered_at: string;
   last_seen_at: string;
+  fit_score: number | null;
+  fit_band: "strong" | "possible" | "weak" | null;
+  fit_breakdown: {
+    dimensions?: Record<string, { score: number; maximum: number }>;
+    criteria?: Record<string, number | boolean>;
+    explanation?: string;
+  };
+  score_version: string | null;
+  scored_at: string | null;
+  latest_enrichment_id: string | null;
+  latest_enrichment: ProspectingEnrichmentSnapshot | null;
+  active_enrichment_job: ProspectingJob | null;
   prospect: {
     id: string;
     kind: "company" | "person";
@@ -88,6 +113,20 @@ export interface ProspectingLead {
   campaign: { id: string; name: string; source: ProspectingCampaign["source"] };
 }
 
+export interface ProspectingEnrichmentSnapshot {
+  id: string;
+  website_url: string;
+  canonical_domain: string;
+  page_count: number;
+  page_urls: string[];
+  title: string | null;
+  description: string | null;
+  emails: string[];
+  phones: string[];
+  social_links: Record<string, string>;
+  captured_at: string;
+}
+
 export interface ProspectingLeadPage {
   leads: ProspectingLead[];
   total: number;
@@ -105,5 +144,7 @@ export interface ProspectingCampaignPage {
     results_reserved: number;
     results_returned: number;
     reported_cost_usd: number;
+    enrichments_started: number;
+    enrichment_pages: number;
   };
 }

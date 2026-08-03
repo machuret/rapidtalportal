@@ -7,8 +7,18 @@ import { getProspectingAdapter } from "@/lib/prospecting/adapters";
 import { serverError } from "@/lib/api/errors";
 import type { ProspectingCampaign, ProspectingJob } from "@/types/prospecting";
 import { todayInTimezone } from "@/lib/date-tz";
+import type { Database } from "@/types/database";
 
 const sourceSchema = z.enum(["google_maps", "google_search"]);
+const keywordList = z.array(z.string().trim().min(1).max(100)).max(12).default([]);
+const idealProfileSchema = z.object({
+  requiredKeywords: keywordList,
+  preferredKeywords: keywordList,
+  excludedKeywords: keywordList,
+  minRating: z.number().min(0).max(5).default(0),
+  minReviewCount: z.number().int().min(0).max(100_000).default(0),
+  mustHaveWebsite: z.boolean().default(false),
+});
 const createSchema = z.object({
   clientId: z.string().uuid(),
   name: z.string().trim().min(1).max(160).optional(),
@@ -16,12 +26,14 @@ const createSchema = z.object({
   query: z.string().trim().min(2).max(300),
   location: z.string().trim().min(2).max(300),
   maxResults: z.number().int().min(1).max(100).default(20),
+  idealProfile: idealProfileSchema.optional(),
 });
 const updateSchema = z.object({
   clientId: z.string().uuid(),
   id: z.string().uuid(),
-  archived: z.boolean(),
-});
+  archived: z.boolean().optional(),
+  idealProfile: idealProfileSchema.optional(),
+}).refine((value) => value.archived !== undefined || value.idealProfile !== undefined, "No update supplied.");
 
 export const GET = withAuth(async (req, { user }) => {
   const parsedQuery = z.object({
@@ -56,7 +68,7 @@ export const GET = withAuth(async (req, { user }) => {
   }
   const byId = new Map(jobs.map((job) => [job.id, job]));
   const { data: usage, error: usageError } = await db.from("prospecting_usage")
-    .select("runs_started, results_reserved, results_returned, reported_cost_usd")
+    .select("runs_started, results_reserved, results_returned, reported_cost_usd, enrichments_started, enrichment_pages")
     .eq("client_id", clientId)
     .eq("usage_date", todayInTimezone("Australia/Sydney"))
     .maybeSingle();
@@ -69,7 +81,7 @@ export const GET = withAuth(async (req, { user }) => {
     total: count ?? 0,
     offset,
     limit,
-    usage: usage ?? { runs_started: 0, results_reserved: 0, results_returned: 0, reported_cost_usd: 0 },
+    usage: usage ?? { runs_started: 0, results_reserved: 0, results_returned: 0, reported_cost_usd: 0, enrichments_started: 0, enrichment_pages: 0 },
   });
 });
 
@@ -101,6 +113,10 @@ export const POST = withAuth(async (req, { user }) => {
     country_code: "au",
     language_code: "en",
     max_results: parsed.data.maxResults,
+    ideal_profile: parsed.data.idealProfile ?? {
+      requiredKeywords: [], preferredKeywords: [], excludedKeywords: [],
+      minRating: 0, minReviewCount: 0, mustHaveWebsite: false,
+    },
     status: "ready",
     created_by: user.id,
   }).select("*").single();
@@ -125,13 +141,24 @@ export const PATCH = withAuth(async (req, { user }) => {
     .maybeSingle();
   if (loadError) return serverError(loadError);
   if (!existing) return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
-  if (parsed.data.archived && existing.status === "running") {
+  if (parsed.data.archived === true && existing.status === "running") {
     return NextResponse.json({ error: "Wait for the active collection run to finish before archiving." }, { status: 409 });
   }
-  const { data, error } = await db.from("prospecting_campaigns").update({
-    archived_at: parsed.data.archived ? new Date().toISOString() : null,
-    status: parsed.data.archived ? "archived" : "ready",
-  }).eq("id", parsed.data.id).eq("client_id", parsed.data.clientId).select("*").single();
+  const values: Database["public"]["Tables"]["prospecting_campaigns"]["Update"] = {};
+  if (parsed.data.archived !== undefined) {
+    values.archived_at = parsed.data.archived ? new Date().toISOString() : null;
+    values.status = parsed.data.archived ? "archived" : "ready";
+  }
+  if (parsed.data.idealProfile) values.ideal_profile = parsed.data.idealProfile;
+  const { data, error } = await db.from("prospecting_campaigns").update(values)
+    .eq("id", parsed.data.id).eq("client_id", parsed.data.clientId).select("*").single();
   if (error || !data) return serverError(error);
+  if (parsed.data.idealProfile) {
+    const { error: scoreError } = await db.rpc("rescore_prospecting_campaign", {
+      p_campaign_id: parsed.data.id,
+      p_client_id: parsed.data.clientId,
+    });
+    if (scoreError) return serverError(scoreError, { userId: user.id, clientId: parsed.data.clientId, url: req.nextUrl.pathname });
+  }
   return NextResponse.json({ campaign: data });
 });

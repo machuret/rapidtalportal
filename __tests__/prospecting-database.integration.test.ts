@@ -109,8 +109,21 @@ live("Prospecting live RLS and concurrency", () => {
       expect(prospects.data).toHaveLength(1);
       prospectId = prospects.data![0].id;
       const leads = await admin!.from("prospecting_campaign_leads")
-        .select("id").eq("client_id", CLIENT_ID!).eq("prospect_id", prospectId);
+        .select("id, fit_score, fit_band, score_version").eq("client_id", CLIENT_ID!).eq("prospect_id", prospectId);
       expect(leads.data).toHaveLength(2);
+      expect(leads.data!.every((lead) => lead.fit_score !== null && lead.score_version === "prospecting-fit-v1")).toBe(true);
+
+      const reservations = await Promise.all([0, 1].map(() => admin!.rpc("reserve_prospecting_enrichment", {
+        p_lead_id: leads.data![0].id,
+        p_client_id: CLIENT_ID!,
+        p_actor_id: ACTOR_ID!,
+        p_actor_identifier: "apify~website-content-crawler",
+        p_adapter_version: 1,
+        p_max_charge_usd: 0.5,
+        p_daily_enrichment_limit: 500,
+      })));
+      expect(reservations.filter((reservation) => !reservation.error && reservation.data?.length === 1)).toHaveLength(1);
+      expect(reservations.filter((reservation) => reservation.error)).toHaveLength(1);
 
       const promotions = await Promise.all(leads.data!.map((lead) => admin!.rpc("promote_prospecting_lead_to_crm", {
         p_campaign_lead_id: lead.id,

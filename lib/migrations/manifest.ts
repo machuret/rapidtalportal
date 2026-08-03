@@ -162,4 +162,7 @@ export const MIGRATIONS = [
   "20260803000200_prospecting_phase1.sql",
   "20260803000201_prospecting_phase1_hardening.sql",
   "20260803000202_prospecting_usage_refund.sql",
+  "20260803000300_prospecting_phase2_qualification.sql",
+  "20260803000301_prospecting_phase2_job_isolation.sql",
+  "20260803000302_prospecting_enrichment_fk_cleanup.sql",
 ] as const;

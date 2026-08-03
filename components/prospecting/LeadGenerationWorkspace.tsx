@@ -9,6 +9,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Globe2,
+  Info,
   Loader2,
   MapPin,
   Phone,
@@ -18,6 +20,7 @@ import {
   UserPlus,
   X,
   StopCircle,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
@@ -39,6 +42,16 @@ import type {
 type Tab = "find" | "inbox" | "campaigns";
 const TERMINAL = new Set(["done", "error", "cancelled"]);
 const PAGE_SIZE = 30;
+
+function keywordList(value: string): string[] {
+  return Array.from(new Set(value.split(",").map((item) => item.trim()).filter(Boolean))).slice(0, 12);
+}
+
+function fitClass(band: ProspectingLead["fit_band"]): string {
+  if (band === "strong") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+  if (band === "possible") return "border-amber-500/30 bg-amber-500/10 text-amber-300";
+  return "border-zinc-700 bg-zinc-800 text-zinc-300";
+}
 
 function statusLabel(status: string): string {
   return ({
@@ -80,12 +93,21 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     results_reserved: 0,
     results_returned: 0,
     reported_cost_usd: 0,
+    enrichments_started: 0,
+    enrichment_pages: 0,
   });
   const [pollIssue, setPollIssue] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   const [source, setSource] = useState<"google_maps" | "google_search">("google_maps");
   const [maxResults, setMaxResults] = useState(20);
+  const [showMatching, setShowMatching] = useState(false);
+  const [requiredKeywords, setRequiredKeywords] = useState("");
+  const [preferredKeywords, setPreferredKeywords] = useState("");
+  const [excludedKeywords, setExcludedKeywords] = useState("");
+  const [minRating, setMinRating] = useState(0);
+  const [minReviewCount, setMinReviewCount] = useState(0);
+  const [mustHaveWebsite, setMustHaveWebsite] = useState(false);
   const [starting, setStarting] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const pollBusy = useRef(false);
@@ -110,7 +132,8 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
       const running = result.campaigns.map((campaign) => campaign.latest_job)
         .filter((job): job is ProspectingJob => Boolean(job && !TERMINAL.has(job.status)));
       setActiveJobs((current) => {
-        const byId = new Map((append ? current : []).map((job) => [job.id, job]));
+        const retained = append ? current : current.filter((job) => job.job_type === "enrichment");
+        const byId = new Map(retained.map((job) => [job.id, job]));
         for (const job of running) byId.set(job.id, job);
         return Array.from(byId.values());
       });
@@ -134,6 +157,15 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
       setLeads(result.leads);
       setTotal(result.total);
       setOffset(result.offset);
+      const enriching = result.leads.map((lead) => lead.active_enrichment_job)
+        .filter((job): job is ProspectingJob => Boolean(job && !TERMINAL.has(job.status)));
+      if (enriching.length) {
+        setActiveJobs((current) => {
+          const byId = new Map(current.map((job) => [job.id, job]));
+          for (const job of enriching) byId.set(job.id, job);
+          return Array.from(byId.values());
+        });
+      }
     } catch (error) {
       toast.error(errorMessage(error, "Lead Inbox could not be loaded."));
     } finally {
@@ -174,12 +206,18 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
         for (const job of results) {
           if (!job) continue;
           if (job.status === "done") {
-            toast.success(`${job.returned_results} leads are ready to review.`);
+            toast.success(job.job_type === "enrichment"
+              ? "Company enrichment is ready. Its fit score has been refreshed."
+              : `${job.returned_results} leads are ready to review.`);
             refreshLeads = true;
           } else if (job.status === "error") {
-            toast.error(job.error_message || "Lead collection did not finish. Run the campaign again.");
+            toast.error(job.error_message || (job.job_type === "enrichment"
+              ? "Company enrichment did not finish. Try enriching this lead again."
+              : "Lead collection did not finish. Run the campaign again."));
+            if (job.job_type === "enrichment") refreshLeads = true;
           } else if (job.status === "cancelled") {
-            toast.success("Lead collection cancelled.");
+            toast.success(job.job_type === "enrichment" ? "Company enrichment cancelled." : "Lead collection cancelled.");
+            if (job.job_type === "enrichment") refreshLeads = true;
           }
         }
         setActiveJobs((current) => current.map((currentJob) =>
@@ -218,6 +256,14 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
         query: query.trim(),
         location: location.trim(),
         maxResults,
+        idealProfile: {
+          requiredKeywords: keywordList(requiredKeywords),
+          preferredKeywords: keywordList(preferredKeywords),
+          excludedKeywords: keywordList(excludedKeywords),
+          minRating,
+          minReviewCount,
+          mustHaveWebsite,
+        },
       });
       const started = await api.post<{ job: ProspectingJob }>(ROUTES.prospecting.runs(), {
         clientId,
@@ -302,6 +348,25 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     }
   }
 
+  async function enrichLead(lead: ProspectingLead) {
+    setPendingAction(`enrich:${lead.id}`);
+    try {
+      const result = await api.post<{ job: ProspectingJob }>(ROUTES.prospecting.enrich(), {
+        clientId,
+        leadId: lead.id,
+      });
+      setActiveJobs((current) => [result.job, ...current.filter((job) => job.id !== result.job.id)]);
+      setLeads((current) => current.map((item) => item.id === lead.id
+        ? { ...item, active_enrichment_job: result.job }
+        : item));
+      toast.success("Company enrichment started. You can keep reviewing leads.");
+    } catch (error) {
+      toast.error(errorMessage(error, "Company enrichment could not be started."));
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   async function cancelJob(job: ProspectingJob) {
     setPendingAction(`cancel:${job.id}`);
     try {
@@ -311,13 +376,13 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
       });
       if (TERMINAL.has(result.job.status)) {
         setActiveJobs((current) => current.filter((item) => item.id !== job.id));
-        await loadCampaigns();
+        await Promise.all([loadCampaigns(), loadLeads(offset, filter)]);
       } else {
         setActiveJobs((current) => current.map((item) => item.id === job.id ? result.job : item));
       }
       toast.success(
         result.job.status === "cancelled"
-          ? "Lead collection cancelled."
+          ? result.job.job_type === "enrichment" ? "Company enrichment cancelled." : "Lead collection cancelled."
           : result.job.status === "done"
             ? "Collection had already completed."
             : "Cancellation requested.",
@@ -359,10 +424,14 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
               <Loader2 className="h-5 w-5 animate-spin text-blue-300" />
               <div>
                 <p className="font-medium text-blue-100">
-                  {activeJob.cancel_requested_at ? "Cancelling lead collection" : "Finding leads in the background"}
+                  {activeJob.cancel_requested_at
+                    ? `Cancelling ${activeJob.job_type === "enrichment" ? "company enrichment" : "lead collection"}`
+                    : activeJob.job_type === "enrichment" ? "Enriching a company website" : "Finding leads in the background"}
                 </p>
                 <p className="mt-0.5 text-xs text-blue-200/70">
-                  Requested {activeJob.requested_results} results. You can leave this page; RapidTal will keep working.
+                  {activeJob.job_type === "enrichment"
+                    ? "Reviewing up to five company pages. You can leave this page; RapidTal will keep working."
+                    : `Requested ${activeJob.requested_results} results. You can leave this page; RapidTal will keep working.`}
                 </p>
                 {activeJob.error_message && (
                   <p className="mt-1 text-xs text-amber-200">{activeJob.error_message}</p>
@@ -432,6 +501,49 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
             {source === "google_search" && (
               <p className="mt-3 text-xs text-amber-300">Web search is broader and may return website candidates that need closer review.</p>
             )}
+            <div className="mt-5 border-t border-zinc-800 pt-5">
+              <button type="button" className="flex items-center gap-2 text-sm font-medium text-zinc-200 hover:text-white" onClick={() => setShowMatching((value) => !value)} aria-expanded={showMatching}>
+                <Sparkles className="h-4 w-4 text-orange-400" />
+                {showMatching ? "Hide ideal-customer matching" : "Improve matching (optional)"}
+              </button>
+              {showMatching && (
+                <div className="mt-4 grid gap-4 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="lead-required">Required terms</Label>
+                    <Input id="lead-required" value={requiredKeywords} onChange={(event) => setRequiredKeywords(event.target.value)} placeholder="e.g. commercial lending, brokers" />
+                    <p className="text-2xs text-zinc-500">Comma-separated. Missing required terms caps the fit score.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lead-preferred">Preferred terms</Label>
+                    <Input id="lead-preferred" value={preferredKeywords} onChange={(event) => setPreferredKeywords(event.target.value)} placeholder="e.g. property, private credit" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lead-excluded">Exclude terms</Label>
+                    <Input id="lead-excluded" value={excludedKeywords} onChange={(event) => setExcludedKeywords(event.target.value)} placeholder="e.g. residential only, recruitment" />
+                    <p className="text-2xs text-zinc-500">A matched exclusion caps the result as a weak fit.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-rating">Minimum rating</Label>
+                      <select id="lead-rating" value={minRating} onChange={(event) => setMinRating(Number(event.target.value))} className="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm">
+                        {[0, 3.5, 4, 4.5].map((value) => <option key={value} value={value}>{value ? `${value}+` : "Any"}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-reviews">Minimum reviews</Label>
+                      <select id="lead-reviews" value={minReviewCount} onChange={(event) => setMinReviewCount(Number(event.target.value))} className="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm">
+                        {[0, 10, 25, 50, 100].map((value) => <option key={value} value={value}>{value || "Any"}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-zinc-300 md:col-span-2">
+                    <input type="checkbox" checked={mustHaveWebsite} onChange={(event) => setMustHaveWebsite(event.target.checked)} className="h-4 w-4 rounded border-zinc-700 bg-zinc-900" />
+                    A website is required for a good fit
+                  </label>
+                  <p className="flex items-start gap-2 text-xs text-zinc-500 md:col-span-2"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />Fit scores are rule-based and show their components. Enrichment improves the evidence; it never changes your criteria.</p>
+                </div>
+              )}
+            </div>
         </section>
       )}
 
@@ -486,6 +598,11 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
                             <h3 className="font-semibold text-zinc-100">{title}</h3>
                             <span className={`rounded-full border px-2 py-0.5 text-2xs font-medium ${statusClass(lead.status)}`}>{statusLabel(lead.status)}</span>
                             <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-2xs text-zinc-400">{lead.campaign.name}</span>
+                            {lead.fit_score !== null && (
+                              <span className={`rounded-full border px-2 py-0.5 text-2xs font-semibold ${fitClass(lead.fit_band)}`}>
+                                {lead.fit_score}/100 · {lead.fit_band ?? "unrated"} fit
+                              </span>
+                            )}
                           </div>
                           {prospect.industry && <p className="mt-1 text-xs text-zinc-400">{prospect.industry}</p>}
                           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zinc-400">
@@ -494,8 +611,34 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
                             {prospect.rating !== null && <span className="flex items-center gap-1.5"><Star className="h-3.5 w-3.5 text-amber-400" />{prospect.rating}{prospect.review_count ? ` (${prospect.review_count})` : ""}</span>}
                             {prospect.website_url && <a className="flex items-center gap-1.5 text-orange-300 hover:text-orange-200" href={prospect.website_url} target="_blank" rel="noreferrer">Website <ExternalLink className="h-3.5 w-3.5" /></a>}
                           </div>
+                          {lead.fit_breakdown?.explanation && <p className="mt-2 text-xs text-zinc-400">{lead.fit_breakdown.explanation}</p>}
+                          {lead.fit_breakdown?.dimensions && (
+                            <details className="mt-2 text-xs text-zinc-500">
+                              <summary className="cursor-pointer hover:text-zinc-300">Why this score</summary>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {Object.entries(lead.fit_breakdown.dimensions).map(([name, value]) => (
+                                  <span key={name} className="rounded-md bg-zinc-950 px-2 py-1">{name.replace(/([A-Z])/gu, " $1")}: {value.score}/{value.maximum}</span>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                          {lead.latest_enrichment && (
+                            <p className="mt-2 flex items-center gap-1.5 text-xs text-blue-300">
+                              <Globe2 className="h-3.5 w-3.5" />
+                              Enriched from {lead.latest_enrichment.page_count} company pages
+                              {lead.latest_enrichment.emails.length ? ` · ${lead.latest_enrichment.emails.length} email found` : ""}
+                            </p>
+                          )}
                         </div>
                         <div className="flex flex-wrap gap-2">
+                          {prospect.website_url && lead.status !== "imported" && (
+                            <Button size="sm" variant="outline" disabled={busy || Boolean(lead.active_enrichment_job)} onClick={() => void enrichLead(lead)}>
+                              {pendingAction === `enrich:${lead.id}` || lead.active_enrichment_job
+                                ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                              {lead.active_enrichment_job ? "Enriching" : lead.latest_enrichment ? "Refresh details" : "Enrich company"}
+                            </Button>
+                          )}
                           {lead.status !== "shortlisted" && lead.status !== "imported" && (
                             <Button size="sm" variant="outline" disabled={busy} onClick={() => void updateLead(lead, "shortlisted")}><Check className="mr-1.5 h-3.5 w-3.5" />Shortlist</Button>
                           )}
@@ -539,7 +682,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
               <p className="text-sm text-zinc-400">Reuse successful searches without entering the criteria again.</p>
             </div>
             <p className="text-xs text-zinc-500">
-              Today: {usage.runs_started} runs · {usage.results_returned} leads · ${Number(usage.reported_cost_usd).toFixed(2)} reported cost
+              Today: {usage.runs_started} searches · {usage.results_returned} leads · {usage.enrichments_started} enrichments · ${Number(usage.reported_cost_usd).toFixed(2)} reported cost
             </p>
           </div>
           {loadingCampaigns ? (

@@ -53,6 +53,7 @@ const campaign: ProspectingCampaign = {
   country_code: "au",
   language_code: "en",
   max_results: 1,
+  ideal_profile: {},
   status: "ready",
   last_job_id: null,
   created_by: "33333333-3333-4333-8333-333333333333",
@@ -66,6 +67,9 @@ const baseJob: ProspectingJob = {
   campaign_id: campaign.id,
   client_id: campaign.client_id,
   source: "google_maps",
+  job_type: "collection",
+  lead_id: null,
+  prospect_id: null,
   status: "queued",
   provider_status: null,
   actor_id: "compass~crawler-google-places",
@@ -396,6 +400,7 @@ describe("prospecting API tenant checks", () => {
       "app/api/prospecting/runs/advance/route.ts",
       "app/api/prospecting/runs/cancel/route.ts",
       "app/api/prospecting/leads/route.ts",
+      "app/api/prospecting/enrich/route.ts",
       "app/api/prospecting/promote/route.ts",
     ];
     for (const route of routes) {
@@ -413,5 +418,8 @@ describe("prospecting API tenant checks", () => {
     expect(source).toContain("aria-label=\"Previous lead page\"");
     expect(source).toContain("Cancel");
     expect(source).toContain("reported cost");
+    expect(source).toContain("Improve matching (optional)");
+    expect(source).toContain("Why this score");
+    expect(source).toContain("Enrich company");
   });
 });

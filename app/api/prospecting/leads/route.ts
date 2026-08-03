@@ -25,19 +25,39 @@ export const GET = withAuth(async (req, { user }) => {
   if (denied) return denied;
   const db = createAdminClient();
   let query = db.from("prospecting_campaign_leads")
-    .select("id, campaign_id, job_id, client_id, status, crm_contact_id, discovered_at, last_seen_at, prospecting_prospects!inner(id, kind, company_name, person_name, job_title, website_url, linkedin_url, source_url, email, phone, address, locality, region, country_code, industry, rating, review_count, description, source, last_seen_at), prospecting_campaigns!inner(id, name, source)", { count: "exact" })
+    .select("id, campaign_id, job_id, client_id, status, crm_contact_id, discovered_at, last_seen_at, fit_score, fit_band, fit_breakdown, score_version, scored_at, latest_enrichment_id, prospecting_prospects!inner(id, kind, company_name, person_name, job_title, website_url, linkedin_url, source_url, email, phone, address, locality, region, country_code, industry, rating, review_count, description, source, last_seen_at), prospecting_campaigns!inner(id, name, source)", { count: "exact" })
     .eq("client_id", parsed.data.clientId)
     .order("discovered_at", { ascending: false })
     .range(parsed.data.offset, parsed.data.offset + parsed.data.limit - 1);
   if (parsed.data.status !== "all") query = query.eq("status", parsed.data.status);
   const { data, error, count } = await query;
   if (error) return serverError(error, { userId: user.id, clientId: parsed.data.clientId, url: req.nextUrl.pathname });
-  const leads = (data ?? []).map((row: Record<string, unknown>) => ({
+  const rows = data ?? [];
+  const leadIds = rows.map((row) => row.id);
+  const enrichmentIds = rows.flatMap((row) => row.latest_enrichment_id ? [row.latest_enrichment_id] : []);
+  const [jobsResult, snapshotsResult] = await Promise.all([
+    leadIds.length
+      ? db.from("prospecting_jobs").select("*").eq("client_id", parsed.data.clientId)
+        .eq("job_type", "enrichment").in("status", ["queued", "running", "ingesting"]).in("lead_id", leadIds)
+      : Promise.resolve({ data: [], error: null }),
+    enrichmentIds.length
+      ? db.from("prospecting_enrichment_snapshots")
+        .select("id, website_url, canonical_domain, page_count, page_urls, title, description, emails, phones, social_links, captured_at")
+        .eq("client_id", parsed.data.clientId).in("id", enrichmentIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (jobsResult.error) return serverError(jobsResult.error, { userId: user.id, clientId: parsed.data.clientId, url: req.nextUrl.pathname });
+  if (snapshotsResult.error) return serverError(snapshotsResult.error, { userId: user.id, clientId: parsed.data.clientId, url: req.nextUrl.pathname });
+  const jobsByLead = new Map((jobsResult.data ?? []).map((job) => [job.lead_id, job]));
+  const snapshotsById = new Map((snapshotsResult.data ?? []).map((snapshot) => [snapshot.id, snapshot]));
+  const leads = rows.map((row: Record<string, unknown>) => ({
     ...row,
     prospect: row.prospecting_prospects,
     campaign: row.prospecting_campaigns,
     prospecting_prospects: undefined,
     prospecting_campaigns: undefined,
+    latest_enrichment: typeof row.latest_enrichment_id === "string" ? snapshotsById.get(row.latest_enrichment_id) ?? null : null,
+    active_enrichment_job: jobsByLead.get(typeof row.id === "string" ? row.id : null) ?? null,
   })) as unknown as ProspectingLead[];
   return NextResponse.json({ leads, total: count ?? 0, offset: parsed.data.offset, limit: parsed.data.limit });
 });

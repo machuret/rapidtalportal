@@ -1,5 +1,19 @@
 export type ProspectingSource = "google_maps" | "google_search" | "linkedin_profiles";
 
+export interface NormalizedWebsiteEnrichment {
+  websiteUrl: string;
+  canonicalDomain: string;
+  pageCount: number;
+  pageUrls: string[];
+  title: string | null;
+  description: string | null;
+  contentExcerpt: string | null;
+  emails: string[];
+  phones: string[];
+  socialLinks: Record<string, string>;
+  contentHash: string;
+}
+
 export type ProspectKind = "company" | "person";
 
 export type ProspectingFieldSource = {

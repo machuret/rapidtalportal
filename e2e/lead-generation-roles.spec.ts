@@ -79,5 +79,9 @@ test.describe("signed-in Lead Generation roles", () => {
       },
     });
     expect(write.status()).toBe(403);
+    const enrich = await page.request.post("/api/prospecting/enrich", {
+      data: { clientId: otherClientId, leadId: "11111111-1111-4111-8111-111111111111" },
+    });
+    expect(enrich.status()).toBe(403);
   });
 });

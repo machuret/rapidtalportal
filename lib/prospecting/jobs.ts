@@ -6,6 +6,12 @@ import {
   startApifyActorRun,
 } from "@/lib/prospecting/apify-client";
 import { getProspectingAdapter, normalizeProspectingDataset } from "@/lib/prospecting/adapters";
+import {
+  buildWebsiteEnrichmentInput,
+  normalizeWebsiteEnrichment,
+  WEBSITE_ENRICHMENT_ACTOR,
+  WEBSITE_ENRICHMENT_ADAPTER_VERSION,
+} from "@/lib/prospecting/enrichment";
 import type { ProspectingCampaign, ProspectingJob } from "@/types/prospecting";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database";
@@ -136,6 +142,88 @@ async function releaseReservation(
 
 export interface StartProspectingRunOptions {
   webhookUrlForJob?: (jobId: string) => string;
+}
+
+export async function startProspectingEnrichment(
+  db: ProspectingDb,
+  lead: { id: string; client_id: string; prospect: { website_url: string | null } },
+  actorId: string,
+  options: StartProspectingRunOptions = {},
+): Promise<ProspectingJob> {
+  if (!lead.prospect.website_url) throw new ProspectingJobError("This lead has no website to enrich.", 422);
+  const maxCharge = configuredNumber("PROSPECTING_ENRICHMENT_MAX_CHARGE_USD", 0.5, 0.5, 3);
+  const { data, error } = await db.rpc("reserve_prospecting_enrichment", {
+    p_lead_id: lead.id,
+    p_client_id: lead.client_id,
+    p_actor_id: actorId,
+    p_actor_identifier: WEBSITE_ENRICHMENT_ACTOR,
+    p_adapter_version: WEBSITE_ENRICHMENT_ADAPTER_VERSION,
+    p_max_charge_usd: maxCharge,
+    p_daily_enrichment_limit: configuredInteger("PROSPECTING_DAILY_ENRICHMENT_LIMIT", 50, 1, 500),
+  });
+  const reserved = one(data as ProspectingJob[] | null);
+  if (error || !reserved) {
+    const detail = typeof error?.message === "string" ? error.message : "";
+    const message = detail.includes("active enrichment")
+      ? "This lead is already being enriched."
+      : detail.includes("budget")
+        ? "Daily company-enrichment budget reached. Try again tomorrow."
+        : detail.includes("no website")
+          ? "This lead has no website to enrich."
+          : "Company enrichment could not be started.";
+    throw new ProspectingJobError(message, message.includes("already") ? 409 : 422);
+  }
+  const claimed = await claimJob(db, reserved.id, lead.client_id);
+  if (!claimed?.lease_token) throw new ProspectingJobError("The new enrichment job is busy. Try again.", 409, true);
+  try {
+    const run = await startApifyActorRun({
+      actorId: WEBSITE_ENRICHMENT_ACTOR,
+      input: buildWebsiteEnrichmentInput(lead.prospect.website_url),
+      maxItems: 5,
+      maxTotalChargeUsd: maxCharge,
+      build: "latest",
+      webhookUrl: options.webhookUrlForJob?.(reserved.id),
+      webhookIdempotencyKey: reserved.id,
+    });
+    try {
+      return await checkpoint(db, reserved.id, claimed.lease_token, {
+        status: "running",
+        providerStatus: run.status,
+        actorBuildId: run.buildId,
+        actorRunId: run.id,
+        actorDatasetId: run.defaultDatasetId,
+        usageTotalUsd: run.usageTotalUsd,
+      });
+    } catch {
+      return {
+        ...reserved,
+        status: "running",
+        provider_status: run.status,
+        actor_build_id: run.buildId,
+        actor_run_id: run.id,
+        actor_dataset_id: run.defaultDatasetId,
+        usage_total_usd: run.usageTotalUsd,
+        error_code: "checkpoint_confirmation_pending",
+        error_message: "The provider run started and is awaiting database confirmation.",
+      };
+    }
+  } catch (caught) {
+    if (caught instanceof ApifyClientError && caught.retryable && caught.requestMayHaveStarted) {
+      return checkpoint(db, reserved.id, claimed.lease_token, {
+        status: "running",
+        errorCode: "provider_start_unconfirmed",
+        errorMessage: "Waiting for the enrichment provider to confirm that collection started.",
+      });
+    }
+    await checkpoint(db, reserved.id, claimed.lease_token, {
+      status: "error",
+      errorCode: caught instanceof ApifyClientError ? "provider_start_failed" : "start_failed",
+      errorMessage: publicJobError(caught),
+    }).catch(() => null);
+    throw caught instanceof ApifyClientError
+      ? new ProspectingJobError(caught.message, caught.status, caught.retryable)
+      : new ProspectingJobError(publicJobError(caught), 500, true);
+  }
 }
 
 export async function startProspectingRun(
@@ -280,7 +368,7 @@ export async function advanceProspectingJob(
         ? null
         : "The provider did not confirm this collection. Run the campaign again.",
     });
-    return claimed.cancel_requested_at
+    return claimed.cancel_requested_at || claimed.job_type === "enrichment"
       ? expired
       : releaseReservation(db, jobId, clientId).catch(() => expired);
   }
@@ -329,6 +417,38 @@ export async function advanceProspectingJob(
       });
     }
 
+    if (claimed.job_type === "enrichment") {
+      const { data: leadRow, error: leadError } = await db
+        .from("prospecting_campaign_leads")
+        .select("id, client_id, prospecting_prospects!inner(website_url)")
+        .eq("id", claimed.lead_id!)
+        .eq("client_id", clientId)
+        .single();
+      if (leadError || !leadRow) throw new ProspectingJobError("Lead not found.", 404);
+      const embedded = leadRow.prospecting_prospects as unknown as { website_url: string | null };
+      if (!embedded.website_url) throw new ProspectingJobError("This lead has no website to enrich.", 422);
+      const datasetItems = await getApifyDatasetItems(run.defaultDatasetId, { limit: 25 });
+      let enrichment;
+      try {
+        enrichment = normalizeWebsiteEnrichment(embedded.website_url, datasetItems);
+      } catch (error) {
+        throw new ProspectingJobError(
+          error instanceof Error ? error.message : "The website did not return usable company information.",
+          422,
+          false,
+        );
+      }
+      const { data, error } = await db.rpc("complete_prospecting_enrichment", {
+        p_job_id: jobId,
+        p_lease_token: claimed.lease_token,
+        p_enrichment: JSON.parse(JSON.stringify(enrichment)) as Json,
+        p_usage_total_usd: run.usageTotalUsd,
+      });
+      const completed = one(data as ProspectingJob[] | null);
+      if (error || !completed) throw new ProspectingJobError("The enriched company details could not be saved. The job can be retried.", 500, true);
+      return completed;
+    }
+
     const { data: campaign, error: campaignError } = await db
       .from("prospecting_campaigns")
       .select("*")
@@ -338,7 +458,7 @@ export async function advanceProspectingJob(
     if (campaignError || !campaign) throw new ProspectingJobError("Campaign not found.", 404);
     const datasetItems = await getApifyDatasetItems(run.defaultDatasetId, { limit: 100 });
     const results = normalizeProspectingDataset(
-      claimed.source,
+      claimed.source as ProspectingCampaign["source"],
       datasetItems,
       {
         providerRunId: run.id,

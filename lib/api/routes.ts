@@ -89,6 +89,7 @@ export const ROUTES = {
     leads: () => "/api/prospecting/leads",
     leadsPage: (clientId: string, status: string, offset: number, limit = 30) =>
       `/api/prospecting/leads?clientId=${clientId}&status=${status}&offset=${offset}&limit=${limit}`,
+    enrich: () => "/api/prospecting/enrich",
     promote: () => "/api/prospecting/promote",
   },
   content: {
