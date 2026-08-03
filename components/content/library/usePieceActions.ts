@@ -144,7 +144,7 @@ export function usePieceActions({
     try {
       const created = await api.post<ContentPiece>(ROUTES.content.duplicate(), { client_id: clientId, id: piece.id });
       onArtifactCreated(created);
-      toast.success("Draft duplicated. It is available in History.");
+      toast.success("Draft duplicated. It is available in the content library.");
     } catch {
       // API client surfaces the error.
     } finally {

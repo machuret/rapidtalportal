@@ -1,14 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import type { DbVaultItem, VaultCategory } from "@/types/database";
 import { toast } from "sonner";
 import {
   FileText, Trash2, Search, Loader2, CheckSquare, Square, X, Radar,
   AlertTriangle, RefreshCw, Sparkles,
+  ArrowRight, CheckCircle2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
@@ -23,6 +26,7 @@ import { VAULT_CATEGORIES, VAULT_CATEGORY_KEYS } from "@/lib/taxonomy/vault-cate
 import { CompetitorsTab } from "@/components/content/competitors/CompetitorsTab";
 import { VaultReadinessDashboard } from "./VaultReadinessDashboard";
 import { reportClientExperience, reportClientFeatureReady } from "@/lib/client-experience";
+import type { ClientFirstSuccessProgress } from "@/lib/onboarding/client-first-success";
 
 type TypeFilter = "all" | "text" | "url" | "pdf" | "docx";
 
@@ -43,10 +47,13 @@ interface VaultClientProps {
   clientId: string;
   userId: string;
   role: string;
-  canWrite: boolean; // client_admin or super_admin
+  canWrite: boolean; // role-gated by the server page; client Vault also permits VA contribution
   companyWebsite?: string | null;
   title?: string;
   subtitle?: string;
+  focusMode?: "documents" | null;
+  initialSearch?: string;
+  initialOpenItemId?: string | null;
 }
 
 // The portal layout provides a global QueryClientProvider, so this just renders.
@@ -59,9 +66,12 @@ function VaultClientInner({
   companyWebsite = null,
   title = "Company Knowledge",
   subtitle = "Approved company facts used by RapidTal Coach and content generation.",
+  focusMode = null,
+  initialSearch = "",
+  initialOpenItemId = null,
 }: VaultClientProps) {
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch.trim());
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<VaultCategory | "all">("all");
 
@@ -101,7 +111,7 @@ function VaultClientInner({
     else reportClientExperience({ eventType: "feature_error", path: "/vault", metadata: { feature: "vault_items" } });
   }, [isLoading, vaultLoadFailed]);
 
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(initialOpenItemId);
   const [crawlJob, setCrawlJob] = useState<CrawlJob | null>(null);
   const [view, setView] = useState<"items" | "recap" | "expanded" | "competitors">("items");
   const [editItem, setEditItem] = useState<DbVaultItem | null>(null);
@@ -111,6 +121,15 @@ function VaultClientInner({
 
   const hasFilters = debouncedSearch !== "" || typeFilter !== "all" || categoryFilter !== "all";
   const canReprocess = canWrite || role === "va";
+  const onboardingProgress = useQuery({
+    queryKey: ["client-first-success", clientId],
+    queryFn: () => api.get<ClientFirstSuccessProgress>(ROUTES.onboarding.progress(clientId), { showErrorToast: false }),
+    enabled: focusMode === "documents",
+    staleTime: 2_000,
+    refetchInterval: (query) => query.state.data?.milestones.includes("documents_ready")
+      ? false
+      : 5_000,
+  });
 
   // ── Backfill embeddings — one server-side sweep indexes everything unindexed ──
   // The work lives in /api/vault/index-batch (same selection + batching as the
@@ -237,6 +256,83 @@ function VaultClientInner({
     } catch {
       companyWebsiteHost = null;
     }
+  }
+
+  if (focusMode === "documents") {
+    const searchableCount = onboardingProgress.data?.readyDocumentCount ?? 0;
+    const ready = Math.min(searchableCount, 3);
+    const complete = onboardingProgress.data?.milestones.includes("documents_ready") ?? false;
+    return (
+      <div className="mx-auto max-w-3xl space-y-5">
+        <section className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-zinc-900 to-zinc-950 p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Step 2 of 6</p>
+          <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold text-white">Add three useful documents</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
+                Start with material that explains what you sell, how you work or what customers need to know. Drop files, paste text or add a URL—RapidTal prepares it automatically.
+              </p>
+            </div>
+            <div className={cn(
+              "rounded-full border px-3 py-1.5 text-sm font-medium",
+              complete ? "border-green-500/30 bg-green-500/10 text-green-300" : "border-zinc-700 bg-zinc-950/60 text-zinc-300",
+            )}>
+              {complete && <CheckCircle2 className="mr-1.5 inline h-4 w-4" />}
+              {onboardingProgress.isLoading
+                ? "Checking…"
+                : complete ? "Starter step complete" : `${ready} of 3 searchable`}
+            </div>
+          </div>
+        </section>
+
+        <CrawlJobPanel clientId={clientId} startedJob={crawlJob} />
+        <div id="vault-add-knowledge">
+          <AddVaultItem
+            clientId={clientId}
+            userId={userId}
+            onAdded={() => {
+              void refetch();
+              void onboardingProgress.refetch();
+            }}
+            onCrawlStarted={setCrawlJob}
+          />
+        </div>
+
+        {counts.processing > 0 && (
+          <p className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-200">
+            {counts.processing} source{counts.processing === 1 ? " is" : "s are"} being prepared. You can continue now; the dashboard updates when processing finishes.
+          </p>
+        )}
+        {complete && searchableCount < 3 && (
+          <p className="rounded-lg border border-zinc-700 bg-zinc-900/60 px-4 py-3 text-sm text-zinc-300">
+            You completed this starter step earlier. {searchableCount} source{searchableCount === 1 ? " is" : "s are"} currently searchable; add or restore sources whenever you want broader coverage.
+          </p>
+        )}
+        {counts.error > 0 && (
+          <p className="rounded-lg border border-red-500/25 bg-red-500/5 px-4 py-3 text-sm text-red-200">
+            {counts.error} source{counts.error === 1 ? " needs" : "s need"} attention. Open the full Vault to retry or replace them.
+          </p>
+        )}
+        {onboardingProgress.isError && (
+          <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm text-amber-100">
+            Starter progress could not be checked. Your sources are safe.
+            <button type="button" onClick={() => void onboardingProgress.refetch()} className="ml-2 underline underline-offset-2">Retry</button>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link href="/dashboard" className={cn(buttonVariants({ variant: "ghost" }), "text-zinc-400")}>
+            Back to your journey
+          </Link>
+          <Link
+            href={complete ? "/dashboard" : "/vault"}
+            className={buttonVariants({ variant: complete ? "default" : "outline" })}
+          >
+            {complete ? "Continue" : "Open full Vault"} <ArrowRight className="ml-1.5 h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -172,4 +172,24 @@ describe("Vault readiness dashboard", () => {
     );
     expect(onIndex).toHaveBeenCalledTimes(1);
   });
+
+  test("shows processing and stuck source counts together", async () => {
+    (api.get as jest.Mock).mockResolvedValue({
+      ...readiness,
+      metrics: { ...readiness.metrics, processing: 2, stuckProcessing: 1 },
+    });
+
+    render(
+      <VaultReadinessDashboard
+        clientId="11111111-1111-4111-8111-111111111111"
+        canCurate
+        canIndex
+        version="1"
+        onAdd={jest.fn()}
+        onIndex={jest.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("2 processing · 1 stuck — restart required")).toBeInTheDocument();
+  });
 });

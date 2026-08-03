@@ -25,9 +25,10 @@ interface Props {
   pages: NotebookPage[];
   participants: NotebookParticipants;
   currentUserId: string;
+  initialPageId?: string | null;
 }
 
-export function NotebookApp({ placements, activePlacementId, pages: initialPages, participants, currentUserId }: Props) {
+export function NotebookApp({ placements, activePlacementId, pages: initialPages, participants, currentUserId, initialPageId = null }: Props) {
   const router = useRouter();
   const [filter, setFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -45,6 +46,7 @@ export function NotebookApp({ placements, activePlacementId, pages: initialPages
     initialPages,
     activePlacementId,
     currentUserId,
+    initialPageId,
     onNewSubPage: (parentId) => setExpanded((e) => ({ ...e, [parentId]: true })),
   });
   const { saveState, stale, scheduleSave, flush, updateContent } = autosave;

@@ -13,6 +13,7 @@ interface UseNotebookPagesOptions {
   initialPages: NotebookPage[];
   activePlacementId: string;
   currentUserId: string;
+  initialPageId?: string | null;
   /**
    * Expanded-state lives in the component (tree concern); called after a
    * sub-page is created so its parent opens.
@@ -42,11 +43,15 @@ export function useNotebookPages({
   initialPages,
   activePlacementId,
   currentUserId,
+  initialPageId = null,
   onNewSubPage,
 }: UseNotebookPagesOptions) {
   const [pages, setPages] = useState<NotebookPage[]>(initialPages);
   const [selectedId, setSelectedId] = useState<string | null>(
-    initialPages.find((p) => !p.is_archived)?.id ?? initialPages[0]?.id ?? null,
+    initialPages.find((p) => p.id === initialPageId && !p.is_archived)?.id
+      ?? initialPages.find((p) => !p.is_archived)?.id
+      ?? initialPages[0]?.id
+      ?? null,
   );
   // Bumped on every context switch to force-remount the editor.
   const [editorKey, setEditorKey] = useState(0);
@@ -57,7 +62,9 @@ export function useNotebookPages({
   // The saver's refs initialise from the initially selected page (first render
   // only), mirroring the ref initializers the autosave hook replaced.
   const [initialDocument] = useState(() => {
-    const first = initialPages.find((p) => !p.is_archived) ?? initialPages[0];
+    const first = initialPages.find((p) => p.id === initialPageId && !p.is_archived)
+      ?? initialPages.find((p) => !p.is_archived)
+      ?? initialPages[0];
     return first ? { id: first.id, title: first.title, updatedAt: first.updated_at } : null;
   });
 

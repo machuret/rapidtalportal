@@ -27,18 +27,14 @@ export function IdealPostQuickAdd({
   clientId: string;
   /** channel → count of approved, permissioned examples (for the /5 meter). */
   approvedByChannel: Record<string, number>;
-  onAdded?: () => void;
+  onAdded?: (channel: (typeof CHANNELS)[number]) => void;
 }) {
   const [channel, setChannel] = useState<(typeof CHANNELS)[number]>("linkedin");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
-  // The page no longer re-renders on add (that remount wiped unsaved work in
-  // the tools below), so the /5 meter tracks this session's additions itself.
-  const [addedByChannel, setAddedByChannel] = useState<Record<string, number>>({});
-
-  const approved = (approvedByChannel[channel] ?? 0) + (addedByChannel[channel] ?? 0);
+  const approved = approvedByChannel[channel] ?? 0;
 
   async function submit() {
     if (busy) return;
@@ -69,9 +65,8 @@ export function IdealPostQuickAdd({
       setBody("");
       setJustAdded(true);
       setTimeout(() => setJustAdded(false), 3000);
-      setAddedByChannel((current) => ({ ...current, [channel]: (current[channel] ?? 0) + 1 }));
-      toast.success(`Added as an approved ideal ${channel} post. The engine learns from it immediately.`);
-      onAdded?.();
+      toast.success(`Added as an approved ideal ${channel} post. It is now available for voice analysis.`);
+      onAdded?.(channel);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The example could not be saved.");
     } finally {
@@ -90,7 +85,7 @@ export function IdealPostQuickAdd({
           <p className="mt-1 max-w-2xl text-sm text-zinc-400">
             Paste a post you love — yours or one you wish you&apos;d written. It becomes an
             <strong> approved golden example</strong>: the engine learns your voice from it right away,
-            and it counts toward the 5-per-channel evaluation baseline.
+            and it becomes available to the channel voice analyser immediately.
           </p>
         </div>
         <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${approved >= 5 ? "border-emerald-500/30 text-emerald-300" : "border-amber-500/30 text-amber-300"}`}>
@@ -136,7 +131,7 @@ export function IdealPostQuickAdd({
           {busy ? "Saving…" : justAdded ? "Added!" : "Add as ideal post"}
         </Button>
         <p className="text-xs text-zinc-500">
-          Added as approved — no second step. Edit or archive it anytime in the golden library below.
+          Added as approved — no second approval step. Analyse the channel profile, then approve that profile before it affects drafts.
         </p>
       </div>
     </section>

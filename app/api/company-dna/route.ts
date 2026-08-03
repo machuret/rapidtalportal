@@ -6,6 +6,8 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CONTENT_HARD_RULE_TYPES } from "@/supabase/functions/_shared/content-style";
 import { hasContentCapability } from "@/lib/auth/content-capabilities";
+import { isCompanyCoreComplete, isCompanyVoiceConfigured } from "@/lib/onboarding/client-first-success";
+import { recordClientOnboardingMilestone } from "@/lib/onboarding/server";
 
 const hardRuleSchema = z.object({
   id: z.string().min(1).max(100),
@@ -28,6 +30,7 @@ const hardRuleSchema = z.object({
 
 const bodySchema = z.object({
   client_id:          z.string().uuid(),
+  onboarding_milestone: z.enum(["company", "voice"]).optional(),
   company_name:       z.string().max(200).optional().nullable(),
   company_description:z.string().max(4000).optional().nullable(),
   founders:           z.string().max(500).optional().nullable(),
@@ -70,7 +73,7 @@ const bodySchema = z.object({
     at: z.string().max(40),
   })).optional(),
   // extra is a NOT NULL JSONB column — must be present on first INSERT
-  extra:              z.record(z.string(), z.unknown()).optional().default({}),
+  extra:              z.record(z.string(), z.unknown()).optional(),
 });
 
 export const POST = withAuth(async (req, { user }) => {
@@ -93,7 +96,7 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  const { client_id, ...fields } = parsed.data;
+  const { client_id, onboarding_milestone, ...fields } = parsed.data;
   const updatedAt = new Date().toISOString();
 
   // Check whether a row already exists for this client.
@@ -101,11 +104,24 @@ export const POST = withAuth(async (req, { user }) => {
   //   INSERT path: all non-null defaults (extra JSONB) are provided
   //   UPDATE path: only the fields the user actually submitted are written —
   //                no risk of nulling out fields not present in this request
-  const { data: existing } = await admin
+  const { data: existing, error: existingError } = await admin
     .from("company_dna")
-    .select("id")
+    .select("*")
     .eq("client_id", client_id)
     .maybeSingle();
+  if (existingError) return serverError(existingError);
+
+  const candidate = { ...(existing ?? {}), ...fields } as Record<string, unknown>;
+  if (onboarding_milestone === "company" && !isCompanyCoreComplete(candidate)) {
+    return NextResponse.json({
+      error: "Add your company name, services, ideal customers and one current priority before continuing.",
+    }, { status: 422 });
+  }
+  if (onboarding_milestone === "voice" && !isCompanyVoiceConfigured(candidate, 0)) {
+    return NextResponse.json({
+      error: "Describe your brand voice or preferred content style before continuing.",
+    }, { status: 422 });
+  }
 
   let data, error;
 
@@ -129,6 +145,29 @@ export const POST = withAuth(async (req, { user }) => {
   if (error) {
     console.error("[company-dna POST] DB error:", error.code, error.message, error.details);
     return serverError(error);
+  }
+  if (!data) {
+    console.error("[company-dna POST] Save completed without a returned row.");
+    return NextResponse.json({ error: "Your company details could not be confirmed after saving. Please try again." }, { status: 500 });
+  }
+  if (onboarding_milestone) {
+    try {
+      await recordClientOnboardingMilestone({
+        clientId: client_id,
+        milestone: onboarding_milestone === "company" ? "company_confirmed" : "voice_configured",
+        completedBy: user.id,
+        sourceType: "company_dna",
+        sourceId: data.id,
+        metadata: { explicitConfirmation: true },
+      });
+    } catch (milestoneError) {
+      console.error("[company-dna POST] onboarding milestone:", milestoneError);
+      return NextResponse.json({
+        error: "Your company details were saved, but starter progress could not be updated. Try Save and continue again.",
+        saved: true,
+        retryable: true,
+      }, { status: 503 });
+    }
   }
   return NextResponse.json(data);
 });

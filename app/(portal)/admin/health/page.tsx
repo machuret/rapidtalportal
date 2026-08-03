@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireSuperAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MIGRATIONS } from "@/lib/migrations/manifest";
@@ -5,9 +6,14 @@ import { emailConfigured } from "@/lib/email";
 import { isEncryptionConfigured } from "@/lib/crypto/credentials";
 import { cn } from "@/lib/utils";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { Activity, CheckCircle2, XCircle, AlertTriangle, Database, Clock, Brain, KeyRound } from "lucide-react";
+import { Activity, CheckCircle2, XCircle, AlertTriangle, Database, Clock, Brain, KeyRound, Compass } from "lucide-react";
 import { ProspectingProviderHealth } from "@/components/admin/ProspectingProviderHealth";
 import providers from "@/lib/prospecting/providers.json";
+import {
+  CLIENT_FIRST_SUCCESS_TOTAL,
+  CLIENT_ONBOARDING_MILESTONE_LABELS,
+  CLIENT_ONBOARDING_MILESTONES,
+} from "@/lib/onboarding/client-first-success";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "System Health — RapidTal Admin" };
@@ -17,12 +23,19 @@ export const metadata = { title: "System Health — RapidTal Admin" };
  * environment drift (migrations not applied, crons not running, embeddings
  * silently failing). Everything here is metadata; no client content is shown.
  */
-export default async function AdminHealthPage() {
+export default async function AdminHealthPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ range?: string }>;
+}) {
   await requireSuperAdmin();
+  const requestedRange = (await searchParams)?.range;
+  const rangeDays = requestedRange === "7" ? 7 : requestedRange === "90" ? 90 : 30;
+  const adoptionSince = new Date(Date.now() - rangeDays * 24 * 3_600_000).toISOString();
 
   const admin = createAdminClient();
 
-  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, tallyRes, { count: recentErrorCount }, providerCheckRes, experienceRes] = await Promise.all([
+  const [{ data: appliedRows }, schemaRes, { data: beats }, { data: clients }, tallyRes, { count: recentErrorCount }, providerCheckRes, experienceRes, adoptionRes, funnelRes, discoveryRes] = await Promise.all([
     admin.from("schema_migrations").select("version"),
     admin.rpc("health_schema_check"),
     admin.from("cron_heartbeats").select("name, ran_at, detail"),
@@ -42,6 +55,20 @@ export default async function AdminHealthPage() {
     (admin as any).rpc("health_portal_experience", {
       p_since: new Date(Date.now() - 24 * 3_600_000).toISOString(),
     }),
+    // Product adoption is intentionally separate from operational health. A
+    // client still learning the product is not a failing system.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (admin as any).rpc("health_client_adoption", {
+      p_since: adoptionSince,
+    }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (admin as any).rpc("health_client_onboarding_funnel", {
+      p_since: adoptionSince,
+    }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (admin as any).rpc("health_client_discovery", {
+      p_since: adoptionSince,
+    }),
   ]);
 
   type ExperienceHealthRow = {
@@ -50,6 +77,26 @@ export default async function AdminHealthPage() {
   };
   const experienceRows = (experienceRes.error ? [] : (experienceRes.data ?? [])) as ExperienceHealthRow[];
   const unhealthyExperience = experienceRows.filter((row) => Number(row.errors) > 0 || Number(row.p95_feature_ms) > 8_000);
+
+  type AdoptionHealthRow = {
+    client_id: string; client_name: string; active_client_admins: number; active_vas: number; route_sessions: number;
+    feature_ready: number; errors: number; retries: number; navigation_searches: number;
+    search_selections: number; zero_result_searches: number; destinations_opened: number; destinations_loaded: number;
+    guide_searches: number; contextual_help: number; recent_steps_completed: number;
+    completed_milestones: number; total_milestones: number; missing_milestones: string[]; last_activity: string | null;
+  };
+  const adoptionRows = (adoptionRes.error ? [] : (adoptionRes.data ?? [])) as AdoptionHealthRow[];
+  type FunnelRow = {
+    sequence: number; step: string; label: string; cohort_clients: number;
+    viewed_clients: number; completed_clients: number;
+  };
+  const funnelRows = (funnelRes.error ? [] : (funnelRes.data ?? [])) as FunnelRow[];
+  type DiscoveryHealthRow = {
+    client_id: string; client_name: string; actor_role: "client_admin" | "va";
+    searches: number; selections: number; record_selections: number; destination_selections: number;
+    destinations_loaded: number; zero_result_searches: number; contextual_help: number; last_activity: string | null;
+  };
+  const discoveryRows = (discoveryRes.error ? [] : (discoveryRes.data ?? [])) as DiscoveryHealthRow[];
 
   // ── Migration drift ────────────────────────────────────────────────────────
   const applied = new Set(((appliedRows ?? []) as { version: string }[]).map((r) => r.version));
@@ -204,6 +251,157 @@ export default async function AdminHealthPage() {
                       <td className="py-2 text-right tabular-nums text-amber-300">{Number(row.slow)}</td>
                       <td className="py-2 text-right tabular-nums text-red-300">{Number(row.errors)}</td>
                       <td className="py-2 text-right tabular-nums text-zinc-400">{Number(row.retries)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="surface-card p-4 lg:col-span-2">
+          <div className="mb-1 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="label-section flex items-center gap-2"><Compass className="w-4 h-4" /> Client adoption — last {rangeDays} days</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Client-admin activity is measured separately from VA usage. Routes and controlled result counts are stored; search text and client content are not.
+              </p>
+            </div>
+            <nav aria-label="Adoption reporting period" className="flex rounded-lg border border-zinc-800 p-0.5 text-xs">
+              {[7, 30, 90].map((days) => (
+                <Link
+                  key={days}
+                  href={`/admin/health?range=${days}`}
+                  aria-current={rangeDays === days ? "page" : undefined}
+                  className={cn("rounded-md px-2.5 py-1.5", rangeDays === days ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-200")}
+                >
+                  {days}d
+                </Link>
+              ))}
+            </nav>
+          </div>
+          {adoptionRes.error ? (
+            <p className="text-sm text-amber-300">Adoption reporting is unavailable. Apply the Sprint 5 client-experience migration.</p>
+          ) : adoptionRows.length === 0 ? (
+            <p className="text-sm text-zinc-500">No active clients are available to measure.</p>
+          ) : (
+            <div>
+              {funnelRes.error ? (
+                <p className="mb-4 text-sm text-amber-300">The onboarding cohort funnel is unavailable.</p>
+              ) : Number(funnelRows[0]?.cohort_clients ?? 0) === 0 ? (
+                <p className="mb-4 rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2 text-xs text-zinc-500">
+                  No client began the guided journey during this period. Lifetime progress is still shown below.
+                </p>
+              ) : (
+                <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6" aria-label="First-success cohort funnel">
+                  {funnelRows.map((step) => (
+                    <div key={step.step} className="rounded-lg border border-zinc-800 bg-zinc-950/30 px-3 py-2">
+                      <p className="text-2xs uppercase tracking-wide text-zinc-600">Step {Number(step.sequence)}</p>
+                      <p className="mt-0.5 text-xs font-medium text-zinc-300">{step.label}</p>
+                      <p className="mt-1 text-xs tabular-nums text-zinc-500">
+                        {Number(step.viewed_clients)} viewed · {Number(step.completed_clients)} completed
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                <thead className="border-b border-zinc-800 text-xs text-zinc-500">
+                  <tr>
+                    <th className="py-2 text-left">Client</th>
+                    <th className="py-2 text-right">Usage</th>
+                    <th className="py-2 text-right">Lifetime progress</th>
+                    <th className="py-2 text-right">Findability</th>
+                    <th className="py-2 text-right">Loaded</th>
+                    <th className="py-2 text-right">Help</th>
+                    <th className="py-2 text-right">Friction</th>
+                    <th className="py-2 text-right">Last seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adoptionRows.map((row) => {
+                    const milestones = Number(row.completed_milestones);
+                    const milestoneTotal = Number(row.total_milestones) || CLIENT_FIRST_SUCCESS_TOTAL;
+                    const complete = milestones >= milestoneTotal;
+                    return (
+                      <tr key={row.client_id} className="border-b border-zinc-800/60 align-top last:border-0">
+                        <td className="py-2 pr-3">
+                          <Link href={`/admin/clients/${row.client_id}`} className="font-medium text-zinc-200 hover:text-white">
+                            {row.client_name}
+                          </Link>
+                        </td>
+                        <td className="py-2 text-right text-xs text-zinc-400">
+                          <span className="block tabular-nums">{Number(row.active_client_admins)} client admin{Number(row.active_client_admins) === 1 ? "" : "s"}</span>
+                          <span className="block text-zinc-600">{Number(row.active_vas)} VA · {Number(row.route_sessions)} client visits</span>
+                        </td>
+                        <td className={cn("py-2 text-right text-xs tabular-nums", complete ? "text-green-400" : "text-zinc-400")}>
+                          <span className="block">{milestones}/{milestoneTotal}</span>
+                          <span className="block text-zinc-600">
+                            {complete
+                              ? "complete"
+                              : `Next: ${CLIENT_ONBOARDING_MILESTONE_LABELS[
+                                CLIENT_ONBOARDING_MILESTONES.find((item) => item === row.missing_milestones?.[0])
+                                  ?? CLIENT_ONBOARDING_MILESTONES[0]
+                              ]}`}
+                          </span>
+                          {Number(row.recent_steps_completed) > 0 && <span className="block text-green-500">+{Number(row.recent_steps_completed)} this period</span>}
+                        </td>
+                        <td className="py-2 text-right text-xs text-zinc-400">
+                          <span className="block tabular-nums">{Number(row.navigation_searches)} searches</span>
+                          <span className="block tabular-nums text-zinc-600">{Number(row.search_selections)} selected · {Number(row.zero_result_searches)} no result</span>
+                        </td>
+                        <td className="py-2 text-right text-xs text-zinc-400">
+                          <span className="block tabular-nums">{Number(row.destinations_loaded)}/{Number(row.destinations_opened)}</span>
+                          <span className="block text-zinc-600">destinations loaded</span>
+                        </td>
+                        <td className="py-2 text-right text-xs text-zinc-400">
+                          <span className="block tabular-nums">{Number(row.guide_searches)} guide</span>
+                          <span className="block tabular-nums text-zinc-600">{Number(row.contextual_help)} in-page</span>
+                        </td>
+                        <td className="py-2 text-right text-xs">
+                          <span className={cn("block tabular-nums", Number(row.errors) ? "text-red-300" : "text-zinc-500")}>{Number(row.errors)} errors</span>
+                          <span className="block tabular-nums text-zinc-600">{Number(row.retries)} retries</span>
+                        </td>
+                        <td className="py-2 text-right text-xs text-zinc-500">
+                          {row.last_activity
+                            ? new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", timeZone: "Australia/Sydney" }).format(new Date(row.last_activity))
+                            : "Not measured"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="surface-card p-4 lg:col-span-2">
+          <p className="label-section mb-1 flex items-center gap-2"><Compass className="h-4 w-4" /> Discovery and in-page Coach pilot</p>
+          <p className="mb-3 text-xs text-zinc-500">Client admins and VAs are measured separately. Only controlled result types and outcomes are stored—never search words or client content.</p>
+          {discoveryRes.error ? (
+            <p className="text-sm text-amber-300">Sprint 6 pilot reporting is unavailable. Apply the client discovery migration.</p>
+          ) : discoveryRows.length === 0 ? (
+            <p className="text-sm text-zinc-500">No global-search or contextual-help activity was recorded during this period.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-zinc-800 text-xs text-zinc-500">
+                  <tr><th className="py-2 text-left">Client</th><th className="py-2 text-left">Role</th><th className="py-2 text-right">Searches</th><th className="py-2 text-right">Selected</th><th className="py-2 text-right">Records</th><th className="py-2 text-right">Loaded</th><th className="py-2 text-right">No result</th><th className="py-2 text-right">Help here</th></tr>
+                </thead>
+                <tbody>
+                  {discoveryRows.map((row) => (
+                    <tr key={`${row.client_id}:${row.actor_role}`} className="border-b border-zinc-800/60 last:border-0">
+                      <td className="py-2 text-zinc-300">{row.client_name}</td>
+                      <td className="py-2 text-xs uppercase text-zinc-500">{row.actor_role === "client_admin" ? "Client" : "VA"}</td>
+                      <td className="py-2 text-right tabular-nums text-zinc-400">{Number(row.searches)}</td>
+                      <td className="py-2 text-right tabular-nums text-zinc-400">{Number(row.selections)}</td>
+                      <td className="py-2 text-right tabular-nums text-zinc-400">{Number(row.record_selections)}</td>
+                      <td className="py-2 text-right tabular-nums text-zinc-400">{Number(row.destinations_loaded)}/{Number(row.selections)}</td>
+                      <td className="py-2 text-right tabular-nums text-amber-300">{Number(row.zero_result_searches)}</td>
+                      <td className="py-2 text-right tabular-nums text-purple-300">{Number(row.contextual_help)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -55,6 +55,6 @@ test("positioning-only competitors are sent to collection instead of broad analy
   expect(screen.getByRole("button", { name: "Analyse competitors" })).toBeDisabled();
   expect(screen.getByRole("link", { name: "Add or collect sources" })).toHaveAttribute(
     "href",
-    `/company-dna/competitors#competitor-${competitor.id}`,
+    `/competitors#competitor-${competitor.id}`,
   );
 });

@@ -1,6 +1,6 @@
 /** @jest-environment jsdom */
 
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { AskVaultClient } from "@/components/coach/AskVaultClient";
 
 let mockChat: {
@@ -15,7 +15,7 @@ jest.mock("@/components/coach/useCoachChat", () => ({
 jest.mock("@/components/coach/ChatTurn", () => ({ ChatTurn: () => <div data-testid="chat-turn" /> }));
 jest.mock("@/components/vault/CoachProgressPanel", () => ({ CoachProgressPanel: () => null }));
 jest.mock("@/components/vault/CoachMemoryPanel", () => ({ CoachMemoryPanel: () => null }));
-jest.mock("@/components/intelligence/AskBrainFlow", () => ({ AskBrainFlow: () => null }));
+jest.mock("@/components/intelligence/AskBrainFlow", () => ({ AskBrainFlow: () => <div>Brain flow</div> }));
 
 const scrollSpy = jest.fn();
 
@@ -32,6 +32,7 @@ function makeTurn(question: string) {
     coachMode: "private",
     actionDraft: null,
     actionStatus: "none",
+    persistenceStatus: "persisted",
   };
 }
 
@@ -82,12 +83,35 @@ describe("Coach auto-scroll behaviour", () => {
       ask: jest.fn(),
       goDeeper: jest.fn(),
       newConversation: jest.fn(),
+      retryTurnPersistence: jest.fn(),
     };
   });
 
   it("scrolls to the bottom on mount", () => {
     renderChat();
     expect(scrollSpy).toHaveBeenCalled();
+  });
+
+  it("keeps the first-question flow simple and offers a continuation after an answer", () => {
+    mockChat.turns = [makeTurn("What should we prioritise?")];
+    render(<AskVaultClient clientId="client-1" companyName="Acme" canCurate={false} onboardingMode />);
+
+    expect(screen.getByText("Step 4 of 6")).toBeInTheDocument();
+    expect(screen.queryByText("Brain flow")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Track Goal" })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Ask your first question…")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /continue/i })).toHaveAttribute("href", "/dashboard");
+  });
+
+  it("never completes onboarding while the first answer is unsaved", () => {
+    const turn = { ...makeTurn("What should we prioritise?"), persistenceStatus: "failed" };
+    mockChat.turns = [turn];
+    render(<AskVaultClient clientId="client-1" companyName="Acme" canCurate={false} onboardingMode />);
+
+    expect(screen.queryByRole("link", { name: /continue/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Your answer is ready, but progress was not saved")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /retry save/i }));
+    expect(mockChat.retryTurnPersistence).toHaveBeenCalledWith(turn);
   });
 
   it("follows streamed tokens only while the user stays near the bottom", () => {

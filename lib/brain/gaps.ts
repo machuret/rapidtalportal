@@ -33,13 +33,20 @@ export interface ProfileGaps {
 
 const isFilled = (v: unknown): boolean => typeof v === "string" && v.trim().length > 0;
 
-export function profileGaps(dna: Record<string, unknown> | null): ProfileGaps {
-  const total = PROFILE_FIELD_DEFS.length;
-  const filled = PROFILE_FIELD_DEFS.filter((f) => isFilled(dna?.[f.key]));
-  const empty = PROFILE_FIELD_DEFS.filter((f) => !isFilled(dna?.[f.key]))
+export function profileGaps(
+  dna: Record<string, unknown> | null,
+  includedKeys?: readonly string[],
+): ProfileGaps {
+  const included = includedKeys ? new Set(includedKeys) : null;
+  const definitions = included
+    ? PROFILE_FIELD_DEFS.filter((field) => included.has(field.key))
+    : PROFILE_FIELD_DEFS;
+  const total = definitions.length;
+  const filled = definitions.filter((f) => isFilled(dna?.[f.key]));
+  const empty = definitions.filter((f) => !isFilled(dna?.[f.key]))
     .sort((a, b) => b.impact - a.impact);
   return {
-    completionPct: Math.round((filled.length / total) * 100),
+    completionPct: total === 0 ? 100 : Math.round((filled.length / total) * 100),
     filledCount: filled.length,
     total,
     gaps: empty,

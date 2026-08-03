@@ -4,11 +4,17 @@ import { AskVaultClient } from "@/components/coach/AskVaultClient";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ShieldAlert } from "lucide-react";
+import { OnboardingStepReporter } from "@/components/onboarding/OnboardingStepReporter";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "RapidTal Coach" };
 
-export default async function AskPage() {
+export default async function AskPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ setup?: string }>;
+}) {
+  const params = await searchParams;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user, client } = ctx;
@@ -38,6 +44,7 @@ export default async function AskPage() {
 
   const canCurate = user.role === "client_admin" || user.role === "super_admin";
   const coachRole = user.role === "va" ? "va" : "client";
+  const onboardingMode = params?.setup === "first-question" && user.role === "client_admin";
   const admin = createAdminClient();
   const [vaResult, taskResult] = await Promise.all([
     coachRole === "client" ? admin
@@ -60,7 +67,7 @@ export default async function AskPage() {
 
   return (
     <div className="page-prose">
-      <PageIntro id="ask" />
+      {!onboardingMode && <PageIntro id="ask" />}
       <AskVaultClient
         clientId={user.client_id}
         companyName={client?.name ?? "your company"}
@@ -70,7 +77,10 @@ export default async function AskPage() {
         teamMembers={teamMembers}
         taskOptions={(taskResult.data ?? []).map((task) => ({ id: task.id, title: task.title, status: task.status as "todo" | "in_progress" | "review" | "done" }))}
         timeZone={user.timezone || "UTC"}
+        onboardingMode={onboardingMode}
+        consumeLocalPrefill
       />
+      {onboardingMode && <OnboardingStepReporter clientId={user.client_id} step="coach" />}
     </div>
   );
 }

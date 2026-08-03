@@ -106,7 +106,7 @@ export function IdeasPage({
           onTopicApproved={(topic) =>
             setTopics((current) => [topic, ...current.filter((item) => item.id !== topic.id)])}
           onTopicsChange={setTopics}
-          onOpenIntelligence={() => router.push("/content/competitors")}
+          onOpenIntelligence={() => router.push("/competitors")}
         />
       </div>
     </ContentErrorBoundary>

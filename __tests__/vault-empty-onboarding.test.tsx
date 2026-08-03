@@ -6,6 +6,15 @@ jest.mock("@/lib/api-client", () => ({
   api: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
 jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+jest.mock("@tanstack/react-query", () => ({
+  ...jest.requireActual("@tanstack/react-query"),
+  useQuery: () => ({
+    data: { milestones: [], readyDocumentCount: 0 },
+    isLoading: false,
+    isError: false,
+    refetch: jest.fn(),
+  }),
+}));
 jest.mock("@/hooks/useVaultList", () => ({
   useVaultList: () => ({
     items: [],
@@ -70,5 +79,23 @@ describe("empty Vault onboarding", () => {
     );
     expect(screen.getByText(/enter the company website above/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Crawl / })).not.toBeInTheDocument();
+  });
+
+  test("offers a focused three-document starter flow without Vault diagnostics", () => {
+    render(
+      <VaultClient
+        clientId="11111111-1111-4111-8111-111111111111"
+        userId="22222222-2222-4222-8222-222222222222"
+        role="client_admin"
+        canWrite
+        focusMode="documents"
+      />,
+    );
+
+    expect(screen.getByText("Step 2 of 6")).toBeInTheDocument();
+    expect(screen.getByText("Add three useful documents")).toBeInTheDocument();
+    expect(screen.getByText("0 of 3 searchable")).toBeInTheDocument();
+    expect(screen.queryByText("Knowledge report")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to your journey" })).toHaveAttribute("href", "/dashboard");
   });
 });

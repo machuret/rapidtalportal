@@ -116,10 +116,13 @@ describe("Lead Generation modularity and regression audit", () => {
     const migration = read("db/migrations/20260803000313_prospecting_enrichment_attempt_visibility.sql");
     const leadsRoute = read("app/api/prospecting/leads/route.ts");
     const inbox = read("components/prospecting/LeadInbox.tsx");
+    const presentation = read("components/prospecting/presentation.ts");
     expect(migration).toContain("latest_enrichment_job_id");
     expect(migration).toContain("remember_latest_prospecting_enrichment_job");
     expect(leadsRoute).toContain("latest_enrichment_job:");
-    expect(inbox).toContain("Company enrichment did not finish");
+    expect(inbox).toContain("explainEnrichmentFailure");
+    expect(presentation).toContain("Company enrichment did not finish");
+    expect(presentation).toContain("Website enrichment scraper test");
   });
 
   test("verifies webhook actors, rate-limits creation and supports collaboration history", () => {

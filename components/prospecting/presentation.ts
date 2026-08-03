@@ -1,4 +1,50 @@
-import type { ProspectingCampaign, ProspectingLead } from "@/types/prospecting";
+import type { ProspectingCampaign, ProspectingJob, ProspectingLead } from "@/types/prospecting";
+
+export interface EnrichmentFailureExplanation {
+  title: string;
+  detail: string;
+  nextStep: string;
+}
+
+export function explainEnrichmentFailure(
+  job: Pick<ProspectingJob, "error_code" | "error_message">,
+): EnrichmentFailureExplanation {
+  const code = job.error_code ?? "";
+  const message = job.error_message?.trim() ?? "";
+  if (/configur|credential|unauthor|forbidden/iu.test(`${code} ${message}`)) {
+    return {
+      title: "Enrichment provider needs attention",
+      detail: "The website-enrichment scraper could not authenticate or is not configured for this environment.",
+      nextStep: "Ask a portal admin to run the Website enrichment scraper test, then retry this lead.",
+    };
+  }
+  if (code === "provider_confirmation_expired" || code === "provider_start_unconfirmed") {
+    return {
+      title: "Enrichment start was not confirmed",
+      detail: "The provider did not confirm the run before the safety timeout, so no daily enrichment allowance was used.",
+      nextStep: "Retry this lead. If it repeats, ask an admin to check the Website enrichment scraper.",
+    };
+  }
+  if (code === "missing_dataset") {
+    return {
+      title: "Enrichment returned no readable result",
+      detail: "The scraper completed without a results dataset that RapidTal could import.",
+      nextStep: "Check that the company website opens publicly, then retry enrichment.",
+    };
+  }
+  if (/provider_(failed|timed-out|timed_out|aborted)/u.test(code)) {
+    return {
+      title: "Enrichment provider did not finish",
+      detail: message || "The website-enrichment scraper stopped before producing usable company details.",
+      nextStep: "Retry this lead. Repeated failures should be checked in the scraper health panel.",
+    };
+  }
+  return {
+    title: "Company enrichment did not finish",
+    detail: message || "The website did not return usable company details.",
+    nextStep: "Retry enrichment. The existing lead and any previously enriched details are unchanged.",
+  };
+}
 
 export function keywordList(value: string): string[] {
   return Array.from(new Set(value.split(",").map((item) => item.trim()).filter(Boolean))).slice(0, 12);

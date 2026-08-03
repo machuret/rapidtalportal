@@ -8,7 +8,12 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { fitClass, statusClass, statusLabel } from "@/components/prospecting/presentation";
+import {
+  explainEnrichmentFailure,
+  fitClass,
+  statusClass,
+  statusLabel,
+} from "@/components/prospecting/presentation";
 import type { ProspectingCollaborator, ProspectingLead, ProspectingLeadStatus } from "@/types/prospecting";
 import { ProspectingLoadFailure } from "@/components/prospecting/ProspectingLoadFailure";
 
@@ -87,6 +92,9 @@ export function LeadInbox({
               const prospect = lead.prospect;
               const title = prospect.person_name || prospect.company_name || "Unnamed lead";
               const busy = pendingAction?.endsWith(lead.id);
+              const enrichmentFailure = lead.latest_enrichment_job?.status === "error"
+                ? explainEnrichmentFailure(lead.latest_enrichment_job)
+                : null;
               return (
                 <article key={lead.id} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
                   <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
@@ -135,10 +143,11 @@ export function LeadInbox({
                           </div>
                         </details>
                       )}
-                      {lead.latest_enrichment_job?.status === "error" && (
+                      {enrichmentFailure && (
                         <div role="alert" className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
-                          <p className="font-medium">Company enrichment did not finish</p>
-                          <p className="mt-1 text-red-200/80">{lead.latest_enrichment_job.error_message || "The website did not return usable company details. You can try again."}</p>
+                          <p className="font-medium">{enrichmentFailure.title}</p>
+                          <p className="mt-1 text-red-200/80">{enrichmentFailure.detail}</p>
+                          <p className="mt-2 font-medium text-red-100">Next: {enrichmentFailure.nextStep}</p>
                         </div>
                       )}
                       {lead.latest_enrichment_job?.status === "cancelled" && !lead.active_enrichment_job && (
@@ -152,7 +161,7 @@ export function LeadInbox({
                       {lead.status !== "shortlisted" && lead.status !== "imported" && <Button size="sm" variant="outline" disabled={busy} onClick={() => onStatus(lead, "shortlisted")}><Check className="mr-1.5 h-3.5 w-3.5" />Shortlist</Button>}
                       {lead.status !== "dismissed" && lead.status !== "imported" && <Button size="sm" variant="ghost" disabled={busy} onClick={() => onStatus(lead, "dismissed")}><X className="mr-1.5 h-3.5 w-3.5" />Dismiss</Button>}
                       {lead.status === "dismissed" && <Button size="sm" variant="outline" disabled={busy} onClick={() => onStatus(lead, "new")}>Restore</Button>}
-                      {lead.status === "imported" ? <Link href="/crm" className={cn(buttonVariants({ size: "sm", variant: "outline" }))}>View CRM</Link> : lead.status !== "dismissed" ? <Button size="sm" disabled={busy} onClick={() => onPromote(lead)}>{pendingAction === `promote:${lead.id}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <UserPlus className="mr-1.5 h-3.5 w-3.5" />}Add to CRM</Button> : null}
+                      {lead.status === "imported" ? <Link href={lead.crm_contact_id ? `/crm?contact=${encodeURIComponent(lead.crm_contact_id)}` : "/crm"} className={cn(buttonVariants({ size: "sm", variant: "outline" }))}>View CRM contact</Link> : lead.status !== "dismissed" ? <Button size="sm" disabled={busy} onClick={() => onPromote(lead)}>{pendingAction === `promote:${lead.id}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <UserPlus className="mr-1.5 h-3.5 w-3.5" />}Add to CRM</Button> : null}
                     </div>
                   </div>
                 </article>

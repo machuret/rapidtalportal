@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { useState } from "react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import type {
   CompetitorIntelligenceIdea,
   CompetitorIntelligenceRun,
@@ -15,14 +16,29 @@ interface RecommendedIdeasSectionProps {
   onIdeaSelected?: (
     idea: CompetitorIntelligenceIdea,
     run: CompetitorIntelligenceRun,
-  ) => void;
+  ) => Promise<boolean>;
 }
 
 export function RecommendedIdeasSection({ run, sourceById, onIdeaSelected }: RecommendedIdeasSectionProps) {
+  const [promoting, setPromoting] = useState<string | null>(null);
+
+  async function promote(idea: CompetitorIntelligenceIdea) {
+    if (!onIdeaSelected || promoting) return;
+    const key = `${idea.channel}:${idea.title}`;
+    setPromoting(key);
+    try {
+      await onIdeaSelected(idea, run);
+    } finally {
+      setPromoting(null);
+    }
+  }
+
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      {run.analysis.recommended_ideas.map((idea) => (
-        <div key={`${idea.channel}-${idea.title}`} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+      {run.analysis.recommended_ideas.map((idea) => {
+        const ideaKey = `${idea.channel}:${idea.title}`;
+        return (
+        <div key={ideaKey} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-wide text-orange-300">{idea.channel} · {idea.format}</p>
@@ -76,14 +92,14 @@ export function RecommendedIdeasSection({ run, sourceById, onIdeaSelected }: Rec
           <EvidenceLinks ids={idea.source_item_ids} quotes={idea.evidence_quotes} sourceById={sourceById} />
           {onIdeaSelected && (
             <div className="mt-4 flex justify-end">
-              <Button type="button" size="sm" onClick={() => onIdeaSelected(idea, run)}>
-                Build content brief
-                <ArrowRight />
+              <Button type="button" size="sm" disabled={Boolean(promoting)} onClick={() => void promote(idea)}>
+                {promoting === ideaKey ? <Loader2 className="animate-spin" /> : <ArrowRight />}
+                {promoting === ideaKey ? "Creating brief…" : "Build content brief"}
               </Button>
             </div>
           )}
         </div>
-      ))}
+      );})}
     </div>
   );
 }

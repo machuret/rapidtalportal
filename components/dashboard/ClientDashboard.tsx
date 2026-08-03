@@ -12,9 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TaskDialog } from "@/components/tasks/TaskDialog";
+import { ClientFirstSuccessJourney } from "@/components/dashboard/ClientFirstSuccessJourney";
+import type { ClientFirstSuccessStep } from "@/lib/onboarding/client-first-success";
 import {
   CheckCircle2, Clock, Inbox, Timer, Plus, Loader2, ThumbsUp, RotateCcw,
-  Sparkles, ArrowRight, AlertTriangle, Dna, BookOpen,
+  ArrowRight, AlertTriangle,
 } from "lucide-react";
 
 export interface ClientVA { id: string; name: string }
@@ -23,6 +25,13 @@ export interface AwaitingTask { id: string; title: string; description: string; 
 export interface DeliveredTask { id: string; title: string; completedAt: string; assigneeName: string | null }
 export interface OverdueTask { id: string; title: string; assigneeName: string | null; dueDate: string; daysOverdue: number }
 export interface DueSoonTask { id: string; title: string; assigneeName: string | null; dueDate: string; daysUntil: number }
+export interface ClientAttentionItem {
+  id: string;
+  title: string;
+  detail: string;
+  href: string;
+  severity: "critical" | "warning" | "action";
+}
 
 export interface ClientDashboardProps {
   clientId: string;
@@ -33,33 +42,19 @@ export interface ClientDashboardProps {
   awaiting: AwaitingTask[];
   overdue: OverdueTask[];
   dueSoon: DueSoonTask[];
+  attention: ClientAttentionItem[];
   stats: { inProgress: number; todo: number; completedThisWeek: number; hoursThisWeek: number; planHours: number | null };
   recentDelivered: DeliveredTask[];
-  setup: {
-    profilePct: number;
-    filledCount: number;
-    totalFields: number;
-    topGaps: { label: string; question: string }[];
-    docs: boolean;
-    va: boolean;
-    firstTask: boolean;
-  };
+  firstSuccess: ClientFirstSuccessStep[];
+  firstSuccessUnavailable: boolean;
 }
-
-// Decile width classes (static literals so Tailwind JIT keeps them; inline
-// styles are disallowed and dynamic arbitrary widths can't be compiled).
-const PCT_WIDTH = ["w-0", "w-[10%]", "w-[20%]", "w-[30%]", "w-[40%]", "w-[50%]", "w-[60%]", "w-[70%]", "w-[80%]", "w-[90%]", "w-full"];
-const widthClass = (pct: number) => PCT_WIDTH[Math.max(0, Math.min(10, Math.round(pct / 10)))];
-
-const dueLabel = (daysUntil: number) =>
-  daysUntil <= 0 ? "due today" : daysUntil === 1 ? "due tomorrow" : `due in ${daysUntil} days`;
 
 export function ClientDashboard(props: ClientDashboardProps) {
   const router = useRouter();
   const { firstName, clientName, vas, categories, stats } = props;
   const [awaiting, setAwaiting] = useState(props.awaiting);
   const [delivered, setDelivered] = useState(props.recentDelivered);
-  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestMode, setRequestMode] = useState<"standard" | "starter" | null>(null);
   const [changesFor, setChangesFor] = useState<AwaitingTask | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -85,14 +80,6 @@ export function ClientDashboard(props: ClientDashboardProps) {
     } catch { /* api-client toasts */ } finally { setBusy(null); }
   }
 
-  const { setup } = props;
-  // Company DNA is the keystone — it powers every AI answer/draft/tool, so it's
-  // weighted heaviest in the single "setup" number; the rest are milestones.
-  const dnaDone = setup.profilePct >= 70;
-  const overallPct = Math.round(0.6 * setup.profilePct + 0.15 * (setup.va ? 100 : 0) + 0.15 * (setup.firstTask ? 100 : 0) + 0.10 * (setup.docs ? 100 : 0));
-  // "Core" complete = the required milestones; docs is recommended, not required.
-  const coreComplete = dnaDone && setup.va && setup.firstTask;
-
   return (
     <div>
       {/* Header */}
@@ -104,112 +91,47 @@ export function ClientDashboard(props: ClientDashboardProps) {
             {vas.length > 0 && <> · your VA{vas.length > 1 ? "s" : ""}: <span className="text-zinc-300">{vaNames}</span></>}
           </p>
         </div>
-        <Button onClick={() => setRequestOpen(true)} className="gap-1.5">
+        <Button onClick={() => setRequestMode("standard")} className="gap-1.5">
           <Plus className="w-4 h-4" /> Request work
         </Button>
       </div>
 
-      {/* Get the most from RapidTal — a persistent setup & value guide. Shows the
-          full panel until the core is set up, then collapses to a slim "what next"
-          bar so there's always a path to more value. */}
-      {coreComplete ? (
-        <div className="surface-card px-4 py-3 mb-6 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-          <span className="text-sm text-zinc-200">You&apos;re set up{overallPct < 100 ? ` · ${overallPct}% complete` : ""}.</span>
-          {!setup.docs && (
-            <Link href="/vault" className="text-xs text-zinc-400 hover:text-white inline-flex items-center gap-1 transition-colors">
-              Add documents to sharpen answers <ArrowRight className="w-3 h-3" />
-            </Link>
-          )}
-          <Link href="/guide" className="text-xs text-zinc-400 hover:text-white inline-flex items-center gap-1 transition-colors ml-auto">
-            <BookOpen className="w-3 h-3" /> Tips to get more value
-          </Link>
-        </div>
-      ) : (
-        <div className="surface-card p-4 mb-6">
-          <div className="flex flex-wrap items-end justify-between gap-2 mb-1">
-            <p className="label-section flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> Get the most from RapidTal</p>
-            <span className="text-xs text-zinc-400">Account setup <span className="text-zinc-100 font-semibold tabular-nums">{overallPct}%</span></span>
-          </div>
-          <p className="text-xs text-zinc-500 mb-2">A complete setup makes your VA — and every AI feature — noticeably sharper. Finish these and you&apos;re away.</p>
-          <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden mb-4">
-            <div className={cn("h-full bg-amber-400 rounded-full transition-all", widthClass(overallPct))} />
-          </div>
+      <ClientFirstSuccessJourney
+        clientId={props.clientId}
+        steps={props.firstSuccess}
+        onRequestWork={() => {
+          void api.post(
+            ROUTES.onboarding.events(),
+            { clientId: props.clientId, step: "task", eventType: "step_viewed", metadata: {} },
+            { showErrorToast: false },
+          ).catch(() => undefined);
+          setRequestMode("starter");
+        }}
+        unavailable={props.firstSuccessUnavailable}
+      />
 
-          <div className="flex flex-col gap-2.5">
-            {/* Keystone: Company DNA */}
-            <Link href="/company-dna" className={cn("block rounded-lg border p-3 transition-colors",
-              dnaDone ? "border-green-500/20 bg-green-500/5" : "border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50")}>
-              <div className="flex items-center gap-2">
-                <Dna className={cn("w-4 h-4 shrink-0", dnaDone ? "text-green-400" : "text-amber-300")} />
-                <p className="text-sm font-medium text-zinc-100 flex-1">Complete your Company DNA <span className="text-zinc-500 font-normal">· start here</span></p>
-                <span className="text-xs font-semibold tabular-nums text-zinc-200">{setup.profilePct}%</span>
-              </div>
-              <p className="text-xs text-zinc-400 mt-1 pl-6">The one that matters most — it powers every AI answer, draft and tool. The more you fill in, the sharper everything gets.</p>
-              <div className="h-1 rounded-full bg-zinc-800 overflow-hidden my-2 ml-6">
-                <div className={cn("h-full rounded-full", dnaDone ? "bg-green-400" : "bg-amber-400", widthClass(setup.profilePct))} />
-              </div>
-              {setup.topGaps.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pl-6">
-                  {setup.topGaps.map((g) => (
-                    <span key={g.label} className="text-2xs text-amber-200/90 bg-amber-500/10 rounded-full px-2 py-0.5">{g.label}</span>
-                  ))}
-                  <span className="text-2xs text-zinc-500 inline-flex items-center gap-0.5">answer these <ArrowRight className="w-3 h-3" /></span>
-                </div>
-              )}
-            </Link>
-
-            {/* Required milestones + one recommended (docs). */}
-            <SetupRow done={setup.va} label="Meet your VA"
-              desc={vas.length ? `You're working with ${vaNames}.` : "Your VA appears here once you're placed."} href="/team" />
-            <SetupRow done={setup.firstTask} label="Request your first task"
-              desc="Tell your VA what you need done — it lands on the shared board." onClick={() => setRequestOpen(true)} />
-            <SetupRow done={setup.docs} optional label="Add key documents"
-              desc="Drop in SOPs, guides or policies so answers cite your real material." href="/vault" />
-          </div>
-
-          <Link href="/guide" className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-white mt-3 transition-colors">
-            <BookOpen className="w-3 h-3" /> New here? Take the 2-minute tour
-          </Link>
-        </div>
-      )}
-
-      {/* Needs attention — overdue work (red) and what's coming due in 48h (amber).
-          Border leads with the worst tier present. */}
-      {(props.overdue.length > 0 || props.dueSoon.length > 0) && (
+      {/* One bounded attention feed across the client journey. Detailed
+          workspaces remain the place to resolve each item. */}
+      {props.attention.length > 0 && (
         <div className={cn("rounded-xl border p-4 mb-6",
-          props.overdue.length > 0 ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5")}>
+          props.attention.some((item) => item.severity === "critical") ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5")}>
           <p className="label-section mb-3 flex items-center gap-2 text-zinc-200">
-            <AlertTriangle className={cn("w-4 h-4", props.overdue.length > 0 ? "text-red-300" : "text-amber-300")} />
+            <AlertTriangle className={cn("w-4 h-4", props.attention.some((item) => item.severity === "critical") ? "text-red-300" : "text-amber-300")} />
             Needs attention
-            {props.overdue.length > 0 && <span className="text-red-300">· {props.overdue.length} overdue</span>}
-            {props.dueSoon.length > 0 && <span className="text-amber-300">· {props.dueSoon.length} due soon</span>}
+            <span className="text-amber-300">· {props.attention.length} item{props.attention.length === 1 ? "" : "s"}</span>
           </p>
           <ul className="flex flex-col gap-1.5">
-            {props.overdue.map((t) => (
-              <li key={t.id} className="flex items-center gap-2 text-sm">
-                <Link href={`/tasks?card=${t.id}`} className="text-zinc-200 truncate flex-1 hover:text-white hover:underline">
-                  {t.title}
+            {props.attention.map((item) => (
+              <li key={item.id} className="flex items-center gap-3 text-sm">
+                <Link href={item.href} className="min-w-0 flex-1 hover:underline">
+                  <span className="block truncate text-zinc-200 hover:text-white">{item.title}</span>
+                  <span className="block truncate text-xs text-zinc-500">{item.detail}</span>
                 </Link>
-                {t.assigneeName && <span className="text-xs text-zinc-500 shrink-0">{t.assigneeName.split(" ")[0]}</span>}
-                <span className="text-xs font-medium text-red-400 shrink-0 tabular-nums">
-                  {t.daysOverdue === 1 ? "1 day" : `${t.daysOverdue} days`} late
-                </span>
-              </li>
-            ))}
-            {props.dueSoon.map((t) => (
-              <li key={t.id} className="flex items-center gap-2 text-sm">
-                <Link href={`/tasks?card=${t.id}`} className="text-zinc-200 truncate flex-1 hover:text-white hover:underline">
-                  {t.title}
-                </Link>
-                {t.assigneeName && <span className="text-xs text-zinc-500 shrink-0">{t.assigneeName.split(" ")[0]}</span>}
-                <span className="text-xs font-medium text-amber-400 shrink-0 tabular-nums">{dueLabel(t.daysUntil)}</span>
+                <span className={cn("shrink-0 rounded-full px-2 py-1 text-3xs font-medium uppercase tracking-wide",
+                  item.severity === "critical" ? "bg-red-500/10 text-red-300" : item.severity === "action" ? "bg-blue-500/10 text-blue-300" : "bg-amber-500/10 text-amber-300")}>{item.severity === "action" ? "Review" : item.severity}</span>
               </li>
             ))}
           </ul>
-          <Link href="/tasks" className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-white mt-3 transition-colors">
-            Review on the board <ArrowRight className="w-3 h-3" />
-          </Link>
         </div>
       )}
 
@@ -273,7 +195,7 @@ export function ClientDashboard(props: ClientDashboardProps) {
         </section>
       </div>
 
-      {requestOpen && (
+      {requestMode && (
         <TaskDialog
           mode="create"
           status="todo"
@@ -282,8 +204,9 @@ export function ClientDashboard(props: ClientDashboardProps) {
           initialAssignedTo={vas.length === 1 ? vas[0].id : undefined}
           members={vas}
           categories={categories}
-          onClose={() => setRequestOpen(false)}
-          onSaved={() => { setRequestOpen(false); router.refresh(); }}
+          starterMode={requestMode === "starter"}
+          onClose={() => setRequestMode(null)}
+          onSaved={() => { setRequestMode(null); router.refresh(); }}
         />
       )}
 
@@ -306,28 +229,6 @@ function Stat({ icon: Icon, tint, label, value, suffix }: { icon: typeof Inbox; 
       <p className="text-xs text-zinc-500 mt-1">{label}</p>
     </div>
   );
-}
-
-/** A compact setup milestone row (link, action button, or static). */
-function SetupRow({ done, label, desc, href, onClick, optional }: {
-  done: boolean; label: string; desc: string; href?: string; onClick?: () => void; optional?: boolean;
-}) {
-  const inner = (
-    <div className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors",
-      done ? "border-green-500/20 bg-green-500/5" : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700")}>
-      {done
-        ? <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
-        : <div className="w-4 h-4 rounded-full border border-zinc-600 shrink-0 mt-0.5" />}
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-zinc-100">{label}{optional && <span className="text-zinc-500 font-normal"> · recommended</span>}</p>
-        <p className="text-xs text-zinc-500 mt-0.5">{desc}</p>
-      </div>
-      {!done && <ArrowRight className="w-3.5 h-3.5 text-zinc-600 shrink-0 mt-1" />}
-    </div>
-  );
-  if (onClick) return <button onClick={onClick} className="text-left w-full">{inner}</button>;
-  if (href) return <Link href={href}>{inner}</Link>;
-  return <div>{inner}</div>;
 }
 
 function ChangesDialog({ task, busy, onClose, onSubmit }: {

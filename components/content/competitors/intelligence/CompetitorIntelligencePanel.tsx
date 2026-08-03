@@ -40,7 +40,8 @@ interface Props {
   onIdeaSelected?: (
     idea: CompetitorIntelligenceIdea,
     run: CompetitorIntelligenceRun,
-  ) => void;
+  ) => Promise<boolean>;
+  onStateChange?: (state: { hasReport: boolean; busy: boolean }) => void;
 }
 
 type Section = "overview" | "market-map" | "topics" | "formats" | "comparison" | "gaps" | "ideas";
@@ -60,6 +61,7 @@ export function CompetitorIntelligencePanel({
   canManage,
   competitors,
   onIdeaSelected,
+  onStateChange,
 }: Props) {
   const [run, setRun] = useState<CompetitorIntelligenceRun | null>(null);
   const [activeJob, setActiveJob] = useState<CompetitorIntelligenceJob | null>(null);
@@ -69,6 +71,10 @@ export function CompetitorIntelligencePanel({
   const [analysing, setAnalysing] = useState(false);
   const [section, setSection] = useState<Section>("overview");
   const [windowDays, setWindowDays] = useState(180);
+
+  useEffect(() => {
+    onStateChange?.({ hasReport: Boolean(run), busy: analysing || Boolean(activeJob) });
+  }, [activeJob, analysing, onStateChange, run]);
   const analysisReadyCompetitors = useMemo(
     () => competitors.filter((competitor) =>
       competitor.status === "active" && competitor.readiness.content_strategy_ready),
@@ -300,7 +306,7 @@ export function CompetitorIntelligencePanel({
                   </div>
                   {canManage ? (
                     <Link
-                      href={`/company-dna/competitors#competitor-${competitor.id}`}
+                      href={`/competitors#competitor-${competitor.id}`}
                       className="shrink-0 rounded-md border border-amber-500/30 px-2.5 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-500/10"
                     >
                       Add or collect sources

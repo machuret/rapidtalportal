@@ -5,6 +5,7 @@ import providers from "@/lib/prospecting/providers.json";
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 const migration = read("db/migrations/20260803000310_prospecting_provider_health_and_search_dedupe.sql");
 const storageMigration = read("db/migrations/20260803000311_prospecting_storage_compaction.sql");
+const searchIdentityMigration = read("db/migrations/20260803000314_prospecting_search_identity.sql");
 const route = read("app/api/admin/prospecting/providers/route.ts");
 const service = read("lib/prospecting/provider-health.ts");
 const panel = read("components/admin/ProspectingProviderHealth.tsx");
@@ -47,6 +48,9 @@ describe("Lead Generation provider health and storage safety", () => {
     expect(migration).toContain("'reused', true");
     expect(campaignRoute).toContain("This exact search already exists");
     expect(campaignRoute).toContain("choose Run again");
+    expect(searchIdentityMigration).not.toContain("'maxResults', p_max_results");
+    expect(searchIdentityMigration).toContain("greatest(max_results, p_max_results)");
+    expect(searchIdentityMigration).toContain("duplicate_rank > 1");
   });
 
   test("caps provider payloads and repeated identity evidence at the database boundary", () => {

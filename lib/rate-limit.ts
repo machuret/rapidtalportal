@@ -127,6 +127,14 @@ export const clientErrorLimiter = new SlidingWindowLimiter(10, 5 * 60_000);
 // while preventing an altered client from flooding the experience event table.
 export const clientExperienceLimiter = new SlidingWindowLimiter(300, 15 * 60_000);
 
+// Global record discovery is read-only but fans out across several bounded
+// tenant indexes. Debounced UI use stays far below this allowance.
+export const clientDiscoveryLimiter = new SlidingWindowLimiter(120, 5 * 60_000);
+
+// A placement request creates durable operational work and notifies admins.
+// One client should never be able to generate a notification flood.
+export const onboardingMutationLimiter = new SlidingWindowLimiter(3, 60 * 60_000);
+
 // SOP Studio AI (suggest + generate). Admins iterate, so generous.
 export const sopAiLimiter = new SlidingWindowLimiter(30, 10 * 60_000);
 

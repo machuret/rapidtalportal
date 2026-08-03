@@ -52,7 +52,7 @@ export function PieceDetailEditor({
   onArtifactCreated,
   onPieceChanged,
   onDirtyChange,
-  backLabel = "Back to content history",
+  backLabel = "Back to content library",
 }: {
   piece: ContentPieceFull;
   clientId: string;

@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { DbCompanyDna } from "@/types/database";
 import { useDna } from "@/hooks/useDna";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { profileGaps } from "@/lib/brain/gaps";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -17,11 +19,14 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { FieldTip } from "@/components/ui/tooltip";
 import { HardRulesEditor } from "./HardRulesEditor";
 import type { ContentHardRule } from "@/supabase/functions/_shared/content-style";
+import { COMPANY_VOICE_UPDATED_EVENT } from "@/lib/content/style-analysis";
 
 interface DnaFormProps {
   initialData: DbCompanyDna | null;
   clientId: string;
   readOnly: boolean;
+  focusMode?: "company" | "voice" | null;
+  sectionMode?: "all" | "profile" | "voice";
 }
 
 // Static decile width classes (Tailwind JIT needs literals; inline styles are
@@ -47,6 +52,17 @@ const FACT_FIELDS: { key: keyof DbCompanyDna; label: string; multiline?: boolean
   { key: "tools_used", label: "Tools the Company Uses", multiline: true, tip: "Your real stack (CRM, ad platforms, analytics…). The AI references the tools you actually use instead of generic software." },
   { key: "website_content", label: "Website Content", multiline: true, tip: "Key text from your website — about, services, pricing. Long-form facts the Brain can quote when the Vault has gaps." },
 ];
+
+const ESSENTIAL_PROFILE_KEYS = new Set<keyof DbCompanyDna>([
+  "company_name",
+  "company_description",
+  "services",
+  "target_demographic",
+  "business_goals",
+  "website",
+]);
+const ESSENTIAL_FACT_FIELDS = FACT_FIELDS.filter((field) => ESSENTIAL_PROFILE_KEYS.has(field.key));
+const ADDITIONAL_FACT_FIELDS = FACT_FIELDS.filter((field) => !ESSENTIAL_PROFILE_KEYS.has(field.key));
 
 const VOICE_FIELDS: { key: keyof DbCompanyDna; label: string; multiline?: boolean; hint?: string; tip?: string }[] = [
   { key: "brand_voice", label: "Brand Voice & Tone", multiline: true },
@@ -100,7 +116,14 @@ function ProvenanceBadge({ entry }: { entry: ProvenanceEntry | undefined }) {
   );
 }
 
-export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
+export function DnaForm({
+  initialData,
+  clientId,
+  readOnly,
+  focusMode = null,
+  sectionMode = "all",
+}: DnaFormProps) {
+  const router = useRouter();
   const { saveDna, isSaving: saving, scrapeDna, isScraping } = useDna();
   const [form, setForm] = useState<Partial<DbCompanyDna>>(initialData ?? {});
   const [updatedAt, setUpdatedAt] = useState(initialData?.updated_at ?? null);
@@ -110,7 +133,12 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
   const hardRules = Array.isArray(form.hard_rules) ? form.hard_rules : [];
   const provenance = (form.field_provenance ?? {}) as ProvenanceMap;
 
-  const gaps = profileGaps(form as Record<string, unknown>);
+  const factFieldKeys = (sectionMode === "profile" ? ESSENTIAL_FACT_FIELDS : FACT_FIELDS)
+    .map((field) => String(field.key));
+  const gaps = profileGaps(
+    form as Record<string, unknown>,
+    sectionMode === "profile" ? factFieldKeys : undefined,
+  );
 
   function set(key: keyof DbCompanyDna, value: string) {
     setForm((f) => {
@@ -172,7 +200,8 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
       if (data.complete) { toast.message("Your profile already covers the key fields."); return; }
       if (data.noVault) { toast.message("Add some documents to the Vault first — then the Brain can draft your profile."); return; }
 
-      const keys = Object.keys(data.drafts ?? {});
+      const keys = Object.keys(data.drafts ?? {}).filter((key) =>
+        sectionMode !== "profile" || factFieldKeys.includes(key));
       if (keys.length === 0) { toast.message("Couldn't draft new fields from your documents yet."); return; }
 
       // Only blanks get drafted — track exactly which fields the AI wrote so
@@ -249,23 +278,54 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    const canContinue = focusMode === "company"
+      ? [form.company_name, form.services, form.target_demographic, form.business_goals]
+          .every((value) => typeof value === "string" && value.trim().length > 0)
+      : focusMode === "voice"
+        ? [form.brand_voice, form.content_style]
+            .some((value) => typeof value === "string" && value.trim().length > 0)
+        : true;
+    if (!canContinue) {
+      toast.error(focusMode === "company"
+        ? "Complete the four starter answers before continuing."
+        : "Describe your brand voice or content style before continuing.");
+      return;
+    }
     try {
-      await saveDna({ form, clientId });
-      toast.success("Company DNA saved.");
+      await saveDna({ form, clientId, onboardingMilestone: focusMode ?? undefined });
+      toast.success(sectionMode === "voice" || focusMode === "voice"
+        ? "Voice settings saved."
+        : "Company profile saved.");
       setUpdatedAt(new Date().toISOString());
+      if (sectionMode === "voice" || focusMode === "voice") {
+        window.dispatchEvent(new CustomEvent(COMPANY_VOICE_UPDATED_EVENT, {
+          detail: { clientId },
+        }));
+      }
+      if (focusMode) {
+        router.push("/dashboard");
+        router.refresh();
+      }
     } catch (err) {
       toast.error("Failed to save: " + (err instanceof Error ? err.message : "error"));
     }
   }
 
   async function copyAll() {
-    const profileText = fields
+    const visibleFields = sectionMode === "voice"
+      ? VOICE_FIELDS
+      : sectionMode === "profile"
+        ? FACT_FIELDS
+        : fields;
+    const profileText = visibleFields
       .map(({ key, label }) => `${label}: ${(form[key] as string) ?? "—"}`)
       .join("\n");
     const channelText = CHANNEL_STYLE_FIELDS
       .map(({ key, label }) => `${label}: ${form.channel_styles?.[key] ?? "Uses the global brand voice"}`)
       .join("\n");
-    await navigator.clipboard.writeText(`${profileText}\n\nChannel Writing Styles\n${channelText}`);
+    await navigator.clipboard.writeText(sectionMode === "profile"
+      ? profileText
+      : `${profileText}\n\nChannel Writing Styles\n${channelText}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -279,15 +339,18 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
             onClick={copyAll}
             className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800"
           >
-            {copied ? <><Check className="w-3.5 h-3.5 text-green-400" />Copied!</> : <><Copy className="w-3.5 h-3.5" />Copy all</>}
+            {copied
+              ? <><Check className="w-3.5 h-3.5 text-green-400" />Copied!</>
+              : <><Copy className="w-3.5 h-3.5" />{sectionMode === "voice" ? "Copy voice settings" : "Copy profile"}</>}
           </button>
         </div>
 
+        {sectionMode !== "voice" && (
         <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
           <h2 className="text-sm font-semibold text-white mb-1">The facts</h2>
           <p className="text-xs text-zinc-500 mb-3">Who the company is and what it does — quoted as facts in every AI answer.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {FACT_FIELDS.map(({ key, label, multiline }) => {
+            {(sectionMode === "profile" ? ESSENTIAL_FACT_FIELDS : FACT_FIELDS).map(({ key, label, multiline }) => {
               const value = (form[key] as string) ?? "";
               return (
                 <div key={key} className={`rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 ${multiline ? "sm:col-span-2" : ""}`}>
@@ -302,6 +365,26 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
               );
             })}
           </div>
+          {sectionMode === "profile" && (
+            <details className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/30">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-zinc-300 hover:text-white">
+                Additional company details
+              </summary>
+              <div className="grid grid-cols-1 gap-3 border-t border-zinc-800 p-4 sm:grid-cols-2">
+                {ADDITIONAL_FACT_FIELDS.map(({ key, label, multiline }) => {
+                  const value = (form[key] as string) ?? "";
+                  return (
+                    <div key={key} className={`rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 ${multiline ? "sm:col-span-2" : ""}`}>
+                      <p className="mb-1 text-xs font-medium text-zinc-500">{label}</p>
+                      <p className={`text-sm ${value ? "text-zinc-200" : "italic text-zinc-600"} ${multiline ? "whitespace-pre-wrap" : ""}`}>
+                        {value || "Not set"}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+          )}
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-4 mt-3">
             <p className="text-xs font-medium text-zinc-500 mb-3">Owned Social Channels</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -319,7 +402,9 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
             </div>
           </div>
         </section>
+        )}
 
+        {sectionMode !== "profile" && (
         <section className="rounded-xl border border-purple-500/25 bg-purple-500/5 p-4">
           <h2 className="text-sm font-semibold text-white mb-1">Voice &amp; editorial policy</h2>
           <p className="text-xs text-zinc-400 mb-3">How the company sounds and what it may claim — applied to every draft.</p>
@@ -360,6 +445,7 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
             <HardRulesEditor value={hardRules} onChange={() => {}} readOnly />
           </div>
         </section>
+        )}
 
         {updatedAt && (
           <p className="text-xs text-zinc-600">Last updated: <LocalTime value={updatedAt} /></p>
@@ -368,11 +454,92 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
     );
   }
 
+  if (focusMode) {
+    const focusCanContinue = focusMode === "company"
+      ? [form.company_name, form.services, form.target_demographic, form.business_goals]
+          .every((value) => typeof value === "string" && value.trim().length > 0)
+      : [form.brand_voice, form.content_style]
+          .some((value) => typeof value === "string" && value.trim().length > 0);
+    const focusFields = focusMode === "company"
+      ? ([
+          { key: "company_name", label: "What is your company called?", multiline: false, placeholder: "Company name" },
+          { key: "services", label: "What do you sell or provide?", multiline: true, placeholder: "Your main products or services" },
+          { key: "target_demographic", label: "Who do you help?", multiline: true, placeholder: "Your ideal customers and what they need" },
+          { key: "business_goals", label: "What matters most right now?", multiline: true, placeholder: "Your current business priorities" },
+        ] as const)
+      : ([
+          { key: "brand_voice", label: "How should your company sound?", multiline: true, placeholder: "For example: confident, practical and warm—not corporate or pushy" },
+          { key: "content_style", label: "What should your content feel like?", multiline: true, placeholder: "For example: strong opening, short paragraphs, useful detail and one clear next step" },
+          { key: "spelling_locale", label: "Which language style should we use?", multiline: false, placeholder: "For example: Australian English" },
+          { key: "default_cta_style", label: "How should content invite action?", multiline: true, placeholder: "For example: finish with a natural discussion question" },
+        ] as const);
+
+    return (
+      <form onSubmit={handleSave} className="mx-auto max-w-2xl space-y-5">
+        <section className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-zinc-900 to-zinc-950 p-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">
+            Step {focusMode === "company" ? "1" : "3"} of 6
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-white">
+            {focusMode === "company" ? "Confirm your company" : "Choose how your content should sound"}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-zinc-400">
+            {focusMode === "company"
+              ? "Four short answers are enough to get started. You can add addresses, social links and detailed settings later."
+              : "Give RapidTal a simple direction now. Detailed channel rules and style analysis remain available later under Company → Voice."}
+          </p>
+          <p className="mt-3 text-xs text-zinc-500">
+            {focusMode === "company"
+              ? "All four answers are needed to confirm this step."
+              : "Describe either your brand voice or content style. Language and CTA settings are optional refinements."}
+          </p>
+        </section>
+
+        <section className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+          <div className="space-y-5">
+            {focusFields.map(({ key, label, multiline, placeholder }) => (
+              <div key={key} className="space-y-1.5">
+                <Label htmlFor={`setup-${key}`}>{label}</Label>
+                {multiline ? (
+                  <Textarea
+                    id={`setup-${key}`}
+                    value={(form[key] as string) ?? ""}
+                    onChange={(event) => set(key, event.target.value)}
+                    rows={3}
+                    placeholder={placeholder}
+                    className="bg-zinc-950/60 border-zinc-700"
+                  />
+                ) : (
+                  <Input
+                    id={`setup-${key}`}
+                    value={(form[key] as string) ?? ""}
+                    onChange={(event) => set(key, event.target.value)}
+                    placeholder={placeholder}
+                    className="bg-zinc-950/60 border-zinc-700"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link href="/dashboard" className={cn(buttonVariants({ variant: "ghost" }), "text-zinc-400")}>
+            Back to your journey
+          </Link>
+          <Button type="submit" disabled={saving || !focusCanContinue}>
+            {saving ? "Saving…" : "Save and continue"}
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
   return (
     <form onSubmit={handleSave} className="flex flex-col gap-5">
       {/* Completeness meter — always shown so progress (and "done") is tangible;
           this profile powers every AI answer, draft and tool. */}
-      {(() => {
+      {sectionMode !== "voice" && (() => {
         const pct = gaps.completionPct;
         const complete = gaps.gaps.length === 0;
         return (
@@ -380,7 +547,7 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
             <div className="flex items-center gap-2 mb-1">
               <Brain className={cn("w-4 h-4", complete ? "text-green-400" : "text-orange-400")} />
               <h3 className="text-sm font-semibold text-white flex-1">
-                {complete ? "Your Company Brain is fully set up 🎉" : "Make your Brain smarter"}
+                {complete ? "Your company profile is complete 🎉" : "Complete your company profile"}
               </h3>
               <span className="text-xs font-semibold tabular-nums text-zinc-200">{pct}%</span>
             </div>
@@ -388,7 +555,7 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
               <div className={cn("h-full rounded-full transition-all", complete ? "bg-green-400" : "bg-orange-400", PCT_WIDTH[Math.max(0, Math.min(10, Math.round(pct / 10)))])} />
             </div>
             {complete ? (
-              <p className="text-xs text-zinc-400">Every field is filled — the Brain uses all of it in every answer, draft and tool. Keep it current as the business changes.</p>
+              <p className="text-xs text-zinc-400">The essential company details are filled. Keep them current as the business changes.</p>
             ) : (
               <>
                 <p className="text-xs text-zinc-400 mb-2">A few quick answers fill the biggest gaps — each one makes every AI feature sharper:</p>
@@ -407,10 +574,15 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
 
       {/* Auto-fill — both gap-fillers in one place, with provenance badges
           on everything they write so you always know what to review. */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      {sectionMode !== "voice" && (
+      <details className="rounded-xl border border-zinc-800 bg-zinc-900/50" open={sectionMode === "all" ? true : undefined}>
+        <summary className="cursor-pointer p-4 text-sm font-semibold text-white hover:text-orange-200">
+          Fill gaps automatically <span className="ml-2 text-xs font-normal text-zinc-500">Optional</span>
+        </summary>
+        <div className="border-t border-zinc-800 p-4">
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className="w-4 h-4 text-orange-400" />
-          <h3 className="text-sm font-semibold text-white">Fill gaps automatically</h3>
+          <h3 className="text-sm font-semibold text-white">Choose an auto-fill method</h3>
         </div>
         <p className="text-xs text-zinc-400 mb-4">
           Two ways to pre-fill empty fields — everything they write gets an auto-fill badge so you can review it before it becomes company truth. You always Save.
@@ -466,16 +638,67 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </details>
+      )}
 
       {/* ── The facts ─────────────────────────────────────────────── */}
+      {sectionMode !== "voice" && (
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
-        <h2 className="text-base font-semibold text-white">The facts</h2>
+        <h2 className="text-base font-semibold text-white">Company essentials</h2>
         <p className="mt-1 mb-5 text-xs text-zinc-500">
           Who the company is and what it does. The AI quotes these as facts in answers, drafts and tools — accuracy here matters more than anywhere else.
         </p>
 
-        <div className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-4 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {(sectionMode === "profile" ? ESSENTIAL_FACT_FIELDS : FACT_FIELDS).map(({ key, label, multiline, hint, tip }) => (
+            <div key={key} className={cn("flex flex-col gap-1.5", multiline && "sm:col-span-2")}>
+              <Label>
+                {label}
+                <ProvenanceBadge entry={provenance[key as string]} />
+                {tip && <FieldTip text={tip} />}
+              </Label>
+              {hint && <p className="text-xs text-zinc-500">{hint}</p>}
+              {multiline ? (
+                <Textarea value={(form[key] as string) ?? ""} onChange={(e) => set(key, e.target.value)} rows={4} className="bg-zinc-900 border-zinc-700" />
+              ) : (
+                <Input value={(form[key] as string) ?? ""} onChange={(e) => set(key, e.target.value)} className="bg-zinc-900 border-zinc-700" />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {sectionMode === "all" && (
+          <div className="mt-5 rounded-xl border border-sky-500/25 bg-sky-500/5 p-4">
+            <div className="mb-4 flex items-center gap-2">
+              <Globe className="h-4 w-4 text-sky-400" />
+              <h3 className="text-sm font-semibold text-white">Owned social channels</h3>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {SOCIAL_LINK_FIELDS.map(({ key, label }) => (
+                <div key={key} className="flex flex-col gap-1.5">
+                  <Label htmlFor={`social-link-${key}`}>{label}</Label>
+                  <Input
+                    id={`social-link-${key}`}
+                    type="url"
+                    value={form.social_links?.[key] ?? ""}
+                    onChange={(event) => setSocialLink(key, event.target.value)}
+                    placeholder={`https://${key === "x" ? "x.com" : `www.${key}.com`}/…`}
+                    className="bg-zinc-900 border-zinc-700 text-sm"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {sectionMode === "profile" && (
+        <details className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950/30">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-zinc-300 hover:text-white">
+            Additional company details and social links
+          </summary>
+          <div className="space-y-5 border-t border-zinc-800 p-4">
+        <div className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-4">
           <div className="flex items-center gap-2 mb-1">
             <Globe className="w-4 h-4 text-sky-400" />
             <h3 className="text-sm font-semibold text-white">Owned Social Channels</h3>
@@ -501,7 +724,7 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {FACT_FIELDS.map(({ key, label, multiline, hint, tip }) => (
+          {ADDITIONAL_FACT_FIELDS.map(({ key, label, multiline, hint, tip }) => (
             <div key={key} className={cn("flex flex-col gap-1.5", multiline && "sm:col-span-2")}>
               <Label>
                 {label}
@@ -526,9 +749,14 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
             </div>
           ))}
         </div>
+          </div>
+        </details>
+        )}
       </section>
+      )}
 
       {/* ── Voice & editorial policy ──────────────────────────────── */}
+      {sectionMode !== "profile" && (
       <section className="rounded-xl border border-purple-500/25 bg-purple-500/5 p-5">
         <h2 className="text-base font-semibold text-white">Voice &amp; editorial policy</h2>
         <p className="mt-1 mb-5 text-xs text-zinc-400">
@@ -595,12 +823,13 @@ export function DnaForm({ initialData, clientId, readOnly }: DnaFormProps) {
           ))}
         </div>
       </section>
+      )}
 
       {updatedAt && (
         <p className="text-xs text-zinc-500">Last saved: <LocalTime value={updatedAt} /></p>
       )}
       <Button type="submit" disabled={saving} className="self-start">
-        {saving ? "Saving…" : "Save DNA"}
+        {saving ? "Saving…" : sectionMode === "voice" ? "Save voice settings" : "Save company profile"}
       </Button>
     </form>
   );

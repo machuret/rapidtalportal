@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   AlertTriangle,
+  ArrowRight,
   BookmarkPlus,
   Check,
   Flag,
@@ -57,6 +59,9 @@ export function AskVaultClient({
   persistConversation = true,
   timeZone = "UTC",
   externalAsk,
+  onboardingMode = false,
+  initialQuestion = "",
+  consumeLocalPrefill = false,
 }: {
   clientId: string;
   companyName: string;
@@ -70,6 +75,9 @@ export function AskVaultClient({
   timeZone?: string;
   /** Lets a parent (e.g. golden questions panel) submit a question into this chat. */
   externalAsk?: { q: string; nonce: number } | null;
+  onboardingMode?: boolean;
+  initialQuestion?: string;
+  consumeLocalPrefill?: boolean;
 }) {
   const {
     question,
@@ -88,7 +96,17 @@ export function AskVaultClient({
     ask,
     goDeeper,
     newConversation,
-  } = useCoachChat({ clientId, coachRole, actionsEnabled, persistConversation, externalAsk });
+    retryTurnPersistence,
+  } = useCoachChat({ clientId, coachRole, actionsEnabled, persistConversation, externalAsk, initialQuestion });
+
+  useEffect(() => {
+    if (!consumeLocalPrefill || initialQuestion) return;
+    try {
+      const value = sessionStorage.getItem("rapidtal:coach-prefill")?.trim().slice(0, 500) ?? "";
+      sessionStorage.removeItem("rapidtal:coach-prefill");
+      if (value) setQuestion(value);
+    } catch { /* optional browser storage */ }
+  }, [consumeLocalPrefill, initialQuestion, setQuestion]);
   const endRef = useRef<HTMLDivElement>(null);
   // Auto-scroll stays "pinned" only while the user is near the bottom — scrolling
   // up during a streamed answer must not yank them back down on every token.
@@ -132,7 +150,7 @@ export function AskVaultClient({
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    ask(question);
+    ask(question, onboardingMode ? "private" : undefined);
   }
 
   const latestTurn = turns.at(-1) ?? null;
@@ -155,25 +173,41 @@ export function AskVaultClient({
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-8rem)]">
+      {onboardingMode && (
+        <section className="mb-5 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-zinc-900 to-zinc-950 p-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Step 4 of 6</p>
+          <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold text-white">Ask Coach your first question</h1>
+              <p className="mt-1 text-sm text-zinc-400">Ask something useful about your company, customers or current work. Your answer and conversation will be saved automatically.</p>
+            </div>
+            <Link href="/dashboard" className={cn(buttonVariants({ size: "sm", variant: "ghost" }), "text-zinc-400")}>
+              Back to your journey
+            </Link>
+          </div>
+        </section>
+      )}
       <div className="mb-6">
-        {persistConversation && <CoachProgressPanel clientId={clientId} timeZone={timeZone} />}
-        {persistConversation && <CoachMemoryPanel clientId={clientId} />}
-        {persistConversation && turns.length > 0 && (
+        {persistConversation && !onboardingMode && <CoachProgressPanel clientId={clientId} timeZone={timeZone} />}
+        {persistConversation && !onboardingMode && <CoachMemoryPanel clientId={clientId} />}
+        {persistConversation && !onboardingMode && turns.length > 0 && (
           <div className="mb-3 flex justify-end">
             <Button type="button" size="sm" variant="outline" onClick={newConversation} disabled={loading} className="gap-1.5 border-zinc-700 text-xs">
               <RotateCcw className="h-3.5 w-3.5" /> New conversation
             </Button>
           </div>
         )}
-        <AskBrainFlow
-          companyName={companyName}
-          coachRole={coachRole}
-          state={flowState}
-          activeKinds={[...new Set(visibleSources.map((source) => source.kind))]}
-          queriedKinds={visibleQueriedKinds}
-          snapshotAvailable={Boolean(latestTurn?.brainContextSnapshotId)}
-          libraryAvailability={visibleLibraryAvailability}
-        />
+        {!onboardingMode && (
+          <AskBrainFlow
+            companyName={companyName}
+            coachRole={coachRole}
+            state={flowState}
+            activeKinds={[...new Set(visibleSources.map((source) => source.kind))]}
+            queriedKinds={visibleQueriedKinds}
+            snapshotAvailable={Boolean(latestTurn?.brainContextSnapshotId)}
+            libraryAvailability={visibleLibraryAvailability}
+          />
+        )}
       </div>
 
       {/* Conversation / empty state */}
@@ -286,9 +320,39 @@ export function AskVaultClient({
         <div ref={endRef} />
       </div>
 
+      {onboardingMode && latestTurn?.persistenceStatus === "persisted" && !interim && !loading && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-500/25 bg-green-500/5 p-4">
+          <div>
+            <p className="text-sm font-medium text-green-200">First Coach question complete</p>
+            <p className="mt-0.5 text-xs text-green-200/65">The answer is saved. You can keep chatting or continue your starter journey.</p>
+          </div>
+          <Link href="/dashboard" className={buttonVariants({ size: "sm", variant: "outline" })}>
+            Continue <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+          </Link>
+        </div>
+      )}
+
+      {onboardingMode && latestTurn && latestTurn.persistenceStatus !== "persisted" && !interim && !loading && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-4" role="status">
+          <div>
+            <p className="text-sm font-medium text-amber-100">
+              {latestTurn.persistenceStatus === "failed" ? "Your answer is ready, but progress was not saved" : "Saving your first Coach answer…"}
+            </p>
+            <p className="mt-0.5 text-xs text-amber-200/65">
+              Continue becomes available only after the conversation is safely stored.
+            </p>
+          </div>
+          {latestTurn.persistenceStatus === "failed" && (
+            <Button type="button" size="sm" variant="outline" onClick={() => void retryTurnPersistence(latestTurn)}>
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Retry save
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Composer */}
       <form onSubmit={onSubmit} className="sticky bottom-0 bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent pt-3 pb-2">
-        <div className="mb-2 flex flex-wrap gap-2" aria-label="Coach conversation audience">
+        {!onboardingMode && <div className="mb-2 flex flex-wrap gap-2" aria-label="Coach conversation audience">
           <CoachModeButton active={coachMode === "private"} onClick={() => setCoachMode("private")} icon={LockKeyhole}>
             Private with Coach
           </CoachModeButton>
@@ -314,18 +378,18 @@ export function AskVaultClient({
               <CoachModeButton active={coachMode === "review_task"} onClick={() => setCoachMode("review_task")} icon={Check}>Review Work</CoachModeButton>
             </>
           )}
-        </div>
-        <p className="mb-2 text-xs text-zinc-500">
+        </div>}
+        {!onboardingMode && <p className="mb-2 text-xs text-zinc-500">
           {coachMode === "private"
             ? "Only you can open this Coach conversation. Conversation history is kept for 12 months; short-lived diagnostic prompts expire after 30 days."
             : "The Coach will prepare a preview. Nothing is shared until you confirm."}
-        </p>
+        </p>}
         <div className="flex gap-2">
           <Input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             maxLength={4_000}
-            placeholder={coachMode === "private" ? "Ask your Coach about the business or current work…" : "Tell the Coach what you want prepared…"}
+            placeholder={onboardingMode ? "Ask your first question…" : coachMode === "private" ? "Ask your Coach about the business or current work…" : "Tell the Coach what you want prepared…"}
             className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
           />
           {loading ? (

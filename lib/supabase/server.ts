@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { Database } from "@/types/database";
+import { boundedSupabaseFetch } from "@/lib/supabase/bounded-fetch";
 
 export async function createClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -13,6 +14,7 @@ export async function createClient() {
     url,
     key,
     {
+      global: { fetch: boundedSupabaseFetch },
       cookies: {
         getAll() {
           return cookieStore.getAll();

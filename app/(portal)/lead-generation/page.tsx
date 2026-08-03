@@ -6,10 +6,18 @@ import { PageIntro } from "@/components/layout/PageIntro";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Lead Generation — RapidTal" };
 
-export default async function LeadGenerationPage() {
+export default async function LeadGenerationPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ lead?: string | string[] }>;
+}) {
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   if (!ctx.user.client_id) redirect("/dashboard");
+  const params = await searchParams;
+  const initialLeadId = typeof params.lead === "string" && /^[0-9a-f-]{36}$/iu.test(params.lead)
+    ? params.lead
+    : null;
   return (
     <div>
       <div className="mb-7">
@@ -19,7 +27,10 @@ export default async function LeadGenerationPage() {
         </p>
       </div>
       <PageIntro id="lead-generation" />
-      <LeadGenerationWorkspace clientId={ctx.user.client_id} />
+      <LeadGenerationWorkspace
+        clientId={ctx.user.client_id}
+        initialLeadId={initialLeadId}
+      />
     </div>
   );
 }

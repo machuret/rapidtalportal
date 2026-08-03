@@ -22,6 +22,7 @@ type VaultItem = {
   updated_at: string | null;
   content_hash: string | null;
   status: string;
+  indexed_at: string | null;
   knowledge_status: string | null;
   has_conflict: boolean | null;
   valid_from: string | null;
@@ -45,7 +46,7 @@ export async function KnowledgeCoverage({
     admin.from("company_dna").select("*").eq("client_id", clientId).maybeSingle(),
     admin
       .from("vault_items")
-      .select("id, title, category, ai_summary, tags, source_type, updated_at, content_hash, status, knowledge_status, has_conflict, valid_from, valid_until, review_due_at")
+      .select("id, title, category, ai_summary, tags, source_type, updated_at, content_hash, status, indexed_at, knowledge_status, has_conflict, valid_from, valid_until, review_due_at")
       .eq("client_id", clientId)
       .eq("evidence_role", "factual")
       .order("updated_at", { ascending: false })
@@ -84,6 +85,7 @@ export async function KnowledgeCoverage({
     (!item.valid_until || item.valid_until >= today) &&
     (!item.review_due_at || item.review_due_at.slice(0, 10) > today)
   );
+  const retrievableItems = vaultItems.filter((item) => item.indexed_at !== null);
   const kbCount = kbResult.count;
 
   // ── Knowledge gaps — questions the brain couldn't answer (from vault_queries) ──
@@ -200,7 +202,7 @@ export async function KnowledgeCoverage({
       {/* Stats strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <StatCard icon={Archive} tint="text-blue-400" label="Vault sources" value={String(allVaultItems.length)} />
-        <StatCard icon={Sparkles} tint="text-purple-400" label="Usable by AI" value={`${vaultItems.length}/${allVaultItems.length}`} />
+        <StatCard icon={Sparkles} tint="text-purple-400" label="Available to AI" value={`${retrievableItems.length}/${allVaultItems.length}`} />
         <StatCard icon={BookOpen} tint="text-green-400" label="KB answers" value={String(kbCount ?? 0)} />
         <StatCard icon={Brain} tint="text-amber-400" label="Coverage" value={`${pct}%`} />
       </div>
@@ -209,6 +211,13 @@ export async function KnowledgeCoverage({
         <div className="mb-8 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
           {allVaultItems.length} Vault source{allVaultItems.length === 1 ? " is" : "s are"} saved,
           but none are ready yet. Open the Vault to restart stalled preparation.
+        </div>
+      )}
+
+      {retrievableItems.length < vaultItems.length && (
+        <div className="mb-8 rounded-xl border border-blue-500/25 bg-blue-500/10 p-4 text-sm text-blue-200">
+          {vaultItems.length - retrievableItems.length} ready Vault source{vaultItems.length - retrievableItems.length === 1 ? " is" : "s are"} still being added to AI search.
+          The Vault recovery action can retry them without changing the saved source.
         </div>
       )}
 

@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { api } from "@/lib/api-client";
 import { QuickDraftPage } from "@/components/content/QuickDraftPage";
 import { ProjectsPage } from "@/components/content/ProjectsPage";
-import type { ContentPiece, ContentProject } from "@/types/content";
+import type { ContentPiece, ContentProject, ContentTopic } from "@/types/content";
 
 jest.mock("@/lib/api-client", () => ({
   api: {
@@ -78,9 +78,11 @@ describe("Quick Draft page", () => {
         clientId={CLIENT_ID}
         canApprove
         brandStyle={{}}
+        onboardingMode
       />,
     );
 
+    expect(screen.getByText("Step 5 of 6")).toBeInTheDocument();
     expect(screen.getByText("Create a draft in under a minute")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Content topic"), "A useful company topic");
     await user.type(screen.getByLabelText("Optional content direction"), "Write for property investors");
@@ -98,6 +100,7 @@ describe("Quick Draft page", () => {
       expect.objectContaining({ idempotent: true, showErrorToast: false }),
     ));
     expect(screen.getByText("Draft editor")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /continue your journey/i })).toHaveAttribute("href", "/dashboard");
   });
 });
 
@@ -143,5 +146,37 @@ describe("Projects page", () => {
     expect(screen.queryByRole("button", {
       name: "Remove A useful company topic from unfinished projects",
     })).not.toBeInTheDocument();
+  });
+
+  test("keeps every approved idea discoverable instead of permanently hiding ideas after twelve", async () => {
+    const user = userEvent.setup();
+    const topics: ContentTopic[] = Array.from({ length: 14 }, (_, index) => ({
+      id: `topic-${index + 1}`,
+      title: `Approved idea ${index + 1}`,
+      description: `Useful idea number ${index + 1}`,
+      content_type: "linkedin",
+      status: "approved",
+      created_at: `2026-07-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`,
+      created_by: null,
+    }));
+
+    render(
+      <ProjectsPage
+        clientId={CLIENT_ID}
+        canApprove
+        brandStyle={{}}
+        initialProjects={[]}
+        projectsHasMore={false}
+        initialTopics={topics}
+      />,
+    );
+
+    expect(screen.getByText("Approved idea 12")).toBeVisible();
+    expect(screen.queryByText("Approved idea 14")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View all 14 approved ideas" }));
+    expect(screen.getByText("Approved idea 14")).toBeVisible();
+    await user.clear(screen.getByPlaceholderText("Search approved ideas"));
+    await user.type(screen.getByPlaceholderText("Search approved ideas"), "idea 14");
+    expect(screen.getByText("Approved idea 14")).toBeVisible();
   });
 });

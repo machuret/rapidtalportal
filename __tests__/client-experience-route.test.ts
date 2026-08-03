@@ -19,7 +19,7 @@ import { POST } from "@/app/api/experience/events/route";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientExperienceLimiter } from "@/lib/rate-limit";
 
-const mockInsert = jest.fn();
+const mockUpsert = jest.fn();
 const mockCreateAdminClient = createAdminClient as jest.Mock;
 const mockCheck = clientExperienceLimiter.check as jest.Mock;
 
@@ -33,8 +33,8 @@ function request(body: unknown) {
 
 describe("client experience event route", () => {
   beforeEach(() => {
-    mockInsert.mockReset().mockResolvedValue({ error: null });
-    mockCreateAdminClient.mockReset().mockReturnValue({ from: () => ({ insert: mockInsert }) });
+    mockUpsert.mockReset().mockResolvedValue({ error: null });
+    mockCreateAdminClient.mockReset().mockReturnValue({ from: () => ({ upsert: mockUpsert }) });
     mockCheck.mockReset().mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
   });
 
@@ -48,20 +48,96 @@ describe("client experience event route", () => {
       metadata: { feature: "monthly_reports" },
     }), { params: Promise.resolve({}) });
     expect(response.status).toBe(204);
-    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({
-      client_id: "22222222-2222-4222-8222-222222222222",
-      user_id: "11111111-1111-4111-8111-111111111111",
-      event_type: "feature_ready",
-      path: "/reports",
-      duration_ms: 3100,
-      navigation_id: "33333333-3333-4333-8333-333333333333",
-      attempt: 1,
-    }));
+    expect(mockUpsert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        client_id: "22222222-2222-4222-8222-222222222222",
+        user_id: "11111111-1111-4111-8111-111111111111",
+        actor_role: "client_admin",
+        event_type: "feature_ready",
+        path: "/reports",
+        duration_ms: 3100,
+        navigation_id: "33333333-3333-4333-8333-333333333333",
+        attempt: 1,
+      }),
+    ], { onConflict: "id", ignoreDuplicates: true });
   });
 
   test("rejects unknown events and non-portal paths", async () => {
     const response = await POST(request({ eventType: "arbitrary", path: "https://elsewhere.test" }), { params: Promise.resolve({}) });
     expect(response.status).toBe(422);
-    expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  test("records findability outcomes without raw search text", async () => {
+    const response = await POST(request({
+      eventType: "navigation_destination_opened",
+      path: "/vault",
+      targetPath: "/content/quick",
+      eventId: "44444444-4444-4444-8444-444444444444",
+      navigationId: "55555555-5555-4555-8555-555555555555",
+      interactionId: "55555555-5555-4555-8555-555555555555",
+      metadata: {
+        source: "command_palette_search",
+        query_token_count: 3,
+        result_count: 1,
+      },
+    }), { params: Promise.resolve({}) });
+    expect(response.status).toBe(204);
+    expect(mockUpsert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: "44444444-4444-4444-8444-444444444444",
+        event_type: "navigation_destination_opened",
+        path: "/vault",
+        target_path: "/content/quick",
+        metadata: { source: "command_palette_search", query_token_count: 3, result_count: 1 },
+      }),
+    ], { onConflict: "id", ignoreDuplicates: true });
+  });
+
+  test.each(["query", "search_text", "prompt", "content"])("rejects sensitive metadata key %s", async (key) => {
+    const response = await POST(request({
+      eventType: "guide_search_used",
+      path: "/guide",
+      metadata: { [key]: "private client words" },
+    }), { params: Promise.resolve({}) });
+    expect(response.status).toBe(422);
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  test("canonicalises dynamic routes and discards query strings before storage", async () => {
+    const response = await POST(request({
+      eventType: "page_ready",
+      path: "/crm/99999999-9999-4999-8999-999999999999?private=words",
+      metadata: { stage: "route_shell" },
+    }), { params: Promise.resolve({}) });
+    expect(response.status).toBe(204);
+    expect(mockUpsert).toHaveBeenCalledWith([
+      expect.objectContaining({ path: "/crm/:item" }),
+    ], expect.any(Object));
+  });
+
+  test("rejects arbitrary strings hidden in otherwise allowed metadata fields", async () => {
+    const response = await POST(request({
+      eventType: "contextual_help_opened",
+      path: "/vault",
+      metadata: { source: "private client words" },
+    }), { params: Promise.resolve({}) });
+    expect(response.status).toBe(422);
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  test("accepts an idempotent batch", async () => {
+    const eventId = "66666666-6666-4666-8666-666666666666";
+    const response = await POST(request({ events: [{
+      eventType: "page_slow",
+      eventId,
+      path: "/vault",
+      durationMs: 9000,
+      metadata: {},
+    }] }), { params: Promise.resolve({}) });
+    expect(response.status).toBe(204);
+    expect(mockUpsert).toHaveBeenCalledWith([
+      expect.objectContaining({ id: eventId, event_type: "page_slow" }),
+    ], { onConflict: "id", ignoreDuplicates: true });
   });
 });

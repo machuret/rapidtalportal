@@ -10,7 +10,7 @@ import type { NotebookPage } from "@/lib/notebook/types";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Notebook — RapidTal" };
 
-export default async function NotebookPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ placement?: string }> }) {
+export default async function NotebookPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ placement?: string; page?: string }> }) {
   const searchParams = await searchParamsPromise;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
@@ -100,6 +100,7 @@ export default async function NotebookPage({ searchParams: searchParamsPromise }
         pages={(pageRows ?? []) as NotebookPage[]}
         participants={participants}
         currentUserId={user.id}
+        initialPageId={typeof searchParams.page === "string" && /^[0-9a-f-]{36}$/iu.test(searchParams.page) ? searchParams.page : null}
       />
     </div>
   );

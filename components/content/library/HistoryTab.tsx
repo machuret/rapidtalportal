@@ -178,7 +178,7 @@ export const HistoryTab = memo(function HistoryTab({
             <RefreshCw className={`mr-2 h-4 w-4 ${detailQuery.isFetching ? "animate-spin" : ""}`} />
             Retry
           </Button>
-          <Button variant="ghost" onClick={handleBack}>Back to History</Button>
+          <Button variant="ghost" onClick={handleBack}>Back to content library</Button>
         </div>
       </div>
     );
@@ -189,7 +189,7 @@ export const HistoryTab = memo(function HistoryTab({
     return (
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-12 text-center">
         <Clock className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
-        <p className="text-zinc-400">No content created yet. Return to Ideas or use Quick Create to generate a draft.</p>
+        <p className="text-zinc-400">No content created yet. Open Create content to start a draft or generate an idea.</p>
       </div>
     );
   }

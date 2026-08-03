@@ -124,6 +124,7 @@ export default async function BrainPage({
         canManage={user.role === "client_admin" || user.role === "super_admin"}
         initialOpportunities={opportunities}
         initialLoadFailed={opportunitiesLoadFailed}
+        readiness={readiness}
       />
       {/* "What the Vault knows" — folded in from the retired Company Report nav
           entry so client admins have one Company Brain home, not three. */}

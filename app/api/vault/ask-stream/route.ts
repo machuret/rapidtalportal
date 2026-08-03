@@ -10,6 +10,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { streamEdgeFunction } from "@/lib/edge-proxy";
 import { askVaultLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { coachModeSchema } from "@/lib/brain/coach-action-policy";
+import { COACH_PAGE_CONTEXT_KEYS, type CoachPageContextKey } from "@/supabase/functions/_shared/coach-page-context";
 
 // Deep mode streams a stronger model's long answer — give it room past Vercel's
 // short default so a slow generation isn't cut off mid-stream.
@@ -22,6 +23,10 @@ const bodySchema = z.object({
   coachMode: coachModeSchema.optional(),
   surface: z.enum(["vault_answer", "compose"]).optional(),
   history: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
+  pageContext: z.string().refine(
+    (value): value is CoachPageContextKey => COACH_PAGE_CONTEXT_KEYS.includes(value as CoachPageContextKey),
+    "Unknown page context.",
+  ).optional(),
 });
 
 export const POST = withAuth(async (req, { user, impersonating }) => {
@@ -52,6 +57,7 @@ export const POST = withAuth(async (req, { user, impersonating }) => {
     coachMode: parsed.data.coachMode ?? "private",
     surface: parsed.data.surface ?? "vault_answer",
     history: parsed.data.history ?? [],
+    pageContext: parsed.data.pageContext,
     stream: true,
   });
 });

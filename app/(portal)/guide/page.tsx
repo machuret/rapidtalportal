@@ -33,7 +33,7 @@ export default async function GuidePage() {
       <div className="surface-card px-5 py-4 mb-6">
         <p className="text-sm text-zinc-300 leading-relaxed">{intro}</p>
       </div>
-      <ClientGuide groups={groups} />
+      <ClientGuide groups={groups} clientMode={!isVa} />
     </div>
   );
 }

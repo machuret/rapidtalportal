@@ -32,6 +32,7 @@ interface Props {
   clientId: string;
   canEdit: boolean;
   clientName?: string;
+  onApproved?: (channel: StyleAnalysisChannel) => void;
 }
 
 const CHANNEL_LABELS: Record<StyleAnalysisChannel, string> = {
@@ -96,13 +97,14 @@ function cloneProfile(profile: StyleAnalysisProfile): StyleAnalysisProfile {
   return JSON.parse(JSON.stringify(profile)) as StyleAnalysisProfile;
 }
 
-export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
+export function StyleAnalysisManager({ clientId, canEdit, clientName, onApproved }: Props) {
   const [data, setData] = useState<StyleAnalysisResponse | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<StyleAnalysisChannel>("linkedin");
   const [form, setForm] = useState<StyleAnalysisProfile>(emptyStyleAnalysisProfile);
   const [recordId, setRecordId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [working, setWorking] = useState<"load" | "analyse" | "save" | "approve" | null>("load");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function load(silent = false) {
     if (!silent) setWorking("load");
@@ -112,8 +114,11 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
         { showErrorToast: false },
       );
       setData(result);
+      setLoadError(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Writing style could not be loaded.");
+      const message = error instanceof Error ? error.message : "Writing style could not be loaded.";
+      setLoadError(message);
+      if (silent) toast.error(message);
     } finally {
       if (!silent) setWorking(null);
     }
@@ -222,6 +227,7 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
         { showErrorToast: false },
       );
       await load(true);
+      if (action === "approve") onApproved?.(selectedChannel);
       toast.success(action === "approve"
         ? `${CHANNEL_LABELS[selectedChannel]} style approved and active.`
         : "Style analysis draft saved.");
@@ -262,7 +268,7 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
             <h2 className="text-sm font-semibold text-white">Writing style analysis</h2>
             <p className="mt-1 max-w-3xl text-xs leading-5 text-zinc-400">
               {clientName ? `Analyse ${clientName}'s` : "Analyse the company’s"} owned content into a reviewable profile for each channel.
-              Only an approved profile influences new drafts. Company DNA and deterministic hard rules always remain authoritative.
+              Only an approved profile influences new drafts. Your company profile and hard rules remain authoritative.
             </p>
           </div>
         </div>
@@ -300,8 +306,24 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading writing style…
         </div>
+      ) : loadError && !data ? (
+        <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-5" role="alert">
+          <p className="font-medium text-red-200">Your saved voice profile could not be loaded</p>
+          <p className="mt-1 text-sm text-zinc-400">{loadError}</p>
+          <Button type="button" variant="outline" className="mt-4" onClick={() => void load()}>
+            <RefreshCw /> Try again
+          </Button>
+        </div>
       ) : (
         <>
+          {loadError && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200" role="status">
+              <span>The latest voice data could not be refreshed. The last loaded profile is still shown.</span>
+              <Button type="button" size="sm" variant="outline" onClick={() => void load()}>
+                <RefreshCw /> Retry
+              </Button>
+            </div>
+          )}
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
               <p className="text-xs text-zinc-500">Usable examples</p>
@@ -330,8 +352,14 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
             </div>
           </div>
 
+          {(calibration || (channelState?.sources.length ?? 0) > 0) && (
+            <details className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/30">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-zinc-300 hover:text-white">
+                Readiness diagnostics and source details
+              </summary>
+              <div className="space-y-4 border-t border-zinc-800 p-4">
           {calibration && (
-            <div className="mt-4 rounded-lg border border-purple-500/20 bg-zinc-950/40 p-4">
+            <div className="rounded-lg border border-purple-500/20 bg-zinc-950/40 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-zinc-200">Style-profile calibration</p>
@@ -384,7 +412,7 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
           )}
 
           {(channelState?.sources.length ?? 0) > 0 && (
-            <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-medium text-zinc-300">Recent style sources</p>
@@ -422,6 +450,9 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
                 ))}
               </div>
             </div>
+          )}
+              </div>
+            </details>
           )}
 
           {canEdit && (
@@ -461,6 +492,39 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
                   You are reviewing a draft analysis. It will not affect generated content until it is approved.
                 </div>
               )}
+
+              <div className="rounded-lg border border-purple-500/25 bg-zinc-950/50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-purple-300">
+                      {CHANNEL_LABELS[selectedChannel]} voice profile
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-zinc-300">
+                      {form.summary || "RapidTal has analysed the examples. Review the detailed profile before approving it."}
+                    </p>
+                    {form.voice_traits.length > 0 && (
+                      <p className="mt-2 text-xs text-zinc-500">Voice traits: {form.voice_traits.slice(0, 4).join(" · ")}</p>
+                    )}
+                  </div>
+                  {canEdit && channelState?.draft && (
+                    <Button
+                      type="button"
+                      onClick={() => void save("approve")}
+                      disabled={working !== null}
+                      className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-500"
+                    >
+                      {working === "approve" ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+                      Approve voice profile
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <details className="rounded-lg border border-zinc-800 bg-zinc-950/30">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-zinc-300 hover:text-white">
+                  Advanced profile editor and evidence
+                </summary>
+                <div className="space-y-5 border-t border-zinc-800 p-4">
 
               <div className="grid gap-4 lg:grid-cols-2">
                 {TEXT_FIELDS.map((field) => (
@@ -544,15 +608,6 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
                     {working === "save" ? <Loader2 className="animate-spin" /> : <Save />}
                     Save review draft
                   </Button>
-                  <Button
-                    type="button"
-                    onClick={() => void save("approve")}
-                    disabled={working !== null || (!channelState?.draft && !dirty)}
-                    className="bg-emerald-600 text-white hover:bg-emerald-500"
-                  >
-                    {working === "approve" ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
-                    Approve for content engine
-                  </Button>
                   {calibration?.confidence === "low" && (
                     <p className="basis-full text-right text-xs text-amber-300">
                       Approval activates this profile, but calibration will remain low until representative goldens are approved.
@@ -560,6 +615,8 @@ export function StyleAnalysisManager({ clientId, canEdit, clientName }: Props) {
                   )}
                 </div>
               )}
+                </div>
+              </details>
             </div>
           )}
         </>

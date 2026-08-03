@@ -29,6 +29,13 @@ import {
 } from "../_shared/coach-tools.ts";
 import { corsHeaders, handleOptions, jsonResponse as json } from "../_shared/cors.ts";
 import { authorizeRequest, checkClientMembership } from "../_shared/auth.ts";
+import {
+  COACH_PAGE_CONTEXT_KEYS,
+  COACH_PAGE_CONTEXTS,
+  coachPageContextPrompt,
+  type CoachPageContextKey,
+} from "../_shared/coach-page-context.ts";
+import { loadCoachPageState } from "../_shared/coach-page-state.ts";
 
 const ANSWER_PROMPT = `You are RapidTal Coach, a grounded business coach and work copilot. Answer the authenticated speaker using ONLY the permitted context below.
 
@@ -400,7 +407,8 @@ function followUpSuggestions(
   if (company) suggestions.push(`What should the team do next based on ${company.title}?`);
   if (market) suggestions.push("Which market opportunity best fits our company context?");
   suggestions.push("What company information would make this answer stronger?");
-  suggestions.push(`Can you turn this into a practical checklist for ${question.slice(0, 80)}?`);
+  const checklistTopic = question.slice(0, 80).replace(/[\s?.!]+$/u, "");
+  suggestions.push(`Can you turn this into a practical checklist for ${checklistTopic}?`);
   return Array.from(new Set(suggestions)).slice(0, 3);
 }
 
@@ -448,6 +456,57 @@ function coachingCommitmentScore(
   return Math.max(0.35, lexicalScore(question, commitment.commitment));
 }
 
+function countedStatuses(rows: Array<{ status: string }>) {
+  const counts = new Map<string, number>();
+  for (const row of rows) counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+  return [...counts.entries()].map(([status, count]) => `${count} ${status.replaceAll("_", " ")}`).join(", ") || "none";
+}
+
+/** Status-only state already present in the official context snapshot. This
+ * lets page help answer concrete next-step questions without another broad
+ * database reader or any route-local context fallback. */
+function brainContextPageState(key: CoachPageContextKey, context: BrainContextV1): string[] {
+  if (["home", "tasks", "supervision"].includes(key)) {
+    return [
+      `Visible tasks (${context.operations.scope}): ${countedStatuses(context.operations.tasks)}.`,
+      `Work awaiting review: ${context.operations.tasks.filter((task) => task.status === "review").length}.`,
+    ];
+  }
+  if (key === "daily_log") {
+    return [`Recent visible daily logs: ${context.operations.dailyLogs.length}.`];
+  }
+  if (key === "messages") {
+    return [`Recent role-permitted communications in context: ${context.operations.communications.length}.`];
+  }
+  if (key === "team") {
+    return [`Visible team members: ${context.operations.team.length}.`];
+  }
+  if (key === "content") {
+    return [`Recent content deliverables in official context: ${countedStatuses(context.operations.deliverables)}.`];
+  }
+  if (key === "knowledge") {
+    return [
+      `Topic retrieval coverage: ${context.knowledge.coverage}; ${context.knowledge.sources.length} relevant sources selected.`,
+      `Context warnings: ${context.warnings.filter((warning) => warning.severity !== "info").length}.`,
+    ];
+  }
+  if (key === "competitors") {
+    return [`Market snapshot availability: ${context.market.included ? `${context.market.insights.length} relevant insights` : "not included"}.`];
+  }
+  if (key === "voice") {
+    return [`Resolved voice source: ${context.style.source}; confidence: ${context.style.confidence ?? "not available"}; hard rules: ${context.style.hardRules.length}.`];
+  }
+  if (["brain", "company_report", "profile"].includes(key)) {
+    return [
+      `Company profile fields available: ${Object.keys(context.company.fields).length}.`,
+      `Knowledge coverage for this request: ${context.knowledge.coverage}.`,
+      `Approved relevant memories: ${context.memories.length}.`,
+      `Context warnings: ${context.warnings.filter((warning) => warning.severity !== "info").length}.`,
+    ];
+  }
+  return [];
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return handleOptions();
   if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
@@ -492,6 +551,11 @@ Deno.serve(async (req: Request) => {
       .includes(body.coachMode)
       ? body.coachMode
       : "private";
+    const pageContextKey = typeof body.pageContext === "string"
+      && COACH_PAGE_CONTEXT_KEYS.includes(body.pageContext as CoachPageContextKey)
+      ? body.pageContext as CoachPageContextKey
+      : null;
+    const pageContext = pageContextKey ? COACH_PAGE_CONTEXTS[pageContextKey] : null;
     if (coachRole === "va" && ["message_va_team", "create_task", "review_task"].includes(requestedCoachMode)) {
       return json({ error: "That Coach action is not available to a VA." }, 403);
     }
@@ -524,7 +588,7 @@ Deno.serve(async (req: Request) => {
       : [];
     const recentQs = history.map((h) => (h?.question ?? "").toString()).filter(Boolean).slice(-2);
     // Embedding query carries recent turns so follow-ups stay on-topic…
-    const retrievalQuery = [...recentQs, question].join(" ").trim();
+    const retrievalQuery = [...recentQs, pageContext?.label ?? "", question].join(" ").trim();
     if (!clientId || !question) return json({ error: "Missing clientId or question." }, 400);
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(clientId)) {
       return json({ error: "Invalid clientId." }, 422);
@@ -533,6 +597,12 @@ Deno.serve(async (req: Request) => {
     if (question.length > 4_000) return json({ error: "Question too long." }, 422);
     const membershipDenied = checkClientMembership(role, userClientId, clientId);
     if (membershipDenied) return membershipDenied;
+    const pageStatePromise = pageContextKey
+      ? Promise.race([
+        loadCoachPageState({ admin, clientId, contextKey: pageContextKey }),
+        new Promise<string[]>((resolve) => setTimeout(() => resolve([]), 2_500)),
+      ])
+      : Promise.resolve([] as string[]);
 
     // Best-effort question log (powers gap detection / analytics). Never throws.
     // deno-lint-ignore no-explicit-any
@@ -596,7 +666,7 @@ Deno.serve(async (req: Request) => {
           topic: retrievalQuery,
           audience: coachRole === "client" ? "authenticated client" : "authenticated virtual assistant",
           objective: requestedCoachMode.replaceAll("_", " "),
-          intent: deep ? "thorough Coach answer" : "concise Coach answer",
+          intent: `${deep ? "thorough" : "concise"} Coach answer${pageContext ? ` in ${pageContext.label}` : ""}`,
           actor: {
             userId: authUserId,
             accountRole: role === "va" || role === "client_admin" ? role : "super_admin",
@@ -633,6 +703,11 @@ Deno.serve(async (req: Request) => {
         recoverable: true,
       }, 503);
     }
+
+    const livePageState = await pageStatePromise;
+    const contextualState = pageContextKey
+      ? [...livePageState, ...brainContextPageState(pageContextKey, brainContext)]
+      : [];
 
     const blocks: Block[] = [];
 
@@ -803,7 +878,8 @@ Deno.serve(async (req: Request) => {
     const editablePrompt = deep
       ? await promptOverride(admin, "vault.ask.deep", DEEP_PROMPT)
       : await promptOverride(admin, "vault.ask.answer", ANSWER_PROMPT);
-    const systemPrompt = `${editablePrompt}\n\n${MANDATORY_BRAIN_POLICY}\n\n${coachRolePolicy(coachRole, requestedCoachMode)}${requestedCoachMode === "private" ? `\n\n${COACH_TOOL_ADDENDUM}` : ""}`;
+    const workspacePrompt = pageContextKey ? `\n\n${coachPageContextPrompt(pageContextKey, coachRole)}` : "";
+    const systemPrompt = `${editablePrompt}\n\n${MANDATORY_BRAIN_POLICY}\n\n${coachRolePolicy(coachRole, requestedCoachMode)}${workspacePrompt}${requestedCoachMode === "private" ? `\n\n${COACH_TOOL_ADDENDUM}` : ""}`;
 
     const responseFormat = coachActionResponseFormat(requestedCoachMode, coachRole);
     const effectiveStream = stream && requestedCoachMode === "private";
@@ -814,7 +890,7 @@ Deno.serve(async (req: Request) => {
         const a = (h?.answer ?? "").toString().trim().slice(0, 600);
         return q && a ? [{ role: "user", content: q }, { role: "assistant", content: a }] : [];
       }),
-      { role: "user", content: `CONTEXT:\n${context}\n\nQUESTION: ${question}` },
+      { role: "user", content: `CONTEXT:\n${context}\n\n${contextualState.length ? `CURRENT WORKSPACE STATE (captured now; status summaries only):\n${contextualState.join("\n")}\n\n` : ""}QUESTION: ${question}` },
     ];
 
     // ── Bounded read-only tool loop (concise + deep answers only) ─────────────

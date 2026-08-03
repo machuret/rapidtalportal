@@ -5,6 +5,7 @@ import path from "path";
 import { CLIENT_GUIDE } from "@/lib/client-guide";
 import { CLIENT_TERMS } from "@/lib/client-experience";
 import { PAGE_INTROS } from "@/lib/page-intros";
+import { alignGuideToCurrentNavigation } from "@/lib/guides/server";
 
 const root = path.resolve(__dirname, "..");
 const items = CLIENT_GUIDE.flatMap((group) => group.items);
@@ -59,5 +60,28 @@ describe("client Guide and language contract", () => {
     expect(migration).toContain("ENABLE ROW LEVEL SECURITY");
     expect(migration).toContain("REVOKE ALL ON TABLE portal_experience_events FROM PUBLIC, anon, authenticated");
     expect(migration).toContain("GRANT SELECT, INSERT, DELETE ON TABLE portal_experience_events TO service_role");
+  });
+
+  test("old admin-edited guides inherit current destination labels and newly shipped routes", () => {
+    const aligned = alignGuideToCurrentNavigation("client", {
+      intro: "Custom intro",
+      groups: [{
+        heading: "Your company knowledge and AI",
+        items: [{
+          title: "Vault",
+          href: "/vault",
+          what: "Custom explanation",
+          why: "Custom reason",
+          can: ["Custom action"],
+          how: ["Custom step"],
+        }],
+      }],
+    });
+    const alignedItems = aligned.groups.flatMap((group) => group.items);
+    expect(alignedItems.find((item) => item.href === "/vault")).toMatchObject({
+      title: "Knowledge",
+      what: "Custom explanation",
+    });
+    expect(alignedItems.find((item) => item.href === "/competitors")?.title).toBe("Competitor insights");
   });
 });

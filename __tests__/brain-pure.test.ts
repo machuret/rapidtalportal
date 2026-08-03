@@ -75,6 +75,14 @@ describe("profileGaps (onboarding gap analysis)", () => {
     expect(g.filledCount).toBe(2);
     expect(g.completionPct).toBe(Math.round((2 / PROFILE_FIELD_DEFS.length) * 100));
   });
+
+  it("can calculate readiness for one visible profile section", () => {
+    const g = profileGaps(
+      { company_name: "Acme", services: "Widgets" },
+      ["company_name", "services"],
+    );
+    expect(g).toMatchObject({ completionPct: 100, filledCount: 2, total: 2, gaps: [] });
+  });
 });
 
 describe("levelFor (Brain Score → level bands)", () => {

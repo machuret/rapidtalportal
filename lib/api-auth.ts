@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCachedIdentity, setCachedIdentity } from "@/lib/auth-cache";
 import { IMPERSONATE_COOKIE } from "@/lib/impersonation";
+import { boundedSupabaseFetch } from "@/lib/supabase/bounded-fetch";
 
 export interface ApiUser {
   id: string;
@@ -61,6 +62,7 @@ export async function requireApiAuth(): Promise<AuthedContext | { error: NextRes
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: { fetch: boundedSupabaseFetch },
       cookies: {
         getAll() { return cookieStore.getAll(); },
         setAll() { /* read-only in API routes */ },

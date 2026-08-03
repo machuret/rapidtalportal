@@ -6,6 +6,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { errorMessage } from "@/lib/error-message";
 import { type AskSourceKind } from "@/components/intelligence/AskBrainFlow";
+import type { CoachPageContextKey } from "@/supabase/functions/_shared/coach-page-context";
 
 export interface Source {
   n: number;
@@ -60,6 +61,8 @@ export type CoachActionDraft =
   | { type: "create_memory"; idempotencyKey: string; kind: "preference" | "decision" | "context" | "challenge"; content: string };
 
 export interface Turn {
+  /** Stable browser identity used while an answer is being persisted/retried. */
+  localId?: string;
   question: string;
   answer: string;
   sources: Source[];
@@ -73,6 +76,8 @@ export interface Turn {
   actionStatus?: "none" | "draft" | "processing" | "completed" | "failed";
   deepAnswer?: string | null;
   deepEvidence?: AnswerEvidence | null;
+  /** Local persistence state. History-loaded turns are always persisted. */
+  persistenceStatus?: "pending" | "persisted" | "failed";
 }
 
 export type AnswerEvidence = Pick<
@@ -111,6 +116,7 @@ interface ThreadHistoryResponse {
 
 function toTurn(turn: CoachTurnRow): Turn {
   return {
+    localId: turn.brain_context_snapshot_id,
     question: turn.question,
     answer: turn.answer,
     coachMode: turn.coach_mode,
@@ -130,6 +136,7 @@ function toTurn(turn: CoachTurnRow): Turn {
       suggestions: turn.deep_suggestions ?? [],
     } : null,
     queriedKinds: [...new Set((turn.sources ?? []).map((source) => source.kind))],
+    persistenceStatus: "persisted",
   };
 }
 
@@ -192,6 +199,7 @@ async function askStream(
   mode?: "deep",
   coachMode: CoachMode = "private",
   signal?: AbortSignal,
+  pageContext?: CoachPageContextKey,
 ): Promise<{
   ok: boolean;
   aborted: boolean;
@@ -210,7 +218,7 @@ async function askStream(
     const res = await fetch("/api/vault/ask-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId, question, history, coachMode, ...(mode ? { mode } : {}) }),
+      body: JSON.stringify({ clientId, question, history, coachMode, pageContext, ...(mode ? { mode } : {}) }),
       signal,
     });
     if (!res.ok || !res.body) {
@@ -308,6 +316,7 @@ function buildCompletedTurn(
   },
 ): Turn {
   return {
+    localId: crypto.randomUUID(),
     question,
     coachMode,
     queriedKinds: queriedLayers,
@@ -319,6 +328,7 @@ function buildCompletedTurn(
     suggestions: result.suggestions ?? [],
     actionDraft: result.actionDraft ?? null,
     actionStatus: result.actionStatus ?? "none",
+    persistenceStatus: "pending",
   };
 }
 
@@ -329,6 +339,8 @@ export function useCoachChat({
   actionsEnabled = true,
   persistConversation = true,
   externalAsk,
+  pageContext,
+  initialQuestion = "",
 }: {
   clientId: string;
   coachRole?: CoachRole;
@@ -336,8 +348,10 @@ export function useCoachChat({
   persistConversation?: boolean;
   /** Lets a parent (e.g. golden questions panel) submit a question into this chat. */
   externalAsk?: { q: string; nonce: number } | null;
+  pageContext?: CoachPageContextKey;
+  initialQuestion?: string;
 }) {
-  const [question, setQuestion] = useState("");
+  const [question, setQuestion] = useState(initialQuestion);
   const [coachMode, setCoachMode] = useState<CoachMode>("private");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -413,6 +427,30 @@ export function useCoachChat({
     }
   }
 
+  function setTurnPersistence(turn: Turn, status: NonNullable<Turn["persistenceStatus"]>) {
+    setTurns((current) => current.map((candidate) => (
+      (candidate === turn
+        || (Boolean(turn.localId) && candidate.localId === turn.localId)
+        || (Boolean(turn.brainContextSnapshotId)
+          && candidate.brainContextSnapshotId === turn.brainContextSnapshotId))
+        ? { ...candidate, persistenceStatus: status }
+        : candidate
+    )));
+  }
+
+  async function persistAppendedTurn(turn: Turn) {
+    if (!persistConversation) return true;
+    const saved = await persistTurn(turn);
+    setTurnPersistence(turn, saved ? "persisted" : "failed");
+    return saved;
+  }
+
+  async function retryTurnPersistence(turn: Turn) {
+    if (turn.persistenceStatus === "pending") return;
+    setTurnPersistence(turn, "pending");
+    await persistAppendedTurn(turn);
+  }
+
   async function newConversation() {
     if (loading) return;
     if (threadId) {
@@ -481,7 +519,7 @@ export function useCoachChat({
     if (resolvedMode !== "private") {
       try {
         const res = await api.post<AskResponse>(ROUTES.vault.ask(), {
-          clientId, question: trimmed, history, coachMode: resolvedMode,
+          clientId, question: trimmed, history, coachMode: resolvedMode, pageContext,
         }, { showErrorToast: false });
         if (!res.actionDraft) throw new Error("Coach returned no validated action preview.");
         const completedTurn = buildCompletedTurn(trimmed, resolvedMode, requestedLayers, {
@@ -497,7 +535,7 @@ export function useCoachChat({
         if (!(await persistTurn(completedTurn))) {
           throw new Error("The verified preview could not be saved for safe execution.");
         }
-        setTurns((prev) => [...prev, completedTurn]);
+        setTurns((prev) => [...prev, { ...completedTurn, persistenceStatus: "persisted" }]);
       } catch (error) {
         setAskFailure({
           question: trimmed,
@@ -519,10 +557,17 @@ export function useCoachChat({
       undefined,
       resolvedMode,
       streamAbort.signal,
+      pageContext,
     );
     // Deliberately aborted (unmount or superseded) — never fall back to a
     // second paid call, and don't touch state on a dead component.
-    if (r.aborted) return;
+    if (r.aborted) {
+      // "Stop" is a normal user action, not a permanent loading state. The
+      // unmount case is harmless; React ignores these final local cleanups.
+      setInterim(null);
+      setLoading(false);
+      return;
+    }
     if (r.ok) {
       const completedTurn = buildCompletedTurn(trimmed, resolvedMode, requestedLayers, {
         answer: r.answer,
@@ -535,12 +580,12 @@ export function useCoachChat({
         actionStatus: "none",
       });
       setTurns((prev) => [...prev, completedTurn]);
-      void persistTurn(completedTurn);
+      void persistAppendedTurn(completedTurn);
     } else {
       try {
         const res = await api.post<AskResponse>(
           ROUTES.vault.ask(),
-          { clientId, question: trimmed, history, coachMode: resolvedMode },
+          { clientId, question: trimmed, history, coachMode: resolvedMode, pageContext },
           { showErrorToast: false },
         );
         const completedTurn = buildCompletedTurn(trimmed, resolvedMode, requestedLayers, {
@@ -554,7 +599,7 @@ export function useCoachChat({
           actionStatus: res.actionDraft ? "draft" : "none",
         });
         setTurns((prev) => [...prev, completedTurn]);
-        void persistTurn(completedTurn);
+        void persistAppendedTurn(completedTurn);
       } catch (error) {
         setAskFailure({
           question: trimmed,
@@ -583,7 +628,7 @@ export function useCoachChat({
     onAnswer: (answer: string) => void,
     onEvidence: (evidence: AnswerEvidence) => void,
   ): Promise<boolean> {
-    const r = await askStream(clientId, turn.question, history, (a) => onAnswer(a), "deep", turn.coachMode, signal);
+    const r = await askStream(clientId, turn.question, history, (a) => onAnswer(a), "deep", turn.coachMode, signal, pageContext);
     if (r.aborted) return true; // unmounted mid-stream — no fallback, no state writes
     if (r.ok) {
       onEvidence({
@@ -601,6 +646,7 @@ export function useCoachChat({
           mode: "deep",
           history,
           coachMode: turn.coachMode,
+          pageContext,
         }, { showErrorToast: false });
         onAnswer(res.answer);
         onEvidence({
@@ -636,5 +682,6 @@ export function useCoachChat({
     goDeeper,
     newConversation,
     persistTurn,
+    retryTurnPersistence,
   };
 }

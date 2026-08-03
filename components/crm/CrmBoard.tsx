@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CrmContact } from "@/types/crm";
 import { Button } from "@/components/ui/button";
@@ -22,12 +22,13 @@ interface CrmBoardProps {
   clientId: string;
   userId: string;
   isAdmin: boolean;
+  initialContactId?: string | null;
 }
 
 type Note = { id: string; body: string; created_at: string };
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function CrmBoard({ contacts: initial, clientId, isAdmin }: CrmBoardProps) {
+export function CrmBoard({ contacts: initial, clientId, isAdmin, initialContactId = null }: CrmBoardProps) {
   const router = useRouter();
   // Read-only Supabase browser client — only used for SELECT (notes fetch)
   const supabaseRef = useRef(createClient());
@@ -58,7 +59,7 @@ export function CrmBoard({ contacts: initial, clientId, isAdmin }: CrmBoardProps
     return matchSearch && matchStatus;
   });
 
-  async function openContact(c: CrmContact) {
+  const openContact = useCallback(async (c: CrmContact) => {
     setSelected(c);
     if (notesCacheRef.current.has(c.id)) {
       setNotes(notesCacheRef.current.get(c.id)!);
@@ -74,7 +75,16 @@ export function CrmBoard({ contacts: initial, clientId, isAdmin }: CrmBoardProps
     notesCacheRef.current.set(c.id, fetched);
     setNotes(fetched);
     setLoadingNotes(false);
-  }
+  }, [supabase]);
+
+  const openedFromUrl = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialContactId || openedFromUrl.current === initialContactId) return;
+    const contact = allContacts.find((candidate) => candidate.id === initialContactId);
+    if (!contact) return;
+    openedFromUrl.current = initialContactId;
+    void openContact(contact);
+  }, [allContacts, initialContactId, openContact]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (

@@ -27,6 +27,44 @@ export const GUIDE_DEFAULTS: Record<GuideKey, GuideDoc> = {
 const TTL_MS = 30_000;
 const cache = new Map<GuideKey, { doc: GuideDoc | null; at: number }>();
 
+/** Keep admin-authored explanations, but make destination names and links
+ * follow the shipped client navigation. It also adds newly shipped guide
+ * destinations to older saved documents instead of leaving them invisible. */
+export function alignGuideToCurrentNavigation(key: GuideKey, document: GuideDoc): GuideDoc {
+  if (key !== "client") return document;
+  const groups = document.groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => ({ ...item })),
+  }));
+  const storedByHref = new Map(
+    groups.flatMap((group) => group.items)
+      .filter((item) => item.href)
+      .map((item) => [item.href as string, item]),
+  );
+
+  for (const defaultGroup of CLIENT_GUIDE) {
+    let destinationGroup = groups.find((group) => group.heading === defaultGroup.heading);
+    for (const defaultItem of defaultGroup.items) {
+      if (!defaultItem.href) continue;
+      const storedItem = storedByHref.get(defaultItem.href);
+      if (storedItem) {
+        storedItem.title = defaultItem.title;
+        storedItem.href = defaultItem.href;
+        continue;
+      }
+      if (!destinationGroup) {
+        destinationGroup = { heading: defaultGroup.heading, blurb: defaultGroup.blurb, items: [] };
+        groups.push(destinationGroup);
+      }
+      const added = { ...defaultItem, can: [...defaultItem.can], how: [...defaultItem.how] };
+      destinationGroup.items.push(added);
+      storedByHref.set(defaultItem.href, added);
+    }
+  }
+
+  return { intro: document.intro, groups };
+}
+
 /** The active guide for an audience: admin edit if saved, else the code default. */
 export async function getGuideDoc(key: GuideKey): Promise<GuideDoc> {
   const hit = cache.get(key);
@@ -40,8 +78,9 @@ export async function getGuideDoc(key: GuideKey): Promise<GuideDoc> {
   } catch {
     doc = null; // never let a guide read take the page down
   }
-  cache.set(key, { doc, at: Date.now() });
-  return doc ?? GUIDE_DEFAULTS[key];
+  const resolved = doc ? alignGuideToCurrentNavigation(key, doc) : GUIDE_DEFAULTS[key];
+  cache.set(key, { doc: resolved, at: Date.now() });
+  return resolved;
 }
 
 /** Called by the admin guides API after a save/reset. */

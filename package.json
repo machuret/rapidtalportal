@@ -15,7 +15,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage --runInBand",
-    "test:e2e:roles": "playwright test e2e/content-studio-roles.spec.ts e2e/lead-generation-roles.spec.ts",
+    "test:e2e:roles": "playwright test e2e/content-studio-roles.spec.ts e2e/lead-generation-roles.spec.ts e2e/client-first-success.spec.ts e2e/client-discovery-coach.spec.ts",
     "audit:prod": "pnpm audit --prod --audit-level high",
     "db:status": "node scripts/apply-migrations.mjs --status",
     "db:baseline": "node scripts/apply-migrations.mjs --baseline",

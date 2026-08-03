@@ -173,11 +173,10 @@ export function VaultReadinessDashboard({
     {
       label: "Usable facts",
       value: `${readiness.metrics.ready}/${readiness.metrics.total}`,
-      detail: readiness.metrics.processing
-        ? `${readiness.metrics.processing} processing`
-        : readiness.metrics.stuckProcessing
-          ? `${readiness.metrics.stuckProcessing} stuck — restart required`
-          : "Processing complete",
+      detail: [
+        readiness.metrics.processing ? `${readiness.metrics.processing} processing` : "",
+        readiness.metrics.stuckProcessing ? `${readiness.metrics.stuckProcessing} stuck — restart required` : "",
+      ].filter(Boolean).join(" · ") || "Processing complete",
       icon: BookOpenCheck,
     },
     {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   Clock3,
@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Settings2,
   Trash2,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
@@ -41,6 +42,7 @@ interface SourceConsoleProps {
   onBrowseCaptures: (page?: number) => void;
   onInspectCapture: (itemId: string) => void;
   onCloseCaptures: () => void;
+  defaultExpanded?: boolean;
 }
 
 /** One competitor card: readiness chips, sources, crawl actions and captured content. */
@@ -54,7 +56,9 @@ export function SourceConsole({
   onBrowseCaptures,
   onInspectCapture,
   onCloseCaptures,
+  defaultExpanded = false,
 }: SourceConsoleProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [working, setWorking] = useState<string | null>(null);
   const [addingSource, setAddingSource] = useState(false);
   const [editingSource, setEditingSource] = useState<string | null>(null);
@@ -68,6 +72,15 @@ export function SourceConsole({
     refresh_cadence: "",
     max_pages: 30,
   });
+
+  useEffect(() => {
+    function revealLinkedCompetitor() {
+      if (window.location.hash === `#competitor-${competitor.id}`) setExpanded(true);
+    }
+    revealLinkedCompetitor();
+    window.addEventListener("hashchange", revealLinkedCompetitor);
+    return () => window.removeEventListener("hashchange", revealLinkedCompetitor);
+  }, [competitor.id]);
 
   async function addSource(event: React.FormEvent) {
     event.preventDefault();
@@ -222,7 +235,7 @@ export function SourceConsole({
       id={`competitor-${competitor.id}`}
       className="scroll-mt-24 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/40"
     >
-      <div className="flex flex-col gap-3 border-b border-zinc-800 p-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className={`flex flex-col gap-3 p-5 sm:flex-row sm:items-start sm:justify-between ${expanded ? "border-b border-zinc-800" : ""}`}>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-semibold text-white">{competitor.name}</h3>
@@ -260,8 +273,9 @@ export function SourceConsole({
             {competitor.sources.reduce((total, source) => total + source.content_count, 0) === 1 ? "" : "s"}
           </p>
         </div>
-        {canManage && (
-          <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
+          {canManage && (
+            <>
             <Button type="button" size="sm" variant="ghost" onClick={() => void toggleCompetitor()}>
               {competitor.status === "paused" ? <Play /> : <Pause />}
               {competitor.status === "paused" ? "Resume" : "Pause"}
@@ -277,11 +291,23 @@ export function SourceConsole({
             >
               <Trash2 />
             </Button>
-          </div>
-        )}
+            </>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-expanded={expanded}
+            aria-controls={`competitor-details-${competitor.id}`}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? "Hide details" : canManage ? "Manage sources" : "View sources"}
+            <ChevronDown className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
+          </Button>
+        </div>
       </div>
 
-      <div className="space-y-3 p-5">
+      {expanded && <div id={`competitor-details-${competitor.id}`} className="space-y-3 p-5">
         <div className={`rounded-lg border p-4 ${
           competitor.readiness.positioning_ready
             ? "border-emerald-500/25 bg-emerald-500/5"
@@ -613,7 +639,7 @@ export function SourceConsole({
             onClose={onCloseCaptures}
           />
         )}
-      </div>
+      </div>}
     </section>
   );
 }

@@ -267,9 +267,12 @@ type ProspectingActivityEventRow = {
 };
 type PortalExperienceEventRow = {
   id: string; client_id: string; user_id: string;
-  event_type: "page_ready" | "feature_ready" | "feature_error" | "page_slow" | "page_retry" | "page_error";
+  event_type: "page_ready" | "feature_ready" | "feature_error" | "page_slow" | "page_retry" | "page_error"
+    | "navigation_search_opened" | "navigation_destination_opened" | "guide_search_used" | "contextual_help_opened";
   path: string; duration_ms: number | null; metadata: Json;
-  navigation_id: string | null; attempt: number; created_at: string;
+  actor_role: "client_admin" | "va" | "super_admin" | "unknown";
+  target_path: string | null; navigation_id: string | null; interaction_id: string | null;
+  attempt: number; created_at: string;
 };
 
 type CompatTables = Omit<
@@ -380,8 +383,10 @@ type CompatTables = Omit<
   };
   portal_experience_events: {
     Row: PortalExperienceEventRow;
-    Insert: Omit<PortalExperienceEventRow, "id" | "duration_ms" | "metadata" | "navigation_id" | "attempt" | "created_at"> & {
-      id?: string; duration_ms?: number | null; metadata?: Json; navigation_id?: string | null; attempt?: number; created_at?: string;
+    Insert: Omit<PortalExperienceEventRow, "id" | "actor_role" | "target_path" | "duration_ms" | "metadata" | "navigation_id" | "interaction_id" | "attempt" | "created_at"> & {
+      id?: string; actor_role?: PortalExperienceEventRow["actor_role"]; target_path?: string | null;
+      duration_ms?: number | null; metadata?: Json; navigation_id?: string | null;
+      interaction_id?: string | null; attempt?: number; created_at?: string;
     };
     Update: Partial<PortalExperienceEventRow>;
     Relationships: [];

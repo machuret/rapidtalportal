@@ -12,6 +12,7 @@ export const STYLE_ANALYSIS_CHANNELS = [
 ] as const;
 export const STYLE_SOURCES_UPDATED_EVENT = "rapidtal:style-sources-updated";
 export const VOICE_GOLDENS_UPDATED_EVENT = "rapidtal:voice-goldens-updated";
+export const COMPANY_VOICE_UPDATED_EVENT = "rapidtal:company-voice-updated";
 
 export type StyleAnalysisChannel = typeof STYLE_ANALYSIS_CHANNELS[number];
 export type StyleAnalysisStatus = "draft" | "approved" | "archived";

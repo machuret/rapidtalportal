@@ -101,7 +101,7 @@ export function AppliedStylePreview({
         </ul>
       ) : (
         <p className="mt-3 text-xs text-amber-300">
-          No voice guidance is configured for this channel yet. Add it in Company DNA.
+          No voice guidance is configured for this channel yet. Add it under Company → Voice.
         </p>
       )}
       <div className="mt-3 flex flex-wrap gap-2 text-2xs">
@@ -119,8 +119,8 @@ export function AppliedStylePreview({
           {style.styleAnalysis
             ? "Approved style analysis applied"
             : hasConfiguredStyle
-              ? "Company DNA style"
-              : "Generic professional style using Company DNA context"}
+              ? "Approved company voice"
+              : "Generic professional style using company profile context"}
         </span>
       </div>
     </section>

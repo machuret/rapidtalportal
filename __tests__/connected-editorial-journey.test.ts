@@ -9,6 +9,7 @@ import {
   contentProjectStatusSchema,
   contentProjectStepSchema,
 } from "@/lib/content/project-schema";
+import { clientDestinationsForGroup } from "@/lib/client-navigation";
 
 const root = path.resolve(__dirname, "..");
 const read = (file: string) => readFileSync(path.join(root, file), "utf8");
@@ -23,7 +24,7 @@ describe("connected editorial journey", () => {
   const quick = read("components/content/QuickDraftPage.tsx");
   const projectsPage = read("components/content/ProjectsPage.tsx");
   const ideas = read("components/content/IdeasPage.tsx");
-  const sidebar = read("components/layout/Sidebar.tsx");
+  const contentNav = read("components/content/ContentSectionNav.tsx");
   const projectsHook = read("hooks/useContentProjects.ts");
   const workflow = read("components/content/ContentProjectWorkflow.tsx");
   const quickDraft = read("lib/content/quick-draft.ts");
@@ -69,20 +70,26 @@ describe("connected editorial journey", () => {
   });
 
   test("the primary Studio navigation supports discovery and recovery", () => {
-    // The monolith is split into routed sub-pages: each concern is its own
-    // deep-linkable page, reachable from the sidebar's Content group.
+    // The underlying concerns remain deep-linkable, while the client-facing
+    // information architecture presents three durable editorial outcomes.
     expect(projectsPage).toContain("Continue working");
     expect(projectsPage).toContain("IDEAS approved");
     expect(projectsPage).toContain("Saved ideas stay here after refresh");
     expect(ideas).toContain("onTopicsChange={setTopics}");
     expect(ideas).toContain("onTopicApproved");
     expect(topics).toContain("await onTopicApproved?.(approved)");
-    expect(quick).toContain("Quick Create");
+    expect(quick).toContain("Create content");
     expect(quick).toContain("Create a draft in under a minute");
     expect(quick).toContain("Guided Create");
-    expect(sidebar).toContain('label: "Ideas"');
-    expect(sidebar).toContain('label: "Competitor Ideas"');
-    expect(sidebar).toContain('label: "Drafts & Approved"');
+    expect(clientDestinationsForGroup("Create").map(({ label, href }) => ({ label, href }))).toEqual([
+      { label: "Create content", href: "/content/quick" },
+      { label: "In progress", href: "/content/projects" },
+      { label: "Content library", href: "/content/library" },
+    ]);
+    expect(contentNav).toContain('label: "Create content"');
+    expect(contentNav).toContain('paths: ["/content/quick", "/content/ideas"]');
+    expect(quick).toContain('href="/content/ideas"');
+    expect(quick).toContain('href="/competitors"');
     expect(projectsHook).toContain("openProject");
     expect(workflow).toContain("Project saved · recoverable on any device");
     for (const step of ["Idea", "Brief", "Evidence", "Generate", "Edit", "Validate", "Approve"]) {

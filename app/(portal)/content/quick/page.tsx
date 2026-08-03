@@ -5,11 +5,17 @@ import { QuickDraftPage } from "@/components/content/QuickDraftPage";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { hasContentCapability } from "@/lib/auth/content-capabilities";
 import { loadBrandStyle } from "@/lib/content/server";
+import { OnboardingStepReporter } from "@/components/onboarding/OnboardingStepReporter";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Quick Draft — RapidTal" };
+export const metadata = { title: "Create content — RapidTal" };
 
-export default async function QuickDraftRoute() {
+export default async function QuickDraftRoute({
+  searchParams,
+}: {
+  searchParams?: Promise<{ setup?: string }>;
+}) {
+  const params = await searchParams;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;
@@ -17,19 +23,22 @@ export default async function QuickDraftRoute() {
 
   const admin = createAdminClient();
   const brandStyle = await loadBrandStyle(admin, user.client_id);
+  const onboardingMode = params?.setup === "first-draft" && user.role === "client_admin";
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">Quick Draft</h1>
-      <p className="text-zinc-400 text-sm mb-8">
-        From a topic to a grounded, on-voice draft in under a minute.
-      </p>
-      <PageIntro id="content-quick" />
+      {!onboardingMode && (
+        <>
+          <PageIntro id="content-quick" />
+        </>
+      )}
       <QuickDraftPage
         clientId={user.client_id}
         canApprove={hasContentCapability(user.role, "approve_content")}
         brandStyle={brandStyle}
+        onboardingMode={onboardingMode}
       />
+      {onboardingMode && <OnboardingStepReporter clientId={user.client_id} step="draft" />}
     </div>
   );
 }

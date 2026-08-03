@@ -16,12 +16,13 @@ export default async function ContentPage() {
   if (!user.client_id) redirect("/dashboard");
 
   const admin = createAdminClient();
-  const { count } = await admin
+  const { count, error } = await admin
     .from("content_projects")
     .select("id", { count: "exact", head: true })
     .eq("client_id", user.client_id)
     .in("status", ["active", "saved"])
     .limit(1);
+  if (error) throw error;
 
   redirect((count ?? 0) > 0 ? "/content/projects" : "/content/quick");
 }

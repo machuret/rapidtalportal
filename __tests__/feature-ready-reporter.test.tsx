@@ -15,14 +15,15 @@ describe("feature readiness", () => {
     render(<FeatureReadyReporter feature="monthly_reports" />);
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
     const [, init] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-    expect(body).toMatchObject({
+    const body = JSON.parse(String(init.body)) as { events: Array<Record<string, unknown>> };
+    const event = body.events[0];
+    expect(event).toMatchObject({
       eventType: "feature_ready",
       path: "/reports",
       metadata: { feature: "monthly_reports" },
       attempt: 0,
     });
-    expect(body.navigationId).toEqual(expect.any(String));
-    expect(body.durationMs).toEqual(expect.any(Number));
+    expect(event.navigationId).toEqual(expect.any(String));
+    expect(event.durationMs).toEqual(expect.any(Number));
   });
 });

@@ -8,6 +8,7 @@ import type { DbCompanyDna } from "@/types/database";
 interface SaveDnaInput {
   form: Partial<DbCompanyDna>;
   clientId: string;
+  onboardingMilestone?: "company" | "voice";
 }
 
 interface ScrapeInput {
@@ -21,9 +22,13 @@ interface ScrapeResult {
 }
 
 function saveDna(input: SaveDnaInput): Promise<DbCompanyDna> {
-  const { form, clientId } = input;
+  const { form, clientId, onboardingMilestone } = input;
   // Component shows its own toast messages, so suppress the default error toast.
-  return api.post<DbCompanyDna>(ROUTES.companyDna.base(), { ...form, client_id: clientId }, { showErrorToast: false });
+  return api.post<DbCompanyDna>(ROUTES.companyDna.base(), {
+    ...form,
+    client_id: clientId,
+    ...(onboardingMilestone ? { onboarding_milestone: onboardingMilestone } : {}),
+  }, { showErrorToast: false });
 }
 
 function scrapeDna(input: ScrapeInput): Promise<ScrapeResult> {

@@ -23,6 +23,7 @@ export const GET = withAuth(async (req, { user }) => {
     sort: z.enum(["fit", "newest"]).default("fit"),
     offset: z.coerce.number().int().min(0).default(0),
     limit: z.coerce.number().int().min(1).max(100).default(50),
+    id: z.string().uuid().optional(),
   }).safeParse(Object.fromEntries(req.nextUrl.searchParams));
   if (!parsed.success) return NextResponse.json({ error: "Invalid lead filters." }, { status: 422 });
   const denied = assertClientAccess(user, parsed.data.clientId);
@@ -31,8 +32,9 @@ export const GET = withAuth(async (req, { user }) => {
   let query = db.from("prospecting_campaign_leads")
     .select("id, campaign_id, job_id, client_id, status, assigned_to, crm_contact_id, discovered_at, last_seen_at, fit_score, fit_band, fit_breakdown, score_version, scored_at, latest_enrichment_id, latest_enrichment_job_id, prospecting_prospects!inner(id, kind, company_name, person_name, job_title, website_url, linkedin_url, source_url, email, phone, address, locality, region, country_code, industry, rating, review_count, description, source, last_seen_at), prospecting_campaigns!inner(id, name, source)", { count: "exact" })
     .eq("client_id", parsed.data.clientId);
-  if (parsed.data.status !== "all") query = query.eq("status", parsed.data.status);
-  if (parsed.data.fit !== "all") query = query.eq("fit_band", parsed.data.fit);
+  if (parsed.data.id) query = query.eq("id", parsed.data.id);
+  if (!parsed.data.id && parsed.data.status !== "all") query = query.eq("status", parsed.data.status);
+  if (!parsed.data.id && parsed.data.fit !== "all") query = query.eq("fit_band", parsed.data.fit);
   query = parsed.data.sort === "fit"
     ? query.order("fit_score", { ascending: false, nullsFirst: false }).order("discovered_at", { ascending: false })
     : query.order("discovered_at", { ascending: false });

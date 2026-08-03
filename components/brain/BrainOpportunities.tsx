@@ -24,6 +24,10 @@ import type {
   BrainEffectivenessStatus,
   BrainOpportunity,
 } from "@/lib/brain/opportunities";
+import type {
+  BrainReadiness,
+  BrainReadinessDimension,
+} from "@/lib/brain/readiness";
 import { brainOpportunityKeys, useBrainOpportunities } from "@/hooks/useBrainOpportunities";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -58,16 +62,34 @@ type View = "active" | "completed" | "all";
 
 const NO_OPPORTUNITIES: BrainOpportunity[] = [];
 
+const READINESS_KEY_BY_OPPORTUNITY: Partial<Record<BrainOpportunity["kind"], BrainReadinessDimension["key"]>> = {
+  knowledge_gap: "knowledge",
+  voice: "voice",
+  personalisation: "personalisation",
+  reliability: "reliability",
+  market: "market",
+};
+
+export function currentReadinessForOpportunity(
+  readiness: BrainReadiness,
+  opportunity: Pick<BrainOpportunity, "kind">,
+): BrainReadinessDimension | null {
+  const key = READINESS_KEY_BY_OPPORTUNITY[opportunity.kind];
+  return key ? readiness.dimensions.find((dimension) => dimension.key === key) ?? null : null;
+}
+
 export function BrainOpportunities({
   clientId,
   canManage,
   initialOpportunities,
   initialLoadFailed,
+  readiness,
 }: {
   clientId: string;
   canManage: boolean;
   initialOpportunities: BrainOpportunity[];
   initialLoadFailed: boolean;
+  readiness: BrainReadiness;
 }) {
   const queryClient = useQueryClient();
   // SSR-seeded when the page load succeeded; on SSR failure no data is seeded
@@ -240,6 +262,23 @@ export function BrainOpportunities({
               }>
               : [];
             const busy = busyId === opportunity.id;
+            const currentDimension = currentReadinessForOpportunity(readiness, opportunity);
+            const useCurrentMeasurement = opportunity.status === "suggested" && currentDimension !== null;
+            const currentAction = currentDimension?.actions[0] ?? null;
+            const noLongerNeedsAction = useCurrentMeasurement
+              && (currentDimension.score >= 80 || currentAction === null);
+            const displayedTitle = useCurrentMeasurement && currentAction
+              ? currentAction
+              : opportunity.title;
+            const displayedSummary = useCurrentMeasurement
+              ? currentDimension.summary
+              : opportunity.summary;
+            const displayedRationale = useCurrentMeasurement
+              ? `${currentDimension.label} is currently ${currentDimension.status.replace("_", " ")} at ${currentDimension.score}%. ${currentDimension.evidence.join(" ")}`
+              : opportunity.rationale;
+            const displayedAction = useCurrentMeasurement
+              ? currentDimension.actions.join(" ") || "No further action is required from this earlier suggestion."
+              : opportunity.recommended_action;
             return (
               <article key={opportunity.id} className="surface-card flex flex-col p-5">
                 <div className="flex items-start justify-between gap-3">
@@ -252,20 +291,29 @@ export function BrainOpportunities({
                         {STATUS_LABEL[opportunity.status]}
                       </span>
                       <span className="text-xs text-zinc-600">
-                        Priority {opportunity.priority_score}
+                        {useCurrentMeasurement
+                          ? `Current readiness ${currentDimension.score}%`
+                          : `Priority ${opportunity.priority_score}`}
                       </span>
                     </div>
-                    <h3 className="mt-3 text-base font-semibold text-white">{opportunity.title}</h3>
+                    <h3 className="mt-3 text-base font-semibold text-white">{displayedTitle}</h3>
                   </div>
                   <CircleGauge className="h-5 w-5 shrink-0 text-orange-400" />
                 </div>
 
-                <p className="mt-2 text-sm leading-6 text-zinc-300">{opportunity.summary}</p>
-                <p className="mt-2 text-xs leading-5 text-zinc-500">{opportunity.rationale}</p>
+                <p className="mt-2 text-sm leading-6 text-zinc-300">{displayedSummary}</p>
+                <p className="mt-2 text-xs leading-5 text-zinc-500">{displayedRationale}</p>
+
+                {useCurrentMeasurement && (
+                  <p className="mt-2 text-2xs text-zinc-600">
+                    Current readiness measured {new Date(readiness.measuredAt).toLocaleString("en-AU")}.
+                    The original diagnostic snapshot remains available in “What the Brain used”.
+                  </p>
+                )}
 
                 <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
                   <p className="label-section">Recommended next step</p>
-                  <p className="mt-1 text-xs leading-5 text-zinc-300">{opportunity.recommended_action}</p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-300">{displayedAction}</p>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-500">
@@ -335,7 +383,7 @@ export function BrainOpportunities({
 
                 {canManage && outcomeId !== opportunity.id && (
                   <div className="mt-auto flex flex-wrap gap-2 border-t border-zinc-800 pt-4">
-                    {opportunity.status === "suggested" && (
+                    {opportunity.status === "suggested" && !noLongerNeedsAction && (
                       <>
                         <Button size="sm" onClick={() => void act(opportunity, "approve")} disabled={busy}>
                           <Check className="mr-1.5 h-3.5 w-3.5" /> Approve
@@ -344,6 +392,11 @@ export function BrainOpportunities({
                           <X className="mr-1.5 h-3.5 w-3.5" /> Dismiss
                         </Button>
                       </>
+                    )}
+                    {opportunity.status === "suggested" && noLongerNeedsAction && (
+                      <Button size="sm" variant="outline" onClick={() => void act(opportunity, "dismiss")} disabled={busy}>
+                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Mark resolved
+                      </Button>
                     )}
                     {opportunity.status === "approved" && (
                       <>

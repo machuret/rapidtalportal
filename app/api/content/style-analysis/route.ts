@@ -157,6 +157,12 @@ function immutableSourceEvidence(rows: SourceRow[]) {
   }));
 }
 
+function styleExampleFingerprint(value: string): string {
+  return createHash("sha256")
+    .update(value.trim().replace(/\s+/gu, " ").toLocaleLowerCase())
+    .digest("hex");
+}
+
 function conflict(message = "This style profile changed while you were working. Reload it and try again.") {
   return NextResponse.json({ error: message, code: "STYLE_ANALYSIS_CONFLICT" }, { status: 409 });
 }
@@ -233,6 +239,9 @@ async function loadStyleAnalysis(clientId: string): Promise<StyleAnalysisRespons
     }
   }
 
+  const sourceFingerprints = new Map<StyleAnalysisChannel, Set<string>>(
+    STYLE_ANALYSIS_CHANNELS.map((channel) => [channel, new Set<string>()]),
+  );
   for (const row of (sourceRows ?? []) as SourceRow[]) {
     const source: StyleAnalysisSource = {
       id: row.id,
@@ -243,10 +252,28 @@ async function loadStyleAnalysis(clientId: string): Promise<StyleAnalysisRespons
       character_count: row.raw_content?.trim().length ?? 0,
       created_at: row.created_at,
     };
-    for (const channel of source.channels) channels[channel].sources.push(source);
+    for (const channel of source.channels) {
+      channels[channel].sources.push(source);
+      if (row.raw_content?.trim()) sourceFingerprints.get(channel)?.add(styleExampleFingerprint(row.raw_content));
+    }
   }
 
   const goldens = (goldenRows ?? []) as ContentGoldenExample[];
+  for (const golden of goldens) {
+    if (golden.status !== "approved" || !golden.evaluation_permission) continue;
+    const fingerprint = styleExampleFingerprint(golden.body);
+    if (sourceFingerprints.get(golden.channel)?.has(fingerprint)) continue;
+    sourceFingerprints.get(golden.channel)?.add(fingerprint);
+    channels[golden.channel].sources.push({
+      id: golden.id,
+      title: golden.title,
+      source_url: golden.source_url,
+      status: "ready",
+      channels: [golden.channel],
+      character_count: golden.body.trim().length,
+      created_at: golden.published_at ?? golden.created_at,
+    });
+  }
   const competitorVocabulary = (competitorRows ?? []).flatMap(
     (row: { title?: string | null; raw_content?: string | null }) => [
       row.title ?? "",
@@ -302,22 +329,56 @@ export const POST = withAuth(async (request, { user }) => {
 
   const admin = createAdminClient();
   const db = admin;
-  const { data: sourceRows, error: sourceError } = await db
-    .from("vault_items")
-    .select("id,title,source_url,raw_content,status,tags,created_at")
-    .eq("client_id", parsed.data.client_id)
-    .eq("evidence_role", "style_example")
-    .eq("status", "ready")
-    .eq("knowledge_status", "active")
-    .or(`review_due_at.is.null,review_due_at.gt.${new Date().toISOString().slice(0, 10)}`)
-    .contains("tags", [parsed.data.channel])
-    .order("created_at", { ascending: false })
-    .limit(20);
+  const [vaultResult, goldenResult] = await Promise.all([
+    db
+      .from("vault_items")
+      .select("id,title,source_url,raw_content,status,tags,created_at")
+      .eq("client_id", parsed.data.client_id)
+      .eq("evidence_role", "style_example")
+      .eq("status", "ready")
+      .eq("knowledge_status", "active")
+      .or(`review_due_at.is.null,review_due_at.gt.${new Date().toISOString().slice(0, 10)}`)
+      .contains("tags", [parsed.data.channel])
+      .order("created_at", { ascending: false })
+      .limit(20),
+    db
+      .from("content_golden_examples")
+      .select("id,title,body,source_url,published_at,created_at,status,evaluation_permission,channel")
+      .eq("client_id", parsed.data.client_id)
+      .eq("channel", parsed.data.channel)
+      .eq("status", "approved")
+      .eq("evaluation_permission", true)
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+  const { data: sourceRows, error: sourceError } = vaultResult;
   if (sourceError) {
     return NextResponse.json({ error: "Style examples could not be loaded." }, { status: 500 });
   }
+  if (goldenResult.error) {
+    return NextResponse.json({ error: "Approved voice examples could not be loaded." }, { status: 500 });
+  }
 
-  const candidateSources = ((sourceRows ?? []) as SourceRow[])
+  const goldenSources = (goldenResult.data ?? []).map((golden) => ({
+    id: golden.id,
+    title: golden.title,
+    source_url: golden.source_url,
+    raw_content: golden.body,
+    status: "ready",
+    tags: [golden.channel],
+    created_at: golden.published_at ?? golden.created_at,
+  })) as SourceRow[];
+  const seenExamples = new Set<string>();
+  const candidateSources = ([...((sourceRows ?? []) as SourceRow[]), ...goldenSources])
+    .filter((source) => {
+      const fingerprint = styleExampleFingerprint(source.raw_content ?? "");
+      if (!fingerprint || seenExamples.has(fingerprint)) return false;
+      seenExamples.add(fingerprint);
+      return true;
+    })
+    .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+    .slice(0, 20)
     .filter((row) => (row.raw_content?.trim().length ?? 0) >= 40);
   const renderedExamples = renderExamples(candidateSources);
   const sources = renderedExamples.includedRows;

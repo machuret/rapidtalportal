@@ -17,13 +17,21 @@ export type { CrmContact } from "@/types/crm";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "CRM — RapidTal" };
 
-export default async function CrmPage() {
+export default async function CrmPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ contact?: string | string[] }>;
+}) {
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
 
   const { user, client } = ctx;
   if (!user.client_id) redirect("/dashboard");
   const clientId = user.client_id;
+  const params = await searchParams;
+  const requestedContactId = typeof params.contact === "string" && /^[0-9a-f-]{36}$/iu.test(params.contact)
+    ? params.contact
+    : null;
 
   const admin = createAdminClient();
   const { data: contacts, error: contactsError } = await withPortalDataTimeout(
@@ -37,6 +45,21 @@ export default async function CrmPage() {
     "CRM contacts",
   );
   if (contactsError) throw new Error("CRM contacts could not be loaded.", { cause: contactsError });
+
+  let visibleContacts = (contacts ?? []) as CrmContact[];
+  if (requestedContactId && !visibleContacts.some((contact) => contact.id === requestedContactId)) {
+    const targeted = await withPortalDataTimeout(
+      (signal) => admin.from("crm_contacts")
+        .select("id, client_id, first_name, last_name, email, phone, company, job_title, status, source, tags, notes, archived_at, created_at, updated_at")
+        .eq("client_id", clientId)
+        .eq("id", requestedContactId)
+        .abortSignal(signal)
+        .maybeSingle(),
+      "CRM contact",
+      5_000,
+    );
+    if (targeted.data) visibleContacts = [targeted.data as CrmContact, ...visibleContacts];
+  }
 
   const isAdmin = user.role === "client_admin" || user.role === "super_admin";
 
@@ -60,10 +83,11 @@ export default async function CrmPage() {
       </div>
       <PageIntro id="crm" />
       <CrmBoard
-        contacts={(contacts ?? []) as CrmContact[]}
+        contacts={visibleContacts}
         clientId={clientId}
         userId={user.id}
         isAdmin={isAdmin}
+        initialContactId={requestedContactId}
       />
     </div>
   );

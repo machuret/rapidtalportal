@@ -461,7 +461,7 @@ export function ContentProjectWorkflow({
       setRetryOperation({ kind: "quick_draft" });
       setSaveState("saved");
       setOperationFailure({
-        title: "Quick Create could not finish the draft",
+        title: "Content generation could not finish the draft",
         message: errorMessage(error, "The quick draft could not be generated."),
         code: error instanceof ApiError ? error.code : null,
         occurredAt: new Date().toISOString(),

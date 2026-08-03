@@ -28,7 +28,7 @@ export interface GuideGroup {
 }
 
 export const GUIDE_INTRO =
-  "Welcome 👋 RapidTal helps you request work, review decisions, see progress and use your company knowledge across your VA and AI tools. Start with the Dashboard; use this Guide whenever you want a plain-English explanation or a direct route to a feature.";
+  "Welcome 👋 RapidTal helps you request work, review decisions, see progress and use your company knowledge across your VA and AI tools. Start with Home; use this Guide whenever you want a plain-English explanation or a direct route to a feature.";
 
 export const CLIENT_GUIDE: GuideGroup[] = [
   {
@@ -36,7 +36,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     blurb: "Find your feet in a couple of minutes.",
     items: [
       {
-        title: "Dashboard",
+        title: "Home",
         href: "/dashboard",
         what: "Your home screen and command centre — a live snapshot of what's happening across your account: recent work, your team, and shortcuts to everything else.",
         why: "The goal is confidence in five seconds. Instead of wondering “what's my VA actually doing?”, you open the portal and immediately see momentum and anything that needs your attention. Less time checking up, more time on the things only you can do.",
@@ -76,7 +76,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
         tip: "Keep each discussion on its task card rather than in chat — six months later you'll still know exactly why something was done.",
       },
       {
-        title: "My Team",
+        title: "Team",
         href: "/team",
         what: "The people working with you — their profiles, contact details, recent activity and delivery summary in one place.",
         why: "The goal is confidence without micromanagement. You can see who is assigned, how work is moving and whether anything needs attention, then open a team member for the detail.",
@@ -86,7 +86,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
           "Handle pending leave requests.",
         ],
         how: [
-          "Open My Team from the menu.",
+          "Open Work in the menu and choose Team.",
           "Click a team member to see their full profile.",
         ],
       },
@@ -143,7 +143,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     blurb: "Add what RapidTal should know, ask for help, and see where the company setup can improve.",
     items: [
       {
-        title: "Vault",
+        title: "Knowledge",
         href: "/vault",
         what: "Your company knowledge — the documents, web pages and notes RapidTal can search when answering questions or creating content.",
         why: "The goal is to turn your scattered, locked-away knowledge into an always-on expert. This is the single biggest lever you control: everything you add here makes every AI answer, report, and draft across the whole portal more accurate. Think of it as teaching the system your business, once, so it can help forever.",
@@ -153,14 +153,14 @@ export const CLIENT_GUIDE: GuideGroup[] = [
           "Remove anything that's gone out of date.",
         ],
         how: [
-          "Open Vault from the menu.",
+          "Open Company in the menu and choose Knowledge.",
           "Upload a file, add a URL, or paste text — the system reads and indexes it automatically.",
           "Add anything that would help someone understand or run your business.",
         ],
         tip: "Start with your policies, pricing, FAQs and how-tos — that's what people ask about most, so you'll feel the benefit immediately.",
       },
       {
-        title: "RapidTal Coach",
+        title: "Coach",
         href: "/ask",
         what: "Ask for guidance in plain English. Coach combines your Company Profile, company knowledge, permitted work, published Library guidance and the preferences you deliberately ask it to remember.",
         why: "The goal is useful guidance without searching across the portal yourself. Coach shows what it used, keeps your conversation private to you and previews any task or message before it is shared.",
@@ -170,27 +170,46 @@ export const CLIENT_GUIDE: GuideGroup[] = [
           "Prepare tasks, messages, goals or commitments and approve them before sharing.",
         ],
         how: [
-          "Open RapidTal Coach from the menu.",
+          "Open Coach from the menu.",
           "Type a question or describe the outcome you want, then press Enter.",
           "Review what Coach used and approve any proposed action before it is shared.",
         ],
         tip: "If an answer feels thin, that's a signal — add the missing info to the Vault and it'll nail it next time.",
       },
       {
-        title: "Company DNA",
+        title: "Company profile",
         href: "/company-dna",
-        what: "Your Company Profile — who you are, what you offer, your priorities, voice and key contacts. Competitors are managed in a separate tab so they do not become part of your own company information.",
+        what: "Your Company Profile — who you are, what you offer, your priorities, audience and key contacts. Company knowledge and voice have their own focused pages under Company; competitors live under Grow.",
         why: "The goal is to give the AI a rock-solid foundation about you. Because this profile is used in every single answer, a few minutes keeping it accurate quietly lifts the quality of everything at once — the highest-leverage five minutes in the whole portal.",
         can: [
-          "Fill in and update your company's essential details in Profile.",
-          "Track competitors and their public content in Competitors.",
+          "Fill in and update your company's essential details in Company Profile.",
+          "Open Knowledge and Voice without searching through technical settings.",
+          "Use Competitor insights under Grow to track public market content.",
           "Improve the accuracy of every AI answer in one place.",
         ],
         how: [
-          "Open the Company DNA group in the menu and pick Profile or Competitors.",
+          "Open Company in the menu and choose Company profile.",
           "Fill in each field (services, values, audience, contacts…) and save.",
         ],
         tip: "Revisit it whenever your services, pricing, or positioning change — the AI will instantly reflect it. Fields with an auto-fill badge were drafted by AI — review those first.",
+      },
+      {
+        title: "Voice",
+        href: "/content/style",
+        what: "The writing examples and approved channel profiles that show RapidTal how your company should sound.",
+        why: "The goal is recognisable writing without making you manage an AI laboratory. You add examples you genuinely like, review what RapidTal learns and approve only the voice profiles that feel right.",
+        can: [
+          "See whether your voice is Generic, Developing or Ready.",
+          "Add strong examples for LinkedIn, email, blog and other channels.",
+          "Review and approve a channel voice before it affects new drafts.",
+          "Open advanced collection and evaluation tools only when you need them.",
+        ],
+        how: [
+          "Open Company in the menu and choose Voice.",
+          "Add an example you genuinely like and choose its channel.",
+          "Review the generated voice profile, adjust it if needed, then approve it.",
+        ],
+        tip: "A few distinctive, genuinely representative examples are more useful than a large pile of average posts.",
       },
       {
         title: "Company Brain",
@@ -203,7 +222,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
           "Open Analytics or Learning from the tabs inside Company Brain when you need detail.",
         ],
         how: [
-          "Open Company Brain from the menu.",
+          "Open Company profile, expand Advanced company tools, then choose Brain readiness and learning.",
           "Review the readiness areas, then follow the clearest recommended next action.",
         ],
         tip: "You do not need to manage this every day. Use it when an output feels weak or when you want to improve a specific capability.",
@@ -215,7 +234,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     blurb: "Practical, everyday helpers that keep the wheels turning.",
     items: [
       {
-        title: "Lead Generation",
+        title: "Find leads",
         href: "/lead-generation",
         what: "A review-first workspace for finding suitable businesses by type and location, then adding only the right ones to CRM.",
         why: "The goal is to make prospecting fast without filling the CRM with unreviewed lists. Searches keep running in the background, repeated results are deduplicated, and nothing enters CRM until you choose it.",
@@ -226,31 +245,47 @@ export const CLIENT_GUIDE: GuideGroup[] = [
           "Add a selected lead to CRM with one click.",
         ],
         how: [
-          "Open Lead Generation and enter the business type and location.",
+          "Open Grow in the menu, choose Find leads, then enter the business type and location.",
           "Review the results in Lead Inbox.",
           "Shortlist promising businesses, then add the right ones to CRM.",
         ],
         tip: "Start with 10–20 results while refining a search; increase it after the first batch looks relevant.",
       },
       {
-        title: "Content",
-        href: "/content/quick",
-        what: "A guided content workspace — quick drafts, grounded ideas, competitor opportunities, projects and approvals, each on its own page under the Content menu.",
-        why: "The goal is to keep ideas, briefs, Vault evidence, competitor inspiration, voice settings, drafts and approvals connected in one recoverable workflow — without everything competing for space on one screen.",
+        title: "Competitor insights",
+        href: "/competitors",
+        what: "A guided workspace for collecting public competitor content, analysing market patterns and turning useful gaps into content ideas.",
+        why: "The goal is to move from scattered competitor links to evidence-backed opportunities without copying competitor writing or mixing it into your company knowledge.",
         can: [
-          "Quick Draft: create a draft from only a topic and channel.",
-          "Ideas: review AI-suggested topics and Vault gaps; approve the good ones.",
-          "Competitor Ideas: see market analysis turned into recommended ideas.",
-          "Projects: continue unfinished work exactly where you left off.",
-          "Drafts & Approved: edit, validate, approve, archive, adapt and export.",
-          "Content Style: manage the writing examples and approved voice profile used by drafts.",
+          "Add competitor websites, LinkedIn company pages, articles and feeds.",
+          "See whether each competitor has enough material for analysis.",
+          "Generate a market report and promote an opportunity into an editable content brief.",
         ],
         how: [
-          "Open the Content group in the menu and pick a section.",
-          "Use Quick Draft for speed, or start from an approved idea or competitor opportunity.",
-          "Open any project to continue where you left off — every step is saved.",
+          "Open Grow in the menu and choose Competitor insights.",
+          "Collect enough source material, then run the market analysis.",
+          "Choose Build content on a recommended idea; RapidTal opens it under In progress.",
         ],
-        tip: "Start with Quick Draft when speed matters; use Projects when you want tighter control over evidence and direction.",
+        tip: "Add editorial sources such as posts and articles—not only a homepage—before expecting useful topic and format insights.",
+      },
+      {
+        title: "Create content",
+        href: "/content/quick",
+        what: "One guided workspace for creating, continuing and managing content. Everyday work is organised into Create content, In progress and Content library; market opportunities and voice setup live where clients naturally expect them.",
+        why: "The goal is to keep ideas, briefs, Vault evidence, competitor inspiration, voice settings, drafts and approvals connected in one recoverable workflow — without everything competing for space on one screen.",
+        can: [
+          "Create content: start quickly from your topic or ask RapidTal for an idea.",
+          "In progress: continue unfinished ideas and drafts exactly where you left off.",
+          "Content library: review, edit, approve, archive, adapt and export finished work.",
+          "Competitor insights under Grow: turn market analysis into content opportunities.",
+          "Voice under Company: manage examples and approve the voice profile used by drafts.",
+        ],
+        how: [
+          "Open Create in the menu and choose Create content.",
+          "Enter a topic for speed, choose Need an idea?, or start from Competitor insights under Grow.",
+          "Use In progress to continue where you left off — every step is saved.",
+        ],
+        tip: "Start in Create content. The brief can stay simple for speed, or you can add more direction when the piece needs tighter control.",
       },
       {
         title: "CRM",
@@ -288,7 +323,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     heading: "Your account",
     items: [
       {
-        title: "My Profile",
+        title: "My profile",
         href: "/profile",
         what: "Your personal details and sign-in settings.",
         why: "The goal is simply to keep your contact information current and your account secure — so notifications reach you and signing in is smooth.",
@@ -297,7 +332,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
           "Change your password.",
         ],
         how: [
-          "Open My Profile from the menu, edit any field, and save.",
+          "Open Settings in the menu, choose My profile, edit any field, and save.",
         ],
       },
     ],

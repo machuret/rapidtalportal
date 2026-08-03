@@ -5,11 +5,17 @@ import { VaultTabs } from "@/components/vault/VaultTabs";
 import { PageIntro } from "@/components/layout/PageIntro";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withPortalDataTimeout } from "@/lib/server-data-timeout";
+import { OnboardingStepReporter } from "@/components/onboarding/OnboardingStepReporter";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Vault — RapidTal" };
 
-export default async function VaultPage() {
+export default async function VaultPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ setup?: string; open?: string; q?: string }>;
+}) {
+  const params = await searchParams;
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
 
@@ -18,6 +24,7 @@ export default async function VaultPage() {
   const clientId = user.client_id;
 
   const canWrite = user.role === "client_admin" || user.role === "super_admin" || user.role === "va";
+  const onboardingMode = params?.setup === "documents" && user.role === "client_admin";
   const admin = createAdminClient();
   const dnaResult = await withPortalDataTimeout(
     (signal) => admin.from("company_dna").select("website").eq("client_id", clientId).abortSignal(signal).maybeSingle(),
@@ -41,15 +48,19 @@ export default async function VaultPage() {
 
   return (
     <div>
-      <VaultTabs active="documents" />
-      <PageIntro id="vault" />
+      {!onboardingMode && <VaultTabs active="documents" />}
+      {!onboardingMode && <PageIntro id="vault" />}
       <VaultClient
         clientId={clientId}
         userId={user.id}
         role={user.role}
         canWrite={canWrite}
         companyWebsite={companyWebsite}
+        focusMode={onboardingMode ? "documents" : null}
+        initialSearch={typeof params?.q === "string" ? params.q.slice(0, 120) : ""}
+        initialOpenItemId={typeof params?.open === "string" && /^[0-9a-f-]{36}$/iu.test(params.open) ? params.open : null}
       />
+      {onboardingMode && <OnboardingStepReporter clientId={clientId} step="documents" />}
     </div>
   );
 }

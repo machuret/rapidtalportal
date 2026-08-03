@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Loader2, Zap } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Lightbulb, Loader2, Radar, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import type { ContentPiece, ContentProject, ContentType } from "@/types/content";
 import { useContentProjects } from "@/hooks/useContentProjects";
@@ -26,10 +28,12 @@ export function QuickDraftPage({
   clientId,
   canApprove,
   brandStyle,
+  onboardingMode = false,
 }: {
   clientId: string;
   canApprove: boolean;
   brandStyle: Record<string, unknown>;
+  onboardingMode?: boolean;
 }) {
   const projects = useContentProjects(clientId, [], false);
   const [manualTitle, setManualTitle] = useState("");
@@ -107,27 +111,31 @@ export function QuickDraftPage({
 
   if (projects.activeProject) {
     return (
-      <ProjectTakeover
-        clientId={clientId}
-        canApprove={canApprove}
-        brandStyle={brandStyle}
-        projects={projects}
-        onContentGenerated={() => {}}
-      />
+      <div className="space-y-5">
+        {onboardingMode && <FirstDraftBanner hasDraft />}
+        <ProjectTakeover
+          clientId={clientId}
+          canApprove={canApprove}
+          brandStyle={brandStyle}
+          projects={projects}
+          onContentGenerated={() => {}}
+        />
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {onboardingMode && <FirstDraftBanner />}
       <section className="rounded-2xl border border-purple-500/35 bg-gradient-to-br from-purple-500/15 via-zinc-900 to-zinc-950 p-6 shadow-lg shadow-purple-950/20">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-purple-300">
-              <Zap className="h-3.5 w-3.5" /> Quick Create
+              <Zap className="h-3.5 w-3.5" /> Create content
             </p>
             <h1 className="mt-2 text-2xl font-semibold text-white">Create a draft in under a minute</h1>
             <p className="mt-1 max-w-2xl text-sm text-zinc-400">
-              Give the engine a topic and channel. Company DNA, approved voice, platform structure and relevant Vault evidence are applied automatically.
+              Give the engine a topic and channel. Your company profile, approved voice, platform structure and relevant company knowledge are applied automatically.
             </p>
           </div>
           <Button
@@ -200,6 +208,35 @@ export function QuickDraftPage({
         </div>
       </section>
 
+      <section className="grid gap-3 sm:grid-cols-2" aria-label="Other ways to start content">
+        <Link
+          href="/content/ideas"
+          className="group rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 transition hover:border-blue-500/40 hover:bg-zinc-900"
+        >
+          <div className="flex items-start gap-3">
+            <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-blue-300" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-white">Need an idea?</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">Generate useful topics from your company, knowledge and audience.</p>
+            </div>
+            <ArrowRight className="mt-1 h-4 w-4 text-zinc-600 transition group-hover:text-blue-300" />
+          </div>
+        </Link>
+        <Link
+          href="/competitors"
+          className="group rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 transition hover:border-orange-500/40 hover:bg-zinc-900"
+        >
+          <div className="flex items-start gap-3">
+            <Radar className="mt-0.5 h-5 w-5 shrink-0 text-orange-300" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-white">Explore market opportunities</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">Find content gaps from collected competitor and market signals.</p>
+            </div>
+            <ArrowRight className="mt-1 h-4 w-4 text-zinc-600 transition group-hover:text-orange-300" />
+          </div>
+        </Link>
+      </section>
+
       {showManual && (
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Guided Create</p>
@@ -217,5 +254,27 @@ export function QuickDraftPage({
         </section>
       )}
     </div>
+  );
+}
+
+function FirstDraftBanner({ hasDraft = false }: { hasDraft?: boolean }) {
+  return (
+    <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Step 5 of 6</p>
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-white">{hasDraft ? "Your first draft is ready" : "Create your first draft"}</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            {hasDraft
+              ? "Edit it, run the checks or keep working later. The draft is already saved."
+              : "Choose a channel and describe the topic. Nothing else is required before generation."}
+          </p>
+        </div>
+        <Link href="/dashboard" className={cn(buttonVariants({ size: "sm", variant: "ghost" }), "text-zinc-400")}>
+          {hasDraft ? "Continue your journey" : "Back to your journey"}
+          {hasDraft && <span aria-hidden="true">→</span>}
+        </Link>
+      </div>
+    </section>
   );
 }

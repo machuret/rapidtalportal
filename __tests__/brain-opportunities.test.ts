@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { diagnosticCandidates } from "@/lib/brain/opportunities";
+import { currentReadinessForOpportunity } from "@/components/brain/BrainOpportunities";
 import type { BrainContext } from "@/lib/brain/context-contract";
 import type { BrainReadiness } from "@/lib/brain/readiness";
 
@@ -110,6 +111,16 @@ describe("proactive Brain opportunities", () => {
   test("does not invent a Library opportunity when retrieval is unavailable", () => {
     const candidates = diagnosticCandidates(readiness(), context("unavailable"));
     expect(candidates.some((candidate) => candidate.sourceLayers.includes("library"))).toBe(false);
+  });
+
+  test("rehydrates active readiness opportunities from the current shared measurement", () => {
+    const current = readiness();
+    expect(currentReadinessForOpportunity(current, { kind: "knowledge_gap" })).toEqual(
+      expect.objectContaining({ score: 35, summary: "Three company sources are usable." }),
+    );
+    expect(currentReadinessForOpportunity(current, { kind: "growth" })).toBeNull();
+    expect(opportunityUi).toContain("Current readiness");
+    expect(opportunityUi).toContain("currentReadinessForOpportunity");
   });
 
   test("reports only source layers that were actually present", () => {

@@ -88,6 +88,10 @@ function chain(result: { data?: unknown; error: unknown }) {
   return builder;
 }
 
+function emptyGoldens() {
+  return chain({ data: [], error: null });
+}
+
 function request(method: "GET" | "POST" | "PATCH", body?: unknown, clientId = CLIENT_A) {
   const url = method === "GET"
     ? `https://portal.test/api/content/style-analysis?client_id=${clientId}`
@@ -200,6 +204,7 @@ test("analyses processed owned examples into a review draft without activating i
   let analysisCalls = 0;
   const from = jest.fn((table: string) => {
     if (table === "vault_items") return sources;
+    if (table === "content_golden_examples") return emptyGoldens();
     if (table === "content_style_analyses") {
       analysisCalls++;
       return analysisCalls === 1 ? draftCheck : inserted;
@@ -233,6 +238,52 @@ test("analyses processed owned examples into a review draft without activating i
     status: "draft",
     source_item_ids: SOURCE_IDS,
     analysis: expect.objectContaining({ confidence: "low" }),
+  }));
+});
+
+test("uses approved owned golden examples as real voice-analysis input", async () => {
+  const vaultSources = chain({ data: [], error: null });
+  const goldenSources = chain({
+    data: SOURCE_IDS.map((id, index) => ({
+      id,
+      title: `Approved ideal post ${index + 1}`,
+      body: `Approved owned example ${index + 1}. ${"Distinctive practical writing. ".repeat(35)}`,
+      source_url: null,
+      published_at: `2026-07-${29 - index}T00:00:00.000Z`,
+      created_at: `2026-07-${29 - index}T00:00:00.000Z`,
+      status: "approved",
+      evaluation_permission: true,
+      channel: "linkedin",
+    })),
+    error: null,
+  });
+  const draftCheck = chain({ data: null, error: null });
+  const inserted = chain({ data: analysisRow("draft"), error: null });
+  let analysisCalls = 0;
+  (createAdminClient as jest.Mock).mockReturnValue({
+    from: jest.fn((table: string) => {
+      if (table === "vault_items") return vaultSources;
+      if (table === "content_golden_examples") return goldenSources;
+      analysisCalls++;
+      return analysisCalls === 1 ? draftCheck : inserted;
+    }),
+  });
+  jest.spyOn(global, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(profile) } }],
+    }), { status: 200, headers: { "content-type": "application/json" } }),
+  );
+
+  const response = await POST(request("POST", {
+    client_id: CLIENT_A,
+    channel: "linkedin",
+    expected_updated_at: null,
+  }), routeCtx);
+
+  expect(response.status).toBe(200);
+  expect(inserted.insert).toHaveBeenCalledWith(expect.objectContaining({
+    source_item_ids: SOURCE_IDS,
+    source_count: 3,
   }));
 });
 
@@ -323,7 +374,7 @@ test("records only examples actually included in the bounded model prompt", asyn
     id,
     title: `Long owned post ${index + 1}`,
     source_url: `https://www.linkedin.com/posts/company-long-${index + 1}`,
-    raw_content: "A".repeat(5000),
+    raw_content: `${String(index).padStart(2, "0")}${"A".repeat(4998)}`,
     status: "ready",
     tags: ["linkedin", "style_example"],
     created_at: "2026-07-29T00:00:00.000Z",
@@ -346,6 +397,7 @@ test("records only examples actually included in the bounded model prompt", asyn
   (createAdminClient as jest.Mock).mockReturnValue({
     from: jest.fn((table: string) => {
       if (table === "vault_items") return sources;
+      if (table === "content_golden_examples") return emptyGoldens();
       analysisCalls++;
       return analysisCalls === 1 ? draftCheck : inserted;
     }),
@@ -386,11 +438,11 @@ test("records only examples actually included in the bounded model prompt", asyn
 
 test("rejects a stale refresh before calling the model", async () => {
   const sources = chain({
-    data: SOURCE_IDS.map((id) => ({
+    data: SOURCE_IDS.map((id, index) => ({
       id,
       title: "Owned post",
       source_url: null,
-      raw_content: "A".repeat(800),
+      raw_content: `${index}${"A".repeat(799)}`,
       status: "ready",
       tags: ["linkedin"],
       created_at: "2026-07-29T00:00:00.000Z",
@@ -401,9 +453,12 @@ test("rejects a stale refresh before calling the model", async () => {
     data: { id: ANALYSIS_ID, updated_at: "2026-07-29T03:00:00.000Z" },
     error: null,
   });
-  let calls = 0;
   (createAdminClient as jest.Mock).mockReturnValue({
-    from: jest.fn(() => (++calls === 1 ? sources : draftCheck)),
+    from: jest.fn((table: string) => {
+      if (table === "vault_items") return sources;
+      if (table === "content_golden_examples") return emptyGoldens();
+      return draftCheck;
+    }),
   });
   const fetchMock = jest.spyOn(global, "fetch");
 

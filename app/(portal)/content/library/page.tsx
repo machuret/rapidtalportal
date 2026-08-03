@@ -7,22 +7,30 @@ import { hasContentCapability } from "@/lib/auth/content-capabilities";
 import { loadHistory } from "@/lib/content/server";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Drafts & Approved — RapidTal" };
+export const metadata = { title: "Content library — RapidTal" };
 
-export default async function LibraryRoute() {
+export default async function LibraryRoute({
+  searchParams,
+}: {
+  searchParams: Promise<{ open?: string | string[] }>;
+}) {
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
   const { user } = ctx;
   if (!user.client_id) redirect("/dashboard");
 
   const admin = createAdminClient();
+  const params = await searchParams;
+  const requestedPieceId = typeof params.open === "string" && /^[0-9a-f-]{36}$/iu.test(params.open)
+    ? params.open
+    : null;
   const { history, hasMore } = await loadHistory(admin, user.client_id);
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">Drafts &amp; Approved</h1>
+      <h1 className="text-2xl font-bold mb-1">Content library</h1>
       <p className="text-zinc-400 text-sm mb-8">
-        Every artifact the engine has produced — edit, compare, approve, export.
+        Find drafts, approved content and archived work in one searchable place.
       </p>
       <PageIntro id="content-library" />
       <LibraryPage
@@ -30,6 +38,7 @@ export default async function LibraryRoute() {
         canApprove={hasContentCapability(user.role, "approve_content")}
         initialHistory={history}
         historyHasMore={hasMore}
+        initialSelectedId={requestedPieceId}
       />
     </div>
   );

@@ -7,6 +7,14 @@
  * and include the `/api` prefix.
  */
 export const ROUTES = {
+  discovery: {
+    search: () => "/api/discovery/search",
+  },
+  onboarding: {
+    progress: (clientId: string) => `/api/onboarding/progress?clientId=${clientId}`,
+    events: () => "/api/onboarding/events",
+    requestVa: () => "/api/onboarding/request-va",
+  },
   admin: {
     users: () => "/api/admin/users",
     usersSuspend: () => "/api/admin/users/suspend",
@@ -90,6 +98,8 @@ export const ROUTES = {
     leads: () => "/api/prospecting/leads",
     leadsPage: (clientId: string, status: string, fit: string, sort: string, offset: number, limit = 30) =>
       `/api/prospecting/leads?clientId=${clientId}&status=${status}&fit=${fit}&sort=${sort}&offset=${offset}&limit=${limit}`,
+    leadForClient: (clientId: string, leadId: string) =>
+      `/api/prospecting/leads?clientId=${clientId}&id=${leadId}&limit=1`,
     enrich: () => "/api/prospecting/enrich",
     promote: () => "/api/prospecting/promote",
     activity: () => "/api/prospecting/activity",

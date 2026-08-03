@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import {
   beginClientNavigation,
+  configureClientExperienceActor,
   ensureClientNavigation,
   reportClientExperience,
 } from "@/lib/client-experience";
@@ -15,9 +16,13 @@ function initialNavigationStartedAt(): number {
 }
 
 /** Records route readiness and captures when an internal navigation started. */
-export function ClientExperienceMonitor() {
+export function ClientExperienceMonitor({ actorId }: { actorId: string }) {
   const pathname = usePathname();
   const firstRender = useRef(true);
+
+  useEffect(() => {
+    configureClientExperienceActor(actorId);
+  }, [actorId]);
 
   useEffect(() => {
     function rememberNavigationStart(event: MouseEvent) {

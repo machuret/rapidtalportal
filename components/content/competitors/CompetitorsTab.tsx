@@ -39,7 +39,7 @@ interface CompetitorsTabProps {
   onIdeaSelected?: (
     idea: CompetitorIntelligenceIdea,
     run: CompetitorIntelligenceRun,
-  ) => void;
+  ) => Promise<boolean>;
 }
 
 export function CompetitorsTab({
@@ -55,6 +55,9 @@ export function CompetitorsTab({
   const [showCreate, setShowCreate] = useState(false);
   const [captureBrowser, setCaptureBrowser] = useState<CaptureBrowserState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [analysisState, setAnalysisState] = useState({ hasReport: false, busy: false });
+  const [ideaPromoted, setIdeaPromoted] = useState(false);
   const [createForm, setCreateForm] = useState({
     name: "",
     website_url: "",
@@ -78,8 +81,11 @@ export function CompetitorsTab({
       );
       setCompetitors(result.competitors);
       setError(null);
+      setLoadError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn't load competitors.");
+      const message = caught instanceof Error ? caught.message : "Couldn't load competitors.";
+      setError(message);
+      setLoadError(message);
     } finally {
       if (!quiet) setLoading(false);
     }
@@ -96,6 +102,31 @@ export function CompetitorsTab({
         .filter((job): job is CompetitorCrawlJob => Boolean(job))),
     [competitors],
   );
+  const hasAnalysisEvidence = competitors.some((competitor) =>
+    competitor.status === "active" && competitor.readiness.content_strategy_ready);
+  const workflowSteps = [
+    {
+      number: "1",
+      title: "Collect sources",
+      description: "Websites, posts and articles",
+      href: "#competitor-sources",
+      state: hasAnalysisEvidence ? "Complete" : "Current",
+    },
+    {
+      number: "2",
+      title: "Analyse the market",
+      description: "Topics, formats and gaps",
+      href: "#competitor-analysis",
+      state: analysisState.hasReport ? "Complete" : hasAnalysisEvidence ? (analysisState.busy ? "Working" : "Current") : "Next",
+    },
+    {
+      number: "3",
+      title: "Build content",
+      description: "Promote an opportunity into a brief",
+      href: "#competitor-analysis",
+      state: ideaPromoted ? "Complete" : analysisState.hasReport ? "Current" : "Next",
+    },
+  ];
 
   useEffect(() => {
     if (!active || !canManage || activeJobs.length === 0) return;
@@ -216,20 +247,26 @@ export function CompetitorsTab({
         )}
       </div>
 
-      {error && (
+      <ol aria-label="Competitor workflow" className="grid gap-2 sm:grid-cols-3">
+        {workflowSteps.map((step) => (
+          <li key={step.number} className={`rounded-lg border px-3 py-3 ${step.state === "Current" || step.state === "Working" ? "border-orange-500/40 bg-orange-500/10" : "border-zinc-800 bg-zinc-950/50"}`}>
+            <a href={step.href} className="block rounded focus:outline-none focus:ring-2 focus:ring-orange-400">
+              <p className="flex items-center justify-between gap-2 text-xs font-semibold text-orange-300">
+                <span>{step.number}</span>
+                <span className={step.state === "Complete" ? "text-emerald-300" : "text-zinc-500"}>{step.state}</span>
+              </p>
+              <p className="mt-1 text-sm font-medium text-zinc-200">{step.title}</p>
+              <p className="mt-0.5 text-xs text-zinc-600">{step.description}</p>
+            </a>
+          </li>
+        ))}
+      </ol>
+
+      {error && !(loadError && competitors.length === 0) && (
         <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           {error}
         </div>
-      )}
-
-      {competitors.length > 0 && showIntelligence && (
-        <CompetitorIntelligencePanel
-          clientId={clientId}
-          canManage={canManage}
-          competitors={competitors}
-          onIdeaSelected={onIdeaSelected}
-        />
       )}
 
       {showCreate && canManage && (
@@ -305,7 +342,16 @@ export function CompetitorsTab({
         </form>
       )}
 
-      {competitors.length === 0 ? (
+      {loadError && competitors.length === 0 ? (
+        <div className="rounded-xl border border-red-500/25 bg-red-500/5 px-6 py-8 text-center" role="alert">
+          <AlertTriangle className="mx-auto h-7 w-7 text-red-300" />
+          <p className="mt-3 font-medium text-red-200">Competitor workspace could not be loaded</p>
+          <p className="mx-auto mt-1 max-w-xl text-sm text-zinc-400">Your saved competitors have not been changed. Retry when the connection is available.</p>
+          <Button type="button" variant="outline" className="mt-4" onClick={() => void load()}>
+            Try again
+          </Button>
+        </div>
+      ) : competitors.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-700 px-6 py-12 text-center">
           <Globe2 className="mx-auto h-8 w-8 text-zinc-600" />
           <p className="mt-3 font-medium text-zinc-300">No competitors added yet</p>
@@ -316,22 +362,51 @@ export function CompetitorsTab({
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {competitors.map((competitor) => (
-            <SourceConsole
-              key={competitor.id}
-              clientId={clientId}
-              canManage={canManage}
-              competitor={competitor}
-              onChanged={() => load(true)}
-              onActionError={reportActionError}
-              captureBrowser={captureBrowser?.competitorId === competitor.id ? captureBrowser : null}
-              onBrowseCaptures={(page) => void browseCaptures(competitor.id, page)}
-              onInspectCapture={(itemId) => void inspectCapture(competitor.id, itemId)}
-              onCloseCaptures={() => setCaptureBrowser(null)}
-            />
-          ))}
-        </div>
+        <section id="competitor-sources" aria-labelledby="competitor-sources-heading" className="scroll-mt-24 space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-orange-300">Step 1</p>
+            <h2 id="competitor-sources-heading" className="mt-1 text-lg font-semibold text-white">Collect useful market sources</h2>
+            <p className="mt-1 text-sm text-zinc-500">Add public websites, LinkedIn pages, articles or feeds, then collect enough material for meaningful analysis.</p>
+          </div>
+          <div className="space-y-4">
+            {competitors.map((competitor, index) => (
+              <SourceConsole
+                key={competitor.id}
+                clientId={clientId}
+                canManage={canManage}
+                competitor={competitor}
+                onChanged={() => load(true)}
+                onActionError={reportActionError}
+                captureBrowser={captureBrowser?.competitorId === competitor.id ? captureBrowser : null}
+                onBrowseCaptures={(page) => void browseCaptures(competitor.id, page)}
+                onInspectCapture={(itemId) => void inspectCapture(competitor.id, itemId)}
+                onCloseCaptures={() => setCaptureBrowser(null)}
+                defaultExpanded={index === 0}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {competitors.length > 0 && showIntelligence && (
+        <section id="competitor-analysis" aria-labelledby="competitor-analysis-heading" className="scroll-mt-24 space-y-4 pt-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-orange-300">Step 2</p>
+            <h2 id="competitor-analysis-heading" className="mt-1 text-lg font-semibold text-white">Analyse the market and choose an opportunity</h2>
+            <p className="mt-1 text-sm text-zinc-500">Turn collected material into topic gaps, competitor comparisons and ideas you can promote directly into content.</p>
+          </div>
+          <CompetitorIntelligencePanel
+            clientId={clientId}
+            canManage={canManage}
+            competitors={competitors}
+            onStateChange={setAnalysisState}
+            onIdeaSelected={async (idea, run) => {
+              const promoted = await onIdeaSelected?.(idea, run) ?? false;
+              if (promoted) setIdeaPromoted(true);
+              return promoted;
+            }}
+          />
+        </section>
       )}
     </div>
   );

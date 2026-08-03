@@ -20,11 +20,13 @@ export function LibraryPage({
   canApprove,
   initialHistory,
   historyHasMore: initialHasMore,
+  initialSelectedId = null,
 }: {
   clientId: string;
   canApprove: boolean;
   initialHistory: ContentPiece[];
   historyHasMore: boolean;
+  initialSelectedId?: string | null;
 }) {
   const [history, setHistory] = useState<ContentPiece[]>(initialHistory);
   const [historyHasMore, setHistoryHasMore] = useState(initialHasMore);
@@ -64,6 +66,7 @@ export function LibraryPage({
         hasMore={historyHasMore}
         loadingMore={loadingMoreHistory}
         onLoadMore={loadMoreHistory}
+        initialSelectedId={initialSelectedId}
       />
     </div>
   );

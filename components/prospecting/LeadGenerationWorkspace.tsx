@@ -7,20 +7,13 @@ import { errorMessage } from "@/lib/error-message";
 import { ROUTES } from "@/lib/api/routes";
 import { CampaignManager } from "@/components/prospecting/CampaignManager";
 import { LeadSearchForm } from "@/components/prospecting/LeadSearchForm";
-import {
-  LeadInbox,
-  type ProspectingFitFilter,
-  type ProspectingLeadSort,
-} from "@/components/prospecting/LeadInbox";
+import { LeadInbox, type ProspectingFitFilter, type ProspectingLeadSort } from "@/components/prospecting/LeadInbox";
 import { ProspectingActivityTimeline } from "@/components/prospecting/ProspectingActivityTimeline";
 import { ProspectingLoadFailure } from "@/components/prospecting/ProspectingLoadFailure";
 import { ProspectingActiveJob } from "@/components/prospecting/ProspectingActiveJob";
 import { reportClientExperience, reportClientFeatureReady } from "@/lib/client-experience";
 import { keywordList } from "@/components/prospecting/presentation";
-import {
-  discoverySourceCapabilities,
-  type EnabledDiscoverySource,
-} from "@/lib/prospecting/catalog";
+import { discoverySourceCapabilities, type EnabledDiscoverySource } from "@/lib/prospecting/catalog";
 import type {
   ProspectingCampaign,
   ProspectingCampaignPage,
@@ -33,13 +26,14 @@ import type {
   ProspectingActivityPage,
   ProspectingCollaborator,
 } from "@/types/prospecting";
+import { ActionOutcome, type ActionOutcomeState } from "@/components/ui/ActionOutcome";
 
 type Tab = "find" | "inbox" | "campaigns" | "activity";
 const TERMINAL = new Set(["done", "error", "cancelled"]);
 const PAGE_SIZE = 30;
 
-export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
-  const [tab, setTab] = useState<Tab>("find");
+export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { clientId: string; initialLeadId?: string | null }) {
+  const [tab, setTab] = useState<Tab>(initialLeadId ? "inbox" : "find");
   const [campaigns, setCampaigns] = useState<ProspectingCampaign[]>([]);
   const [leads, setLeads] = useState<ProspectingLead[]>([]);
   const [total, setTotal] = useState(0);
@@ -80,6 +74,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   const [mustHaveWebsite, setMustHaveWebsite] = useState(false);
   const [starting, setStarting] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [actionOutcome, setActionOutcome] = useState<ActionOutcomeState | null>(null);
   const [selectedContacts, setSelectedContacts] = useState<Record<string, { email: string; phone: string }>>({});
   const pollBusy = useRef(false);
   const pollFailures = useRef(0);
@@ -151,13 +146,16 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     nextFilter: ProspectingLeadStatus | "all",
     nextFit: ProspectingFitFilter,
     nextSort: ProspectingLeadSort,
+    requestedLeadId: string | null = null,
   ) => {
     setLeadLoadError(null);
     setLoadingLeads(true);
     reportedFeatureState.current = null;
     try {
       const result = await api.get<ProspectingLeadPage>(
-        ROUTES.prospecting.leadsPage(clientId, nextFilter, nextFit, nextSort, nextOffset, PAGE_SIZE),
+        requestedLeadId
+          ? ROUTES.prospecting.leadForClient(clientId, requestedLeadId)
+          : ROUTES.prospecting.leadsPage(clientId, nextFilter, nextFit, nextSort, nextOffset, PAGE_SIZE),
         { showErrorToast: false },
       );
       setLeads(result.leads);
@@ -197,8 +195,8 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   }, [clientId]);
 
   useEffect(() => {
-    void Promise.all([loadCampaigns(), loadLeads(0, "all", "all", "fit")]);
-  }, [loadCampaigns, loadLeads]);
+    void Promise.all([loadCampaigns(), loadLeads(0, "all", "all", "fit", initialLeadId)]);
+  }, [initialLeadId, loadCampaigns, loadLeads]);
 
   useEffect(() => {
     if (loadingCampaigns || loadingLeads) return;
@@ -277,7 +275,6 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     const normalizeSearchPart = (value: string) => value.trim().replace(/\s+/gu, " ").toLowerCase();
     const existing = campaigns.find((campaign) => (
       campaign.source === source
-      && campaign.max_results === maxResults
       && campaign.queries.length === 1
       && normalizeSearchPart(campaign.queries[0] ?? "") === normalizeSearchPart(query)
       && campaign.locations.length === 1
@@ -285,7 +282,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     ));
     if (existing) {
       setTab("campaigns");
-      toast.info(`“${existing.name}” already contains this search. Choose Run again to refresh it.`);
+      toast.info(`“${existing.name}” already contains this search. Choose Run again to refresh it${maxResults > existing.max_results ? ", then increase its result limit if needed" : ""}.`);
       return;
     }
     startBusy.current = true;
@@ -425,7 +422,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     setPendingAction(`promote:${lead.id}`);
     try {
       const selected = selectedContacts[lead.id];
-      await api.post(ROUTES.prospecting.promote(), {
+      const promoted = await api.post<{ contactId: string }>(ROUTES.prospecting.promote(), {
         clientId,
         leadId: lead.id,
         selectedEmail: selected?.email || null,
@@ -435,9 +432,17 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
         setLeads((current) => current.filter((item) => item.id !== lead.id));
         setTotal((current) => Math.max(0, current - 1));
       } else {
-        setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, status: "imported" } : item));
+        setLeads((current) => current.map((item) => item.id === lead.id
+          ? { ...item, status: "imported", crm_contact_id: promoted.contactId }
+          : item));
       }
       toast.success("Lead added to CRM.");
+      setActionOutcome({
+        title: "Lead added to CRM",
+        message: "The exact contact is ready for review and follow-up.",
+        actionLabel: "Open CRM contact",
+        href: `/crm?contact=${encodeURIComponent(promoted.contactId)}`,
+      });
     } catch (error) {
       toast.error(errorMessage(error, "Lead could not be added to CRM."));
     } finally {
@@ -493,6 +498,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
 
   return (
     <div className="space-y-6">
+      {actionOutcome && <ActionOutcome outcome={actionOutcome} onDismiss={() => setActionOutcome(null)} />}
       <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-3" role="tablist" aria-label="Lead Generation sections">
         {([
           ["find", "Find Leads"],

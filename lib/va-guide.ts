@@ -17,7 +17,7 @@ export const VA_GUIDE: GuideGroup[] = [
     blurb: "Get oriented in a couple of minutes.",
     items: [
       {
-        title: "Dashboard",
+        title: "Home",
         what: "Your home screen — a quick snapshot of what's on your plate: your tasks, recent activity, and shortcuts to everything else.",
         why: "The goal is to start every day knowing exactly what matters, with no guesswork. Instead of wondering where to begin, you open the portal and your priorities are right there — so you spend your energy doing the work, not hunting for it.",
         can: [
@@ -29,7 +29,7 @@ export const VA_GUIDE: GuideGroup[] = [
           "It's the first page you land on after signing in.",
           "Click any card or any item in the left-hand menu to open that section.",
         ],
-        tip: "Make it your 60-second morning routine — check the Dashboard, then your Tasks, and you'll always know your plan for the day.",
+        tip: "Make it your 60-second morning routine — check Home, then Tasks, and you'll always know your plan for the day.",
       },
     ],
   },
@@ -130,7 +130,7 @@ export const VA_GUIDE: GuideGroup[] = [
     blurb: "This is your unfair advantage. The AI already knows your client's business — let it do the heavy lifting so you deliver faster and sharper.",
     items: [
       {
-        title: "RapidTal Coach",
+        title: "Coach",
         what: "Ask any question about the client's business in plain English and get an answer built only from their own documents — with a link to where each fact came from.",
         why: "The goal is to make you instantly knowledgeable about a business you may be new to. Instead of interrupting your client with questions, you ask the Brain and get a trustworthy, sourced answer in seconds. It's like having read every document the company owns — so you sound informed from day one.",
         can: [
@@ -139,40 +139,23 @@ export const VA_GUIDE: GuideGroup[] = [
           "See the exact source behind every answer, so you can trust it.",
         ],
         how: [
-          "Open RapidTal Coach from the menu.",
+          "Open Coach from the menu.",
           "Type a question (e.g. 'What's our refund policy?') and press Enter.",
           "Want more detail? Click 'Go deeper'.",
         ],
         tip: "Before you ask your client a question, ask the Brain first — half the time the answer's already there, and you'll save everyone time.",
       },
       {
-        title: "Compose",
-        what: "Writes emails, replies, and posts in the client's voice, grounded in the Vault so the details are accurate. Describe what you need (or paste a message to reply to), then refine the draft.",
-        why: "The goal is to help you write fast and on-brand, even for a client whose tone you're still learning. It drafts in their voice with the right facts, so you start from a strong draft instead of a blank page — and you polish instead of struggle.",
-        can: [
-          "Generate emails, replies, and posts in the client's voice.",
-          "Paste a message you need to reply to and get a draft response.",
-          "Refine the draft until it's exactly right.",
-        ],
-        how: [
-          "Open Compose from the menu.",
-          "Describe what you need or paste the message to reply to, then generate.",
-          "Tweak the wording and use it.",
-        ],
-        tip: "Always give it a quick human read before sending — you're the judgement; the AI is the speed.",
-      },
-      {
-        title: "Content",
-        what: "A studio that generates marketing drafts — blogs, posts, emails — grounded in the client's Vault and brand. It lives in sections under the Content menu: Quick Draft, Ideas, Competitor Ideas, Projects, Drafts & Approved, and Content Style. You create and refine; an admin approves before anything goes out.",
+        title: "Create content",
+        what: "A guided workspace for marketing drafts—ideas, posts, emails and articles—using company knowledge and voice. Create content starts new work, In progress resumes it and Content library holds drafts and approved work.",
         why: "The goal is to let you produce real marketing work without being a professional copywriter. It handles the first draft on-brand and on-topic; you shape it. The approval step means there's always a safety net before anything is published.",
         can: [
-          "Quick Draft: generate posts, blogs and emails from a topic and channel.",
-          "Ideas: work from AI-suggested topics or your own brief.",
-          "Competitor Ideas: turn market analysis into draft opportunities.",
-          "Projects: continue saved work; Drafts & Approved: refine and submit for approval.",
+          "Create content from a topic, company-informed idea or competitor opportunity.",
+          "Continue unfinished briefs and drafts under In progress.",
+          "Refine work and submit it for client approval from Content library.",
         ],
         how: [
-          "Open the Content group in the menu and pick a section.",
+          "Open Create in the menu and choose Create content.",
           "Describe what you want (or pick an idea), generate a draft, and refine it.",
           "Submit it for admin approval.",
         ],
@@ -193,7 +176,7 @@ export const VA_GUIDE: GuideGroup[] = [
         tip: "Tools is in active development and keeps growing — if there's a helper you wish existed, tell your RapidTal contact; we build based on real requests.",
       },
       {
-        title: "Vault",
+        title: "Knowledge",
         what: "The client's knowledge base — every document, web page, and note the AI reads to answer questions.",
         why: "The goal is to make every AI tool you use smarter. Everything in the Vault feeds RapidTal Coach, Compose, Content and Tools — so when you add useful information here, all of those get better at helping you. It's worth keeping it current.",
         can: [
@@ -202,13 +185,13 @@ export const VA_GUIDE: GuideGroup[] = [
           "Remove anything that's gone out of date.",
         ],
         how: [
-          "Open Vault from the menu.",
+          "Open Company in the menu and choose Knowledge.",
           "Upload a file, add a URL, or paste text — the system reads and indexes it automatically.",
         ],
         tip: "When you learn something new about the client that isn't written down, add it here — future-you (and the AI) will thank you.",
       },
       {
-        title: "Company DNA",
+        title: "Company profile",
         what: "The core profile of the client's business — who they are, what they offer, their values, and key contacts. Admins edit it; you can view it.",
         why: "The goal is to give you the essentials of the business at a glance, and to anchor every AI answer in the truth. Reading it is the fastest way to understand a new client; it's used in every answer, so it quietly shapes the quality of everything.",
         can: [
@@ -216,7 +199,7 @@ export const VA_GUIDE: GuideGroup[] = [
           "Use it to get up to speed quickly on a new placement.",
         ],
         how: [
-          "Open Company DNA from the menu and read through it.",
+          "Open Company in the menu and choose Company profile.",
         ],
         tip: "Read it on day one of a new client — it's the quickest possible briefing on who they are and what matters to them.",
       },
@@ -240,7 +223,7 @@ export const VA_GUIDE: GuideGroup[] = [
     blurb: "Practical helpers for the day-to-day of supporting your client.",
     items: [
       {
-        title: "Lead Generation",
+        title: "Find leads",
         what: "A review-first workspace for finding businesses by type and location before adding suitable leads to the client's CRM.",
         why: "The goal is to turn prospecting into a repeatable VA workflow while keeping the CRM clean. Collection continues in the background, duplicate businesses are recognized, and you decide what is worth pursuing.",
         can: [

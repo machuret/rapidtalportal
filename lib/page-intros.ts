@@ -12,12 +12,12 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
   vault: {
     title: "What is the Vault?",
     body: "The Vault holds your company knowledge — the documents, web pages and notes RapidTal can search when answering questions or creating content. Add a file, link or pasted text; RapidTal prepares it automatically and tells you if anything needs attention.",
-    guide: "Vault",
+    guide: "Knowledge",
   },
   ask: {
     title: "What is RapidTal Coach?",
     body: "Your role-aware Coach combines Company DNA, current permitted work, Vault evidence and published Business Library guidance. Your Coach history is visible only to you and retained for 12 months; short-lived diagnostic prompts expire after 30 days. Messages and tasks are never shared until you approve the preview.",
-    guide: "RapidTal Coach",
+    guide: "Coach",
   },
   compose: {
     title: "What is Compose?",
@@ -47,21 +47,21 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
   "lead-generation": {
     title: "What is Lead Generation?",
     body: "Lead Generation finds businesses that match a target and keeps them in a review-first inbox. Searches continue safely in the background, duplicate results are recognized, and nothing is added to CRM until you choose it.",
-    guide: "Lead Generation",
+    guide: "Find leads",
   },
   content: {
     title: "What is the Content studio?",
     body: "The Content studio creates marketing drafts using your Company Profile, company knowledge and approved voice. Start quickly from a topic or use the guided workflow, then edit, review and approve the result when it is ready.",
-    guide: "Content",
+    guide: "Create content",
   },
   "knowledge-base": {
     title: "What is the Knowledge Base?",
     body: "The Knowledge Base contains AI-generated Q&A drafts built from your Vault and Company DNA. Admins can review, edit or remove entries, and regenerate them as the Vault grows.",
   },
   "company-dna": {
-    title: "What is Company DNA?",
-    body: "Company DNA is your Company Profile — who you are, what you offer, your audience, priorities, voice and contacts. RapidTal applies it across Coach and Content, so keeping the essentials current improves every result. Client admins can edit it; VAs can view it.",
-    guide: "Company DNA",
+    title: "What is the Company profile?",
+    body: "Your Company profile explains who you are, what you offer, your audience, priorities and contacts. RapidTal applies it across Coach and Content, so keeping the essentials current improves every result. Client admins can edit it; VAs can view it.",
+    guide: "Company profile",
   },
   "company-report": {
     title: "What is the Company Report?",
@@ -104,38 +104,38 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
     guide: "Notebook",
   },
   "content-quick": {
-    title: "What is Quick Draft?",
-    body: "The fastest way to a finished draft: give the engine a topic and a channel, and it applies your Company DNA, approved voice and the most relevant Vault evidence automatically. Use Guided Create when you want to review the idea and sources before anything is written.",
-    guide: "Content",
+    title: "Create content your way",
+    body: "Start with a topic for the fastest draft, generate company-informed ideas when you need inspiration, or explore competitor opportunities for a market angle. Every route keeps your company context and saves unfinished work.",
+    guide: "Create content",
   },
   "content-ideas": {
     title: "What is Ideas?",
     body: "Ideas the engine generates from your DNA, Vault and the questions your team asks — each one explains why it matters and what evidence supports it. Approve the good ones, then turn them into drafts whenever you're ready.",
-    guide: "Content",
+    guide: "Create content",
   },
   "content-competitors": {
-    title: "What is Competitor Ideas?",
-    body: "Your competitors' public content, analyzed into market maps, formats and positioning gaps — then turned into recommended ideas only your company can credibly own. Competitor material never becomes your DNA or your voice; it's context, not truth.",
-    guide: "Content",
+    title: "One competitor workspace",
+    body: "Add competitors and public sources, collect their content, run market analysis and turn useful gaps into draft ideas without changing tools.",
+    guide: "Competitor insights",
   },
   "content-projects": {
-    title: "What are Projects?",
-    body: "Projects are your in-progress content. RapidTal saves the idea, direction, selected company sources and draft at each step, so you can stop and continue later without rebuilding the work.",
-    guide: "Content",
+    title: "Continue unfinished content",
+    body: "RapidTal saves each idea, direction, selected company source and draft here, so you can stop and return later without rebuilding the work.",
+    guide: "Create content",
   },
   "content-library": {
-    title: "What are Drafts & Approved?",
-    body: "Your content library contains every draft and approved piece. Open one to edit it, compare versions, adapt it to another channel, approve it, archive it or export it.",
-    guide: "Content",
+    title: "Your content library",
+    body: "Find every draft, approved piece and archived item here. Open one to edit it, compare versions, adapt it to another channel, approve it, archive it or export it.",
+    guide: "Create content",
   },
   "content-style": {
-    title: "What is Content Style?",
-    body: "Content Style shows how RapidTal should write for your company. Add writing examples you like, collect your own published posts and approve the resulting voice profile; advanced evaluation remains optional.",
-    guide: "Content",
+    title: "How should your company sound?",
+    body: "Add writing examples you genuinely like, review what RapidTal learns and approve the voice used in future drafts. Collection and evaluation controls remain available under Advanced voice tools.",
+    guide: "Voice",
   },
   "dna-competitors": {
     title: "What are Competitors?",
     body: "Add the companies you compete with and collect their public websites, posts or articles. RapidTal uses that material for market opportunities and content ideas while keeping it separate from your Company Profile, company knowledge and voice.",
-    guide: "Company DNA",
+    guide: "Competitor insights",
   },
 };

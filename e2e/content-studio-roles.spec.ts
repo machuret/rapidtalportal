@@ -47,9 +47,8 @@ test.describe("signed-in Content Studio roles", () => {
     const clientId = process.env.E2E_CLIENT_ADMIN_CLIENT_ID;
     if (!clientId) throw new Error("Missing E2E_CLIENT_ADMIN_CLIENT_ID.");
     await signIn(page, "CLIENT_ADMIN");
-    await page.goto("/content");
-    await expect(page.getByRole("heading", { name: "Content Studio" })).toBeVisible();
-    await page.getByRole("button", { name: /Competitor opportunities/u }).click();
+    await page.goto("/competitors");
+    await expect(page.getByRole("heading", { name: "Competitor insights" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Competitor intelligence" })).toBeVisible();
     await expect(page.getByTestId("competitor-add-button")).toBeVisible();
 
@@ -95,7 +94,7 @@ test.describe("signed-in Content Studio roles", () => {
     const state = await stateResponse.json() as {
       competitors: Array<{
         id: string;
-        readiness: { ready: boolean };
+        readiness: { ready: boolean; content_strategy_ready: boolean };
         sources: Array<{ id: string; platform: string; source_type: string; status: string }>;
       }>;
     };
@@ -135,7 +134,7 @@ test.describe("signed-in Content Studio roles", () => {
     const refreshed = await page.request.get(`/api/content/competitors?client_id=${clientId}`);
     const refreshedState = await refreshed.json() as typeof state;
     const readyCompetitors = refreshedState.competitors
-      .filter((competitor) => competitor.readiness.ready)
+      .filter((competitor) => competitor.readiness.content_strategy_ready)
       .map((competitor) => competitor.id)
       .slice(0, 3);
     expect(readyCompetitors.length).toBeGreaterThan(0);
@@ -149,11 +148,11 @@ test.describe("signed-in Content Studio roles", () => {
     });
     expect(intelligence.status()).toBe(201);
 
-    await page.goto("/content");
-    await page.getByRole("button", { name: /Competitor opportunities/u }).click();
+    await page.goto("/competitors");
     await page.getByRole("button", { name: "Ideas", exact: true }).click();
     await expect(page.getByRole("link").first()).toBeVisible();
     await page.getByRole("button", { name: "Build content brief" }).first().click();
+    await page.waitForURL(/\/content\/projects\?open=/u);
     await expect(page.getByText("Selected idea")).toBeVisible();
     await page.getByRole("button", { name: "Reject idea" }).click();
     await expect(page.getByText("Idea rejected")).toBeVisible();
@@ -161,9 +160,8 @@ test.describe("signed-in Content Studio roles", () => {
 
   test("VA can read Market Intelligence but cannot mutate competitor configuration", async ({ page }) => {
     await signIn(page, "VA");
-    await page.goto("/content");
-    await expect(page.getByRole("heading", { name: "Content Studio" })).toBeVisible();
-    await page.getByRole("button", { name: /Competitor opportunities/u }).click();
+    await page.goto("/competitors");
+    await expect(page.getByRole("heading", { name: "Competitor insights" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Competitor intelligence" })).toBeVisible();
     await expect(page.getByTestId("competitor-add-button")).toHaveCount(0);
     await expect(page.getByTestId("competitor-analyse-button")).toHaveCount(0);
@@ -350,16 +348,17 @@ test.describe("signed-in Content Studio roles", () => {
   test("client admin can recover the brief and evidence workflow after closing the page", async ({ page }) => {
     test.setTimeout(180_000);
     await signIn(page, "CLIENT_ADMIN");
-    await page.goto("/content");
+    await page.goto("/content/quick");
     const title = `E2E recoverable idea ${Date.now()}`;
 
-    await page.getByRole("button", { name: "Start with my own idea" }).click();
+    await page.getByRole("button", { name: "Need more control? Guided Create" }).click();
     await page.getByPlaceholder("What should the company talk about?").fill(title);
-    await page.getByRole("button", { name: "Review idea" }).click();
+    await page.getByRole("button", { name: "Start guided draft" }).click();
     await expect(page.getByText("Selected idea")).toBeVisible();
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Save idea for later" }).click();
+    await page.goto("/content/projects");
     await expect(page.getByText("Continue working")).toBeVisible();
     await page.reload();
     await page.getByText(title, { exact: true }).first().click();

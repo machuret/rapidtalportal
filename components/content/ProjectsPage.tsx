@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArchiveX, ArrowRight, Clock3, FileText, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArchiveX, ArrowRight, Clock3, FileText, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { ContentProject, ContentTopic } from "@/types/content";
 import { useContentProjects } from "@/hooks/useContentProjects";
 import { ProjectTakeover } from "./ProjectTakeover";
@@ -30,6 +31,7 @@ export function ProjectsPage({
   initialProjects,
   projectsHasMore,
   initialTopics,
+  initialOpenProjectId = null,
 }: {
   clientId: string;
   canApprove: boolean;
@@ -37,9 +39,20 @@ export function ProjectsPage({
   initialProjects: ContentProject[];
   projectsHasMore: boolean;
   initialTopics: ContentTopic[];
+  initialOpenProjectId?: string | null;
 }) {
   const projects = useContentProjects(clientId, initialProjects, projectsHasMore);
   const [showAllProjects, setShowAllProjects] = useState(false);
+  const [showAllIdeas, setShowAllIdeas] = useState(false);
+  const [ideaSearch, setIdeaSearch] = useState("");
+  const openedFromUrl = useRef<string | null>(null);
+  const openRequestedProject = projects.openProject;
+
+  useEffect(() => {
+    if (!initialOpenProjectId || openedFromUrl.current === initialOpenProjectId) return;
+    openedFromUrl.current = initialOpenProjectId;
+    void openRequestedProject(initialOpenProjectId);
+  }, [initialOpenProjectId, openRequestedProject]);
 
   const unfinished = useMemo(
     () => projects.projects.filter((project) => ["active", "saved"].includes(project.status)),
@@ -49,6 +62,15 @@ export function ProjectsPage({
     () => initialTopics.filter((topic) => topic.status === "approved"),
     [initialTopics],
   );
+  const matchingApprovedTopics = useMemo(() => {
+    const query = ideaSearch.trim().toLocaleLowerCase();
+    if (!query) return approvedTopics;
+    return approvedTopics.filter((topic) =>
+      `${topic.title} ${topic.description ?? ""} ${topic.content_type}`.toLocaleLowerCase().includes(query));
+  }, [approvedTopics, ideaSearch]);
+  const visibleApprovedTopics = ideaSearch.trim() || showAllIdeas
+    ? matchingApprovedTopics
+    : matchingApprovedTopics.slice(0, 12);
 
   if (projects.activeProject) {
     return (
@@ -77,8 +99,21 @@ export function ProjectsPage({
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">IDEAS approved</p>
           <p className="mt-1 text-xs text-zinc-500">Saved ideas stay here after refresh. Start or continue a draft whenever you are ready.</p>
           {approvedTopics.length > 0 ? (
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {approvedTopics.slice(0, 12).map((topic) => {
+            <>
+              {approvedTopics.length > 6 && (
+                <label className="relative mt-3 block max-w-md">
+                  <span className="sr-only">Search approved ideas</span>
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
+                  <Input
+                    value={ideaSearch}
+                    onChange={(event) => setIdeaSearch(event.target.value)}
+                    placeholder="Search approved ideas"
+                    className="bg-zinc-950 pl-9"
+                  />
+                </label>
+              )}
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {visibleApprovedTopics.map((topic) => {
                 const existing = projects.projects.find((project) =>
                   project.idea_snapshot.topicId === topic.id &&
                   ["active", "saved"].includes(project.status));
@@ -97,7 +132,16 @@ export function ProjectsPage({
                   </button>
                 );
               })}
-            </div>
+              </div>
+              {matchingApprovedTopics.length === 0 && (
+                <p className="mt-3 text-sm text-zinc-500">No approved ideas match “{ideaSearch}”.</p>
+              )}
+              {!ideaSearch.trim() && approvedTopics.length > 12 && (
+                <Button type="button" variant="ghost" className="mt-3" onClick={() => setShowAllIdeas((value) => !value)}>
+                  {showAllIdeas ? "Show recent ideas" : `View all ${approvedTopics.length} approved ideas`}
+                </Button>
+              )}
+            </>
           ) : (
             <p className="mt-3 rounded-lg border border-dashed border-zinc-800 p-3 text-sm text-zinc-500">
               No approved ideas yet. Generate ideas below, then click “{canApprove ? "Save idea" : "Save for approval"}”.

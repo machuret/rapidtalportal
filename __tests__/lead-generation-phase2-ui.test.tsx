@@ -139,6 +139,10 @@ describe("Lead Generation Phase 2 review workflow", () => {
         selectedPhone: null,
       }),
     ));
+    expect(await screen.findByRole("link", { name: "Open CRM contact" })).toHaveAttribute(
+      "href",
+      "/crm?contact=contact-one",
+    );
   });
 
   test("shows and saves the campaign matching rules", async () => {
@@ -189,6 +193,35 @@ describe("Lead Generation Phase 2 review workflow", () => {
     expect(screen.getByRole("button", { name: "Enrich company" })).toBeEnabled();
   });
 
+  test("turns provider configuration failures into an actionable scraper-health instruction", async () => {
+    const failedLead = {
+      ...lead,
+      latest_enrichment_id: null,
+      latest_enrichment: null,
+      latest_enrichment_job: {
+        id: "77777777-7777-4777-8777-777777777777",
+        status: "error",
+        error_code: "advance_failed",
+        error_message: "Lead collection is not configured correctly.",
+      } as ProspectingLead["latest_enrichment_job"],
+    };
+    (api.get as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes("/api/prospecting/campaigns")) {
+        return Promise.resolve({
+          campaigns: [campaign], total: 1, offset: 0, limit: 50, active_jobs: [], collaborators: [],
+          usage: { runs_started: 0, results_reserved: 0, results_returned: 1, reported_cost_usd: 0, enrichments_started: 1, enrichment_pages: 0 },
+        });
+      }
+      return Promise.resolve({ leads: [failedLead], total: 1, offset: 0, limit: 30 });
+    });
+
+    render(<LeadGenerationWorkspace clientId={campaign.client_id} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Lead Inbox" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enrichment provider needs attention");
+    expect(screen.getByRole("alert")).toHaveTextContent("Website enrichment scraper test");
+  });
+
   test("redirects an identical previous search to the existing campaign without calling the paid APIs", async () => {
     render(<LeadGenerationWorkspace clientId={campaign.client_id} />);
     fireEvent.click(screen.getByRole("tab", { name: "Campaigns" }));
@@ -200,6 +233,20 @@ describe("Lead Generation Phase 2 review workflow", () => {
 
     await waitFor(() => expect(toast.info).toHaveBeenCalledWith(expect.stringContaining("already contains this search")));
     expect(screen.getByRole("tab", { name: "Campaigns" })).toHaveAttribute("aria-selected", "true");
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  test("treats a different result limit as the same previous search", async () => {
+    render(<LeadGenerationWorkspace clientId={campaign.client_id} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Campaigns" }));
+    await screen.findByText("Sydney brokers");
+    fireEvent.click(screen.getByRole("tab", { name: "Find Leads" }));
+    fireEvent.change(screen.getByLabelText("Business type or service"), { target: { value: "mortgage brokers" } });
+    fireEvent.change(screen.getByLabelText("Location"), { target: { value: "Sydney" } });
+    fireEvent.change(screen.getByLabelText("How many results?"), { target: { value: "50" } });
+    fireEvent.click(screen.getByRole("button", { name: "Find leads" }));
+
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith(expect.stringContaining("already contains this search")));
     expect(api.post).not.toHaveBeenCalled();
   });
 });

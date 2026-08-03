@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -10,41 +10,32 @@ import {
   Building2,
   Users,
   Archive,
-  Dna,
   LogOut,
-  ContactRound,
   ListChecks,
   PenLine,
   NotebookPen,
-  UserCircle,
-  UsersRound,
-  MessageSquare,
   Brain,
   Sparkles,
-  KanbanSquare,
   KeyRound,
-  Notebook,
   Handshake,
   Bug,
-  Wrench,
   SlidersHorizontal,
   MonitorPlay,
   Briefcase,
   AlertTriangle,
   Activity,
-  FileBarChart,
   TrendingUp,
-  Target,
   Wallet,
-  BookOpen,
   LibraryBig,
   ChevronDown,
+  Search,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "./NotificationsBell";
 import { useSupabase } from "@/hooks/useSupabase";
+import { CLIENT_NAVIGATION_DESTINATIONS, clientDestinationsForGroup } from "@/lib/client-navigation";
 
 type NavItem =
   | { href: string; label: string; icon: LucideIcon }
@@ -52,9 +43,7 @@ type NavItem =
   | {
       group: string;
       icon: LucideIcon;
-      /** Route prefix — the group auto-expands and highlights when active. */
-      base: string;
-      children: { href: string; label: string }[];
+      children: { href: string; label: string; paths?: string[] }[];
     };
 
 interface SidebarProps {
@@ -63,84 +52,79 @@ interface SidebarProps {
   onNavigate?: () => void;
 }
 
-const contentGroup = {
-  group: "Content",
-  icon: PenLine,
-  base: "/content",
-  children: [
-    { href: "/content/quick", label: "Quick Draft" },
-    { href: "/content/ideas", label: "Ideas" },
-    { href: "/content/competitors", label: "Competitor Ideas" },
-    { href: "/content/projects", label: "Projects" },
-    { href: "/content/library", label: "Drafts & Approved" },
-    { href: "/content/style", label: "Content Style" },
-  ],
+const clientWorkGroup = {
+  group: "Work",
+  icon: Briefcase,
+  children: clientDestinationsForGroup("Work").map(({ href, label, paths }) => ({ href, label, paths })),
 } satisfies NavItem;
 
-const dnaGroup = {
-  group: "Company DNA",
-  icon: Dna,
-  base: "/company-dna",
+const clientCreateGroup = {
+  group: "Create",
+  icon: PenLine,
+  children: clientDestinationsForGroup("Create").map(({ href, label, paths }) => ({ href, label, paths })),
+} satisfies NavItem;
+
+const clientGrowGroup = {
+  group: "Grow",
+  icon: TrendingUp,
+  children: clientDestinationsForGroup("Grow").map(({ href, label, paths }) => ({ href, label, paths })),
+} satisfies NavItem;
+
+const clientCompanyGroup = {
+  group: "Company",
+  icon: Building2,
+  children: clientDestinationsForGroup("Company").map(({ href, label, paths }) => ({ href, label, paths })),
+} satisfies NavItem;
+
+const clientSettingsGroup = {
+  group: "Settings",
+  icon: SlidersHorizontal,
+  children: clientDestinationsForGroup("Settings").map(({ href, label, paths }) => ({ href, label, paths })),
+} satisfies NavItem;
+
+function clientStandaloneLink(label: "Home" | "Coach" | "Access", icon: LucideIcon): NavItem {
+  const destination = CLIENT_NAVIGATION_DESTINATIONS.find((item) => item.label === label);
+  if (!destination) throw new Error(`Missing client navigation destination: ${label}`);
+  return { href: destination.href, label: destination.label, icon };
+}
+
+const vaWorkGroup = {
+  group: "Work",
+  icon: Briefcase,
   children: [
-    { href: "/company-dna", label: "Profile" },
-    { href: "/company-dna/competitors", label: "Competitors" },
+    { href: "/tasks", label: "Tasks" },
+    { href: "/messages", label: "Messages" },
+    { href: "/notebook", label: "Notebook" },
+    { href: "/daily-log", label: "Daily log" },
+    { href: "/my-job", label: "My job" },
+    { href: "/sops", label: "Procedures" },
+    { href: "/tools", label: "Tools" },
   ],
 } satisfies NavItem;
 
 const vaLinks: NavItem[] = [
-  { href: "/dashboard",      label: "Dashboard",      icon: LayoutDashboard },
-  { section: "Team & work" },
-  { href: "/tasks",          label: "Tasks",          icon: KanbanSquare },
-  { href: "/messages",       label: "Messages",       icon: MessageSquare },
-  { href: "/notebook",       label: "Notebook",       icon: Notebook },
-  { href: "/access",         label: "Access",         icon: KeyRound },
-  { href: "/daily-log",      label: "Daily Log",      icon: NotebookPen },
-  { href: "/lead-generation", label: "Lead Generation", icon: Target },
-  { href: "/crm",            label: "CRM",            icon: ContactRound },
-  { section: "Knowledge & content" },
-  contentGroup,
-  dnaGroup,
-  { href: "/ask",            label: "RapidTal Coach", icon: Sparkles },
-  { href: "/vault",          label: "Vault",          icon: Archive },
-  { href: "/brain",          label: "Company Brain",  icon: Brain },
-  { section: "Tools" },
-  { href: "/tools",          label: "Tools",           icon: Wrench },
-  { href: "/sops",           label: "SOPs",           icon: ListChecks },
-  { href: "/my-job",         label: "My Job",         icon: Briefcase },
-  { section: "Account" },
-  { href: "/guide",          label: "Guide",          icon: BookOpen },
-  { href: "/profile",        label: "My Profile",     icon: UserCircle },
+  clientStandaloneLink("Home", LayoutDashboard),
+  vaWorkGroup,
+  clientCreateGroup,
+  clientGrowGroup,
+  clientCompanyGroup,
+  clientStandaloneLink("Coach", Sparkles),
+  clientStandaloneLink("Access", KeyRound),
+  clientSettingsGroup,
 ];
 
-// Client-first: the things a client does — see progress, oversee the team,
-// communicate — lead. The VA/AI work tools (which a client *can* open but their
-// VA mostly drives) are grouped under "Workspace" so the top level reads like a
-// client product, not the VA's.
-// Content and Company DNA are expandable groups: each content concern (draft,
-// ideas, competitors, projects, library, style) and each DNA concern (profile,
-// competitors) is one deep-linkable page instead of one crowded scroll.
+// Client-first navigation exposes goals, not the application's internal
+// architecture. Detailed Brain, style-analysis and Q&A controls remain
+// reachable inside Company pages without competing in the primary sidebar.
 const clientAdminLinks: NavItem[] = [
-  { href: "/dashboard",      label: "Dashboard",       icon: LayoutDashboard },
-  { section: "Team & work" },
-  { href: "/tasks",          label: "Tasks",           icon: KanbanSquare },
-  { href: "/messages",       label: "Messages",        icon: MessageSquare },
-  { href: "/notebook",       label: "Notebook",        icon: Notebook },
-  { href: "/team",           label: "My Team",         icon: UsersRound },
-  { href: "/reports",        label: "Reports",         icon: FileBarChart },
-  { section: "Content & brand" },
-  contentGroup,
-  dnaGroup,
-  { section: "Your AI & knowledge" },
-  { href: "/vault",          label: "Vault",           icon: Archive },
-  { href: "/ask",            label: "RapidTal Coach",  icon: Sparkles },
-  { href: "/brain",          label: "Company Brain",   icon: Brain },
-  { section: "Tools" },
-  { href: "/lead-generation", label: "Lead Generation", icon: Target },
-  { href: "/crm",            label: "CRM",             icon: ContactRound },
-  { href: "/access",         label: "Access",          icon: KeyRound },
-  { section: "Account" },
-  { href: "/guide",          label: "Guide",           icon: BookOpen },
-  { href: "/profile",        label: "My Profile",      icon: UserCircle },
+  clientStandaloneLink("Home", LayoutDashboard),
+  clientWorkGroup,
+  clientCreateGroup,
+  clientGrowGroup,
+  clientCompanyGroup,
+  clientStandaloneLink("Coach", Sparkles),
+  clientStandaloneLink("Access", KeyRound),
+  clientSettingsGroup,
 ];
 
 const adminLinks: NavItem[] = [
@@ -169,8 +153,30 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
   const router = useRouter();
   const supabase = useSupabase();
   const [confirmLogout, setConfirmLogout] = useState(false);
-  // Groups start expanded for discoverability; toggling collapses per group.
+  // Only the active goal group expands by default; explicit toggles persist in
+  // this browser, while the group owning the current page always remains open.
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (user.role === "super_admin") return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(`rapidtal:client-nav-groups:${user.id}`) ?? "null") as Record<string, unknown> | null;
+      if (!saved) return;
+      setCollapsedGroups(Object.fromEntries(
+        Object.entries(saved).filter(([, value]) => typeof value === "boolean"),
+      ) as Record<string, boolean>);
+    } catch { /* Browser storage is optional. */ }
+  }, [user.id, user.role]);
+
+  function setGroupCollapsed(group: string, collapsed: boolean) {
+    setCollapsedGroups((previous) => {
+      const next = { ...previous, [group]: collapsed };
+      if (user.role !== "super_admin") {
+        try { localStorage.setItem(`rapidtal:client-nav-groups:${user.id}`, JSON.stringify(next)); } catch { /* ignore */ }
+      }
+      return next;
+    });
+  }
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -205,6 +211,24 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
 
         {/* Nav */}
         <nav className="flex flex-col gap-0.5 flex-1 overflow-y-auto px-3.5 py-4">
+          {!isSuperAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                onNavigate?.();
+                if (window.matchMedia?.("(max-width: 767px)").matches) {
+                  document.querySelector<HTMLElement>('[aria-label="Open navigation"]')?.focus();
+                }
+                window.dispatchEvent(new Event("rapidtal:open-client-navigation"));
+              }}
+              className="mb-2 flex w-full items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2.5 text-left text-xs text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-100"
+              aria-label="Search and jump to a feature"
+            >
+              <Search className="h-4 w-4" />
+              <span className="flex-1">Search or jump to…</span>
+              <kbd className="rounded border border-zinc-700 px-1.5 py-0.5 font-mono text-3xs text-zinc-500">⌘/Ctrl K</kbd>
+            </button>
+          )}
           {links.map((item) =>
             "section" in item ? (
               <p key={`s-${item.section}`} className="font-mono text-3xs font-bold uppercase tracking-[0.16em] text-zinc-500 px-2.5 pt-4 pb-1.5">
@@ -212,13 +236,20 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
               </p>
             ) : "group" in item ? (
               (() => {
-                const groupActive = pathname === item.base || pathname.startsWith(item.base + "/");
-                const collapsed = !!collapsedGroups[item.group];
+                const matchingChild = item.children
+                  .filter((child) => (child.paths ?? [child.href]).some(
+                    (path) => pathname === path || pathname.startsWith(path + "/"),
+                  ))
+                  .sort((a, b) => Math.max(...(b.paths ?? [b.href]).map((path) => path.length)) - Math.max(...(a.paths ?? [a.href]).map((path) => path.length)))[0];
+                const groupActive = Boolean(matchingChild);
+                // Keep the information architecture calm. The current goal
+                // area is always visible; choices for inactive groups persist.
+                const collapsed = groupActive ? false : (collapsedGroups[item.group] ?? true);
                 return (
                   <div key={`g-${item.group}`}>
                     <button
                       type="button"
-                      onClick={() => setCollapsedGroups((prev) => ({ ...prev, [item.group]: !collapsed }))}
+                      onClick={() => setGroupCollapsed(item.group, !collapsed)}
                       aria-expanded={!collapsed}
                       className={cn(
                         "relative flex w-full items-center gap-3 px-2.5 py-2.5 rounded-md text-xs font-semibold transition-colors",
@@ -235,9 +266,7 @@ export function Sidebar({ user, client, onNavigate }: SidebarProps) {
                     {!collapsed && (
                       <div className="ml-6 flex flex-col gap-0.5 border-l border-zinc-800 pl-3 pb-1">
                         {item.children.map((child) => {
-                          const childActive = child.href === item.base
-                            ? pathname === child.href
-                            : pathname === child.href || pathname.startsWith(child.href + "/");
+                          const childActive = child.href === matchingChild?.href;
                           return (
                             <Link
                               key={child.href}

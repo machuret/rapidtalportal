@@ -17,7 +17,7 @@ import type { TaskCategory } from "./CategoryManager";
 import type { Task, TaskStatus, BoardMember } from "./types";
 
 export function TaskDialog({
-  mode, task, status, clientId, isAdmin, canWrite = true, members, categories, initialAssignedTo, onClose, onSaved, onDeleted, onCommented,
+  mode, task, status, clientId, isAdmin, canWrite = true, members, categories, initialAssignedTo, starterMode = false, onClose, onSaved, onDeleted, onCommented,
 }: {
   mode: "create" | "edit";
   task?: Task;
@@ -29,6 +29,8 @@ export function TaskDialog({
   categories: TaskCategory[];
   /** Optional create-mode seed (e.g. the only VA on the team). */
   initialAssignedTo?: string;
+  /** First-success flow: title, useful detail and VA only. */
+  starterMode?: boolean;
   onClose: () => void;
   onSaved: (t: Task) => void;
   onDeleted?: (id: string) => void;
@@ -66,6 +68,10 @@ export function TaskDialog({
 
   async function save() {
     if (title.trim().length < 1 || busy) return;
+    if (starterMode && isAdmin && !assignedTo) {
+      toast.error("Choose the VA who should receive this request.");
+      return;
+    }
     setBusy(true);
     try {
       if (mode === "create") {
@@ -117,7 +123,7 @@ export function TaskDialog({
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="bg-zinc-900 border-zinc-700">
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "New task" : canWrite ? "Edit task" : "Task"}</DialogTitle>
+          <DialogTitle>{starterMode ? "Request work from your VA" : mode === "create" ? "New task" : canWrite ? "Edit task" : "Task"}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4 mt-2">
           {canReview && (
@@ -142,12 +148,12 @@ export function TaskDialog({
             </div>
           )}
           <div className="flex flex-col gap-1.5">
-            <Label>Title</Label>
+            <Label>{starterMode ? "What do you need?" : "Title"}</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canWrite}
               placeholder="e.g. Update the homepage hero copy" className="bg-zinc-800 border-zinc-700" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Details</Label>
+            <Label>{starterMode ? "Helpful details" : "Details"}</Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} disabled={!canWrite}
               rows={4} placeholder="Anything the VA needs to do this well…" className="bg-zinc-800 border-zinc-700" />
           </div>
@@ -165,7 +171,7 @@ export function TaskDialog({
                 </select>
               </div>
             )}
-            {isAdmin && (
+            {isAdmin && (!starterMode || members.length > 1) && (
               <div className="flex flex-col gap-1.5">
                 <Label>Assignee</Label>
                 <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}
@@ -175,12 +181,12 @@ export function TaskDialog({
                 </select>
               </div>
             )}
-            <div className="flex flex-col gap-1.5">
+            {!starterMode && <div className="flex flex-col gap-1.5">
               <Label>Due date</Label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} disabled={!canWrite}
                 className="bg-zinc-800 border-zinc-700" />
-            </div>
-            <div className="flex flex-col gap-1.5">
+            </div>}
+            {!starterMode && <div className="flex flex-col gap-1.5">
               <Label>Priority</Label>
               <select value={priority} onChange={(e) => setPriority(Number(e.target.value))} disabled={!canWrite}
                 className="bg-zinc-800 border border-zinc-700 rounded-md px-3 h-9 text-sm text-zinc-300">
@@ -189,8 +195,8 @@ export function TaskDialog({
                 <option value={3}>High</option>
                 <option value={4}>Urgent</option>
               </select>
-            </div>
-            {categories.length > 0 && (
+            </div>}
+            {!starterMode && categories.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <Label>Category</Label>
                 <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} disabled={!canWrite}
@@ -219,9 +225,9 @@ export function TaskDialog({
                 {canWrite ? "Cancel" : "Close"}
               </Button>
               {canWrite && (
-                <Button size="sm" onClick={save} disabled={busy || title.trim().length < 1} className="gap-1.5">
+                <Button size="sm" onClick={save} disabled={busy || title.trim().length < 1 || (starterMode && isAdmin && !assignedTo)} className="gap-1.5">
                   {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  {mode === "create" ? "Add task" : "Save"}
+                  {starterMode ? "Send request" : mode === "create" ? "Add task" : "Save"}
                 </Button>
               )}
             </div>

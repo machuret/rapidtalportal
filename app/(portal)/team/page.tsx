@@ -168,7 +168,12 @@ export default async function TeamPage({ searchParams: searchParamsPromise }: { 
         <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-16 text-center">
           <Users className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
           <p className="text-zinc-300 font-semibold text-lg mb-1">No VAs assigned yet</p>
-          <p className="text-zinc-500 text-sm">VA accounts assigned to your client will appear here.</p>
+          <p className="text-zinc-500 text-sm">VA accounts assigned to your company will appear here.</p>
+          {user.role === "client_admin" && (
+            <Link href="/dashboard" className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-blue-300 hover:text-blue-200">
+              Request a VA from Home <ArrowRight className="h-4 w-4" />
+            </Link>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">

@@ -276,7 +276,7 @@ export const TopicsTab = memo(function TopicsTab({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-white">Content Topics</h2>
+          <h2 className="text-lg font-semibold text-white">Content ideas</h2>
           <p className="text-sm text-zinc-400 mt-0.5">
             Propose a topic. Once approved, generate content from it.
           </p>

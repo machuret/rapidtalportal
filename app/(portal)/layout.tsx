@@ -12,6 +12,8 @@ import { getFeatureVideos } from "@/lib/tutorials/server";
 import PortalLoading from "./loading";
 import { ClientExperienceMonitor } from "@/components/layout/ClientExperienceMonitor";
 import { withPortalDataTimeout } from "@/lib/server-data-timeout";
+import { ClientCommandPalette } from "@/components/layout/ClientCommandPalette";
+import { PortalFeatureReadyFallback } from "@/components/layout/PortalFeatureReadyFallback";
 
 export default async function PortalLayout({
   children,
@@ -68,7 +70,7 @@ export default async function PortalLayout({
         Skip to content
       </a>
       <ErrorReporter />
-      <ClientExperienceMonitor />
+      <ClientExperienceMonitor actorId={ctx.user.id} />
       {/* The single sidebar instance (desktop column + mobile drawer) */}
       <div className="print:hidden">
         <SidebarShell user={ctx.user} client={ctx.client} />
@@ -85,12 +87,16 @@ export default async function PortalLayout({
         <div className="max-w-6xl mx-auto px-4 py-6 md:p-8 print:p-0 print:max-w-none">
           <FeatureVideosProvider value={featureVideos}>
             <Suspense fallback={<PortalLoading />}>
-              <QueryProvider>{children}</QueryProvider>
+              <QueryProvider>{children}<PortalFeatureReadyFallback /></QueryProvider>
             </Suspense>
           </FeatureVideosProvider>
         </div>
       </main>
-      <HelpFab />
+      <HelpFab
+        clientId={ctx.impersonating ? null : ctx.user.client_id}
+        coachRole={ctx.user.role === "va" ? "va" : "client"}
+      />
+      <ClientCommandPalette enabled={Boolean(ctx.user.client_id) && !ctx.impersonating} />
     </div>
   );
 }

@@ -176,6 +176,11 @@ export const MIGRATIONS = [
   "20260803000311_prospecting_storage_compaction.sql",
   "20260803000312_prospecting_collaboration_and_atomic_start.sql",
   "20260803000313_prospecting_enrichment_attempt_visibility.sql",
+  "20260803000314_prospecting_search_identity.sql",
   "20260803000400_client_experience_sprint1.sql",
   "20260803000500_client_experience_truthful_readiness.sql",
+  "20260803000600_client_first_success.sql",
+  "20260803000700_client_experience_sprint5.sql",
+  "20260803000800_client_discovery_coach.sql",
+  "20260803000900_client_va_assignment_requests.sql",
 ] as const;

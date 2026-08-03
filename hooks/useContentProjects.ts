@@ -164,9 +164,9 @@ export function useContentProjects(
     const result = competitorIdeaToBrief(idea, run);
     if (!result.ok) {
       toast.error(result.error);
-      return;
+      return null;
     }
-    await createProject({
+    return createProject({
       version: 1,
       origin: "competitor_intelligence",
       title: idea.title,
