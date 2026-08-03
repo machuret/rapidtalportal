@@ -28,6 +28,7 @@ const videoField = z
 
 const itemSchema = z.object({
   title: z.string().trim().min(1).max(200),
+  href: z.string().startsWith("/").max(300).optional(),
   what: z.string().max(4000),
   why: z.string().max(4000),
   can: z.array(z.string().max(1000)),

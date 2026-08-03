@@ -123,6 +123,10 @@ export const briefingLimiter = new SlidingWindowLimiter(8, 60 * 60_000);
 // Browser error reports — enough for real bugs, useless for flooding.
 export const clientErrorLimiter = new SlidingWindowLimiter(10, 5 * 60_000);
 
+// Route readiness telemetry: enough for fast navigation and several open tabs,
+// while preventing an altered client from flooding the experience event table.
+export const clientExperienceLimiter = new SlidingWindowLimiter(300, 15 * 60_000);
+
 // SOP Studio AI (suggest + generate). Admins iterate, so generous.
 export const sopAiLimiter = new SlidingWindowLimiter(30, 10 * 60_000);
 

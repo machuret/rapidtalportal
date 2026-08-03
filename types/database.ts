@@ -265,6 +265,11 @@ type ProspectingActivityEventRow = {
   job_id: string | null; event_type: string; actor_id: string | null;
   subject_user_id: string | null; detail: Json; created_at: string;
 };
+type PortalExperienceEventRow = {
+  id: string; client_id: string; user_id: string;
+  event_type: "page_ready" | "page_slow" | "page_retry" | "page_error";
+  path: string; duration_ms: number | null; metadata: Json; created_at: string;
+};
 
 type CompatTables = Omit<
   GeneratedTables,
@@ -370,6 +375,14 @@ type CompatTables = Omit<
       id?: string; detail?: Json; created_at?: string;
     };
     Update: Partial<ProspectingActivityEventRow>;
+    Relationships: [];
+  };
+  portal_experience_events: {
+    Row: PortalExperienceEventRow;
+    Insert: Omit<PortalExperienceEventRow, "id" | "duration_ms" | "metadata" | "created_at"> & {
+      id?: string; duration_ms?: number | null; metadata?: Json; created_at?: string;
+    };
+    Update: Partial<PortalExperienceEventRow>;
     Relationships: [];
   };
 };

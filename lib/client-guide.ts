@@ -6,6 +6,8 @@
  */
 export interface GuideItem {
   title: string;
+  /** Canonical destination for this feature; checked against the real portal. */
+  href?: string;
   /** What it is, in plain words. */
   what: string;
   /** The goal and the benefit — why it's there and what you gain. */
@@ -26,7 +28,7 @@ export interface GuideGroup {
 }
 
 export const GUIDE_INTRO =
-  "Welcome 👋 This portal is your command centre for working with your virtual assistant and turning everything your business knows into an AI that works for you. Every feature here exists to do three things: give your work back to you (delegate with confidence), keep everything visible (no more wondering what's happening), and make your VA — and your whole operation — sharper over time. You don't need to be technical to get the most from it. Here's what each part does, why it's there, and exactly how to use it. Tap any item to open it.";
+  "Welcome 👋 RapidTal helps you request work, review decisions, see progress and use your company knowledge across your VA and AI tools. Start with the Dashboard; use this Guide whenever you want a plain-English explanation or a direct route to a feature.";
 
 export const CLIENT_GUIDE: GuideGroup[] = [
   {
@@ -35,6 +37,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     items: [
       {
         title: "Dashboard",
+        href: "/dashboard",
         what: "Your home screen and command centre — a live snapshot of what's happening across your account: recent work, your team, and shortcuts to everything else.",
         why: "The goal is confidence in five seconds. Instead of wondering “what's my VA actually doing?”, you open the portal and immediately see momentum and anything that needs your attention. Less time checking up, more time on the things only you can do.",
         can: [
@@ -56,6 +59,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     items: [
       {
         title: "Tasks",
+        href: "/tasks",
         what: "A shared, live to-do board you and your VA both see in real time — like sticky notes that move across columns as work gets done.",
         why: "The goal is total clarity on who's doing what and where it stands, without a single status-update email. You delegate once, then simply watch it progress. Nothing falls through the cracks, priorities stay obvious, and you always know what's in flight — that's the whole point of having a VA, made effortless.",
         can: [
@@ -72,27 +76,14 @@ export const CLIENT_GUIDE: GuideGroup[] = [
         tip: "Keep each discussion on its task card rather than in chat — six months later you'll still know exactly why something was done.",
       },
       {
-        title: "Supervision",
-        what: "A bird's-eye view of every VA's activity — daily logs, hours, tasks — that gently flags anyone who's gone quiet.",
-        why: "The goal is peace of mind with early warning. Rather than micromanaging, you get one screen that reassures you everyone's engaged and nudges you only when something genuinely needs a look. Trust, but verify — in seconds.",
-        can: [
-          "See each VA's recent activity in one place.",
-          "Spot quickly if a VA hasn't logged work lately.",
-          "Click a VA to see the full detail behind the summary.",
-        ],
-        how: [
-          "Open Supervision from the menu.",
-          "Scan the list; click any VA to drill into their activity.",
-        ],
-        tip: "A quick glance once a week keeps you ahead of any drift before it becomes an issue.",
-      },
-      {
         title: "My Team",
-        what: "The people working with you — their profiles, skills, and contact details, all in one place.",
-        why: "The goal is to make your team feel like *your* team. Having everyone's key information a click away makes onboarding smoother and day-to-day collaboration easier — no hunting for who does what or how to reach them.",
+        href: "/team",
+        what: "The people working with you — their profiles, contact details, recent activity and delivery summary in one place.",
+        why: "The goal is confidence without micromanagement. You can see who is assigned, how work is moving and whether anything needs attention, then open a team member for the detail.",
         can: [
-          "View your VA's profile, skills, and details.",
-          "Keep their key information handy.",
+          "View your VA's profile, contact details and recent activity.",
+          "Review delivery, hours, daily logs and anything needing attention.",
+          "Handle pending leave requests.",
         ],
         how: [
           "Open My Team from the menu.",
@@ -101,6 +92,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
       },
       {
         title: "Reports",
+        href: "/reports",
         what: "A clean, shareable summary of the work delivered over any period — what was done and the hours behind it.",
         why: "The goal is to make the value you're getting impossible to miss — effortlessly. Whether it's for your own records, justifying the spend, or showing a partner what's been achieved, the receipts are always ready and presentable. Your VA's impact, on paper.",
         can: [
@@ -115,6 +107,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
       },
       {
         title: "Messages",
+        href: "/messages",
         what: "A shared chat for your account — one thread the whole team sees, with notifications for new messages.",
         why: "The goal is to keep work conversations out of scattered personal inboxes, where things get buried and lost. One shared place means everyone has the same context, replies are fast, and nothing important slips away in someone's email.",
         can: [
@@ -129,6 +122,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
       },
       {
         title: "Notebook",
+        href: "/notebook",
         what: "A private shared workspace for you and your VA — SOPs, account registers, content calendars, meeting notes — with ready-made templates to start from.",
         why: "The goal is one trusted home for how your business actually runs, instead of knowledge scattered across email, chat, and people's heads. And it's genuinely private: RapidTal staff cannot see anything you write here — it belongs to you and your VA alone. Build it once and a new VA can get up to speed in days, not weeks.",
         can: [
@@ -145,12 +139,13 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     ],
   },
   {
-    heading: "Your AI company brain",
-    blurb: "This is your superpower. The more you feed it, the smarter every answer, report, and draft becomes.",
+    heading: "Your company knowledge and AI",
+    blurb: "Add what RapidTal should know, ask for help, and see where the company setup can improve.",
     items: [
       {
         title: "Vault",
-        what: "Your company's knowledge base — every document, web page, and note the AI reads to answer questions.",
+        href: "/vault",
+        what: "Your company knowledge — the documents, web pages and notes RapidTal can search when answering questions or creating content.",
         why: "The goal is to turn your scattered, locked-away knowledge into an always-on expert. This is the single biggest lever you control: everything you add here makes every AI answer, report, and draft across the whole portal more accurate. Think of it as teaching the system your business, once, so it can help forever.",
         can: [
           "Add files (PDFs, Word docs), web links, or pasted text.",
@@ -166,23 +161,25 @@ export const CLIENT_GUIDE: GuideGroup[] = [
       },
       {
         title: "RapidTal Coach",
-        what: "Ask any question about your business in plain English and get an answer built only from your own documents — with a link to where each fact came from.",
-        why: "The goal is instant, trustworthy answers with zero digging and zero guessing. Because it only uses your real documents (and shows its sources), it won't make things up. It's like having someone who has read every document in your company, on call 24/7 — for you and for your VA.",
+        href: "/ask",
+        what: "Ask for guidance in plain English. Coach combines your Company Profile, company knowledge, permitted work, published Library guidance and the preferences you deliberately ask it to remember.",
+        why: "The goal is useful guidance without searching across the portal yourself. Coach shows what it used, keeps your conversation private to you and previews any task or message before it is shared.",
         can: [
-          "Get instant answers grounded in your real company information.",
-          "Click 'Go deeper' for a longer, more thorough answer.",
-          "See the exact source behind every answer, so you can trust it.",
+          "Get guidance informed by your company and current work.",
+          "See the company sources, work and learned preferences that influenced an answer.",
+          "Prepare tasks, messages, goals or commitments and approve them before sharing.",
         ],
         how: [
           "Open RapidTal Coach from the menu.",
-          "Type a question (e.g. 'What's our refund policy?') and press Enter.",
-          "Want more detail? Click 'Go deeper'.",
+          "Type a question or describe the outcome you want, then press Enter.",
+          "Review what Coach used and approve any proposed action before it is shared.",
         ],
         tip: "If an answer feels thin, that's a signal — add the missing info to the Vault and it'll nail it next time.",
       },
       {
         title: "Company DNA",
-        what: "The core profile of your business — who you are, what you offer, your values, and key contacts. It has two pages: Profile (the facts plus your voice & editorial policy) and Competitors (who you compete with, kept strictly separate from your own facts).",
+        href: "/company-dna",
+        what: "Your Company Profile — who you are, what you offer, your priorities, voice and key contacts. Competitors are managed in a separate tab so they do not become part of your own company information.",
         why: "The goal is to give the AI a rock-solid foundation about you. Because this profile is used in every single answer, a few minutes keeping it accurate quietly lifts the quality of everything at once — the highest-leverage five minutes in the whole portal.",
         can: [
           "Fill in and update your company's essential details in Profile.",
@@ -197,32 +194,19 @@ export const CLIENT_GUIDE: GuideGroup[] = [
       },
       {
         title: "Company Brain",
-        what: "One place to see what the AI knows, how much feedback it has learned from, and which knowledge areas still need work.",
-        why: "The goal is to make the different health indicators understandable. The Brain learning score is separate from Vault knowledge readiness and Company DNA completion, and the page explains each part.",
+        href: "/brain",
+        what: "A readiness view showing what RapidTal can use today: company knowledge, voice, approved learned preferences, reliability and market intelligence.",
+        why: "The goal is to answer a practical question: which capabilities are ready for this company, and what is the most useful improvement to make next? Each area is shown separately so one strong area cannot hide a weak one.",
         can: [
-          "See the Brain's learning score and its component breakdown.",
-          "Review Vault coverage and knowledge gaps on the same page.",
-          "Open Brain Analytics for detailed usage and feedback.",
+          "Review readiness by capability rather than relying on one opaque score.",
+          "See knowledge coverage and the next recommended improvement.",
+          "Open Analytics or Learning from the tabs inside Company Brain when you need detail.",
         ],
         how: [
           "Open Company Brain from the menu.",
-          "Review the score breakdown, then scroll to knowledge coverage for the next recommended improvement.",
+          "Review the readiness areas, then follow the clearest recommended next action.",
         ],
-        tip: "Use the component breakdown rather than comparing the Brain score directly with Vault readiness or Company DNA completion.",
-      },
-      {
-        title: "Brain Analytics",
-        what: "Shows what people are actually asking the AI, how often it has a good answer, and which questions it couldn't answer.",
-        why: "The goal is to let your team's real questions guide you, instead of guessing. Every unanswered question is a ready-made to-do for the Vault — so the system keeps getting smarter on its own momentum, driven by exactly what people need.",
-        can: [
-          "See the real questions being asked.",
-          "Find the questions the AI couldn't answer — and fix them by adding to the Vault.",
-        ],
-        how: [
-          "Open Brain Analytics from the menu.",
-          "Review the unanswered questions and add the missing information to the Vault.",
-        ],
-        tip: "Knock out the top few unanswered questions each month — it's the fastest way to a noticeably smarter brain.",
+        tip: "You do not need to manage this every day. Use it when an output feels weak or when you want to improve a specific capability.",
       },
     ],
   },
@@ -232,6 +216,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     items: [
       {
         title: "Lead Generation",
+        href: "/lead-generation",
         what: "A review-first workspace for finding suitable businesses by type and location, then adding only the right ones to CRM.",
         why: "The goal is to make prospecting fast without filling the CRM with unreviewed lists. Searches keep running in the background, repeated results are deduplicated, and nothing enters CRM until you choose it.",
         can: [
@@ -249,6 +234,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
       },
       {
         title: "Content",
+        href: "/content/quick",
         what: "A guided content workspace — quick drafts, grounded ideas, competitor opportunities, projects and approvals, each on its own page under the Content menu.",
         why: "The goal is to keep ideas, briefs, Vault evidence, competitor inspiration, voice settings, drafts and approvals connected in one recoverable workflow — without everything competing for space on one screen.",
         can: [
@@ -257,7 +243,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
           "Competitor Ideas: see market analysis turned into recommended ideas.",
           "Projects: continue unfinished work exactly where you left off.",
           "Drafts & Approved: edit, validate, approve, archive, adapt and export.",
-          "Content Style: manage voice profiles, golden examples and style sources.",
+          "Content Style: manage the writing examples and approved voice profile used by drafts.",
         ],
         how: [
           "Open the Content group in the menu and pick a section.",
@@ -268,6 +254,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
       },
       {
         title: "CRM",
+        href: "/crm",
         what: "A simple way to track contacts and leads as they move from first contact to closed — with notes and a full history.",
         why: "The goal is that no lead is ever lost and no follow-up forgotten. A clear pipeline keeps you and your VA aligned on who's where and what happens next, so opportunities turn into results instead of slipping away.",
         can: [
@@ -282,6 +269,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
       },
       {
         title: "Access",
+        href: "/access",
         what: "A secure, encrypted store for the logins your VA needs (site, username, password).",
         why: "The goal is to give your VA the access they need without ever pasting a password into chat or email. Credentials are encrypted, and every time one is revealed it's logged — so you get convenience and security at the same time, with full peace of mind about who saw what.",
         can: [
@@ -301,6 +289,7 @@ export const CLIENT_GUIDE: GuideGroup[] = [
     items: [
       {
         title: "My Profile",
+        href: "/profile",
         what: "Your personal details and sign-in settings.",
         why: "The goal is simply to keep your contact information current and your account secure — so notifications reach you and signing in is smooth.",
         can: [
@@ -310,26 +299,6 @@ export const CLIENT_GUIDE: GuideGroup[] = [
         how: [
           "Open My Profile from the menu, edit any field, and save.",
         ],
-      },
-    ],
-  },
-  {
-    heading: "About the platform — built to grow with you",
-    blurb: "This is a living product, and you have a say in where it goes.",
-    items: [
-      {
-        title: "New features & Tools in development",
-        what: "The portal is continuously improved. Some areas — especially the AI Tools (helpers for SEO, content, posts and more) — are in active development and will keep gaining capabilities, so you'll see them change and grow over time.",
-        why: "The goal is honesty and partnership. Rather than pretend everything is finished, we'd rather tell you what's evolving — and build what you actually need instead of guessing. Your real-world use shapes what comes next, and that makes the platform better for you specifically.",
-        can: [
-          "Expect regular new features and improvements.",
-          "Request a feature or tool you'd find useful — if it's within our capabilities, we can build it for you.",
-        ],
-        how: [
-          "Have an idea or a need? Tell your RapidTal contact, or send it via Messages.",
-          "We'll let you know if it's something we can add, and roughly when.",
-        ],
-        tip: "No idea is too small — if it would save you or your VA time, we genuinely want to hear it.",
       },
     ],
   },

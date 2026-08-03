@@ -10,6 +10,7 @@ import { HelpFab } from "@/components/layout/HelpFab";
 import { FeatureVideosProvider } from "@/components/layout/FeatureVideosProvider";
 import { getFeatureVideos } from "@/lib/tutorials/server";
 import PortalLoading from "./loading";
+import { ClientExperienceMonitor } from "@/components/layout/ClientExperienceMonitor";
 
 export default async function PortalLayout({
   children,
@@ -60,6 +61,7 @@ export default async function PortalLayout({
         Skip to content
       </a>
       <ErrorReporter />
+      <ClientExperienceMonitor />
       {/* The single sidebar instance (desktop column + mobile drawer) */}
       <div className="print:hidden">
         <SidebarShell user={ctx.user} client={ctx.client} />

@@ -11,7 +11,7 @@ export interface IntroCopy { title: string; body: string; guide?: string }
 export const PAGE_INTROS: Record<string, IntroCopy> = {
   vault: {
     title: "What is the Vault?",
-    body: "The Vault is your company's knowledge base — every document, web page, and note the AI reads to answer questions. Add anything here (files, links, or pasted text) and it becomes searchable. The richer the Vault, the smarter every AI answer across the portal.",
+    body: "The Vault holds your company knowledge — the documents, web pages and notes RapidTal can search when answering questions or creating content. Add a file, link or pasted text; RapidTal prepares it automatically and tells you if anything needs attention.",
     guide: "Vault",
   },
   ask: {
@@ -51,7 +51,7 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
   },
   content: {
     title: "What is the Content studio?",
-    body: "The Content studio generates marketing drafts — blogs, posts, emails — grounded in your company's Vault and brand. Create a draft, refine it, and an admin approves it before it goes out.",
+    body: "The Content studio creates marketing drafts using your Company Profile, company knowledge and approved voice. Start quickly from a topic or use the guided workflow, then edit, review and approve the result when it is ready.",
     guide: "Content",
   },
   "knowledge-base": {
@@ -60,7 +60,7 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
   },
   "company-dna": {
     title: "What is Company DNA?",
-    body: "Company DNA is the core profile of the business — who they are, what they offer, their values and contacts. The AI uses it in every answer, so keeping it accurate makes the whole system smarter. Admins edit it; VAs can view it.",
+    body: "Company DNA is your Company Profile — who you are, what you offer, your audience, priorities, voice and contacts. RapidTal applies it across Coach and Content, so keeping the essentials current improves every result. Client admins can edit it; VAs can view it.",
     guide: "Company DNA",
   },
   "company-report": {
@@ -70,8 +70,8 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
   },
   "brain-analytics": {
     title: "What is Brain Analytics?",
-    body: "Brain Analytics shows what people are asking the AI, how often it has a good answer, and which questions it can't answer yet. Turn those gaps into Vault additions to keep improving the answers.",
-    guide: "Brain Analytics",
+    body: "Analytics is the detailed view inside Company Brain. It shows what people ask, whether retrieval succeeds and where company knowledge is still thin. Use it when you want to investigate a weak result; it is not required for everyday work.",
+    guide: "Company Brain",
   },
   messages: {
     title: "What is Messages?",
@@ -120,22 +120,22 @@ export const PAGE_INTROS: Record<string, IntroCopy> = {
   },
   "content-projects": {
     title: "What are Projects?",
-    body: "Every draft-in-progress, saved automatically at each step — idea, brief, evidence, generation, edit, approval. Stop anytime and pick up exactly where you left off, from any device.",
+    body: "Projects are your in-progress content. RapidTal saves the idea, direction, selected company sources and draft at each step, so you can stop and continue later without rebuilding the work.",
     guide: "Content",
   },
   "content-library": {
     title: "What are Drafts & Approved?",
-    body: "Every artifact the engine has produced, in one library. Open any piece to edit it, compare versions, adapt it to another channel, approve it, or export it.",
+    body: "Your content library contains every draft and approved piece. Open one to edit it, compare versions, adapt it to another channel, approve it, archive it or export it.",
     guide: "Content",
   },
   "content-style": {
     title: "What is Content Style?",
-    body: "How the engine learns to write like your company: analyzed style profiles per channel, golden examples of your best published work, and the sources (like your LinkedIn posts) it learns from. The more approved evidence here, the more every draft sounds like you.",
+    body: "Content Style shows how RapidTal should write for your company. Add writing examples you like, collect your own published posts and approve the resulting voice profile; advanced evaluation remains optional.",
     guide: "Content",
   },
   "dna-competitors": {
     title: "What are Competitors?",
-    body: "The companies you compete with, and the public content the portal collects about them. This material is quarantined: it can inform market analysis and ideas, but it can never become your Company DNA, your facts, or your writing style.",
+    body: "Add the companies you compete with and collect their public websites, posts or articles. RapidTal uses that material for market opportunities and content ideas while keeping it separate from your Company Profile, company knowledge and voice.",
     guide: "Company DNA",
   },
 };

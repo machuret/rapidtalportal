@@ -17,7 +17,7 @@ export default async function GuidePage() {
   const { intro, groups } = await getGuideDoc(isVa ? "va" : "client");
   const subtitle = isVa
     ? "A plain-English guide to every tool you have, how to do great work, and how to keep your job details clear. Tap any item to expand it."
-    : "A plain-English guide to every feature and how to manage your VA. Tap any item to expand it.";
+    : "A plain-English guide to the core client workflows, with direct links to each feature. Tap any item to expand it.";
 
   return (
     <div className="page-prose">

@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { CLIENT_GUIDE, type GuideGroup } from "@/lib/client-guide";
 import { ChevronDown, ChevronRight, CheckCircle2, Lightbulb, Target, PlayCircle } from "lucide-react";
 import { LoomEmbed } from "@/components/help/LoomEmbed";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 /** Slug for a guide item's anchor, so PageIntro can deep-link to it. */
 const slug = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -87,6 +90,11 @@ export function ClientGuide({ groups = CLIENT_GUIDE }: { groups?: GuideGroup[] }
                           <Lightbulb className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                           <p className="text-sm text-zinc-300 leading-relaxed"><span className="font-semibold text-amber-400">Tip:</span> {item.tip}</p>
                         </div>
+                      )}
+                      {item.href && (
+                        <Link href={item.href} className={cn(buttonVariants({ variant: "outline" }), "self-start border-zinc-700")}>
+                          Open {item.title}
+                        </Link>
                       )}
                     </div>
                   )}
