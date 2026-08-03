@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getProspectingAdapter } from "@/lib/prospecting/adapters";
 import { serverError } from "@/lib/api/errors";
 import type { ProspectingCampaign, ProspectingJob } from "@/types/prospecting";
+import { todayInTimezone } from "@/lib/date-tz";
 
 const sourceSchema = z.enum(["google_maps", "google_search"]);
 const createSchema = z.object({
@@ -23,19 +24,24 @@ const updateSchema = z.object({
 });
 
 export const GET = withAuth(async (req, { user }) => {
-  const clientId = req.nextUrl.searchParams.get("clientId") ?? "";
-  if (!z.string().uuid().safeParse(clientId).success) {
+  const parsedQuery = z.object({
+    clientId: z.string().uuid(),
+    offset: z.coerce.number().int().min(0).default(0),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+  }).safeParse(Object.fromEntries(req.nextUrl.searchParams));
+  if (!parsedQuery.success) {
     return NextResponse.json({ error: "A valid client is required." }, { status: 422 });
   }
+  const { clientId, offset, limit } = parsedQuery.data;
   const denied = assertClientAccess(user, clientId);
   if (denied) return denied;
   const db = createAdminClient();
-  const { data, error } = await db.from("prospecting_campaigns")
-    .select("*")
+  const { data, error, count } = await db.from("prospecting_campaigns")
+    .select("*", { count: "exact" })
     .eq("client_id", clientId)
     .is("archived_at", null)
     .order("updated_at", { ascending: false })
-    .limit(100);
+    .range(offset, offset + limit - 1);
   if (error) return serverError(error, { userId: user.id, clientId, url: req.nextUrl.pathname });
   const campaigns = (data ?? []) as ProspectingCampaign[];
   const jobIds = campaigns.flatMap((campaign) => campaign.last_job_id ? [campaign.last_job_id] : []);
@@ -49,11 +55,21 @@ export const GET = withAuth(async (req, { user }) => {
     jobs = (jobRows ?? []) as ProspectingJob[];
   }
   const byId = new Map(jobs.map((job) => [job.id, job]));
+  const { data: usage, error: usageError } = await db.from("prospecting_usage")
+    .select("runs_started, results_reserved, results_returned, reported_cost_usd")
+    .eq("client_id", clientId)
+    .eq("usage_date", todayInTimezone("Australia/Sydney"))
+    .maybeSingle();
+  if (usageError) return serverError(usageError, { userId: user.id, clientId, url: req.nextUrl.pathname });
   return NextResponse.json({
     campaigns: campaigns.map((campaign) => ({
       ...campaign,
       latest_job: campaign.last_job_id ? byId.get(campaign.last_job_id) ?? null : null,
     })),
+    total: count ?? 0,
+    offset,
+    limit,
+    usage: usage ?? { runs_started: 0, results_reserved: 0, results_returned: 0, reported_cost_usd: 0 },
   });
 });
 

@@ -41,8 +41,14 @@ export interface ProspectingJob {
   deduplicated_results: number;
   max_charge_usd: number;
   usage_total_usd: number | null;
+  usage_date: string;
   error_code: string | null;
   error_message: string | null;
+  failure_count: number;
+  next_attempt_at: string | null;
+  provider_confirmation_deadline: string | null;
+  reservation_released_at: string | null;
+  cancel_requested_at: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -87,4 +93,17 @@ export interface ProspectingLeadPage {
   total: number;
   offset: number;
   limit: number;
+}
+
+export interface ProspectingCampaignPage {
+  campaigns: ProspectingCampaign[];
+  total: number;
+  offset: number;
+  limit: number;
+  usage: {
+    runs_started: number;
+    results_reserved: number;
+    results_returned: number;
+    reported_cost_usd: number;
+  };
 }

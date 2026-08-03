@@ -1,4 +1,10 @@
-import { ApifyClientError, getApifyActorRun, getApifyDatasetItems, startApifyActorRun } from "@/lib/prospecting/apify-client";
+import {
+  abortApifyActorRun,
+  ApifyClientError,
+  getApifyActorRun,
+  getApifyDatasetItems,
+  startApifyActorRun,
+} from "@/lib/prospecting/apify-client";
 import { getProspectingAdapter, normalizeProspectingDataset } from "@/lib/prospecting/adapters";
 import type { ProspectingCampaign, ProspectingJob } from "@/types/prospecting";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -16,6 +22,11 @@ export class ProspectingJobError extends Error {
 function configuredNumber(name: string, fallback: number, min: number, max: number): number {
   const value = Number(process.env[name]);
   return Number.isFinite(value) ? Math.max(min, Math.min(value, max)) : fallback;
+}
+
+function configuredInteger(name: string, fallback: number, min: number, max: number): number {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) ? Math.max(min, Math.min(value, max)) : fallback;
 }
 
 function one<T>(value: T[] | T | null): T | null {
@@ -88,10 +99,50 @@ async function claimJob(
   return one(data as Array<ProspectingJob & { lease_token: string }> | null);
 }
 
+async function deferJob(
+  db: ProspectingDb,
+  jobId: string,
+  leaseToken: string,
+  errorCode: string,
+  errorMessage: string,
+  countFailure = true,
+): Promise<ProspectingJob> {
+  const { data, error } = await db.rpc("defer_prospecting_job", {
+    p_job_id: jobId,
+    p_lease_token: leaseToken,
+    p_error_code: errorCode,
+    p_error_message: errorMessage,
+    p_count_failure: countFailure,
+    p_max_failures: 5,
+  });
+  const job = one(data as ProspectingJob[] | null);
+  if (error || !job) throw new ProspectingJobError("The collection retry could not be scheduled.", 500, true);
+  return job;
+}
+
+async function releaseReservation(
+  db: ProspectingDb,
+  jobId: string,
+  clientId: string,
+): Promise<ProspectingJob> {
+  const { data, error } = await db.rpc("release_prospecting_job_reservation", {
+    p_job_id: jobId,
+    p_client_id: clientId,
+  });
+  const job = one(data as ProspectingJob[] | null);
+  if (error || !job) throw new ProspectingJobError("The unused collection quota could not be released.", 500, true);
+  return job;
+}
+
+export interface StartProspectingRunOptions {
+  webhookUrlForJob?: (jobId: string) => string;
+}
+
 export async function startProspectingRun(
   db: ProspectingDb,
   campaign: ProspectingCampaign,
   actorId: string,
+  options: StartProspectingRunOptions = {},
 ): Promise<ProspectingJob> {
   const adapter = getProspectingAdapter(campaign.source);
   const validation = adapter.validate({
@@ -111,8 +162,8 @@ export async function startProspectingRun(
     p_actor_identifier: adapter.actorId,
     p_adapter_version: adapter.version,
     p_max_charge_usd: maxCharge,
-    p_daily_run_limit: configuredNumber("PROSPECTING_DAILY_RUN_LIMIT", 10, 1, 100),
-    p_daily_result_limit: configuredNumber("PROSPECTING_DAILY_RESULT_LIMIT", 500, 10, 10_000),
+    p_daily_run_limit: configuredInteger("PROSPECTING_DAILY_RUN_LIMIT", 10, 1, 100),
+    p_daily_result_limit: configuredInteger("PROSPECTING_DAILY_RESULT_LIMIT", 500, 10, 10_000),
   });
   const reserved = one(data as ProspectingJob[] | null);
   if (error || !reserved) {
@@ -126,6 +177,7 @@ export async function startProspectingRun(
 
   const claimed = await claimJob(db, reserved.id, campaign.client_id);
   if (!claimed?.lease_token) throw new ProspectingJobError("The new collection job is busy. Try again.", 409, true);
+  const webhookUrl = options.webhookUrlForJob?.(reserved.id);
   try {
     const run = await startApifyActorRun({
       actorId: adapter.actorId,
@@ -139,21 +191,49 @@ export async function startProspectingRun(
       maxItems: campaign.max_results,
       maxTotalChargeUsd: maxCharge,
       build: "latest",
+      webhookUrl,
+      webhookIdempotencyKey: reserved.id,
     });
-    return checkpoint(db, reserved.id, claimed.lease_token, {
-      status: "running",
-      providerStatus: run.status,
-      actorBuildId: run.buildId,
-      actorRunId: run.id,
-      actorDatasetId: run.defaultDatasetId,
-      usageTotalUsd: run.usageTotalUsd,
-    });
+    try {
+      return await checkpoint(db, reserved.id, claimed.lease_token, {
+        status: "running",
+        providerStatus: run.status,
+        actorBuildId: run.buildId,
+        actorRunId: run.id,
+        actorDatasetId: run.defaultDatasetId,
+        usageTotalUsd: run.usageTotalUsd,
+      });
+    } catch {
+      // The paid run is known and its webhook can reconcile the database even
+      // if this checkpoint response was lost. Never invite a duplicate start.
+      return {
+        ...reserved,
+        status: "running",
+        provider_status: run.status,
+        actor_build_id: run.buildId,
+        actor_run_id: run.id,
+        actor_dataset_id: run.defaultDatasetId,
+        usage_total_usd: run.usageTotalUsd,
+        error_code: "checkpoint_confirmation_pending",
+        error_message: "The provider run started and is awaiting database confirmation.",
+      };
+    }
   } catch (caught) {
+    if (caught instanceof ApifyClientError && caught.retryable && caught.requestMayHaveStarted) {
+      // A timeout can occur after Apify accepted the paid POST. Keep the
+      // campaign active until its signed webhook confirms the run or the
+      // provider-confirmation deadline expires.
+      return checkpoint(db, reserved.id, claimed.lease_token, {
+        status: "running",
+        errorCode: "provider_start_unconfirmed",
+        errorMessage: "Waiting for the lead provider to confirm that collection started.",
+      });
+    }
     await checkpoint(db, reserved.id, claimed.lease_token, {
       status: "error",
       errorCode: caught instanceof ApifyClientError ? "provider_start_failed" : "start_failed",
       errorMessage: publicJobError(caught),
-    }).catch(() => null);
+    }).then(() => releaseReservation(db, reserved.id, campaign.client_id)).catch(() => null);
     throw caught instanceof ApifyClientError
       ? new ProspectingJobError(caught.message, caught.status, caught.retryable)
       : new ProspectingJobError(publicJobError(caught), 500, true);
@@ -178,14 +258,47 @@ export async function advanceProspectingJob(
   const claimed = await claimJob(db, jobId, clientId);
   if (!claimed?.lease_token) return null;
   if (!claimed.actor_run_id) {
-    return checkpoint(db, jobId, claimed.lease_token, {
-      status: "error",
-      errorCode: "missing_provider_run",
-      errorMessage: "The provider run was not recorded. Start a new campaign run.",
+    const deadline = claimed.provider_confirmation_deadline
+      ? new Date(claimed.provider_confirmation_deadline).getTime()
+      : new Date(claimed.created_at).getTime() + 15 * 60_000;
+    if (Date.now() < deadline) {
+      return deferJob(
+        db,
+        jobId,
+        claimed.lease_token,
+        claimed.cancel_requested_at ? "cancel_waiting_for_provider" : "provider_start_unconfirmed",
+        claimed.cancel_requested_at
+          ? "Cancellation is waiting for the provider run identifier."
+          : "Waiting for the lead provider to confirm that collection started.",
+        false,
+      );
+    }
+    const expired = await checkpoint(db, jobId, claimed.lease_token, {
+      status: claimed.cancel_requested_at ? "cancelled" : "error",
+      errorCode: claimed.cancel_requested_at ? null : "provider_confirmation_expired",
+      errorMessage: claimed.cancel_requested_at
+        ? null
+        : "The provider did not confirm this collection. Run the campaign again.",
     });
+    return claimed.cancel_requested_at
+      ? expired
+      : releaseReservation(db, jobId, clientId).catch(() => expired);
   }
 
   try {
+    if (claimed.cancel_requested_at) {
+      const currentRun = await getApifyActorRun(claimed.actor_run_id);
+      const stopped = ["READY", "RUNNING", "ABORTING"].includes(currentRun.status)
+        ? await abortApifyActorRun(claimed.actor_run_id)
+        : currentRun;
+      return checkpoint(db, jobId, claimed.lease_token, {
+        status: "cancelled",
+        providerStatus: stopped.status,
+        actorBuildId: stopped.buildId,
+        actorDatasetId: stopped.defaultDatasetId,
+        usageTotalUsd: stopped.usageTotalUsd,
+      });
+    }
     const run = await getApifyActorRun(claimed.actor_run_id);
     if (["READY", "RUNNING", "ABORTING"].includes(run.status)) {
       return checkpoint(db, jobId, claimed.lease_token, {
@@ -251,11 +364,13 @@ export async function advanceProspectingJob(
         ? caught.retryable
         : true;
     if (retryable) {
-      return checkpoint(db, jobId, claimed.lease_token, {
-        status: "running",
-        errorCode: "temporary_advance_failure",
-        errorMessage: publicJobError(caught),
-      });
+      return deferJob(
+        db,
+        jobId,
+        claimed.lease_token,
+        "temporary_advance_failure",
+        publicJobError(caught),
+      );
     }
     return checkpoint(db, jobId, claimed.lease_token, {
       status: "error",
@@ -263,4 +378,21 @@ export async function advanceProspectingJob(
       errorMessage: publicJobError(caught),
     });
   }
+}
+
+export async function requestProspectingCancellation(
+  db: ProspectingDb,
+  jobId: string,
+  clientId: string,
+  actorId: string,
+): Promise<ProspectingJob> {
+  const { data, error } = await db.rpc("request_prospecting_job_cancel", {
+    p_job_id: jobId,
+    p_client_id: clientId,
+    p_actor_id: actorId,
+  });
+  const job = one(data as ProspectingJob[] | null);
+  if (error || !job) throw new ProspectingJobError("The collection could not be cancelled.", 500, true);
+  if (["done", "error", "cancelled"].includes(job.status)) return job;
+  return (await advanceProspectingJob(db, job.id, clientId)) ?? job;
 }

@@ -210,7 +210,7 @@ describe("service-role API tenant guards", () => {
       });
 
     const recognizedGuard =
-      /assertClientAccess|requireSuperAdmin|withSuperAdmin|CRON_SECRET|user\.client_id|roles:\s*\[[^\]]*super_admin|authorizeScope|actualUser|proxyToEdgeFunction/;
+      /assertClientAccess|requireSuperAdmin|withSuperAdmin|CRON_SECRET|verifyProspectingWebhookToken|user\.client_id|roles:\s*\[[^\]]*super_admin|authorizeScope|actualUser|proxyToEdgeFunction/;
     const unguarded = routes
       .filter((file) => !recognizedGuard.test(readFileSync(file, "utf8")))
       .map((file) => path.relative(root, file));

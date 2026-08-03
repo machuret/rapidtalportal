@@ -79,6 +79,18 @@ export const ROUTES = {
     notes: () => "/api/crm/notes",
     events: () => "/api/crm/events",
   },
+  prospecting: {
+    campaigns: () => "/api/prospecting/campaigns",
+    campaignsForClient: (clientId: string, offset = 0, limit = 50) =>
+      `/api/prospecting/campaigns?clientId=${clientId}&offset=${offset}&limit=${limit}`,
+    runs: () => "/api/prospecting/runs",
+    advance: () => "/api/prospecting/runs/advance",
+    cancel: () => "/api/prospecting/runs/cancel",
+    leads: () => "/api/prospecting/leads",
+    leadsPage: (clientId: string, status: string, offset: number, limit = 30) =>
+      `/api/prospecting/leads?clientId=${clientId}&status=${status}&offset=${offset}&limit=${limit}`,
+    promote: () => "/api/prospecting/promote",
+  },
   content: {
     pieces: () => "/api/content/pieces",
     piecesPage: (clientId: string, offset: number, limit = 50) =>

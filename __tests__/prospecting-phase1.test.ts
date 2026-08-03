@@ -5,10 +5,16 @@ import type { ProspectingCampaign, ProspectingJob } from "@/types/prospecting";
 const startActor = jest.fn();
 const getRun = jest.fn();
 const getItems = jest.fn();
+const abortRun = jest.fn();
 
 jest.mock("@/lib/prospecting/apify-client", () => {
   class MockApifyClientError extends Error {
-    constructor(message: string, public status: number, public retryable: boolean) {
+    constructor(
+      message: string,
+      public status: number,
+      public retryable: boolean,
+      public requestMayHaveStarted = false,
+    ) {
       super(message);
     }
   }
@@ -17,13 +23,23 @@ jest.mock("@/lib/prospecting/apify-client", () => {
     startApifyActorRun: (...args: unknown[]) => startActor(...args),
     getApifyActorRun: (...args: unknown[]) => getRun(...args),
     getApifyDatasetItems: (...args: unknown[]) => getItems(...args),
+    abortApifyActorRun: (...args: unknown[]) => abortRun(...args),
   };
 });
 
 import { advanceProspectingJob, startProspectingRun, type ProspectingDb } from "@/lib/prospecting/jobs";
+import { ApifyClientError } from "@/lib/prospecting/apify-client";
 
 const migration = readFileSync(
   join(process.cwd(), "db/migrations/20260803000200_prospecting_phase1.sql"),
+  "utf8",
+);
+const hardeningMigration = readFileSync(
+  join(process.cwd(), "db/migrations/20260803000201_prospecting_phase1_hardening.sql"),
+  "utf8",
+);
+const refundMigration = readFileSync(
+  join(process.cwd(), "db/migrations/20260803000202_prospecting_usage_refund.sql"),
   "utf8",
 );
 
@@ -63,8 +79,14 @@ const baseJob: ProspectingJob = {
   deduplicated_results: 0,
   max_charge_usd: 0.5,
   usage_total_usd: null,
+  usage_date: "2026-08-03",
   error_code: null,
   error_message: null,
+  failure_count: 0,
+  next_attempt_at: null,
+  provider_confirmation_deadline: "2026-08-03T00:15:00.000Z",
+  reservation_released_at: null,
+  cancel_requested_at: null,
   created_at: "2026-08-03T00:00:00.000Z",
   updated_at: "2026-08-03T00:00:00.000Z",
   completed_at: null,
@@ -94,6 +116,14 @@ describe("prospecting Phase 1 database boundary", () => {
     expect(migration).toContain("pg_advisory_xact_lock");
     expect(migration).toContain("dedupe_keys && v_keys");
     expect(migration).toContain("ON CONFLICT (campaign_id, prospect_id) DO UPDATE");
+    expect(hardeningMigration).toContain("canonical_key = v_row->>'canonicalKey'");
+    expect(hardeningMigration).not.toContain("dedupe_keys && v_keys");
+    expect(hardeningMigration).toContain("defer_prospecting_job");
+    expect(hardeningMigration).toContain("retry_limit_reached");
+    expect(hardeningMigration).toContain("request_prospecting_job_cancel");
+    expect(hardeningMigration).toContain("reconcile_prospecting_provider_run");
+    expect(refundMigration).toContain("reservation_released_at");
+    expect(refundMigration).toContain("results_reserved = greatest(0, results_reserved - v_job.requested_results)");
   });
 
   test("allows only service role to execute orchestration and CRM promotion", () => {
@@ -109,6 +139,8 @@ describe("prospecting Phase 1 database boundary", () => {
     }
     expect(migration).toContain("IF v_lead.crm_contact_id IS NOT NULL THEN RETURN v_lead.crm_contact_id");
     expect(migration).toContain("Actor does not belong to this client.");
+    expect(hardeningMigration).toContain("prospecting_prospects_crm_contact_unique");
+    expect(hardeningMigration).toContain("WHERE prospect_id = v_prospect.id AND client_id = p_client_id");
   });
 });
 
@@ -149,6 +181,66 @@ describe("prospecting Phase 1 orchestration", () => {
       maxItems: 1,
       maxTotalChargeUsd: 0.5,
     }));
+  });
+
+  test("keeps an ambiguous paid start active for signed webhook reconciliation", async () => {
+    const rpc = jest.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === "reserve_prospecting_job") return { data: [baseJob], error: null };
+      if (name === "claim_prospecting_job") {
+        return { data: [{ ...baseJob, lease_token: "55555555-5555-4555-8555-555555555555" }], error: null };
+      }
+      if (name === "checkpoint_prospecting_job") {
+        return { data: [{
+          ...baseJob,
+          status: args.p_status,
+          error_code: args.p_error_code,
+          error_message: args.p_error_message,
+        }], error: null };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    });
+    startActor.mockRejectedValue(new ApifyClientError("The lead provider timed out. Try again.", 504, true, true));
+
+    const job = await startProspectingRun(
+      { rpc, from: jest.fn() } as unknown as ProspectingDb,
+      campaign,
+      campaign.created_by!,
+      { webhookUrlForJob: (jobId) => `https://portal.example/webhook?job=${jobId}` },
+    );
+    expect(job.status).toBe("running");
+    expect(job.error_code).toBe("provider_start_unconfirmed");
+    expect(startActor).toHaveBeenCalledWith(expect.objectContaining({
+      webhookUrl: expect.stringContaining(baseJob.id),
+    }));
+  });
+
+  test("releases reserved result quota after a definitive rejected provider start", async () => {
+    const rpc = jest.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === "reserve_prospecting_job") return { data: [baseJob], error: null };
+      if (name === "claim_prospecting_job") {
+        return { data: [{ ...baseJob, lease_token: "55555555-5555-4555-8555-555555555555" }], error: null };
+      }
+      if (name === "checkpoint_prospecting_job") {
+        return { data: [{ ...baseJob, status: args.p_status }], error: null };
+      }
+      if (name === "release_prospecting_job_reservation") {
+        return { data: [{ ...baseJob, status: "error", reservation_released_at: "2026-08-03T00:01:00.000Z" }], error: null };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    });
+    startActor.mockRejectedValue(new ApifyClientError("Provider busy", 429, true, false));
+
+    await expect(startProspectingRun(
+      { rpc, from: jest.fn() } as unknown as ProspectingDb,
+      campaign,
+      campaign.created_by!,
+    )).rejects.toEqual(expect.objectContaining({ status: 429, retryable: true }));
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual([
+      "reserve_prospecting_job",
+      "claim_prospecting_job",
+      "checkpoint_prospecting_job",
+      "release_prospecting_job_reservation",
+    ]);
   });
 
   test("normalizes, caps and atomically ingests a completed dataset", async () => {
@@ -212,6 +304,88 @@ describe("prospecting Phase 1 orchestration", () => {
     ]);
     expect(from).not.toHaveBeenCalledWith("crm_contacts");
   });
+
+  test("aborts and checkpoints a user-cancelled provider run", async () => {
+    const runningJob = {
+      ...baseJob,
+      status: "running" as const,
+      actor_run_id: "apify-run-cancel",
+      cancel_requested_at: "2026-08-03T00:01:00.000Z",
+    };
+    const jobQuery = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: runningJob, error: null }),
+    };
+    const rpc = jest.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === "claim_prospecting_job") {
+        return { data: [{ ...runningJob, lease_token: "55555555-5555-4555-8555-555555555555" }], error: null };
+      }
+      if (name === "checkpoint_prospecting_job") {
+        return { data: [{ ...runningJob, status: args.p_status, provider_status: args.p_provider_status }], error: null };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    });
+    getRun.mockResolvedValue({
+      id: runningJob.actor_run_id,
+      actId: "actor-1",
+      status: "RUNNING",
+      defaultDatasetId: "dataset-1",
+      startedAt: null,
+      finishedAt: null,
+      buildId: "build-1",
+      usageTotalUsd: 0.001,
+    });
+    abortRun.mockResolvedValue({
+      id: runningJob.actor_run_id,
+      actId: "actor-1",
+      status: "ABORTING",
+      defaultDatasetId: "dataset-1",
+      startedAt: null,
+      finishedAt: null,
+      buildId: "build-1",
+      usageTotalUsd: 0.001,
+    });
+
+    const job = await advanceProspectingJob(
+      { rpc, from: jest.fn(() => jobQuery) } as unknown as ProspectingDb,
+      runningJob.id,
+      campaign.client_id,
+    );
+    expect(abortRun).toHaveBeenCalledWith(runningJob.actor_run_id);
+    expect(job?.status).toBe("cancelled");
+    expect(job?.provider_status).toBe("ABORTING");
+  });
+
+  test("sends transient polling failures through the bounded database retry policy", async () => {
+    const runningJob = { ...baseJob, status: "running" as const, actor_run_id: "apify-run-retry" };
+    const jobQuery = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: runningJob, error: null }),
+    };
+    const rpc = jest.fn(async (name: string) => {
+      if (name === "claim_prospecting_job") {
+        return { data: [{ ...runningJob, lease_token: "55555555-5555-4555-8555-555555555555" }], error: null };
+      }
+      if (name === "defer_prospecting_job") {
+        return { data: [{ ...runningJob, failure_count: 1, next_attempt_at: "2026-08-03T00:02:00.000Z" }], error: null };
+      }
+      throw new Error(`Unexpected RPC ${name}`);
+    });
+    getRun.mockRejectedValue(new ApifyClientError("Provider unavailable", 502, true));
+
+    const job = await advanceProspectingJob(
+      { rpc, from: jest.fn(() => jobQuery) } as unknown as ProspectingDb,
+      runningJob.id,
+      campaign.client_id,
+    );
+    expect(job?.failure_count).toBe(1);
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual([
+      "claim_prospecting_job",
+      "defer_prospecting_job",
+    ]);
+  });
 });
 
 describe("prospecting API tenant checks", () => {
@@ -220,6 +394,7 @@ describe("prospecting API tenant checks", () => {
       "app/api/prospecting/campaigns/route.ts",
       "app/api/prospecting/runs/route.ts",
       "app/api/prospecting/runs/advance/route.ts",
+      "app/api/prospecting/runs/cancel/route.ts",
       "app/api/prospecting/leads/route.ts",
       "app/api/prospecting/promote/route.ts",
     ];
@@ -236,5 +411,7 @@ describe("prospecting API tenant checks", () => {
     expect(source).toContain("You can leave this page; RapidTal will keep working.");
     expect(source).toContain("Add to CRM");
     expect(source).toContain("aria-label=\"Previous lead page\"");
+    expect(source).toContain("Cancel");
+    expect(source).toContain("reported cost");
   });
 });

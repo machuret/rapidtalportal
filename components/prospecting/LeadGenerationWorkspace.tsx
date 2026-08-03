@@ -17,6 +17,7 @@ import {
   Star,
   UserPlus,
   X,
+  StopCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
@@ -25,8 +26,10 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { ROUTES } from "@/lib/api/routes";
 import type {
   ProspectingCampaign,
+  ProspectingCampaignPage,
   ProspectingJob,
   ProspectingLead,
   ProspectingLeadPage,
@@ -45,6 +48,7 @@ function statusLabel(status: string): string {
     failed: "Needs retry",
     done: "Completed",
     error: "Needs retry",
+    cancelled: "Cancelled",
     new: "New",
     shortlisted: "Shortlisted",
     dismissed: "Dismissed",
@@ -69,7 +73,15 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   const [filter, setFilter] = useState<ProspectingLeadStatus | "all">("all");
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [loadingLeads, setLoadingLeads] = useState(true);
-  const [activeJob, setActiveJob] = useState<ProspectingJob | null>(null);
+  const [activeJobs, setActiveJobs] = useState<ProspectingJob[]>([]);
+  const [campaignTotal, setCampaignTotal] = useState(0);
+  const [usage, setUsage] = useState<ProspectingCampaignPage["usage"]>({
+    runs_started: 0,
+    results_reserved: 0,
+    results_returned: 0,
+    reported_cost_usd: 0,
+  });
+  const [pollIssue, setPollIssue] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   const [source, setSource] = useState<"google_maps" | "google_search">("google_maps");
@@ -77,19 +89,31 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   const [starting, setStarting] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const pollBusy = useRef(false);
+  const pollFailures = useRef(0);
   const startBusy = useRef(false);
+  const activeJobsRef = useRef<ProspectingJob[]>([]);
 
-  const loadCampaigns = useCallback(async () => {
-    setLoadingCampaigns(true);
+  useEffect(() => {
+    activeJobsRef.current = activeJobs;
+  }, [activeJobs]);
+
+  const loadCampaigns = useCallback(async (nextOffset = 0, append = false) => {
+    if (!append) setLoadingCampaigns(true);
     try {
-      const result = await api.get<{ campaigns: ProspectingCampaign[] }>(
-        `/prospecting/campaigns?clientId=${encodeURIComponent(clientId)}`,
+      const result = await api.get<ProspectingCampaignPage>(
+        ROUTES.prospecting.campaignsForClient(clientId, nextOffset),
         { showErrorToast: false },
       );
-      setCampaigns(result.campaigns);
+      setCampaigns((current) => append ? [...current, ...result.campaigns] : result.campaigns);
+      setCampaignTotal(result.total);
+      setUsage(result.usage);
       const running = result.campaigns.map((campaign) => campaign.latest_job)
-        .find((job): job is ProspectingJob => Boolean(job && !TERMINAL.has(job.status)));
-      setActiveJob((current) => running ?? (current && !TERMINAL.has(current.status) ? current : null));
+        .filter((job): job is ProspectingJob => Boolean(job && !TERMINAL.has(job.status)));
+      setActiveJobs((current) => {
+        const byId = new Map((append ? current : []).map((job) => [job.id, job]));
+        for (const job of running) byId.set(job.id, job);
+        return Array.from(byId.values());
+      });
     } catch (error) {
       toast.error(errorMessage(error, "Campaigns could not be loaded."));
     } finally {
@@ -104,7 +128,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     setLoadingLeads(true);
     try {
       const result = await api.get<ProspectingLeadPage>(
-        `/prospecting/leads?clientId=${encodeURIComponent(clientId)}&status=${nextFilter}&offset=${nextOffset}&limit=${PAGE_SIZE}`,
+        ROUTES.prospecting.leadsPage(clientId, nextFilter, nextOffset, PAGE_SIZE),
         { showErrorToast: false },
       );
       setLeads(result.leads);
@@ -121,36 +145,55 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     void Promise.all([loadCampaigns(), loadLeads(0, "all")]);
   }, [loadCampaigns, loadLeads]);
 
-  const activeJobId = activeJob?.id ?? null;
-  const activeJobStatus = activeJob?.status ?? null;
+  const activeJobKey = activeJobs.map((job) => job.id).sort().join(",");
   useEffect(() => {
-    if (!activeJobId || !activeJobStatus || TERMINAL.has(activeJobStatus)) return;
+    if (!activeJobKey) return;
     const advance = async () => {
       if (pollBusy.current) return;
       pollBusy.current = true;
       try {
-        const result = await api.post<{ job: ProspectingJob | null; busy: boolean }>(
-          "/prospecting/runs/advance",
-          { clientId, jobId: activeJobId },
-          { showErrorToast: false },
-        );
-        if (result.job) {
-          setActiveJob(result.job);
-          if (result.job.status === "done") {
-            toast.success(`${result.job.returned_results} leads are ready to review.`);
-            setTab("inbox");
-            await Promise.all([loadCampaigns(), loadLeads(0, "all")]);
-            setActiveJob(null);
-          } else if (["error", "cancelled"].includes(result.job.status)) {
-            toast.error(result.job.error_message || "Lead collection did not finish. Run the campaign again.");
-            await loadCampaigns();
-            setActiveJob(null);
+        const settled = await Promise.allSettled(activeJobsRef.current.map(async (activeJob) => {
+          const result = await api.post<{ job: ProspectingJob | null; busy: boolean }>(
+            ROUTES.prospecting.advance(),
+            { clientId, jobId: activeJob.id },
+            { showErrorToast: false },
+          );
+          return result.job;
+        }));
+        const results = settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+        const failedRefreshes = settled.filter((result) => result.status === "rejected").length;
+        if (failedRefreshes === 0) {
+          pollFailures.current = 0;
+          setPollIssue(null);
+        } else {
+          pollFailures.current += 1;
+          if (!navigator.onLine) setPollIssue("You are offline. Collection is continuing in the background.");
+          else if (pollFailures.current >= 3) setPollIssue("Some collection progress cannot be refreshed right now. Background recovery is still running.");
+        }
+        let refreshLeads = false;
+        for (const job of results) {
+          if (!job) continue;
+          if (job.status === "done") {
+            toast.success(`${job.returned_results} leads are ready to review.`);
+            refreshLeads = true;
+          } else if (job.status === "error") {
+            toast.error(job.error_message || "Lead collection did not finish. Run the campaign again.");
+          } else if (job.status === "cancelled") {
+            toast.success("Lead collection cancelled.");
           }
         }
+        setActiveJobs((current) => current.map((currentJob) =>
+          results.find((job) => job?.id === currentJob.id) ?? currentJob
+        ).filter((job) => !TERMINAL.has(job.status)));
+        if (results.some((job) => job && TERMINAL.has(job.status))) await loadCampaigns();
+        if (refreshLeads) {
+          setTab("inbox");
+          await loadLeads(0, "all");
+        }
       } catch {
-        // The durable cron continues the run. Keep the UI recoverable and let
-        // the next poll try again instead of declaring a provider failure.
-        if (!navigator.onLine) toast.error("You are offline. Collection is continuing in the background.");
+        pollFailures.current += 1;
+        if (!navigator.onLine) setPollIssue("You are offline. Collection is continuing in the background.");
+        else if (pollFailures.current >= 3) setPollIssue("Progress cannot be refreshed right now. Background recovery is still running.");
       } finally {
         pollBusy.current = false;
       }
@@ -158,7 +201,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     void advance();
     const timer = window.setInterval(() => void advance(), 4_000);
     return () => window.clearInterval(timer);
-  }, [activeJobId, activeJobStatus, clientId, loadCampaigns, loadLeads]);
+  }, [activeJobKey, clientId, loadCampaigns, loadLeads]);
 
   async function createAndRun() {
     if (startBusy.current) return;
@@ -169,19 +212,20 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
     startBusy.current = true;
     setStarting(true);
     try {
-      const created = await api.post<{ campaign: ProspectingCampaign }>("/prospecting/campaigns", {
+      const created = await api.post<{ campaign: ProspectingCampaign }>(ROUTES.prospecting.campaigns(), {
         clientId,
         source,
         query: query.trim(),
         location: location.trim(),
         maxResults,
       });
-      const started = await api.post<{ job: ProspectingJob }>("/prospecting/runs", {
+      const started = await api.post<{ job: ProspectingJob }>(ROUTES.prospecting.runs(), {
         clientId,
         campaignId: created.campaign.id,
       });
       setCampaigns((current) => [{ ...created.campaign, latest_job: started.job }, ...current]);
-      setActiveJob(started.job);
+      setCampaignTotal((current) => current + 1);
+      setActiveJobs((current) => [started.job, ...current.filter((job) => job.id !== started.job.id)]);
       toast.success("Lead collection started. You can leave this page safely.");
     } catch (error) {
       toast.error(errorMessage(error, "Lead collection could not be started."));
@@ -195,11 +239,11 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   async function runCampaign(campaign: ProspectingCampaign) {
     setPendingAction(`run:${campaign.id}`);
     try {
-      const result = await api.post<{ job: ProspectingJob }>("/prospecting/runs", {
+      const result = await api.post<{ job: ProspectingJob }>(ROUTES.prospecting.runs(), {
         clientId,
         campaignId: campaign.id,
       });
-      setActiveJob(result.job);
+      setActiveJobs((current) => [result.job, ...current.filter((job) => job.id !== result.job.id)]);
       toast.success("Campaign collection started.");
       await loadCampaigns();
     } catch (error) {
@@ -212,8 +256,9 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   async function archiveCampaign(campaign: ProspectingCampaign) {
     setPendingAction(`archive:${campaign.id}`);
     try {
-      await api.patch("/prospecting/campaigns", { clientId, id: campaign.id, archived: true });
+      await api.patch(ROUTES.prospecting.campaigns(), { clientId, id: campaign.id, archived: true });
       setCampaigns((current) => current.filter((item) => item.id !== campaign.id));
+      setCampaignTotal((current) => Math.max(0, current - 1));
       toast.success("Campaign archived.");
     } catch (error) {
       toast.error(errorMessage(error, "Campaign could not be archived."));
@@ -225,8 +270,11 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   async function updateLead(lead: ProspectingLead, status: "new" | "shortlisted" | "dismissed") {
     setPendingAction(`${status}:${lead.id}`);
     try {
-      await api.patch("/prospecting/leads", { clientId, id: lead.id, status });
-      if (filter !== "all" && filter !== status) setLeads((current) => current.filter((item) => item.id !== lead.id));
+      await api.patch(ROUTES.prospecting.leads(), { clientId, id: lead.id, status });
+      if (filter !== "all" && filter !== status) {
+        setLeads((current) => current.filter((item) => item.id !== lead.id));
+        setTotal((current) => Math.max(0, current - 1));
+      }
       else setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, status } : item));
       toast.success(status === "shortlisted" ? "Lead shortlisted." : status === "dismissed" ? "Lead dismissed." : "Lead restored.");
     } catch (error) {
@@ -239,11 +287,43 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   async function promoteLead(lead: ProspectingLead) {
     setPendingAction(`promote:${lead.id}`);
     try {
-      await api.post("/prospecting/promote", { clientId, leadId: lead.id });
-      setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, status: "imported" } : item));
+      await api.post(ROUTES.prospecting.promote(), { clientId, leadId: lead.id });
+      if (filter !== "all" && filter !== "imported") {
+        setLeads((current) => current.filter((item) => item.id !== lead.id));
+        setTotal((current) => Math.max(0, current - 1));
+      } else {
+        setLeads((current) => current.map((item) => item.id === lead.id ? { ...item, status: "imported" } : item));
+      }
       toast.success("Lead added to CRM.");
     } catch (error) {
       toast.error(errorMessage(error, "Lead could not be added to CRM."));
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function cancelJob(job: ProspectingJob) {
+    setPendingAction(`cancel:${job.id}`);
+    try {
+      const result = await api.post<{ job: ProspectingJob }>(ROUTES.prospecting.cancel(), {
+        clientId,
+        jobId: job.id,
+      });
+      if (TERMINAL.has(result.job.status)) {
+        setActiveJobs((current) => current.filter((item) => item.id !== job.id));
+        await loadCampaigns();
+      } else {
+        setActiveJobs((current) => current.map((item) => item.id === job.id ? result.job : item));
+      }
+      toast.success(
+        result.job.status === "cancelled"
+          ? "Lead collection cancelled."
+          : result.job.status === "done"
+            ? "Collection had already completed."
+            : "Cancellation requested.",
+      );
+    } catch (error) {
+      toast.error(errorMessage(error, "Lead collection could not be cancelled."));
     } finally {
       setPendingAction(null);
     }
@@ -272,22 +352,36 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
         ))}
       </div>
 
-      {activeJob && !TERMINAL.has(activeJob.status) && (
-        <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4" role="status">
-          <div className="flex items-center gap-3">
-            <Loader2 className="h-5 w-5 animate-spin text-blue-300" />
-            <div>
-              <p className="font-medium text-blue-100">Finding leads in the background</p>
-              <p className="mt-0.5 text-xs text-blue-200/70">
-                Requested {activeJob.requested_results} results. You can leave this page; RapidTal will keep working.
-              </p>
-              {activeJob.error_message && (
-                <p className="mt-1 text-xs text-amber-200">Temporary issue: {activeJob.error_message}</p>
-              )}
+      {activeJobs.map((activeJob) => (
+        <div key={activeJob.id} className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4" role="status">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-300" />
+              <div>
+                <p className="font-medium text-blue-100">
+                  {activeJob.cancel_requested_at ? "Cancelling lead collection" : "Finding leads in the background"}
+                </p>
+                <p className="mt-0.5 text-xs text-blue-200/70">
+                  Requested {activeJob.requested_results} results. You can leave this page; RapidTal will keep working.
+                </p>
+                {activeJob.error_message && (
+                  <p className="mt-1 text-xs text-amber-200">{activeJob.error_message}</p>
+                )}
+              </div>
             </div>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={Boolean(activeJob.cancel_requested_at) || pendingAction === `cancel:${activeJob.id}`}
+              onClick={() => void cancelJob(activeJob)}
+            >
+              {pendingAction === `cancel:${activeJob.id}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <StopCircle className="mr-1.5 h-3.5 w-3.5" />}
+              {activeJob.cancel_requested_at ? "Cancelling" : "Cancel"}
+            </Button>
           </div>
         </div>
-      )}
+      ))}
+      {pollIssue && <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200" role="alert">{pollIssue}</p>}
 
       {tab === "find" && (
         <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 md:p-6">
@@ -328,13 +422,16 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
               </select>
             </div>
           </div>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Button onClick={() => void createAndRun()} disabled={starting || Boolean(activeJob)}>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Button onClick={() => void createAndRun()} disabled={starting}>
               {starting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
               Find leads
             </Button>
-            <p className="text-xs text-zinc-500">Results are reviewed here first. Nothing is added to CRM automatically.</p>
-          </div>
+              <p className="text-xs text-zinc-500">Results are reviewed here first. Nothing is added to CRM automatically.</p>
+            </div>
+            {source === "google_search" && (
+              <p className="mt-3 text-xs text-amber-300">Web search is broader and may return website candidates that need closer review.</p>
+            )}
         </section>
       )}
 
@@ -436,9 +533,14 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
 
       {tab === "campaigns" && (
         <section className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Campaigns</h2>
-            <p className="text-sm text-zinc-400">Reuse successful searches without entering the criteria again.</p>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Campaigns</h2>
+              <p className="text-sm text-zinc-400">Reuse successful searches without entering the criteria again.</p>
+            </div>
+            <p className="text-xs text-zinc-500">
+              Today: {usage.runs_started} runs · {usage.results_returned} leads · ${Number(usage.reported_cost_usd).toFixed(2)} reported cost
+            </p>
           </div>
           {loadingCampaigns ? (
             <div className="flex min-h-40 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" aria-label="Loading campaigns" /></div>
@@ -463,7 +565,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
                       {job?.error_message && <p className="mt-1 text-xs text-red-300">{job.error_message}</p>}
                     </div>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" disabled={busy || Boolean(activeJob)} onClick={() => void runCampaign(campaign)}>
+                      <Button size="sm" variant="outline" disabled={busy} onClick={() => void runCampaign(campaign)}>
                         {pendingAction === `run:${campaign.id}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1.5 h-3.5 w-3.5" />}
                         Run again
                       </Button>
@@ -472,6 +574,11 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
                   </article>
                 );
               })}
+            </div>
+          )}
+          {!loadingCampaigns && campaigns.length < campaignTotal && (
+            <div className="flex justify-center">
+              <Button variant="outline" onClick={() => void loadCampaigns(campaigns.length, true)}>Load more campaigns</Button>
             </div>
           )}
         </section>

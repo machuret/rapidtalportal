@@ -103,7 +103,10 @@ No all-in-one email enrichment Actor is approved yet. Provider discovery and enr
 - Stable deduplication keys and source/run provenance.
 - An asynchronous Apify client with spend limits, item limits, timeouts, polling, dataset paging and cancellation.
 - Sanitized provider-shape fixtures and contract tests.
-- Exact post-normalization result limits and multi-key deduplication across provider records.
+- Exact post-normalization result limits and strong provider-identity deduplication across runs.
+- Signed provider webhooks reconcile paid runs when the initial response is lost.
+- Automatic deduplication uses the strongest provider identity so shared branch domains or phones do not collapse distinct locations.
+- Retry attempts are bounded with backoff, users can cancel active runs, and CRM promotion is idempotent for a prospect across campaigns.
 
 Use the deliberately gated lab runner from a secure environment. It will not start without `--confirm-spend`, limits samples to 25 rows and applies Apify's minimum supported USD $0.50 run ceiling:
 

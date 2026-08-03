@@ -46,6 +46,8 @@ describe("prospecting Apify client", () => {
       maxItems: 10,
       maxTotalChargeUsd: 0.5,
       build: "latest",
+      webhookUrl: "https://portal.example/api/webhooks/prospecting/apify?jobId=one",
+      webhookIdempotencyKey: "11111111-1111-4111-8111-111111111111",
     });
 
     expect(run).toEqual(expect.objectContaining({
@@ -58,6 +60,15 @@ describe("prospecting Apify client", () => {
     expect(url).toContain("waitForFinish=0");
     expect(url).toContain("maxItems=10");
     expect(url).toContain("maxTotalChargeUsd=0.50");
+    expect(url).toContain("webhooks=");
+    const webhookParam = new URL(url).searchParams.get("webhooks");
+    expect(JSON.parse(Buffer.from(webhookParam!, "base64").toString("utf8"))).toEqual([
+      expect.objectContaining({
+        requestUrl: "https://portal.example/api/webhooks/prospecting/apify?jobId=one",
+        idempotencyKey: "11111111-1111-4111-8111-111111111111",
+        eventTypes: expect.arrayContaining(["ACTOR.RUN.CREATED", "ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.ABORTED"]),
+      }),
+    ]);
     expect(init.headers).toEqual(expect.objectContaining({
       Authorization: "Bearer test-apify-token",
       "Content-Type": "application/json",
@@ -116,6 +127,7 @@ describe("prospecting Apify client", () => {
     await expect(getApifyActorRun("run12345")).rejects.toEqual(expect.objectContaining({
       status: 429,
       retryable: true,
+      message: "The lead provider is busy. Collection will retry automatically.",
     }));
   });
 

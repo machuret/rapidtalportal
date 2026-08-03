@@ -160,4 +160,6 @@ export const MIGRATIONS = [
   "20260802000144_atomic_quick_content_create.sql",
   "20260803000150_allow_content_archive_transition.sql",
   "20260803000200_prospecting_phase1.sql",
+  "20260803000201_prospecting_phase1_hardening.sql",
+  "20260803000202_prospecting_usage_refund.sql",
 ] as const;

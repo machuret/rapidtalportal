@@ -60,8 +60,7 @@ describe("prospecting Actor adapters", () => {
       reviewCount: 87,
     }));
     expect(lead.canonicalKey).toHaveLength(64);
-    expect(lead.dedupeKeys).toHaveLength(4);
-    expect(new Set(lead.dedupeKeys).size).toBe(4);
+    expect(lead.dedupeKeys).toEqual([lead.canonicalKey]);
     expect(lead.source).toEqual({
       source: "google_maps",
       actorId: "compass~crawler-google-places",
@@ -71,6 +70,20 @@ describe("prospecting Actor adapters", () => {
       capturedAt: "2026-08-03T00:00:00.000Z",
       sourceUrl: "https://www.google.com/maps/place/?q=place_id:ChIJ-test-maps-place",
     });
+  });
+
+  test("does not collapse distinct Google places that share a corporate website and phone", () => {
+    const shared = {
+      title: "National Finance",
+      website: "https://national-finance.example",
+      phone: "+61290000000",
+    };
+    const rows = normalizeProspectingDataset("google_maps", [
+      { ...shared, placeId: "sydney-branch", address: "1 Sydney Street" },
+      { ...shared, placeId: "parramatta-branch", address: "2 Parramatta Road" },
+    ], { providerRunId: "run-shared-domain" }, 10);
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((row) => row.canonicalKey)).size).toBe(2);
   });
 
   test("flattens and deduplicates Google organic results by company domain", () => {
@@ -89,6 +102,18 @@ describe("prospecting Actor adapters", () => {
       countryCode: "au",
       saveHtml: false,
     }));
+  });
+
+  test("filters social networks and business directories from web-company discovery", () => {
+    const rows = getProspectingAdapter("google_search").normalize({
+      organicResults: [
+        { title: "Directory result", url: "https://www.yellowpages.com.au/find/mortgage-brokers" },
+        { title: "Social result", url: "https://www.linkedin.com/company/example" },
+        { title: "Actual company", url: "https://actual-company.example/about" },
+      ],
+    }, { providerRunId: "run-search-quality" });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].companyName).toBe("Actual company");
   });
 
   test("enforces the requested maximum after nested provider results are normalized", () => {

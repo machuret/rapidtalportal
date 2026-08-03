@@ -128,8 +128,12 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
 export function deduplicateProspects(rows: NormalizedProspect[]): NormalizedProspect[] {
   const seen = new Set<string>();
   return rows.filter((row) => {
-    if (row.dedupeKeys.some((key) => seen.has(key))) return false;
-    for (const key of row.dedupeKeys) seen.add(key);
+    // Only the strongest provider identity may collapse two rows. Supporting
+    // signals such as a shared corporate domain or switchboard phone number
+    // are useful review hints, but are unsafe automatic identities for
+    // franchises and multi-location businesses.
+    if (seen.has(row.canonicalKey)) return false;
+    seen.add(row.canonicalKey);
     return true;
   });
 }

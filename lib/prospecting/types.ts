@@ -103,4 +103,5 @@ export interface StartApifyActorRunOptions {
   maxTotalChargeUsd: number;
   build?: string;
   webhookUrl?: string;
+  webhookIdempotencyKey?: string;
 }

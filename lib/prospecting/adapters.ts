@@ -25,6 +25,23 @@ import {
 const GOOGLE_MAPS_ACTOR = "compass~crawler-google-places";
 const GOOGLE_SEARCH_ACTOR = "apify~google-search-scraper";
 const LINKEDIN_PROFILE_ACTOR = "harvestapi~linkedin-profile-search";
+const NON_COMPANY_SEARCH_DOMAINS = [
+  "facebook.com",
+  "instagram.com",
+  "linkedin.com",
+  "youtube.com",
+  "wikipedia.org",
+  "yelp.com",
+  "yellowpages.com.au",
+  "truelocal.com.au",
+  "hipages.com.au",
+  "zoominfo.com",
+  "crunchbase.com",
+];
+
+function isCompanyWebsiteDomain(domain: string): boolean {
+  return !NON_COMPANY_SEARCH_DOMAINS.some((blocked) => domain === blocked || domain.endsWith(`.${blocked}`));
+}
 
 function baseValidation(criteria: ProspectingSearchCriteria): ProspectingValidationResult {
   const errors: string[] = [];
@@ -116,10 +133,11 @@ const googleMapsAdapter: ProspectingActorAdapter = {
       phone ? makeCanonicalKey(["phone", phone.replace(/\D/gu, "")]) : null,
       fallbackKey,
     ].filter((key): key is string => Boolean(key));
+    const canonicalKey = dedupeKeys[0];
     return [emptyProspect({
       kind: "company",
-      canonicalKey: dedupeKeys[0],
-      dedupeKeys,
+      canonicalKey,
+      dedupeKeys: [canonicalKey],
       companyName,
       websiteUrl,
       sourceUrl,
@@ -151,7 +169,7 @@ function normalizeOrganicResult(
   if (!sourceUrl) return [];
   const domain = canonicalWebsiteDomain(sourceUrl);
   const title = cleanString(row.title, 500);
-  if (!domain) return [];
+  if (!domain || !isCompanyWebsiteDomain(domain)) return [];
   const domainKey = makeCanonicalKey(["domain", domain]);
   return [emptyProspect({
     kind: "company",
@@ -254,10 +272,11 @@ const linkedinProfilesAdapter: ProspectingActorAdapter = {
       email ? makeCanonicalKey(["email", email]) : null,
       fallbackKey,
     ].filter((key): key is string => Boolean(key));
+    const canonicalKey = dedupeKeys[0];
     return [emptyProspect({
       kind: "person",
-      canonicalKey: dedupeKeys[0],
-      dedupeKeys,
+      canonicalKey,
+      dedupeKeys: [canonicalKey],
       personName,
       companyName,
       jobTitle: cleanString(

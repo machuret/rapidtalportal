@@ -7,6 +7,7 @@ export class ApifyClientError extends Error {
     message: string,
     public readonly status: number,
     public readonly retryable: boolean,
+    public readonly requestMayHaveStarted = false,
   ) {
     super(message);
     this.name = "ApifyClientError";
@@ -32,14 +33,12 @@ function actorPath(actorId: string): string {
   return encodeURIComponent(normalized);
 }
 
-function safeProviderMessage(value: unknown, fallback: string): string {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
-  const error = (value as { error?: unknown }).error;
-  if (!error || typeof error !== "object" || Array.isArray(error)) return fallback;
-  const message = (error as { message?: unknown }).message;
-  return typeof message === "string" && message.trim()
-    ? message.trim().slice(0, 500)
-    : fallback;
+function publicProviderError(status: number): string {
+  if (status === 401 || status === 403) return "Lead collection is not configured correctly.";
+  if (status === 408) return "The lead provider timed out. Try again.";
+  if (status === 429) return "The lead provider is busy. Collection will retry automatically.";
+  if (status >= 500) return "The lead provider is temporarily unavailable. Collection will retry automatically.";
+  return "The lead provider rejected this collection request.";
 }
 
 async function apifyJson(path: string, init?: RequestInit): Promise<unknown> {
@@ -60,14 +59,14 @@ async function apifyJson(path: string, init?: RequestInit): Promise<unknown> {
   } catch (error) {
     if (error instanceof ApifyClientError) throw error;
     if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
-      throw new ApifyClientError("The lead provider timed out. Try the job again.", 504, true);
+      throw new ApifyClientError("The lead provider timed out. Try the job again.", 504, true, init?.method === "POST");
     }
-    throw new ApifyClientError("The lead provider could not be reached. Try again.", 502, true);
+    throw new ApifyClientError("The lead provider could not be reached. Try again.", 502, true, init?.method === "POST");
   }
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new ApifyClientError(
-      safeProviderMessage(json, `The lead provider returned ${response.status}.`),
+      publicProviderError(response.status),
       response.status === 429 ? 429 : 502,
       response.status === 408 || response.status === 429 || response.status >= 500,
     );
@@ -120,11 +119,21 @@ export async function startApifyActorRun(options: StartApifyActorRunOptions): Pr
     build: options.build ?? "latest",
   });
   if (options.webhookUrl) {
-    params.set("webhooks", JSON.stringify([{
-      eventTypes: ["ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.FAILED", "ACTOR.RUN.TIMED_OUT"],
+    const webhooks = [{
+      eventTypes: [
+        "ACTOR.RUN.CREATED",
+        "ACTOR.RUN.SUCCEEDED",
+        "ACTOR.RUN.FAILED",
+        "ACTOR.RUN.TIMED_OUT",
+        "ACTOR.RUN.ABORTED",
+      ],
       requestUrl: options.webhookUrl,
+      ...(options.webhookIdempotencyKey ? { idempotencyKey: options.webhookIdempotencyKey } : {}),
       payloadTemplate: "{\"eventType\":{{eventType}},\"eventData\":{{eventData}},\"resource\":{{resource}}}",
-    }]));
+    }];
+    // Apify's Run Actor API requires the ad-hoc webhook array to be Base64
+    // encoded inside the query parameter, not raw JSON.
+    params.set("webhooks", Buffer.from(JSON.stringify(webhooks), "utf8").toString("base64"));
   }
   const json = await apifyJson(`/v2/acts/${actorPath(options.actorId)}/runs?${params}`, {
     method: "POST",

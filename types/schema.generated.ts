@@ -6243,6 +6243,7 @@ export type Database = {
           actor_run_id: string | null
           adapter_version: number
           campaign_id: string
+          cancel_requested_at: string | null
           client_id: string
           completed_at: string | null
           created_at: string
@@ -6251,16 +6252,21 @@ export type Database = {
           deduplicated_results: number
           error_code: string | null
           error_message: string | null
+          failure_count: number
           id: string
           lease_token: string | null
           lease_until: string | null
           max_charge_usd: number
+          next_attempt_at: string | null
+          provider_confirmation_deadline: string
           provider_status: string | null
           requested_results: number
+          reservation_released_at: string | null
           returned_results: number
           source: string
           status: string
           updated_at: string
+          usage_date: string
           usage_total_usd: number | null
         }
         Insert: {
@@ -6270,6 +6276,7 @@ export type Database = {
           actor_run_id?: string | null
           adapter_version: number
           campaign_id: string
+          cancel_requested_at?: string | null
           client_id: string
           completed_at?: string | null
           created_at?: string
@@ -6278,16 +6285,21 @@ export type Database = {
           deduplicated_results?: number
           error_code?: string | null
           error_message?: string | null
+          failure_count?: number
           id?: string
           lease_token?: string | null
           lease_until?: string | null
           max_charge_usd: number
+          next_attempt_at?: string | null
+          provider_confirmation_deadline?: string
           provider_status?: string | null
           requested_results: number
+          reservation_released_at?: string | null
           returned_results?: number
           source: string
           status?: string
           updated_at?: string
+          usage_date?: string
           usage_total_usd?: number | null
         }
         Update: {
@@ -6297,6 +6309,7 @@ export type Database = {
           actor_run_id?: string | null
           adapter_version?: number
           campaign_id?: string
+          cancel_requested_at?: string | null
           client_id?: string
           completed_at?: string | null
           created_at?: string
@@ -6305,16 +6318,21 @@ export type Database = {
           deduplicated_results?: number
           error_code?: string | null
           error_message?: string | null
+          failure_count?: number
           id?: string
           lease_token?: string | null
           lease_until?: string | null
           max_charge_usd?: number
+          next_attempt_at?: string | null
+          provider_confirmation_deadline?: string
           provider_status?: string | null
           requested_results?: number
+          reservation_released_at?: string | null
           returned_results?: number
           source?: string
           status?: string
           updated_at?: string
+          usage_date?: string
           usage_total_usd?: number | null
         }
         Relationships: [
@@ -6354,6 +6372,7 @@ export type Database = {
           company_name: string | null
           country_code: string | null
           created_at: string
+          crm_contact_id: string | null
           dedupe_keys: string[]
           description: string | null
           email: string | null
@@ -6391,6 +6410,7 @@ export type Database = {
           company_name?: string | null
           country_code?: string | null
           created_at?: string
+          crm_contact_id?: string | null
           dedupe_keys: string[]
           description?: string | null
           email?: string | null
@@ -6428,6 +6448,7 @@ export type Database = {
           company_name?: string | null
           country_code?: string | null
           created_at?: string
+          crm_contact_id?: string | null
           dedupe_keys?: string[]
           description?: string | null
           email?: string | null
@@ -6459,6 +6480,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospecting_prospects_crm_contact_id_fkey"
+            columns: ["crm_contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
             referencedColumns: ["id"]
           },
         ]
@@ -8164,6 +8192,7 @@ export type Database = {
           actor_run_id: string | null
           adapter_version: number
           campaign_id: string
+          cancel_requested_at: string | null
           client_id: string
           completed_at: string | null
           created_at: string
@@ -8172,16 +8201,21 @@ export type Database = {
           deduplicated_results: number
           error_code: string | null
           error_message: string | null
+          failure_count: number
           id: string
           lease_token: string | null
           lease_until: string | null
           max_charge_usd: number
+          next_attempt_at: string | null
+          provider_confirmation_deadline: string
           provider_status: string | null
           requested_results: number
+          reservation_released_at: string | null
           returned_results: number
           source: string
           status: string
           updated_at: string
+          usage_date: string
           usage_total_usd: number | null
         }[]
         SetofOptions: {
@@ -8345,6 +8379,7 @@ export type Database = {
           actor_run_id: string | null
           adapter_version: number
           campaign_id: string
+          cancel_requested_at: string | null
           client_id: string
           completed_at: string | null
           created_at: string
@@ -8353,16 +8388,21 @@ export type Database = {
           deduplicated_results: number
           error_code: string | null
           error_message: string | null
+          failure_count: number
           id: string
           lease_token: string | null
           lease_until: string | null
           max_charge_usd: number
+          next_attempt_at: string | null
+          provider_confirmation_deadline: string
           provider_status: string | null
           requested_results: number
+          reservation_released_at: string | null
           returned_results: number
           source: string
           status: string
           updated_at: string
+          usage_date: string
           usage_total_usd: number | null
         }[]
         SetofOptions: {
@@ -8729,6 +8769,55 @@ export type Database = {
       current_user_role: { Args: never; Returns: string }
       dashboard_stats: { Args: never; Returns: Json }
       decay_brain_memories: { Args: { p_client_id: string }; Returns: number }
+      defer_prospecting_job: {
+        Args: {
+          p_count_failure?: boolean
+          p_error_code: string
+          p_error_message: string
+          p_job_id: string
+          p_lease_token: string
+          p_max_failures?: number
+        }
+        Returns: {
+          actor_build_id: string | null
+          actor_dataset_id: string | null
+          actor_id: string
+          actor_run_id: string | null
+          adapter_version: number
+          campaign_id: string
+          cancel_requested_at: string | null
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          created_results: number
+          deduplicated_results: number
+          error_code: string | null
+          error_message: string | null
+          failure_count: number
+          id: string
+          lease_token: string | null
+          lease_until: string | null
+          max_charge_usd: number
+          next_attempt_at: string | null
+          provider_confirmation_deadline: string
+          provider_status: string | null
+          requested_results: number
+          reservation_released_at: string | null
+          returned_results: number
+          source: string
+          status: string
+          updated_at: string
+          usage_date: string
+          usage_total_usd: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "prospecting_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       deliver_coach_check_in: {
         Args: {
           p_claim_token: string
@@ -8904,6 +8993,7 @@ export type Database = {
           actor_run_id: string | null
           adapter_version: number
           campaign_id: string
+          cancel_requested_at: string | null
           client_id: string
           completed_at: string | null
           created_at: string
@@ -8912,16 +9002,21 @@ export type Database = {
           deduplicated_results: number
           error_code: string | null
           error_message: string | null
+          failure_count: number
           id: string
           lease_token: string | null
           lease_until: string | null
           max_charge_usd: number
+          next_attempt_at: string | null
+          provider_confirmation_deadline: string
           provider_status: string | null
           requested_results: number
+          reservation_released_at: string | null
           returned_results: number
           source: string
           status: string
           updated_at: string
+          usage_date: string
           usage_total_usd: number | null
         }[]
         SetofOptions: {
@@ -9125,6 +9220,55 @@ export type Database = {
           total: number
         }[]
       }
+      reconcile_prospecting_provider_run: {
+        Args: {
+          p_actor_build_id?: string
+          p_actor_dataset_id?: string
+          p_actor_run_id: string
+          p_job_id: string
+          p_provider_status: string
+          p_usage_total_usd?: number
+        }
+        Returns: {
+          actor_build_id: string | null
+          actor_dataset_id: string | null
+          actor_id: string
+          actor_run_id: string | null
+          adapter_version: number
+          campaign_id: string
+          cancel_requested_at: string | null
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          created_results: number
+          deduplicated_results: number
+          error_code: string | null
+          error_message: string | null
+          failure_count: number
+          id: string
+          lease_token: string | null
+          lease_until: string | null
+          max_charge_usd: number
+          next_attempt_at: string | null
+          provider_confirmation_deadline: string
+          provider_status: string | null
+          requested_results: number
+          reservation_released_at: string | null
+          returned_results: number
+          source: string
+          status: string
+          updated_at: string
+          usage_date: string
+          usage_total_usd: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "prospecting_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       record_coach_question_metric: {
         Args: {
           p_answer_mode: string
@@ -9190,6 +9334,48 @@ export type Database = {
         }
         Returns: boolean
       }
+      release_prospecting_job_reservation: {
+        Args: { p_client_id: string; p_job_id: string }
+        Returns: {
+          actor_build_id: string | null
+          actor_dataset_id: string | null
+          actor_id: string
+          actor_run_id: string | null
+          adapter_version: number
+          campaign_id: string
+          cancel_requested_at: string | null
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          created_results: number
+          deduplicated_results: number
+          error_code: string | null
+          error_message: string | null
+          failure_count: number
+          id: string
+          lease_token: string | null
+          lease_until: string | null
+          max_charge_usd: number
+          next_attempt_at: string | null
+          provider_confirmation_deadline: string
+          provider_status: string | null
+          requested_results: number
+          reservation_released_at: string | null
+          returned_results: number
+          source: string
+          status: string
+          updated_at: string
+          usage_date: string
+          usage_total_usd: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "prospecting_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       renew_content_project_generation: {
         Args: {
           p_actor_id: string
@@ -9199,6 +9385,48 @@ export type Database = {
           p_project_id: string
         }
         Returns: string
+      }
+      request_prospecting_job_cancel: {
+        Args: { p_actor_id: string; p_client_id: string; p_job_id: string }
+        Returns: {
+          actor_build_id: string | null
+          actor_dataset_id: string | null
+          actor_id: string
+          actor_run_id: string | null
+          adapter_version: number
+          campaign_id: string
+          cancel_requested_at: string | null
+          client_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          created_results: number
+          deduplicated_results: number
+          error_code: string | null
+          error_message: string | null
+          failure_count: number
+          id: string
+          lease_token: string | null
+          lease_until: string | null
+          max_charge_usd: number
+          next_attempt_at: string | null
+          provider_confirmation_deadline: string
+          provider_status: string | null
+          requested_results: number
+          reservation_released_at: string | null
+          returned_results: number
+          source: string
+          status: string
+          updated_at: string
+          usage_date: string
+          usage_total_usd: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "prospecting_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       reserve_prospecting_job: {
         Args: {
@@ -9218,6 +9446,7 @@ export type Database = {
           actor_run_id: string | null
           adapter_version: number
           campaign_id: string
+          cancel_requested_at: string | null
           client_id: string
           completed_at: string | null
           created_at: string
@@ -9226,16 +9455,21 @@ export type Database = {
           deduplicated_results: number
           error_code: string | null
           error_message: string | null
+          failure_count: number
           id: string
           lease_token: string | null
           lease_until: string | null
           max_charge_usd: number
+          next_attempt_at: string | null
+          provider_confirmation_deadline: string
           provider_status: string | null
           requested_results: number
+          reservation_released_at: string | null
           returned_results: number
           source: string
           status: string
           updated_at: string
+          usage_date: string
           usage_total_usd: number | null
         }[]
         SetofOptions: {

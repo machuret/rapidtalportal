@@ -34,6 +34,7 @@ effect. Vars marked *auto* are provided by the platform; don't set them.
 | `RESEND_API_KEY` | Transactional email (see §2b). Sends are skipped without it. |
 | `RESEND_FROM` | Sender. Default `RapidTal <noreply@rapidtal.online>`. |
 | `NEXT_PUBLIC_APP_URL` / `APP_URL` | Absolute base URL for email links. Falls back to `VERCEL_URL` (*auto*). |
+| `PROSPECTING_WEBHOOK_SECRET` | Optional dedicated HMAC secret for Apify lead-generation recovery webhooks. Falls back to `CRON_SECRET`; use at least 24 random characters. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Distributed rate limiting (Upstash Redis REST). When set, endpoint limits hold across serverless instances; unset → per-instance in-memory fallback. |
 
 ### Vercel — model / behavior tunables (all optional)
