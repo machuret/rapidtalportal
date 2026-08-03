@@ -8,4 +8,6 @@ overrides:
   ws: 8.21.0
 
 allowBuilds:
+  msw: false
   sharp: true
+  unrs-resolver: false
