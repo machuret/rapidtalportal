@@ -1,14 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Loader2,
-  StopCircle,
-} from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { errorMessage } from "@/lib/error-message";
-import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/lib/api/routes";
 import { CampaignManager } from "@/components/prospecting/CampaignManager";
 import { LeadSearchForm } from "@/components/prospecting/LeadSearchForm";
@@ -18,6 +13,8 @@ import {
   type ProspectingLeadSort,
 } from "@/components/prospecting/LeadInbox";
 import { ProspectingActivityTimeline } from "@/components/prospecting/ProspectingActivityTimeline";
+import { ProspectingLoadFailure } from "@/components/prospecting/ProspectingLoadFailure";
+import { ProspectingActiveJob } from "@/components/prospecting/ProspectingActiveJob";
 import { keywordList } from "@/components/prospecting/presentation";
 import {
   discoverySourceCapabilities,
@@ -51,12 +48,15 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
   const [leadSort, setLeadSort] = useState<ProspectingLeadSort>("fit");
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [loadingLeads, setLoadingLeads] = useState(true);
+  const [campaignLoadError, setCampaignLoadError] = useState<string | null>(null);
+  const [leadLoadError, setLeadLoadError] = useState<string | null>(null);
   const [activeJobs, setActiveJobs] = useState<ProspectingJob[]>([]);
   const [campaignTotal, setCampaignTotal] = useState(0);
   const [collaborators, setCollaborators] = useState<ProspectingCollaborator[]>([]);
   const [activity, setActivity] = useState<ProspectingActivityEvent[]>([]);
   const [activityTotal, setActivityTotal] = useState(0);
   const [loadingActivity, setLoadingActivity] = useState(false);
+  const [activityLoadError, setActivityLoadError] = useState<string | null>(null);
   const [usage, setUsage] = useState<ProspectingCampaignPage["usage"]>({
     runs_started: 0,
     results_reserved: 0,
@@ -97,6 +97,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
         { showErrorToast: false },
       );
       setCampaigns((current) => append ? [...current, ...result.campaigns] : result.campaigns);
+      setCampaignLoadError(null);
       setCampaignTotal(result.total);
       setCollaborators(result.collaborators ?? []);
       setUsage(result.usage);
@@ -108,7 +109,11 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
       });
       return result;
     } catch (error) {
-      if (!silent) toast.error(errorMessage(error, "Campaigns could not be loaded."));
+      const message = errorMessage(error, "Campaigns could not be loaded.");
+      if (!silent) {
+        setCampaignLoadError(message);
+        toast.error(message);
+      }
       return null;
     } finally {
       if (!silent) setLoadingCampaigns(false);
@@ -123,9 +128,12 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
         { showErrorToast: false },
       );
       setActivity((current) => append ? [...current, ...result.events] : result.events);
+      setActivityLoadError(null);
       setActivityTotal(result.total);
     } catch (error) {
-      toast.error(errorMessage(error, "Lead activity could not be loaded."));
+      const message = errorMessage(error, "Lead activity could not be loaded.");
+      setActivityLoadError(message);
+      toast.error(message);
     } finally {
       setLoadingActivity(false);
     }
@@ -144,6 +152,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
         { showErrorToast: false },
       );
       setLeads(result.leads);
+      setLeadLoadError(null);
       setSelectedContacts((current) => {
         const next: typeof current = {};
         for (const lead of result.leads) {
@@ -169,7 +178,9 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
       }
       return result;
     } catch (error) {
-      toast.error(errorMessage(error, "Lead Inbox could not be loaded."));
+      const message = errorMessage(error, "Lead Inbox could not be loaded.");
+      setLeadLoadError(message);
+      toast.error(message);
       return null;
     } finally {
       setLoadingLeads(false);
@@ -486,39 +497,12 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
       </div>
 
       {activeJobs.map((activeJob) => (
-        <div key={activeJob.id} className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4" role="status">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 animate-spin text-blue-300" />
-              <div>
-                <p className="font-medium text-blue-100">
-                  {activeJob.cancel_requested_at
-                    ? `Cancelling ${activeJob.job_type === "enrichment" ? "company enrichment" : "lead collection"}`
-                    : activeJob.job_type === "enrichment" ? "Enriching a company website" : "Finding leads in the background"}
-                </p>
-                <p className="mt-0.5 text-xs text-blue-200/70">
-                  {activeJob.job_type === "enrichment"
-                    ? "Reviewing up to five company pages. You can leave this page; RapidTal will keep working."
-                    : `Requested ${activeJob.requested_results} results. You can leave this page; RapidTal will keep working.`}
-                </p>
-                {activeJob.error_message && (
-                  <p className="mt-1 text-xs text-amber-200">{activeJob.error_message}</p>
-                )}
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={Boolean(activeJob.cancel_requested_at) || pendingAction === `cancel:${activeJob.id}`}
-              onClick={() => void cancelJob(activeJob)}
-            >
-              {pendingAction === `cancel:${activeJob.id}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <StopCircle className="mr-1.5 h-3.5 w-3.5" />}
-              {activeJob.cancel_requested_at ? "Cancelling" : "Cancel"}
-            </Button>
-          </div>
-        </div>
+        <ProspectingActiveJob key={activeJob.id} job={activeJob} cancelling={pendingAction === `cancel:${activeJob.id}`} onCancel={() => void cancelJob(activeJob)} />
       ))}
       {pollIssue && <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200" role="alert">{pollIssue}</p>}
+      {tab === "find" && (campaignLoadError || leadLoadError) && (
+        <ProspectingLoadFailure compact title="Saved campaigns or leads could not be loaded. You can still start a new search." retryLabel="Retry saved data" onRetry={() => void Promise.all([loadCampaigns(), loadLeads(0, filter, fitFilter, leadSort)])} />
+      )}
 
       {tab === "find" && (
         <LeadSearchForm
@@ -562,6 +546,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
           offset={offset}
           pageSize={PAGE_SIZE}
           loading={loadingLeads}
+          error={leadLoadError}
           filter={filter}
           fitFilter={fitFilter}
           sort={leadSort}
@@ -581,6 +566,7 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
             void loadLeads(0, filter, fitFilter, next);
           }}
           onFindLeads={() => setTab("find")}
+          onRetry={() => void loadLeads(offset, filter, fitFilter, leadSort)}
           onPage={(nextOffset) => void loadLeads(nextOffset, filter, fitFilter, leadSort)}
           onSelectEmail={(leadId, email) => setSelectedContacts((current) => ({
             ...current,
@@ -603,22 +589,28 @@ export function LeadGenerationWorkspace({ clientId }: { clientId: string }) {
           usage={usage}
           collaborators={collaborators}
           loading={loadingCampaigns}
+          error={campaignLoadError}
           pendingAction={pendingAction}
           onRun={(campaign) => void runCampaign(campaign)}
           onArchive={(campaign) => void archiveCampaign(campaign)}
           onAssign={(campaign, ownerId) => void assignCampaign(campaign, ownerId)}
           onUpdateProfile={updateCampaignProfile}
           onLoadMore={() => void loadCampaigns(campaigns.length, true)}
+          onRetry={() => void loadCampaigns()}
         />
       )}
 
       {tab === "activity" && (
-        <ProspectingActivityTimeline
-          events={activity}
-          total={activityTotal}
-          loading={loadingActivity}
-          onLoadMore={() => void loadActivity(activity.length, true)}
-        />
+        activityLoadError ? (
+          <ProspectingLoadFailure title="Lead activity could not be loaded" message={activityLoadError} onRetry={() => void loadActivity(0)} />
+        ) : (
+          <ProspectingActivityTimeline
+            events={activity}
+            total={activityTotal}
+            loading={loadingActivity}
+            onLoadMore={() => void loadActivity(activity.length, true)}
+          />
+        )
       )}
     </div>
   );

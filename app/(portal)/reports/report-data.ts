@@ -43,13 +43,20 @@ async function monthTotals(
   const startDate = startIso.slice(0, 10);
   const nextDate = nextIso.slice(0, 10);
 
-  const [{ data: doneRows }, { count: requested }, { data: timeRows }, { count: content }, { count: toolRuns }] = await Promise.all([
+  const [doneResult, requestedResult, timeResult, contentResult, toolRunsResult] = await Promise.all([
     admin.from("tasks").select("completed_at, due_date").eq("client_id", clientId).eq("status", "done").gte("completed_at", startIso).lt("completed_at", nextIso),
     admin.from("tasks").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
     admin.from("time_entries").select("started_at, ended_at").eq("client_id", clientId).eq("phase", "work").gte("work_date", startDate).lt("work_date", nextDate),
     admin.from("content_pieces").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
     admin.from("tool_runs").select("id", { count: "exact", head: true }).eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
   ]);
+  const queryError = doneResult.error ?? requestedResult.error ?? timeResult.error ?? contentResult.error ?? toolRunsResult.error;
+  if (queryError) throw new Error("Monthly comparison data could not be loaded.", { cause: queryError });
+  const doneRows = doneResult.data;
+  const requested = requestedResult.count;
+  const timeRows = timeResult.data;
+  const content = contentResult.count;
+  const toolRuns = toolRunsResult.count;
 
   const tasks = (doneRows ?? []) as { completed_at: string | null; due_date: string | null }[];
   return {
@@ -95,7 +102,7 @@ export async function buildClientReport(clientId: string, clientName: string, mo
   // is known up front, so it runs in the same batch as the main-month queries.
   const prevKey = previousMonthKey(monthKey);
 
-  const [{ data: vaRows }, { data: cats }, { data: deliveredRows }, { count: requested }, { data: timeRows }, { count: content }, { count: toolRuns }, prevTotals] = await Promise.all([
+  const [vaResult, categoriesResult, deliveredResult, requestedResult, timeResult, contentResult, toolRunsResult, prevTotals] = await Promise.all([
     admin.from("users").select("id, full_name, email").eq("client_id", clientId).eq("role", "va"),
     admin.from("task_categories").select("id, name, color").eq("client_id", clientId),
     admin.from("tasks").select("title, status, assigned_to, completed_at, due_date, category_id")
@@ -110,6 +117,16 @@ export async function buildClientReport(clientId: string, clientName: string, mo
       .eq("client_id", clientId).gte("created_at", startIso).lt("created_at", nextIso),
     monthTotals(admin, clientId, prevKey),
   ]);
+  const queryError = vaResult.error ?? categoriesResult.error ?? deliveredResult.error
+    ?? requestedResult.error ?? timeResult.error ?? contentResult.error ?? toolRunsResult.error;
+  if (queryError) throw new Error("Monthly report data could not be loaded.", { cause: queryError });
+  const vaRows = vaResult.data;
+  const cats = categoriesResult.data;
+  const deliveredRows = deliveredResult.data;
+  const requested = requestedResult.count;
+  const timeRows = timeResult.data;
+  const content = contentResult.count;
+  const toolRuns = toolRunsResult.count;
 
   const vaName = new Map(((vaRows ?? []) as { id: string; full_name: string | null; email: string }[]).map((v) => [v.id, v.full_name ?? v.email]));
   const catById = new Map(((cats ?? []) as { id: string; name: string; color: string }[]).map((c) => [c.id, c]));

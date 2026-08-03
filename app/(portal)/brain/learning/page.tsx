@@ -11,6 +11,7 @@ import {
   loadVaultFeedback,
   resolveBrainPicker,
 } from "../loaders";
+import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Brain Learning — RapidTal" };
@@ -30,11 +31,11 @@ export default async function BrainLearningPage({ searchParams: searchParamsProm
 
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  const [memory, signals, feedback] = await Promise.all([
+  const [memory, signals, feedback] = await withPortalDataTimeout(Promise.all([
     loadBrainMemory(admin, clientId),
     loadBrainSignals(admin, clientId, since),
     loadVaultFeedback(admin, clientId, since),
-  ]);
+  ]), "Brain learning");
 
   const pendingSignals = signals.filter((s) => s.visibility !== "private_coach" && !s.distilled_at).length;
 

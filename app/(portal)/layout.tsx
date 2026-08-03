@@ -17,6 +17,10 @@ export default async function PortalLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Help content is independent of authentication. Start both reads together
+  // so an optional tutorial lookup never adds another serial network roundtrip
+  // to every portal navigation.
+  const featureVideosPromise = getFeatureVideos();
   // One auth lookup on the happy path (cache()d, so pages calling it again are
   // free). Previously the layout ran its own getUser AND getCurrentUserAndClient's
   // — two remote auth round-trips before any page work, on top of middleware's.
@@ -49,7 +53,7 @@ export default async function PortalLayout({
     );
   }
 
-  const featureVideos = await getFeatureVideos();
+  const featureVideos = await featureVideosPromise;
 
   return (
     <div className="flex min-h-screen bg-zinc-950 text-zinc-50 print:bg-white print:min-h-0">

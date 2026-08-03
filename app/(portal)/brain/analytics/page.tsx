@@ -22,6 +22,7 @@ import {
   loadVaultFeedback,
   resolveBrainPicker,
 } from "../loaders";
+import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Brain Analytics — RapidTal" };
@@ -48,7 +49,7 @@ export default async function BrainAnalyticsPage({ searchParams: searchParamsPro
   // one extra day of slack covers the ±60s title-match window at the edge.
   const sinceOutcomeTasks = new Date(Date.now() - (OUTCOMES_WINDOW_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString();
 
-  const [queriesRes, feedback, signals, topicsRes, receiptsRes, outcomeTasksRes, keptPiecesRes, opportunitiesRes] = await Promise.all([
+  const [queriesRes, feedback, signals, topicsRes, receiptsRes, outcomeTasksRes, keptPiecesRes, opportunitiesRes] = await withPortalDataTimeout(Promise.all([
     // Narrow columns only — select("*") used to drag full answer text and
     // sources JSONB for rows we only count/group.
     admin.from("vault_queries").select("id, question, answered, dismissed, created_at")
@@ -79,20 +80,24 @@ export default async function BrainAnalyticsPage({ searchParams: searchParamsPro
     admin.from("brain_opportunities")
       .select("id, status, effectiveness_status")
       .eq("client_id", clientId).gte("created_at", sinceOutcomes).limit(1000),
-  ]);
+  ]), "Brain analytics");
+
+  const analyticsError = queriesRes.error ?? topicsRes.error ?? receiptsRes.error
+    ?? outcomeTasksRes.error ?? keptPiecesRes.error ?? opportunitiesRes.error;
+  if (analyticsError) throw new Error("Brain analytics could not be loaded.", { cause: analyticsError });
 
   // ── Outcomes (reporting-only; migration 091 keeps efficacy out of learning) ─
-  const receipts = (receiptsRes.error ? [] : (receiptsRes.data ?? [])) as CoachReceiptRow[];
-  const outcomeTasks = (outcomeTasksRes.error ? [] : (outcomeTasksRes.data ?? [])) as OutcomeTaskRow[];
-  const keptPieces = (keptPiecesRes.error ? [] : (keptPiecesRes.data ?? [])) as KeptPieceRow[];
-  const opportunityRows = (opportunitiesRes.error ? [] : (opportunitiesRes.data ?? [])) as OpportunityOutcomeRow[];
+  const receipts = (receiptsRes.data ?? []) as CoachReceiptRow[];
+  const outcomeTasks = (outcomeTasksRes.data ?? []) as OutcomeTaskRow[];
+  const keptPieces = (keptPiecesRes.data ?? []) as KeptPieceRow[];
+  const opportunityRows = (opportunitiesRes.data ?? []) as OpportunityOutcomeRow[];
   const coachOutcomes = computeCoachActionOutcomes(receipts, outcomeTasks);
   const contentKept = computeContentKept(keptPieces);
   const opportunityEffectiveness = computeOpportunityEffectiveness(opportunityRows);
 
   // ── Content Brain measurement (Phase 4) ──────────────────────────────────
   type TopicRow = { status: string; ai_flagged: boolean | null; updated_at: string };
-  const topics = (topicsRes.error ? [] : (topicsRes.data ?? [])) as TopicRow[];
+  const topics = (topicsRes.data ?? []) as TopicRow[];
 
   const isDecided = (t: TopicRow) => t.status === "approved" || t.status === "rejected";
   const decided = topics.filter(isDecided);
@@ -135,7 +140,7 @@ export default async function BrainAnalyticsPage({ searchParams: searchParamsPro
   const overallAccept = decided.length ? Math.round((decided.filter((t) => t.status === "approved").length / decided.length) * 100) : null;
   const hasContentBrain = topics.length > 0 || contentSignals.length > 0;
 
-  const queries = (queriesRes.error ? [] : (queriesRes.data ?? [])) as { question: string; answered: boolean; dismissed?: boolean }[];
+  const queries = (queriesRes.data ?? []) as { question: string; answered: boolean; dismissed?: boolean }[];
 
   const asked = queries.length;
   const answered = queries.filter((q) => q.answered).length;

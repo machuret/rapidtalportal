@@ -11,6 +11,7 @@ import type {
   ProspectingCollaborator,
   ProspectingIdealProfile,
 } from "@/types/prospecting";
+import { ProspectingLoadFailure } from "@/components/prospecting/ProspectingLoadFailure";
 
 export function CampaignManager({
   campaigns,
@@ -18,24 +19,28 @@ export function CampaignManager({
   usage,
   collaborators,
   loading,
+  error,
   pendingAction,
   onRun,
   onArchive,
   onAssign,
   onUpdateProfile,
   onLoadMore,
+  onRetry,
 }: {
   campaigns: ProspectingCampaign[];
   total: number;
   usage: ProspectingCampaignPage["usage"];
   collaborators: ProspectingCollaborator[];
   loading: boolean;
+  error: string | null;
   pendingAction: string | null;
   onRun: (campaign: ProspectingCampaign) => void;
   onArchive: (campaign: ProspectingCampaign) => void;
   onAssign: (campaign: ProspectingCampaign, ownerId: string | null) => void;
   onUpdateProfile: (campaign: ProspectingCampaign, profile: ProspectingIdealProfile) => Promise<void>;
   onLoadMore: () => void;
+  onRetry: () => void;
 }) {
   return (
     <section className="space-y-4">
@@ -48,7 +53,9 @@ export function CampaignManager({
           Today: {usage.runs_started} searches · {usage.results_returned} leads · {usage.enrichments_started} enrichment attempts · ${Number(usage.reported_cost_usd).toFixed(4)} provider-reported spend
         </p>
       </div>
-      {loading ? (
+      {error ? (
+        <ProspectingLoadFailure title="Campaigns could not be loaded" message={error} onRetry={onRetry} />
+      ) : loading ? (
         <div className="flex min-h-40 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" aria-label="Loading campaigns" /></div>
       ) : campaigns.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-700 p-8 text-center text-sm text-zinc-400">No campaigns yet. Your first search will be saved automatically.</div>

@@ -25,8 +25,9 @@ export async function resolveBrainPicker(
   if (user.role !== "super_admin") {
     return { clientId: user.client_id, clientOptions: [], selectedClientName: null };
   }
-  const { data: clients } = await admin
+  const { data: clients, error } = await admin
     .from("clients").select("id, name").is("archived_at", null).order("name");
+  if (error) throw new Error("Client options could not be loaded.", { cause: error });
   const clientOptions = (clients ?? []) as { id: string; name: string }[];
   const selected = clientOptions.find((option) => option.id === searchClient) ?? clientOptions[0];
   return {
@@ -57,7 +58,8 @@ export async function loadVaultFeedback(
     .gte("created_at", since)
     .order("created_at", { ascending: false })
     .limit(1000);
-  return ((res.error ? [] : (res.data ?? [])) as {
+  if (res.error) throw new Error("Vault feedback could not be loaded.", { cause: res.error });
+  return ((res.data ?? []) as {
     id: string; question: string; answer: string; rating: number;
     sources: unknown; resolved: boolean; created_at: string | null;
   }[]).map((row) => ({
@@ -88,7 +90,8 @@ export async function loadBrainSignals(
     .eq("client_id", clientId)
     .gte("created_at", since)
     .limit(3000);
-  return (res.error ? [] : (res.data ?? [])) as BrainSignalRow[];
+  if (res.error) throw new Error("Brain signals could not be loaded.", { cause: res.error });
+  return (res.data ?? []) as BrainSignalRow[];
 }
 
 export async function loadBrainMemory(
@@ -102,5 +105,6 @@ export async function loadBrainMemory(
     .order("pinned", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(200);
-  return (res.error ? [] : (res.data ?? [])) as BrainMemoryItem[];
+  if (res.error) throw new Error("Brain memory could not be loaded.", { cause: res.error });
+  return (res.data ?? []) as BrainMemoryItem[];
 }

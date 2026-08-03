@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { CrmContact } from "@/types/crm";
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 
 // Canonical home is types/crm.ts — re-exported for existing importers.
 export type { CrmContact } from "@/types/crm";
@@ -23,12 +24,16 @@ export default async function CrmPage() {
   if (!user.client_id) redirect("/dashboard");
 
   const admin = createAdminClient();
-  const { data: contacts } = await admin
-    .from("crm_contacts")
-    .select("id, client_id, first_name, last_name, email, phone, company, job_title, status, source, tags, notes, archived_at, created_at, updated_at")
-    .eq("client_id", user.client_id)
-    .order("created_at", { ascending: false })
-    .limit(500);
+  const { data: contacts, error: contactsError } = await withPortalDataTimeout(
+    admin
+      .from("crm_contacts")
+      .select("id, client_id, first_name, last_name, email, phone, company, job_title, status, source, tags, notes, archived_at, created_at, updated_at")
+      .eq("client_id", user.client_id)
+      .order("created_at", { ascending: false })
+      .limit(500),
+    "CRM contacts",
+  );
+  if (contactsError) throw new Error("CRM contacts could not be loaded.", { cause: contactsError });
 
   const isAdmin = user.role === "client_admin" || user.role === "super_admin";
 

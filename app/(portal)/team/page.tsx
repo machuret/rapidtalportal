@@ -10,6 +10,7 @@ import { ExportCsv } from "@/components/team/ExportCsv";
 import { moodMeta } from "@/lib/daily-logs/mood";
 import { computeVaStats, blankVaStats, vaOnTimePct, vaFlags, type VaFlag } from "@/lib/va/stats";
 import { timeAgo } from "@/lib/time";
+import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "My Team — RapidTal" };
@@ -31,8 +32,9 @@ export default async function TeamPage({ searchParams: searchParamsPromise }: { 
   let clientId = user.client_id;
   let clientOptions: { id: string; name: string }[] = [];
   if (user.role === "super_admin") {
-    const { data: clients } = await admin
+    const { data: clients, error: clientsError } = await admin
       .from("clients").select("id, name").is("archived_at", null).order("name");
+    if (clientsError) throw new Error("Clients could not be loaded.", { cause: clientsError });
     clientOptions = (clients ?? []) as { id: string; name: string }[];
     const selected = clientOptions.find((option) => option.id === searchParams.client) ?? clientOptions[0];
     clientId = selected?.id ?? null;
@@ -44,7 +46,7 @@ export default async function TeamPage({ searchParams: searchParamsPromise }: { 
   // VAs and the client's pending leave are independent (both scoped by
   // client_id) — fetch together. The per-VA logs below need the VA ids, so they
   // follow.
-  const [{ data: vas }, { data: leaveRows }] = await Promise.all([
+  const [vasResult, leaveResult] = await withPortalDataTimeout(Promise.all([
     admin
       .from("users")
       .select("id, full_name, email, phone, birthday, avatar_url, created_at")
@@ -57,13 +59,18 @@ export default async function TeamPage({ searchParams: searchParamsPromise }: { 
       .eq("client_id", clientId)
       .eq("status", "pending")
       .order("start_date"),
-  ]);
+  ]), "Team roster");
+  if (vasResult.error || leaveResult.error) {
+    throw new Error("Team information could not be loaded.", { cause: vasResult.error ?? leaveResult.error });
+  }
+  const vas = vasResult.data;
+  const leaveRows = leaveResult.data;
 
   const vaList = vas ?? [];
 
   // Single batch query for all VAs — avoids N+1
   const vaIds = vaList.map(v => v.id);
-  const [{ data: allLogs }, stats] = await Promise.all([
+  const [logsResult, stats] = await withPortalDataTimeout(Promise.all([
     vaIds.length > 0
       ? admin
           .from("daily_logs")
@@ -74,7 +81,11 @@ export default async function TeamPage({ searchParams: searchParamsPromise }: { 
       : Promise.resolve({ data: [] }),
     // 30-day outcome stats (shared with the old Supervision page's formulas).
     computeVaStats(admin, vaIds, clientId, STATS_WINDOW_DAYS),
-  ]);
+  ]), "Team activity");
+  if ("error" in logsResult && logsResult.error) {
+    throw new Error("Team activity could not be loaded.", { cause: logsResult.error });
+  }
+  const allLogs = logsResult.data;
 
   const summaryMap: Record<string, { user_id: string; log_date: string; mood: string | null; tasks_done: string | null }[]> = {};
   for (const log of allLogs ?? []) {

@@ -439,11 +439,12 @@ describe("prospecting API tenant checks", () => {
     const search = readFileSync(join(process.cwd(), "components/prospecting/LeadSearchForm.tsx"), "utf8");
     const inbox = readFileSync(join(process.cwd(), "components/prospecting/LeadInbox.tsx"), "utf8");
     const campaigns = readFileSync(join(process.cwd(), "components/prospecting/CampaignManager.tsx"), "utf8");
+    const activeJob = readFileSync(join(process.cwd(), "components/prospecting/ProspectingActiveJob.tsx"), "utf8");
     expect(search).toContain("Nothing is added to CRM automatically.");
-    expect(workspace).toContain("You can leave this page; RapidTal will keep working.");
+    expect(activeJob).toContain("You can leave this page; RapidTal will keep working.");
     expect(inbox).toContain("Add to CRM");
     expect(inbox).toContain("aria-label=\"Previous lead page\"");
-    expect(workspace).toContain("Cancel");
+    expect(activeJob).toContain("Cancel");
     expect(campaigns).toContain("provider-reported spend");
     expect(search).toContain("Improve matching (optional)");
     expect(inbox).toContain("Why this score");

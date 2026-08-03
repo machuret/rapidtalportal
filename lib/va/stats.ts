@@ -86,6 +86,8 @@ export async function computeVaStats(
   }
 
   const [logsRes, timeRes, tasksRes] = await Promise.all([logsQuery, timeQuery, tasksQuery]);
+  const queryError = logsRes.error ?? timeRes.error ?? tasksRes.error;
+  if (queryError) throw new Error("VA outcome statistics could not be loaded.", { cause: queryError });
 
   const logs = (logsRes.data ?? []) as { user_id: string; log_date: string; updated_at: string }[];
   const times = (timeRes.data ?? []) as { user_id: string; started_at: string; ended_at: string | null }[];

@@ -10,15 +10,16 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { fitClass, statusClass, statusLabel } from "@/components/prospecting/presentation";
 import type { ProspectingCollaborator, ProspectingLead, ProspectingLeadStatus } from "@/types/prospecting";
+import { ProspectingLoadFailure } from "@/components/prospecting/ProspectingLoadFailure";
 
 export type ProspectingFitFilter = Exclude<ProspectingLead["fit_band"], null> | "all";
 export type ProspectingLeadSort = "fit" | "newest";
 export type SelectedProspectingContacts = Record<string, { email: string; phone: string }>;
 
 export function LeadInbox({
-  leads, total, offset, pageSize, loading, filter, fitFilter, sort,
+  leads, total, offset, pageSize, loading, error, filter, fitFilter, sort,
   collaborators, pendingAction, selectedContacts,
-  onFilter, onFitFilter, onSort, onFindLeads, onPage,
+  onFilter, onFitFilter, onSort, onFindLeads, onRetry, onPage,
   onSelectEmail, onSelectPhone, onAssign, onEnrich, onStatus, onPromote,
 }: {
   leads: ProspectingLead[];
@@ -26,6 +27,7 @@ export function LeadInbox({
   offset: number;
   pageSize: number;
   loading: boolean;
+  error: string | null;
   filter: ProspectingLeadStatus | "all";
   fitFilter: ProspectingFitFilter;
   sort: ProspectingLeadSort;
@@ -36,6 +38,7 @@ export function LeadInbox({
   onFitFilter: (filter: ProspectingFitFilter) => void;
   onSort: (sort: ProspectingLeadSort) => void;
   onFindLeads: () => void;
+  onRetry: () => void;
   onPage: (offset: number) => void;
   onSelectEmail: (leadId: string, email: string) => void;
   onSelectPhone: (leadId: string, phone: string) => void;
@@ -66,7 +69,9 @@ export function LeadInbox({
           </select>
         </div>
       </div>
-      {loading ? (
+      {error ? (
+        <ProspectingLoadFailure title="Lead Inbox could not be loaded" message={error} onRetry={onRetry} />
+      ) : loading ? (
         <div className="flex min-h-48 items-center justify-center rounded-xl border border-zinc-800"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" aria-label="Loading leads" /></div>
       ) : leads.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-700 p-10 text-center">
