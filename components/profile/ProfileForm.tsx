@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { toast } from "sonner";
+import { DEFAULT_PORTAL_TIMEZONE } from "@/lib/date-tz";
 import { Camera, Loader2, Save, KeyRound, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +29,7 @@ export function ProfileForm({ user }: Props) {
   const [phone, setPhone]         = useState(user.phone ?? "");
   const [birthday, setBirthday]   = useState(user.birthday ?? "");
   const [avatarUrl, setAvatarUrl] = useState(user.avatar_url ?? "");
-  const [timezone, setTimezone]   = useState(user.timezone ?? "UTC");
+  const [timezone, setTimezone]   = useState(user.timezone ?? DEFAULT_PORTAL_TIMEZONE);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [newPassword, setNewPassword]     = useState("");

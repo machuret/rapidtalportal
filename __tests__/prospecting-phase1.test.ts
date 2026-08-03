@@ -426,6 +426,7 @@ describe("prospecting API tenant checks", () => {
       "app/api/prospecting/leads/route.ts",
       "app/api/prospecting/enrich/route.ts",
       "app/api/prospecting/promote/route.ts",
+      "app/api/prospecting/provider-status/route.ts",
     ];
     for (const route of routes) {
       const source = readFileSync(join(process.cwd(), route), "utf8");

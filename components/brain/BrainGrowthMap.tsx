@@ -5,6 +5,7 @@ import type {
   BrainReadinessStatus,
 } from "@/lib/brain/readiness";
 import styles from "./BrainGrowthMap.module.css";
+import { LocalTime } from "@/components/ui/LocalTime";
 
 const POSITION: Record<BrainReadinessDimensionKey, string> = {
   knowledge: styles.knowledge,
@@ -122,7 +123,7 @@ export function BrainGrowthMap({
         </p>
         <p>
           Motion visualises measured readiness; it does not mean work is running. Measured{" "}
-          {new Date(readiness.measuredAt).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short" })}
+          <LocalTime value={readiness.measuredAt} opts={{ day: "numeric", month: "short" }} />
         </p>
       </div>
     </section>

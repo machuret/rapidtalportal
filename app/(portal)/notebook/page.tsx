@@ -6,6 +6,7 @@ import { NotebookApp, type PlacementOption, type NotebookParticipants } from "@/
 import { PageIntro } from "@/components/layout/PageIntro";
 import { NotebookPen } from "lucide-react";
 import type { NotebookPage } from "@/lib/notebook/types";
+import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Notebook — RapidTal" };
@@ -20,12 +21,18 @@ export default async function NotebookPage({ searchParams: searchParamsPromise }
   // the admin client is fine here. Page CONTENT below uses the user-scoped
   // client so RLS — not application code — enforces the access boundary.
   const admin = createAdminClient();
-  const { data: placementRows } = await admin
-    .from("placements")
-    .select("id, client_id, va_user_id, client_user_id, status")
-    .or(`va_user_id.eq.${user.id},client_user_id.eq.${user.id}`)
-    .eq("status", "active")
-    .order("created_at");
+  const { data: placementRows, error: placementsError } = await withPortalDataTimeout(
+    (signal) => admin
+      .from("placements")
+      .select("id, client_id, va_user_id, client_user_id, status")
+      .or(`va_user_id.eq.${user.id},client_user_id.eq.${user.id}`)
+      .eq("status", "active")
+      .order("created_at")
+      .abortSignal(signal),
+    "Notebook placements",
+    8_000,
+  );
+  if (placementsError) throw new Error("Notebook placements could not be loaded.", { cause: placementsError });
 
   const placements = (placementRows ?? []) as { id: string; client_id: string; va_user_id: string; client_user_id: string; status: string }[];
 
@@ -58,10 +65,15 @@ export default async function NotebookPage({ searchParams: searchParamsPromise }
   // Resolve participant + client-org names (metadata).
   const userIds = Array.from(new Set(placements.flatMap((p) => [p.va_user_id, p.client_user_id])));
   const clientIds = Array.from(new Set(placements.map((p) => p.client_id)));
-  const [{ data: people }, { data: orgs }] = await Promise.all([
-    admin.from("users").select("id, full_name, email").in("id", userIds),
-    admin.from("clients").select("id, name").in("id", clientIds),
-  ]);
+  const [peopleResult, orgsResult] = await withPortalDataTimeout((signal) => Promise.all([
+    admin.from("users").select("id, full_name, email").in("id", userIds).abortSignal(signal),
+    admin.from("clients").select("id, name").in("id", clientIds).abortSignal(signal),
+  ]), "Notebook participants", 8_000);
+  if (peopleResult.error || orgsResult.error) {
+    throw new Error("Notebook participants could not be loaded.", { cause: peopleResult.error ?? orgsResult.error });
+  }
+  const people = peopleResult.data;
+  const orgs = orgsResult.data;
   const nameOf = (id: string) => {
     const u = (people ?? []).find((x) => x.id === id) as { full_name: string | null; email: string } | undefined;
     return u?.full_name ?? u?.email ?? "Someone";
@@ -84,11 +96,17 @@ export default async function NotebookPage({ searchParams: searchParamsPromise }
 
   // PAGE CONTENT — user-scoped client → RLS gates to participants only.
   const sb = await createClient();
-  const { data: pageRows } = await sb
-    .from("notebook_pages")
-    .select("*")
-    .eq("placement_id", active.id)
-    .order("sort_order");
+  const { data: pageRows, error: pagesError } = await withPortalDataTimeout(
+    (signal) => sb
+      .from("notebook_pages")
+      .select("*")
+      .eq("placement_id", active.id)
+      .order("sort_order")
+      .abortSignal(signal),
+    "Notebook pages",
+    8_000,
+  );
+  if (pagesError) throw new Error("Notebook pages could not be loaded.", { cause: pagesError });
 
   return (
     <div>

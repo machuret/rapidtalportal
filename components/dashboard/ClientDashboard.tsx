@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { TaskDialog } from "@/components/tasks/TaskDialog";
 import { ClientFirstSuccessJourney } from "@/components/dashboard/ClientFirstSuccessJourney";
 import type { ClientFirstSuccessStep } from "@/lib/onboarding/client-first-success";
+import { awaitingApprovalCount } from "@/lib/dashboard/approval-count";
 import {
   CheckCircle2, Clock, Inbox, Timer, Plus, Loader2, ThumbsUp, RotateCcw,
   ArrowRight, AlertTriangle,
@@ -40,6 +41,7 @@ export interface ClientDashboardProps {
   vas: ClientVA[];
   categories: ClientCategory[];
   awaiting: AwaitingTask[];
+  contentAwaitingApproval: number;
   overdue: OverdueTask[];
   dueSoon: DueSoonTask[];
   attention: ClientAttentionItem[];
@@ -137,7 +139,12 @@ export function ClientDashboard(props: ClientDashboardProps) {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <Stat icon={Inbox} tint="text-amber-400" label="Awaiting your approval" value={awaiting.length} />
+        <Stat
+          icon={Inbox}
+          tint="text-amber-400"
+          label="Awaiting your approval"
+          value={awaitingApprovalCount(awaiting.length, props.contentAwaitingApproval)}
+        />
         <Stat icon={Clock} tint="text-blue-400" label="In progress" value={stats.inProgress} />
         <Stat icon={CheckCircle2} tint="text-green-400" label="Delivered this week" value={stats.completedThisWeek} />
         <Stat icon={Timer} tint="text-purple-400" label="Hours this week"
@@ -148,7 +155,7 @@ export function ClientDashboard(props: ClientDashboardProps) {
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Awaiting approval */}
         <section className="surface-card p-4">
-          <p className="label-section mb-3 flex items-center gap-2"><Inbox className="w-4 h-4" /> Awaiting your approval</p>
+          <p className="label-section mb-3 flex items-center gap-2"><Inbox className="w-4 h-4" /> VA work awaiting approval</p>
           {awaiting.length === 0 ? (
             <p className="text-sm text-zinc-500 py-6 text-center">Nothing waiting on you. 🎉</p>
           ) : (

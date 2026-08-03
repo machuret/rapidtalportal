@@ -14,7 +14,7 @@ import {
   statusClass,
   statusLabel,
 } from "@/components/prospecting/presentation";
-import type { ProspectingCollaborator, ProspectingLead, ProspectingLeadStatus } from "@/types/prospecting";
+import type { ProspectingCampaign, ProspectingCollaborator, ProspectingLead, ProspectingLeadStatus } from "@/types/prospecting";
 import { ProspectingLoadFailure } from "@/components/prospecting/ProspectingLoadFailure";
 
 export type ProspectingFitFilter = Exclude<ProspectingLead["fit_band"], null> | "all";
@@ -22,9 +22,9 @@ export type ProspectingLeadSort = "fit" | "newest";
 export type SelectedProspectingContacts = Record<string, { email: string; phone: string }>;
 
 export function LeadInbox({
-  leads, total, offset, pageSize, loading, error, filter, fitFilter, sort,
+  leads, total, offset, pageSize, loading, error, filter, fitFilter, sort, campaigns, campaignId,
   collaborators, pendingAction, selectedContacts,
-  onFilter, onFitFilter, onSort, onFindLeads, onRetry, onPage,
+  onFilter, onFitFilter, onSort, onCampaign, onFindLeads, onRetry, onPage,
   onSelectEmail, onSelectPhone, onAssign, onEnrich, onStatus, onPromote,
 }: {
   leads: ProspectingLead[];
@@ -36,12 +36,15 @@ export function LeadInbox({
   filter: ProspectingLeadStatus | "all";
   fitFilter: ProspectingFitFilter;
   sort: ProspectingLeadSort;
+  campaigns: ProspectingCampaign[];
+  campaignId: string | null;
   collaborators: ProspectingCollaborator[];
   pendingAction: string | null;
   selectedContacts: SelectedProspectingContacts;
   onFilter: (filter: ProspectingLeadStatus | "all") => void;
   onFitFilter: (filter: ProspectingFitFilter) => void;
   onSort: (sort: ProspectingLeadSort) => void;
+  onCampaign: (campaignId: string | null) => void;
   onFindLeads: () => void;
   onRetry: () => void;
   onPage: (offset: number) => void;
@@ -60,6 +63,11 @@ export function LeadInbox({
           <p className="text-sm text-zinc-400">Review, shortlist or add suitable companies to CRM.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Label htmlFor="lead-campaign" className="sr-only">Filter campaign</Label>
+          <select id="lead-campaign" value={campaignId ?? ""} onChange={(event) => onCampaign(event.target.value || null)} className="h-9 max-w-64 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-200">
+            <option value="">All campaigns</option>
+            {campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
+          </select>
           <Label htmlFor="lead-status" className="sr-only">Filter lead status</Label>
           <select id="lead-status" value={filter} onChange={(event) => onFilter(event.target.value as ProspectingLeadStatus | "all")} className="h-9 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-200">
             <option value="all">All leads</option><option value="new">New</option><option value="shortlisted">Shortlisted</option><option value="imported">In CRM</option><option value="dismissed">Dismissed</option>

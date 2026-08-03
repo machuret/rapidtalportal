@@ -25,6 +25,7 @@ export function CampaignManager({
   onArchive,
   onAssign,
   onUpdateProfile,
+  onViewLeads,
   onLoadMore,
   onRetry,
 }: {
@@ -39,6 +40,7 @@ export function CampaignManager({
   onArchive: (campaign: ProspectingCampaign) => void;
   onAssign: (campaign: ProspectingCampaign, ownerId: string | null) => void;
   onUpdateProfile: (campaign: ProspectingCampaign, profile: ProspectingIdealProfile) => Promise<void>;
+  onViewLeads: (campaign: ProspectingCampaign) => void;
   onLoadMore: () => void;
   onRetry: () => void;
 }) {
@@ -75,6 +77,11 @@ export function CampaignManager({
                     {campaign.source === "google_maps" ? "Google Maps" : "Web search"} · Up to {campaign.max_results} results
                     {job?.status === "done" ? ` · ${job.returned_results} found` : ""}
                   </p>
+                  {job?.status === "done" && job.returned_results === 0 && (
+                    <p role="status" className="mt-2 max-w-xl rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-200">
+                      The provider completed, but RapidTal imported no usable leads. Check that the query and location are broad enough; if this is unexpected, ask a portal admin to verify scraper health before rerunning.
+                    </p>
+                  )}
                   <CampaignProfileEditor
                     key={`${campaign.id}:${campaign.updated_at}`}
                     campaign={campaign}
@@ -101,6 +108,9 @@ export function CampaignManager({
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => onRun(campaign)}>
                     {pendingAction === `run:${campaign.id}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1.5 h-3.5 w-3.5" />}
                     Run again
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => onViewLeads(campaign)}>
+                    View leads
                   </Button>
                   <Button size="sm" variant="ghost" disabled={busy} onClick={() => onArchive(campaign)}><Archive className="mr-1.5 h-3.5 w-3.5" />Archive</Button>
                 </div>

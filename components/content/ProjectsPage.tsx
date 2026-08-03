@@ -7,21 +7,7 @@ import { Input } from "@/components/ui/input";
 import type { ContentProject, ContentTopic } from "@/types/content";
 import { useContentProjects } from "@/hooks/useContentProjects";
 import { ProjectTakeover } from "./ProjectTakeover";
-
-function projectProgress(project: ContentProject): string {
-  if (project.last_error_message && project.last_operation === "generate") {
-    return "Generation failed — ready to retry";
-  }
-  if (project.status === "saved") return "Saved idea";
-  if (project.current_step === "complete") {
-    return `${project.status.charAt(0).toUpperCase()}${project.status.slice(1)}`;
-  }
-  if (["idea", "brief", "evidence", "generate"].includes(project.current_step)) {
-    return "Preparing draft";
-  }
-  if (project.current_step === "edit") return "Draft";
-  return "In review";
-}
+import { contentProjectProgress } from "@/lib/content/project-progress";
 
 /** /content/projects — approved ideas ready to start + unfinished work. */
 export function ProjectsPage({
@@ -155,7 +141,7 @@ export function ProjectsPage({
               <div key={project.id} className="group relative rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-purple-500/40 hover:bg-zinc-800/70">
                 <button type="button" onClick={() => projects.openProject(project.id)} className="w-full p-4 pr-11 text-left">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="rounded-full bg-purple-500/10 px-2 py-1 text-2xs font-medium uppercase text-purple-300">{projectProgress(project)}</span>
+                    <span className="rounded-full bg-purple-500/10 px-2 py-1 text-2xs font-medium uppercase text-purple-300">{contentProjectProgress(project)}</span>
                     {projects.openingProject === project.id ? <Clock3 className="h-4 w-4 animate-spin text-zinc-500" /> : <ArrowRight className="h-4 w-4 text-zinc-600" />}
                   </div>
                   <p className="mt-3 line-clamp-2 text-sm font-medium text-white">{project.title}</p>

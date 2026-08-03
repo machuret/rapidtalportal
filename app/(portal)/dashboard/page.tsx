@@ -24,7 +24,12 @@ export default async function DashboardPage() {
   // not the VA workspace dashboard.
   if (user.role === "client_admin" && user.client_id) {
     const data = await withPortalDataTimeout(
-      renderClientDashboard(user.client_id, user.full_name ?? user.email, user.id),
+      renderClientDashboard(
+        user.client_id,
+        user.full_name ?? user.email,
+        user.id,
+        user.timezone ?? DEFAULT_PORTAL_TIMEZONE,
+      ),
       "Client dashboard",
     );
     return <><FeatureReadyReporter feature="client_dashboard" /><ClientDashboard {...data} clientName={client?.name ?? ""} /></>;

@@ -311,7 +311,8 @@ export function PieceDetailEditor({
           <Button
             size="sm"
             onClick={() => handleStatusChange("approved")}
-            disabled={isUpdating || dirty}
+            disabled={isUpdating || dirty || liveWarningCount > 0}
+            title={liveWarningCount > 0 ? "Resolve the displayed channel, voice or hard-rule checks before approval." : "Approve this draft"}
             className="bg-green-600 hover:bg-green-700 text-white border-0 text-xs h-8"
           >
             {isUpdating ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5 mr-1.5" />}
@@ -374,6 +375,22 @@ export function PieceDetailEditor({
         >
           {lifecycleNotice.message}
         </p>
+      )}
+
+      {canApprove && piece.status === "draft" && !editing && liveWarningCount > 0 && (
+        <div role="alert" className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3">
+          <p className="text-sm font-medium text-amber-200">
+            Approval is blocked until {liveWarningCount} editorial check{liveWarningCount === 1 ? " is" : "s are"} resolved.
+          </p>
+          <div className="mt-2 space-y-1">
+            {liveChecks.flatMap((check) => check.warnings).slice(0, 6).map((warning) => (
+              <p key={warning} className="text-xs leading-5 text-zinc-400">• {warning}</p>
+            ))}
+          </div>
+          <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setEditing(true)}>
+            Edit and fix draft
+          </Button>
+        </div>
       )}
 
       {/* Brief */}

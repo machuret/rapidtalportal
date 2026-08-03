@@ -9,7 +9,7 @@ export const metadata = { title: "Lead Generation — RapidTal" };
 export default async function LeadGenerationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lead?: string | string[] }>;
+  searchParams: Promise<{ lead?: string | string[]; tab?: string | string[] }>;
 }) {
   const ctx = await getCurrentUserAndClient();
   if (!ctx) redirect("/login");
@@ -30,6 +30,7 @@ export default async function LeadGenerationPage({
       <LeadGenerationWorkspace
         clientId={ctx.user.client_id}
         initialLeadId={initialLeadId}
+        initialTab={params.tab === "campaigns" ? "campaigns" : null}
       />
     </div>
   );

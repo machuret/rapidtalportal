@@ -8,18 +8,7 @@ import { loadClientFirstSuccessProgress } from "@/lib/onboarding/server";
 import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 import { dedupeAttentionItems } from "@/lib/dashboard/attention";
 import type { ClientAttentionItem, ClientDashboardProps } from "@/components/dashboard/ClientDashboard";
-
-/** Local-midnight of the most recent Monday. */
-function weekStart(now = new Date()): Date {
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return d;
-}
-
-/** Today as a 'YYYY-MM-DD' local-calendar date (matches how due_date is stored). */
-function localToday(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
+import { DEFAULT_PORTAL_TIMEZONE, todayInTimezone } from "@/lib/date-tz";
 
 interface TaskRow {
   id: string; title: string; description: string | null; status: string;
@@ -27,12 +16,20 @@ interface TaskRow {
 }
 
 /** Assemble everything the client home needs. Service-role reads, client-scoped. */
-export async function renderClientDashboard(clientId: string, fullName: string, userId: string): Promise<ClientDashboardProps> {
+export async function renderClientDashboard(
+  clientId: string,
+  fullName: string,
+  userId: string,
+  timezone = DEFAULT_PORTAL_TIMEZONE,
+): Promise<ClientDashboardProps> {
   const admin = createAdminClient();
-  const wkStart = weekStart();
-  const wkStartIso = wkStart.toISOString();
-  const wkStartDate = wkStart.toISOString().slice(0, 10);
-  const today = localToday();
+  const today = todayInTimezone(timezone);
+  const wkStartDate = (() => {
+    const date = new Date(`${today}T12:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+    return date.toISOString().slice(0, 10);
+  })();
+  const wkStartIso = `${wkStartDate}T00:00:00.000Z`;
   const dueSoonEnd = (() => {
     const date = new Date(`${today}T12:00:00Z`);
     date.setUTCDate(date.getUTCDate() + 2);
@@ -56,7 +53,7 @@ export async function renderClientDashboard(clientId: string, fullName: string, 
     admin.from("content_projects").select("id,title,updated_at").eq("client_id", clientId).in("status", ["active", "saved"]).eq("current_step", "approve").order("updated_at", { ascending: false }).limit(8),
     admin.from("vault_items").select("id,title,updated_at").eq("client_id", clientId).eq("status", "error").order("updated_at", { ascending: false }).limit(8),
     admin.from("competitor_sources").select("id,url,updated_at").eq("client_id", clientId).eq("status", "error").order("updated_at", { ascending: false }).limit(5),
-    admin.from("prospecting_jobs").select("id,error_message,updated_at").eq("client_id", clientId).eq("status", "error").order("updated_at", { ascending: false }).limit(5),
+    admin.from("prospecting_jobs").select("id,lead_id,error_message,updated_at").eq("client_id", clientId).eq("status", "error").order("updated_at", { ascending: false }).limit(5),
     admin.from("messages").select("id", { count: "exact", head: true }).eq("client_id", clientId).neq("sender_id", userId).not("read_by", "cs", `{${userId}}`),
     ]),
     withPortalDataTimeout(
@@ -124,7 +121,13 @@ export async function renderClientDashboard(clientId: string, fullName: string, 
     ...((contentApprovalRows ?? []) as Array<{ id: string; title: string }>).map((project) => ({ id: `content:${project.id}`, title: project.title, detail: "Content is ready for approval", href: `/content/projects?open=${project.id}`, severity: "action" as const })),
     ...((vaultFailureRows ?? []) as Array<{ id: string; title: string }>).map((item) => ({ id: `vault:${item.id}`, title: item.title, detail: "Company knowledge needs processing attention", href: `/vault?open=${item.id}`, severity: "warning" as const })),
     ...((competitorFailureRows ?? []) as Array<{ id: string; url: string }>).map((source) => ({ id: `competitor:${source.id}`, title: source.url, detail: "Competitor collection needs retry", href: "/competitors", severity: "warning" as const })),
-    ...((leadFailureRows ?? []) as Array<{ id: string; error_message: string | null }>).map((job) => ({ id: `lead:${job.id}`, title: "Lead collection needs attention", detail: job.error_message || "Open Lead Generation to retry", href: "/lead-generation", severity: "warning" as const })),
+    ...((leadFailureRows ?? []) as Array<{ id: string; lead_id: string | null; error_message: string | null }>).map((job) => ({
+      id: `lead:${job.id}`,
+      title: "Lead collection needs attention",
+      detail: job.error_message || "Open Lead Generation to retry",
+      href: job.lead_id ? `/lead-generation?lead=${encodeURIComponent(job.lead_id)}` : "/lead-generation?tab=campaigns",
+      severity: "warning" as const,
+    })),
     ...((unreadMessages ?? 0) > 0 ? [{ id: "messages:unread", title: `${unreadMessages} unread message${unreadMessages === 1 ? "" : "s"}`, detail: "Your VA may be waiting for a response", href: "/messages", severity: "action" as const }] : []),
   ]).sort((left, right) => attentionPriority(left.severity) - attentionPriority(right.severity)).slice(0, 12);
 
@@ -160,6 +163,7 @@ export async function renderClientDashboard(clientId: string, fullName: string, 
     vas,
     categories: (catRows ?? []) as { id: string; name: string; color: string }[],
     awaiting,
+    contentAwaitingApproval: (contentApprovalRows ?? []).length,
     overdue,
     dueSoon,
     attention,

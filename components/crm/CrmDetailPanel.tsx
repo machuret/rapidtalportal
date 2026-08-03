@@ -174,7 +174,7 @@ export function CrmDetailPanel({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors shrink-0">
+          <button type="button" aria-label="Close contact details" title="Close contact details" onClick={onClose} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -326,6 +326,9 @@ export function CrmDetailPanel({
                     <LocalTime value={n.created_at} opts={{ day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }} />
                   </p>
                   <button
+                    type="button"
+                    aria-label="Delete activity note"
+                    title="Delete activity note"
                     onClick={() => deleteNote(n.id)}
                     className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-zinc-600 hover:text-red-400"
                   >

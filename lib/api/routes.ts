@@ -96,8 +96,8 @@ export const ROUTES = {
     advance: () => "/api/prospecting/runs/advance",
     cancel: () => "/api/prospecting/runs/cancel",
     leads: () => "/api/prospecting/leads",
-    leadsPage: (clientId: string, status: string, fit: string, sort: string, offset: number, limit = 30) =>
-      `/api/prospecting/leads?clientId=${clientId}&status=${status}&fit=${fit}&sort=${sort}&offset=${offset}&limit=${limit}`,
+    leadsPage: (clientId: string, status: string, fit: string, sort: string, offset: number, limit = 30, campaignId?: string | null) =>
+      `/api/prospecting/leads?clientId=${clientId}&status=${status}&fit=${fit}&sort=${sort}&offset=${offset}&limit=${limit}${campaignId ? `&campaignId=${encodeURIComponent(campaignId)}` : ""}`,
     leadForClient: (clientId: string, leadId: string) =>
       `/api/prospecting/leads?clientId=${clientId}&id=${leadId}&limit=1`,
     enrich: () => "/api/prospecting/enrich",
@@ -105,6 +105,7 @@ export const ROUTES = {
     activity: () => "/api/prospecting/activity",
     activityForClient: (clientId: string, offset = 0, limit = 50) =>
       `/api/prospecting/activity?clientId=${clientId}&offset=${offset}&limit=${limit}`,
+    providerStatus: (clientId: string) => `/api/prospecting/provider-status?clientId=${clientId}`,
   },
   content: {
     pieces: () => "/api/content/pieces",

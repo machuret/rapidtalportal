@@ -183,4 +183,5 @@ export const MIGRATIONS = [
   "20260803000700_client_experience_sprint5.sql",
   "20260803000800_client_discovery_coach.sql",
   "20260803000900_client_va_assignment_requests.sql",
+  "20260804000100_client_bug_repairs.sql",
 ] as const;

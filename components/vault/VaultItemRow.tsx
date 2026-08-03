@@ -131,6 +131,11 @@ export function VaultItemRow({
                 Expired
               </span>
             )}
+            {item.status === "ready" && item.indexed === false && (
+              <span className="rounded border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-300">
+                Awaiting AI search
+              </span>
+            )}
             <span className="text-xs text-zinc-600">
               {formatDate(item.created_at, { day: "numeric", month: "short", year: "numeric" })}
             </span>

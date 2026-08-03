@@ -15,25 +15,31 @@ import { reportClientExperience, reportClientFeatureReady } from "@/lib/client-e
 import { keywordList } from "@/components/prospecting/presentation";
 import { discoverySourceCapabilities, type EnabledDiscoverySource } from "@/lib/prospecting/catalog";
 import type {
-  ProspectingCampaign,
-  ProspectingCampaignPage,
-  ProspectingJob,
-  ProspectingLead,
-  ProspectingLeadPage,
-  ProspectingLeadStatus,
-  ProspectingIdealProfile,
-  ProspectingActivityEvent,
-  ProspectingActivityPage,
-  ProspectingCollaborator,
+  ProspectingActivityEvent, ProspectingActivityPage, ProspectingCampaign, ProspectingCampaignPage,
+  ProspectingCollaborator, ProspectingIdealProfile, ProspectingJob, ProspectingLead,
+  ProspectingLeadPage, ProspectingLeadStatus,
 } from "@/types/prospecting";
 import { ActionOutcome, type ActionOutcomeState } from "@/components/ui/ActionOutcome";
+import { ProviderStatusStrip } from "@/components/prospecting/ProviderStatusStrip";
+import {
+  ProspectingWorkspaceTabs,
+  type ProspectingWorkspaceTab,
+} from "@/components/prospecting/ProspectingWorkspaceTabs";
 
-type Tab = "find" | "inbox" | "campaigns" | "activity";
+type Tab = ProspectingWorkspaceTab;
 const TERMINAL = new Set(["done", "error", "cancelled"]);
 const PAGE_SIZE = 30;
 
-export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { clientId: string; initialLeadId?: string | null }) {
-  const [tab, setTab] = useState<Tab>(initialLeadId ? "inbox" : "find");
+export function LeadGenerationWorkspace({
+  clientId,
+  initialLeadId = null,
+  initialTab = null,
+}: {
+  clientId: string;
+  initialLeadId?: string | null;
+  initialTab?: Extract<Tab, "campaigns"> | null;
+}) {
+  const [tab, setTab] = useState<Tab>(initialLeadId ? "inbox" : initialTab ?? "find");
   const [campaigns, setCampaigns] = useState<ProspectingCampaign[]>([]);
   const [leads, setLeads] = useState<ProspectingLead[]>([]);
   const [total, setTotal] = useState(0);
@@ -41,6 +47,7 @@ export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { cl
   const [filter, setFilter] = useState<ProspectingLeadStatus | "all">("all");
   const [fitFilter, setFitFilter] = useState<ProspectingFitFilter>("all");
   const [leadSort, setLeadSort] = useState<ProspectingLeadSort>("fit");
+  const [campaignFilter, setCampaignFilter] = useState<string | null>(null);
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [campaignLoadError, setCampaignLoadError] = useState<string | null>(null);
@@ -146,6 +153,7 @@ export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { cl
     nextFilter: ProspectingLeadStatus | "all",
     nextFit: ProspectingFitFilter,
     nextSort: ProspectingLeadSort,
+    nextCampaignId: string | null,
     requestedLeadId: string | null = null,
   ) => {
     setLeadLoadError(null);
@@ -155,7 +163,7 @@ export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { cl
       const result = await api.get<ProspectingLeadPage>(
         requestedLeadId
           ? ROUTES.prospecting.leadForClient(clientId, requestedLeadId)
-          : ROUTES.prospecting.leadsPage(clientId, nextFilter, nextFit, nextSort, nextOffset, PAGE_SIZE),
+          : ROUTES.prospecting.leadsPage(clientId, nextFilter, nextFit, nextSort, nextOffset, PAGE_SIZE, nextCampaignId),
         { showErrorToast: false },
       );
       setLeads(result.leads);
@@ -195,7 +203,7 @@ export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { cl
   }, [clientId]);
 
   useEffect(() => {
-    void Promise.all([loadCampaigns(), loadLeads(0, "all", "all", "fit", initialLeadId)]);
+    void Promise.all([loadCampaigns(), loadLeads(0, "all", "all", "fit", null, initialLeadId)]);
   }, [initialLeadId, loadCampaigns, loadLeads]);
 
   useEffect(() => {
@@ -233,7 +241,7 @@ export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { cl
           const nextIds = new Set((result.active_jobs ?? []).map((job) => job.id));
           const finished = previousJobs.filter((job) => !nextIds.has(job.id));
           if (finished.length) {
-            const leadPage = await loadLeads(offset, filter, fitFilter, leadSort);
+            const leadPage = await loadLeads(offset, filter, fitFilter, leadSort, campaignFilter);
             for (const job of finished) {
               if (job.job_type === "enrichment") {
                 const finalJob = leadPage?.leads.find((lead) => lead.latest_enrichment_job?.id === job.id)?.latest_enrichment_job;
@@ -264,7 +272,7 @@ export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { cl
     void refreshProgress();
     const timer = window.setInterval(() => void refreshProgress(), 10_000);
     return () => window.clearInterval(timer);
-  }, [activeJobKey, clientId, filter, fitFilter, leadSort, loadCampaigns, loadLeads, offset]);
+  }, [activeJobKey, campaignFilter, clientId, filter, fitFilter, leadSort, loadCampaigns, loadLeads, offset]);
 
   async function createAndRun() {
     if (startBusy.current) return;
@@ -361,7 +369,7 @@ export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { cl
       });
       setCampaigns((current) => current.map((item) => item.id === campaign.id ? result.campaign : item));
       toast.success("Matching rules saved and existing leads rescored.");
-      await loadLeads(0, filter, fitFilter, leadSort);
+      await loadLeads(0, filter, fitFilter, leadSort, campaignFilter);
     } catch (error) {
       toast.error(errorMessage(error, "Matching rules could not be saved."));
     } finally {
@@ -478,7 +486,7 @@ export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { cl
       });
       if (TERMINAL.has(result.job.status)) {
         setActiveJobs((current) => current.filter((item) => item.id !== job.id));
-        await Promise.all([loadCampaigns(), loadLeads(offset, filter, fitFilter, leadSort)]);
+        await Promise.all([loadCampaigns(), loadLeads(offset, filter, fitFilter, leadSort, campaignFilter)]);
       } else {
         setActiveJobs((current) => current.map((item) => item.id === job.id ? result.job : item));
       }
@@ -499,37 +507,21 @@ export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { cl
   return (
     <div className="space-y-6">
       {actionOutcome && <ActionOutcome outcome={actionOutcome} onDismiss={() => setActionOutcome(null)} />}
-      <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-3" role="tablist" aria-label="Lead Generation sections">
-        {([
-          ["find", "Find Leads"],
-          ["inbox", "Lead Inbox"],
-          ["campaigns", "Campaigns"],
-          ["activity", "Activity"],
-        ] as Array<[Tab, string]>).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={tab === value}
-            onClick={() => {
-              setTab(value);
-              if (value === "activity") void loadActivity();
-            }}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-              tab === value ? "bg-orange-500 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <ProviderStatusStrip clientId={clientId} />
+      <ProspectingWorkspaceTabs
+        value={tab}
+        onChange={(value) => {
+          setTab(value);
+          if (value === "activity") void loadActivity();
+        }}
+      />
 
       {activeJobs.map((activeJob) => (
         <ProspectingActiveJob key={activeJob.id} job={activeJob} cancelling={pendingAction === `cancel:${activeJob.id}`} onCancel={() => void cancelJob(activeJob)} />
       ))}
       {pollIssue && <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200" role="alert">{pollIssue}</p>}
       {tab === "find" && (campaignLoadError || leadLoadError) && (
-        <ProspectingLoadFailure compact title="Saved campaigns or leads could not be loaded. You can still start a new search." retryLabel="Retry saved data" onRetry={() => void Promise.all([loadCampaigns(), loadLeads(0, filter, fitFilter, leadSort)])} />
+        <ProspectingLoadFailure compact title="Saved campaigns or leads could not be loaded. You can still start a new search." retryLabel="Retry saved data" onRetry={() => void Promise.all([loadCampaigns(), loadLeads(0, filter, fitFilter, leadSort, campaignFilter)])} />
       )}
 
       {tab === "find" && (
@@ -578,24 +570,30 @@ export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { cl
           filter={filter}
           fitFilter={fitFilter}
           sort={leadSort}
+          campaigns={campaigns}
+          campaignId={campaignFilter}
           collaborators={collaborators}
           pendingAction={pendingAction}
           selectedContacts={selectedContacts}
           onFilter={(next) => {
             setFilter(next);
-            void loadLeads(0, next, fitFilter, leadSort);
+            void loadLeads(0, next, fitFilter, leadSort, campaignFilter);
           }}
           onFitFilter={(next) => {
             setFitFilter(next);
-            void loadLeads(0, filter, next, leadSort);
+            void loadLeads(0, filter, next, leadSort, campaignFilter);
           }}
           onSort={(next) => {
             setLeadSort(next);
-            void loadLeads(0, filter, fitFilter, next);
+            void loadLeads(0, filter, fitFilter, next, campaignFilter);
+          }}
+          onCampaign={(next) => {
+            setCampaignFilter(next);
+            void loadLeads(0, filter, fitFilter, leadSort, next);
           }}
           onFindLeads={() => setTab("find")}
-          onRetry={() => void loadLeads(offset, filter, fitFilter, leadSort)}
-          onPage={(nextOffset) => void loadLeads(nextOffset, filter, fitFilter, leadSort)}
+          onRetry={() => void loadLeads(offset, filter, fitFilter, leadSort, campaignFilter)}
+          onPage={(nextOffset) => void loadLeads(nextOffset, filter, fitFilter, leadSort, campaignFilter)}
           onSelectEmail={(leadId, email) => setSelectedContacts((current) => ({
             ...current,
             [leadId]: { email, phone: current[leadId]?.phone ?? "" },
@@ -623,6 +621,11 @@ export function LeadGenerationWorkspace({ clientId, initialLeadId = null }: { cl
           onArchive={(campaign) => void archiveCampaign(campaign)}
           onAssign={(campaign, ownerId) => void assignCampaign(campaign, ownerId)}
           onUpdateProfile={updateCampaignProfile}
+          onViewLeads={(campaign) => {
+            setCampaignFilter(campaign.id);
+            setTab("inbox");
+            void loadLeads(0, filter, fitFilter, leadSort, campaign.id);
+          }}
           onLoadMore={() => void loadCampaigns(campaigns.length, true)}
           onRetry={() => void loadCampaigns()}
         />

@@ -16,6 +16,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
@@ -306,7 +307,7 @@ export function BrainOpportunities({
 
                 {useCurrentMeasurement && (
                   <p className="mt-2 text-2xs text-zinc-600">
-                    Current readiness measured {new Date(readiness.measuredAt).toLocaleString("en-AU")}.
+                    Current readiness measured <LocalTime value={readiness.measuredAt} />.
                     The original diagnostic snapshot remains available in “What the Brain used”.
                   </p>
                 )}

@@ -118,7 +118,7 @@ export async function computeBrainReadiness(
       .eq("client_id", clientId).in("status", ["open", "in_review"]).limit(1000),
     admin.from("content_style_analyses")
       .select("id,channel,status,analysis,source_count,approved_at")
-      .eq("client_id", clientId).eq("status", "approved").limit(50),
+      .eq("client_id", clientId).in("status", ["draft", "approved"]).limit(100),
     admin.from("brain_memory")
       .select("id,kind,scope,source_count,lineage_complete,contradiction_status,status,active")
       .eq("client_id", clientId).eq("status", "active").eq("active", true).limit(500),
@@ -141,7 +141,7 @@ export async function computeBrainReadiness(
     admin.from("competitors")
       .select("id,status").eq("client_id", clientId).eq("status", "active").limit(100),
     admin.from("competitor_content_items")
-      .select("id,captured_at,is_removed").eq("client_id", clientId)
+      .select("id,captured_at,is_removed,content_type").eq("client_id", clientId)
       .eq("is_removed", false).order("captured_at", { ascending: false }).limit(1000),
     admin.from("competitor_intelligence_runs")
       .select("id,status,created_at,analysis,source_count")
@@ -216,8 +216,10 @@ export async function computeBrainReadiness(
     ],
   );
 
-  type StyleRow = { channel: string; analysis: unknown; source_count: number };
-  const styles = (stylesResult.data ?? []) as StyleRow[];
+  type StyleRow = { channel: string; status: string; analysis: unknown; source_count: number };
+  const styleAnalyses = (stylesResult.data ?? []) as StyleRow[];
+  const styles = styleAnalyses.filter((row) => row.status === "approved");
+  const draftStyles = styleAnalyses.filter((row) => row.status === "draft");
   const styleExamples = vault.filter((row) => row.evidence_role === "style_example" && row.status === "ready").length;
   const styleConfidences = styles.map((row) => styleConfidence(row.analysis)).filter((value): value is number => value !== null);
   const averageConfidence = styleConfidences.length
@@ -245,7 +247,10 @@ export async function computeBrainReadiness(
     [
       `${channelCoverage} channel${channelCoverage === 1 ? "" : "s"} configured`,
       `${styleExamples} owned style example${styleExamples === 1 ? "" : "s"}`,
-      `${styles.reduce((sum, row) => sum + row.source_count, 0)} examples analysed`,
+      `${styles.reduce((sum, row) => sum + row.source_count, 0)} examples in approved voice profiles`,
+      ...(draftStyles.length
+        ? [`${draftStyles.reduce((sum, row) => sum + row.source_count, 0)} examples analysed in ${draftStyles.length} draft profile${draftStyles.length === 1 ? "" : "s"} awaiting approval`]
+        : []),
     ],
     [
       ...(!hasGlobalVoice ? ["Add a global voice in Company DNA."] : []),
@@ -357,8 +362,9 @@ export async function computeBrainReadiness(
   );
 
   const competitors = (competitorsResult.data ?? []).length;
-  const captures = (capturesResult.data ?? []) as Array<{ captured_at: string }>;
+  const captures = (capturesResult.data ?? []) as Array<{ captured_at: string; content_type: string }>;
   const freshCaptures = captures.filter((row) => row.captured_at >= recent).length;
+  const editorialCaptures = captures.filter((row) => ["article", "post", "social_post"].includes(row.content_type)).length;
   const latestCapture = captures[0]?.captured_at ?? null;
   const latestIntelligence = (intelligenceResult.data ?? [])[0] as
     | { created_at: string; analysis: unknown; source_count: number }
@@ -391,7 +397,11 @@ export async function computeBrainReadiness(
     ],
     [
       ...(competitors === 0 ? ["Add the most relevant competitors and source URLs."] : []),
-      ...(competitors > 0 && !latestIntelligence ? ["Run competitor analysis."] : []),
+      ...(competitors > 0 && !latestIntelligence
+        ? [editorialCaptures > 0
+          ? "Run competitor analysis."
+          : "Add public competitor posts or articles, collect them, then run analysis."]
+        : []),
       ...(latestIntelligence && freshCaptures === 0 ? ["Refresh competitor sources before the next analysis."] : []),
     ],
   );
