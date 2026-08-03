@@ -31,6 +31,16 @@ describe("client experience bug repairs", () => {
     expect(migration).toContain("added this contact from Lead Generation");
   });
 
+  test("approval screens may record validation for the exact current revision", () => {
+    const migration = readFileSync(
+      join(process.cwd(), "db/migrations/20260804000200_revalidate_content_at_approval.sql"),
+      "utf8",
+    );
+    expect(migration).toContain("current_step NOT IN ('validate', 'approve')");
+    expect(migration).toContain("v_piece.updated_at IS DISTINCT FROM p_expected_piece_updated_at");
+    expect(migration).toContain("REVOKE ALL ON FUNCTION record_content_project_validation");
+  });
+
   test("approval, Vault indexing and Notebook failures are explicit", () => {
     const editor = readFileSync(join(process.cwd(), "components/content/library/PieceDetailEditor.tsx"), "utf8");
     const workflow = readFileSync(join(process.cwd(), "components/content/ContentProjectWorkflow.tsx"), "utf8");
