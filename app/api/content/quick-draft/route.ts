@@ -63,6 +63,14 @@ export async function POST(req: NextRequest) {
   const input = parsed.data;
   const denied = assertClientAccess(auth.user, input.clientId);
   if (denied) return denied;
+
+  // Gate the whole endpoint BEFORE any expensive work (semantic embedding via
+  // the brain-embed edge function + project-row creation). Otherwise a caller
+  // looping with a fresh idempotencyKey each time drives uncapped edge calls and
+  // row inserts before the limiter — which previously sat after that work — engaged.
+  const rl = await aiGenerateLimiter.check(`content:${auth.user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
+
   const requestHash = createHash("sha256").update(JSON.stringify({
     clientId: input.clientId,
     title: input.title,
@@ -194,8 +202,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const rl = await aiGenerateLimiter.check(`content:${auth.user.id}`);
-  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
   const generated = await proxyToEdgeFunction("content-generate", {
     clientId: input.clientId,
     projectId: project.id,

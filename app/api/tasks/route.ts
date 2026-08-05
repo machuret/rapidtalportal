@@ -189,6 +189,12 @@ export const PATCH = withAuth(async (req, { user }) => {
   if (parsed.data.assignedTo !== undefined && !isAdmin(user.role)) {
     return NextResponse.json({ error: "Only admins can reassign tasks." }, { status: 403 });
   }
+  // Only admins may finalise a task as "done" — VAs move it to "review" for
+  // client approval. Mirrors the TaskDialog UI (which hides Done from non-admins)
+  // and preserves the approval gate + delivered-stats integrity.
+  if (parsed.data.status === "done" && task.status !== "done" && !isAdmin(user.role)) {
+    return NextResponse.json({ error: "Only admins can mark a task done." }, { status: 403 });
+  }
 
   const updates: Database["public"]["Tables"]["tasks"]["Update"] = { updated_at: new Date().toISOString() };
   if (parsed.data.title !== undefined) updates.title = parsed.data.title.trim();

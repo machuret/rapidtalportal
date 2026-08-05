@@ -185,4 +185,6 @@ export const MIGRATIONS = [
   "20260803000900_client_va_assignment_requests.sql",
   "20260804000100_client_bug_repairs.sql",
   "20260804000200_revalidate_content_at_approval.sql",
+  "20260805000100_users_privileged_column_guard.sql",
+  "20260805000200_help_content_access_lockdown.sql",
 ] as const;

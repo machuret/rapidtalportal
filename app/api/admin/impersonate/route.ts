@@ -34,7 +34,12 @@ async function logImpersonation(
   entry: { actor_id: string; target_id: string | null; target_email: string | null; action: "start" | "stop" }
 ) {
   try {
-    await admin.from("impersonation_log").insert(entry);
+    // supabase-js returns { error } rather than throwing, so an RLS/constraint/
+    // missing-table failure would otherwise be dropped silently — check it.
+    const { error } = await admin.from("impersonation_log").insert(entry);
+    if (error) {
+      console.error("[impersonate] audit log failed:", error.message);
+    }
   } catch (e) {
     console.error("[impersonate] audit log failed:", e instanceof Error ? e.message : e);
   }

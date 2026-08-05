@@ -10,6 +10,26 @@ import React from "react";
  * a full CommonMark engine, just enough to read our generated documents well.
  */
 
+/**
+ * Returns a safe href for a markdown link, or null if the URL scheme is not
+ * allowed. React does NOT block dangerous hrefs like `javascript:`/`data:`, so
+ * we must gate them ourselves: dossier/catalog markdown can embed AI- and
+ * crawl-derived URLs (e.g. a crawled page's <title>), which is an XSS vector if
+ * rendered as a clickable link. Relative URLs, anchors and http/https/mailto
+ * are allowed; everything else (javascript:, data:, vbscript:, …) is rejected.
+ */
+function safeHref(raw: string): string | null {
+  const url = raw.trim();
+  if (!url) return null;
+  // Relative paths / anchors are safe (no scheme).
+  if (/^(\/|#|\.\/|\.\.\/)/.test(url)) return url;
+  // A token with no URL scheme at all is treated as a relative reference.
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) return url;
+  // Otherwise only allow an explicit http/https/mailto scheme.
+  if (/^(https?:|mailto:)/i.test(url)) return url;
+  return null;
+}
+
 function renderInline(text: string, keyBase: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   // Split on **bold**, *italic*, `code`, [label](url), and bare URLs.
@@ -23,9 +43,18 @@ function renderInline(text: string, keyBase: string): React.ReactNode[] {
     else if (tok.startsWith("`")) nodes.push(<code key={k} className="text-xs bg-zinc-800 rounded px-1 py-0.5 text-zinc-200">{tok.slice(1, -1)}</code>);
     else if (tok.startsWith("[")) {
       const mm = /\[([^\]]+)\]\(([^)]+)\)/.exec(tok);
-      if (mm) nodes.push(<a key={k} href={mm[2]} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">{mm[1]}</a>);
+      if (mm) {
+        const href = safeHref(mm[2]);
+        // Disallowed scheme (e.g. javascript:) → render the label as plain text.
+        nodes.push(href
+          ? <a key={k} href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">{mm[1]}</a>
+          : <span key={k}>{mm[1]}</span>);
+      }
     } else if (tok.startsWith("http")) {
-      nodes.push(<a key={k} href={tok} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 break-all">{tok}</a>);
+      const href = safeHref(tok);
+      nodes.push(href
+        ? <a key={k} href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 break-all">{tok}</a>
+        : <span key={k}>{tok}</span>);
     } else if (tok.startsWith("*")) {
       nodes.push(<em key={k} className="italic">{tok.slice(1, -1)}</em>);
     }
