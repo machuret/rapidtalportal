@@ -50,7 +50,9 @@ export const GET = withAuth(async (req, { user }) => {
         label: catalogue[id].label,
         state,
         checkedAt,
-        diagnostic: check?.diagnostic ?? null,
+        // The raw diagnostic is internal operational detail (Apify smoke-test
+        // output). Clients see only the state; super-admins get the detail.
+        diagnostic: user.role === "super_admin" ? (check?.diagnostic ?? null) : null,
       };
     }),
   });

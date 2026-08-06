@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
@@ -24,6 +24,10 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
   const [streamingContent, setStreamingContent] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadNonce, setLoadNonce] = useState(0);
+  // Abort the in-flight deep-analysis stream if the user navigates away, so a
+  // frontier-model generation doesn't keep billing (and setting state) after unmount.
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,6 +58,8 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
   }
 
   async function generate() {
+    const controller = new AbortController();
+    abortRef.current = controller;
     setGenerating(true);
     setStreamingContent("");
     try {
@@ -63,6 +69,7 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clientId, stream: true }),
+        signal: controller.signal,
       });
       if (!res.ok || !res.body) throw new Error("stream-unavailable");
 
@@ -97,6 +104,8 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
         toast.success("Deep analysis ready.");
       }
     } catch {
+      // User navigated away mid-stream — stop, don't retry or toast on a dead component.
+      if (controller.signal.aborted) return;
       try {
         await generateNonStreaming();
         toast.success("Deep analysis ready.");
@@ -104,8 +113,11 @@ export function VaultExpanded({ clientId, canWrite }: { clientId: string; canWri
         toast.error(e instanceof Error ? e.message : "Couldn't generate the analysis.");
       }
     } finally {
-      setStreamingContent("");
-      setGenerating(false);
+      if (abortRef.current === controller) abortRef.current = null;
+      if (!controller.signal.aborted) {
+        setStreamingContent("");
+        setGenerating(false);
+      }
     }
   }
 
