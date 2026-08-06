@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withTool } from "@/lib/tools/handler";
 import { logToolRun } from "@/lib/tools/ai";
+import { isBlockedUrl } from "@/lib/security/ssrf";
 
 export const maxDuration = 60;
 
@@ -15,22 +16,14 @@ const schema = z.object({
   url: z.string().url(),
 });
 
-// Block obvious SSRF targets by hostname. NOTE: this is a literal-host check —
-// it does not defend against DNS rebinding (a public host resolving to a
-// private IP). Acceptable here because Firecrawl performs the fetch on its own
-// infrastructure, not from ours.
-const PRIVATE_IP_RE = /^(localhost|127\.|0\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1|fc00:|fe80:)/i;
+// SSRF guard is shared + hardened in lib/security/ssrf.ts (isBlockedUrl). The
+// fetch itself runs on Firecrawl's infra, so this is defense-in-depth.
 
 export const POST = withTool(
   { slug: "fetch-url", schema, invalid: "Enter a valid URL." },
   async ({ data, user }) => {
-    try {
-      const u = new URL(data.url);
-      if (u.protocol !== "https:" || PRIVATE_IP_RE.test(u.hostname)) {
-        return NextResponse.json({ error: "Only public HTTPS URLs can be fetched." }, { status: 400 });
-      }
-    } catch {
-      return NextResponse.json({ error: "Enter a valid URL." }, { status: 422 });
+    if (isBlockedUrl(data.url)) {
+      return NextResponse.json({ error: "Only public HTTPS URLs can be fetched." }, { status: 400 });
     }
 
     const key = process.env.FIRECRAWL_API_KEY;

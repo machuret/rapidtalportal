@@ -8,6 +8,7 @@ import { scheduleVaultProcess } from "@/lib/vault-process-trigger";
 import { vaultUploadLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { z } from "zod";
 import { errorMessage } from "@/lib/error-message";
+import { isBlockedUrl } from "@/lib/security/ssrf";
 
 const schema = z.object({
   title: z.string().max(200).optional(),
@@ -27,18 +28,7 @@ function deriveTitle(raw: string): string {
   }
 }
 
-const PRIVATE_IP_RE = /^(localhost|127\.|0\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1|fc00:|fe80:)/i;
-
-function isBlockedUrl(raw: string): boolean {
-  try {
-    const parsed = new URL(raw);
-    if (parsed.protocol !== "https:") return true;
-    if (PRIVATE_IP_RE.test(parsed.hostname)) return true;
-    return false;
-  } catch {
-    return true;
-  }
-}
+// SSRF guard is shared + hardened in lib/security/ssrf.ts (isBlockedUrl).
 
 export const POST = withAuth(async (req, { user }) => {
   // URL ingestion fans out into a paid Firecrawl scrape + embedding pipeline.

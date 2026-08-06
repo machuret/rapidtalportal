@@ -30,10 +30,21 @@ export const POST = withAuth(async (req, { user }) => {
   // the caller can actually see may be referenced: a global SOP (client_id null)
   // or one in their own client — never a foreign tenant's SOP (which would leak
   // its version and pollute the caller's run analytics with a foreign sop_id).
-  const { data: sop } = await admin.from("sops").select("version, client_id").eq("id", parsed.data.sopId).maybeSingle();
-  const sopRow = sop as { version: number; client_id: string | null } | null;
+  const { data: sop } = await admin.from("sops").select("version, client_id, visibility").eq("id", parsed.data.sopId).maybeSingle();
+  const sopRow = sop as { version: number; client_id: string | null; visibility: string | null } | null;
   if (!sopRow || (sopRow.client_id !== null && sopRow.client_id !== user.client_id && user.role !== "super_admin")) {
     return NextResponse.json({ error: "SOP not found." }, { status: 404 });
+  }
+  // Restricted SOPs are visible only to granted VAs (sop_access). Don't let a VA
+  // record a run — and pollute analytics — for a restricted SOP they can't see.
+  if (sopRow.visibility === "restricted" && user.role === "va") {
+    const { data: grant } = await admin
+      .from("sop_access")
+      .select("sop_id")
+      .eq("sop_id", parsed.data.sopId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!grant) return NextResponse.json({ error: "SOP not found." }, { status: 404 });
   }
   const sopVersion = sopRow.version ?? null;
 

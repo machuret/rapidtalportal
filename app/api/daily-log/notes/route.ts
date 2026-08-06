@@ -19,15 +19,21 @@ export const POST = withAuth(async (req, { user }) => {
 
   const admin = createAdminClient();
 
-  // Verify the log belongs to this user's client before attaching a note
+  // Verify the log belongs to this user's client before attaching a note.
   const { data: ownerCheck } = await admin
     .from("daily_logs")
-    .select("id")
+    .select("id, user_id")
     .eq("id", parsed.data.log_id)
     .eq("client_id", user.client_id)
     .maybeSingle();
 
   if (!ownerCheck) {
+    return NextResponse.json({ error: "Log not found or access denied." }, { status: 404 });
+  }
+  // A VA may only annotate their OWN log — mirrors the read path (daily-log/
+  // [date]) that hides colleagues' logs from VAs. Admins supervise the whole
+  // client, so they may note any log. 404 (not 403) so existence isn't leaked.
+  if (user.role === "va" && (ownerCheck as { user_id: string | null }).user_id !== user.id) {
     return NextResponse.json({ error: "Log not found or access denied." }, { status: 404 });
   }
 
@@ -49,7 +55,9 @@ export const POST = withAuth(async (req, { user }) => {
 export const DELETE = withAuth(async (req, { user }) => {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  if (!id || !z.string().uuid().safeParse(id).success) {
+    return NextResponse.json({ error: "Missing or invalid id" }, { status: 400 });
+  }
 
   if (!user.client_id) return NextResponse.json({ error: "No client." }, { status: 403 });
 

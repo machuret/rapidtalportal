@@ -15,6 +15,7 @@ import { assertClientAccess } from "@/lib/api-auth";
 import { withAuth } from "@/lib/api/with-auth";
 import { siteCrawlLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { errorMessage } from "@/lib/error-message";
+import { isBlockedUrl } from "@/lib/security/ssrf";
 
 const PAGE_CAP = 50;
 
@@ -23,16 +24,7 @@ const startSchema = z.object({
   url: z.string().url(),
 });
 
-const PRIVATE_IP_RE = /^(localhost|127\.|0\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1|fc00:|fe80:)/i;
-
-function isBlockedUrl(raw: string): boolean {
-  try {
-    const parsed = new URL(raw);
-    return parsed.protocol !== "https:" || PRIVATE_IP_RE.test(parsed.hostname);
-  } catch {
-    return true;
-  }
-}
+// SSRF guard is shared + hardened in lib/security/ssrf.ts (isBlockedUrl).
 
 export const GET = withAuth(async (req, { user }) => {
   const clientId = req.nextUrl.searchParams.get("clientId");

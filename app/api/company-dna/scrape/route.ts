@@ -11,21 +11,14 @@ import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { scrapeLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { proxyToEdgeFunction } from "@/lib/edge-proxy";
+import { isBlockedUrl } from "@/lib/security/ssrf";
 
 const schema = z.object({
   clientId: z.string().uuid(),
   url: z.string().url(),
 });
 
-const PRIVATE_IP_RE = /^(localhost|127\.|0\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1|fc00:|fe80:)/i;
-function isBlockedUrl(raw: string): boolean {
-  try {
-    const u = new URL(raw);
-    return u.protocol !== "https:" || PRIVATE_IP_RE.test(u.hostname);
-  } catch {
-    return true;
-  }
-}
+// SSRF guard is shared + hardened in lib/security/ssrf.ts (isBlockedUrl).
 
 export const POST = withAuth(async (req: NextRequest, { user }) => {
   let body: unknown;
