@@ -283,11 +283,13 @@ async function askStream(
       recoverable: true,
     };
   } catch {
+    // Return whatever streamed so far. On a deliberate abort ("Stop") the caller
+    // keeps this partial; on a mid-stream error it falls back and ignores it.
     return {
       ok: false,
       aborted: signal?.aborted ?? false,
-      answer: "",
-      sources: [],
+      answer,
+      sources,
       brainContextSnapshotId: null,
       libraryAvailability: "not_requested",
       warnings: [],
@@ -562,8 +564,18 @@ export function useCoachChat({
     // Deliberately aborted (unmount or superseded) — never fall back to a
     // second paid call, and don't touch state on a dead component.
     if (r.aborted) {
-      // "Stop" is a normal user action, not a permanent loading state. The
-      // unmount case is harmless; React ignores these final local cleanups.
+      // "Stop" is a normal user action. Keep the partial answer the user was
+      // reading as a completed (local-only) turn rather than discarding it — no
+      // snapshot/action from a truncated stream. The unmount case is a harmless
+      // no-op state update React ignores.
+      if ((r.answer ?? "").trim()) {
+        setTurns((prev) => [...prev, buildCompletedTurn(trimmed, resolvedMode, requestedLayers, {
+          answer: r.answer,
+          sources: r.sources,
+          actionDraft: null,
+          actionStatus: "none",
+        })]);
+      }
       setInterim(null);
       setLoading(false);
       return;

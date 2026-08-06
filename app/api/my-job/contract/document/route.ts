@@ -29,6 +29,9 @@ async function resolveTarget(
   targetId: string,
   requireAdmin: boolean,
 ): Promise<{ clientId: string | null; contractPath: string | null; contractName: string | null } | NextResponse> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId)) {
+    return NextResponse.json({ error: "Invalid user id." }, { status: 400 });
+  }
   if (targetId !== caller.id) {
     if (!ADMIN.includes(caller.role)) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   } else if (requireAdmin) {

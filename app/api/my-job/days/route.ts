@@ -15,6 +15,10 @@ export const dynamic = "force-dynamic";
 export const GET = withAuth(async (req, { user }) => {
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  if ((from && !dateRe.test(from)) || (to && !dateRe.test(to))) {
+    return NextResponse.json({ error: "Invalid date range." }, { status: 400 });
+  }
   const admin = createAdminClient();
   // Cap the unwindowed read (~3 years of days); document generators pass an
   // explicit from/to month window so they're unaffected by the limit.
@@ -49,7 +53,9 @@ export const POST = withAuth(async (req, { user }) => {
 
 export const DELETE = withAuth(async (req, { user }) => {
   const date = req.nextUrl.searchParams.get("date");
-  if (!date) return NextResponse.json({ error: "Missing date." }, { status: 400 });
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return NextResponse.json({ error: "Missing or invalid date." }, { status: 400 });
+  }
   const admin = createAdminClient();
   const { error } = await admin.from("va_days_worked").delete().eq("user_id", user.id).eq("work_date", date);
   if (error) return serverError(error);
