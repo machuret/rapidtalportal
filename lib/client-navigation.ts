@@ -9,6 +9,8 @@ export interface ClientNavigationDestination {
   keywords?: string[];
   /** Exact title of the matching client Guide item, when contextual help exists. */
   guideTitle?: string;
+  /** Reachable only by client admins — VAs are redirected, so hide it from them. */
+  adminOnly?: boolean;
 }
 
 /**
@@ -56,6 +58,7 @@ export const CLIENT_NAVIGATION_DESTINATIONS: ClientNavigationDestination[] = [
     description: "See who is working with you and review delivery activity.",
     keywords: ["va", "people", "hours", "daily log", "supervision"],
     guideTitle: "Team",
+    adminOnly: true,
   },
   {
     label: "Reports",
@@ -64,6 +67,7 @@ export const CLIENT_NAVIGATION_DESTINATIONS: ClientNavigationDestination[] = [
     description: "Review delivered work and hours for a selected period.",
     keywords: ["results", "monthly", "summary", "hours"],
     guideTitle: "Reports",
+    adminOnly: true,
   },
   {
     label: "Create content",

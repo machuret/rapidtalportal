@@ -25,8 +25,13 @@ export function NotificationsBell({ userId }: { userId: string }) {
   const [items, setItems] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
-  const supabaseRef = useRef(createClient());
+  // Lazy-init once — useRef(createClient()) rebuilds a browser client on every
+  // render (churns GoTrue/Realtime instances); useState's initializer runs once.
+  const [supabase] = useState(() => createClient());
   const panelRef = useRef<HTMLDivElement>(null);
+  // Ids we've already surfaced (from load() + realtime) so a redelivered INSERT
+  // (subscribe/load race or reconnect) doesn't double-count the unread badge.
+  const seenIds = useRef<Set<string>>(new Set());
   // The sidebar mounts twice (desktop + mobile drawer), so each bell needs its
   // own channel topic — Supabase rejects a second subscribe() on the same topic.
   const channelId = useRef(Math.random().toString(36).slice(2));
@@ -38,6 +43,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
       );
       setItems(d.notifications);
       setUnread(d.unread);
+      seenIds.current = new Set(d.notifications.map((n) => n.id));
     } catch { /* silent — badge just stays stale */ }
   }, []);
 
@@ -47,7 +53,6 @@ export function NotificationsBell({ userId }: { userId: string }) {
     const onFocus = () => { void load(); };
     window.addEventListener("focus", onFocus);
 
-    const supabase = supabaseRef.current;
     const channel = supabase
       .channel(`notifications:${userId}:${channelId.current}`)
       .on(
@@ -55,8 +60,10 @@ export function NotificationsBell({ userId }: { userId: string }) {
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
         (payload) => {
           const n = payload.new as Notification;
-          setItems((p) => (p.some((x) => x.id === n.id) ? p : [n, ...p].slice(0, 30)));
-          setUnread((u) => u + 1);
+          if (seenIds.current.has(n.id)) return; // already surfaced — don't re-add or double-count
+          seenIds.current.add(n.id);
+          setItems((p) => [n, ...p].slice(0, 30));
+          if (!n.read_at) setUnread((u) => u + 1);
         },
       )
       .subscribe();
@@ -65,7 +72,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
       window.removeEventListener("focus", onFocus);
       void supabase.removeChannel(channel);
     };
-  }, [userId, load]);
+  }, [userId, load, supabase]);
 
   // Close on outside click.
   useEffect(() => {

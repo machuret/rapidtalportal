@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { ROUTES } from "@/lib/api/routes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,7 +38,7 @@ export function VaProfileEditor({ vaId, initial }: VaProfileEditorProps) {
 
   const saveMutation = useMutation({
     mutationFn: (payload: typeof form) =>
-      api.patch(`/team/${vaId}`, payload),
+      api.patch(ROUTES.team(vaId), payload),
     onSuccess: () => {
       toast.success("Profile updated.");
       setOpen(false);

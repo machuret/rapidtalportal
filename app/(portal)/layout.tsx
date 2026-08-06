@@ -96,7 +96,7 @@ export default async function PortalLayout({
         clientId={ctx.impersonating ? null : ctx.user.client_id}
         coachRole={ctx.user.role === "va" ? "va" : "client"}
       />
-      <ClientCommandPalette enabled={Boolean(ctx.user.client_id) && !ctx.impersonating} />
+      <ClientCommandPalette enabled={Boolean(ctx.user.client_id) && !ctx.impersonating} canAccessAdminNav={ctx.user.role !== "va"} />
     </div>
   );
 }

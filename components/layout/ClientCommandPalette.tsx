@@ -21,7 +21,7 @@ const QUICK_GOALS = [
   "Coach",
 ] as const;
 
-export function ClientCommandPalette({ enabled }: { enabled: boolean }) {
+export function ClientCommandPalette({ enabled, canAccessAdminNav = false }: { enabled: boolean; canAccessAdminNav?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -83,9 +83,13 @@ export function ClientCommandPalette({ enabled }: { enabled: boolean }) {
   }, [open, pathname]);
 
   const results = useMemo(() => {
-    const destinations = query.trim()
-      ? searchClientDestinations(query).slice(0, 6)
-      : CLIENT_NAVIGATION_DESTINATIONS.filter((item) => QUICK_GOALS.includes(item.label as typeof QUICK_GOALS[number]));
+    const destinations = (query.trim()
+      ? searchClientDestinations(query)
+      : CLIENT_NAVIGATION_DESTINATIONS.filter((item) => QUICK_GOALS.includes(item.label as typeof QUICK_GOALS[number])))
+      // VAs are redirected away from client-admin-only pages (Reports, Team), so
+      // don't offer them as palette destinations — they'd dead-end at /dashboard.
+      .filter((item) => canAccessAdminNav || !item.adminOnly)
+      .slice(0, 6);
     const combined = [
       ...destinations.map((destination) => ({
         key: `destination:${destination.href}`,
@@ -114,7 +118,7 @@ export function ClientCommandPalette({ enabled }: { enabled: boolean }) {
       .map((entry, index) => ({ entry, index, score: paletteResultScore(needle, entry.label, entry.description, entry.resultKind) }))
       .sort((left, right) => right.score - left.score || left.index - right.index)
       .map(({ entry }) => entry);
-  }, [discovery.results, query]);
+  }, [discovery.results, query, canAccessAdminNav]);
 
   useEffect(() => {
     setActiveIndex(0);
