@@ -294,11 +294,11 @@ export function AccessClient({ initialItems, clientId, isAdmin, members, encrypt
 }
 
 function AuditDialog({ entry, onClose }: { entry: AccessEntry; onClose: () => void }) {
-  const [reveals, setReveals] = useState<{ who: string; at: string }[] | null>(null);
+  const [reveals, setReveals] = useState<{ who: string; actingWho: string | null; at: string }[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    api.get<{ reveals: { who: string; at: string }[] }>(`${ROUTES.accessReveals()}?id=${entry.id}`, { showErrorToast: false })
+    api.get<{ reveals: { who: string; actingWho: string | null; at: string }[] }>(`${ROUTES.accessReveals()}?id=${entry.id}`, { showErrorToast: false })
       .then((d) => { if (!cancelled) setReveals(d.reveals); })
       .catch(() => { if (!cancelled) setReveals([]); });
     return () => { cancelled = true; };
@@ -319,7 +319,10 @@ function AuditDialog({ entry, onClose }: { entry: AccessEntry; onClose: () => vo
             <div className="divide-y divide-zinc-800">
               {reveals.map((r, i) => (
                 <div key={i} className="flex items-center justify-between py-2.5">
-                  <span className="text-sm text-zinc-200">{r.who}</span>
+                  <span className="text-sm text-zinc-200">
+                    {r.who}
+                    {r.actingWho && <span className="text-xs text-amber-400"> · acting: {r.actingWho}</span>}
+                  </span>
                   <span className="text-xs text-zinc-500">
                     <LocalTime value={r.at} opts={{ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }} />
                   </span>

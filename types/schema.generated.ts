@@ -41,6 +41,7 @@ export type Database = {
     Tables: {
       access_credential_reveals: {
         Row: {
+          acting_user_id: string | null
           client_id: string
           credential_id: string
           id: string
@@ -48,6 +49,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          acting_user_id?: string | null
           client_id: string
           credential_id: string
           id?: string
@@ -55,6 +57,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          acting_user_id?: string | null
           client_id?: string
           credential_id?: string
           id?: string
@@ -62,6 +65,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "access_credential_reveals_acting_user_id_fkey"
+            columns: ["acting_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "access_credential_reveals_client_id_fkey"
             columns: ["client_id"]

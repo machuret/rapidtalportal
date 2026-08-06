@@ -16,7 +16,7 @@ import { credentialRevealLimiter, tooManyRequests } from "@/lib/rate-limit";
 
 const schema = z.object({ id: z.string().uuid() });
 
-export const POST = withAuth(async (req, { user }) => {
+export const POST = withAuth(async (req, { user, actualUser }) => {
   // Throttle reveals so a compromised session can't bulk-export the vault.
   const rl = await credentialRevealLimiter.check(`reveal:${user.id}`);
   if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
@@ -58,6 +58,9 @@ export const POST = withAuth(async (req, { user }) => {
     credential_id: cred.id,
     client_id: cred.client_id,
     user_id: user.id,
+    // During impersonation, user.id is the target; actualUser is the real admin
+    // who performed the reveal. NULL when acting directly (no impersonation).
+    acting_user_id: actualUser?.id ?? null,
   });
   if (auditError) {
     console.error("[access/reveal] audit insert failed", auditError.code, auditError.message);

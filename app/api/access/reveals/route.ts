@@ -30,14 +30,14 @@ export const GET = withAuth(async (req, { user }) => {
 
   const { data: reveals, error } = await admin
     .from("access_credential_reveals")
-    .select("user_id, revealed_at")
+    .select("user_id, acting_user_id, revealed_at")
     .eq("credential_id", credentialId)
     .order("revealed_at", { ascending: false })
     .limit(100);
   if (error) return serverError(error);
 
-  const rows = (reveals ?? []) as { user_id: string | null; revealed_at: string }[];
-  const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean))) as string[];
+  const rows = (reveals ?? []) as { user_id: string | null; acting_user_id: string | null; revealed_at: string }[];
+  const userIds = Array.from(new Set(rows.flatMap((r) => [r.user_id, r.acting_user_id]).filter(Boolean))) as string[];
   const names = new Map<string, string>();
   if (userIds.length) {
     const { data: people } = await admin.from("users").select("id, full_name, email").in("id", userIds);
@@ -49,6 +49,8 @@ export const GET = withAuth(async (req, { user }) => {
   return NextResponse.json({
     reveals: rows.map((r) => ({
       who: r.user_id ? (names.get(r.user_id) ?? "Removed user") : "Removed user",
+      // Present only when the reveal happened under impersonation: the real admin.
+      actingWho: r.acting_user_id ? (names.get(r.acting_user_id) ?? "Removed user") : null,
       at: r.revealed_at,
     })),
   });
