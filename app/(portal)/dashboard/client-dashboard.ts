@@ -7,6 +7,7 @@ import {
 import { loadClientFirstSuccessProgress } from "@/lib/onboarding/server";
 import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 import { dedupeAttentionItems } from "@/lib/dashboard/attention";
+import { visibleMessageAudiences } from "@/lib/messages/audience";
 import type { ClientAttentionItem, ClientDashboardProps } from "@/components/dashboard/ClientDashboard";
 import { DEFAULT_PORTAL_TIMEZONE, todayInTimezone } from "@/lib/date-tz";
 
@@ -36,6 +37,12 @@ export async function renderClientDashboard(
     return date.toISOString().slice(0, 10);
   })();
 
+  // Client home is client_admin-only; count only messages this admin can see
+  // (company + client-private notes), matching the messages_select policy.
+  let unreadMessagesQuery = admin.from("messages").select("id", { count: "exact", head: true }).eq("client_id", clientId).neq("sender_id", userId).not("read_by", "cs", `{${userId}}`);
+  const messageAudiences = visibleMessageAudiences("client_admin");
+  if (messageAudiences) unreadMessagesQuery = unreadMessagesQuery.in("audience", messageAudiences);
+
   const [results, progressResult] = await Promise.all([
     Promise.all([
     admin.from("users").select("id, full_name, email").eq("client_id", clientId).eq("role", "va").order("full_name"),
@@ -54,7 +61,7 @@ export async function renderClientDashboard(
     admin.from("vault_items").select("id,title,updated_at").eq("client_id", clientId).eq("status", "error").order("updated_at", { ascending: false }).limit(8),
     admin.from("competitor_sources").select("id,url,updated_at").eq("client_id", clientId).eq("status", "error").order("updated_at", { ascending: false }).limit(5),
     admin.from("prospecting_jobs").select("id,lead_id,error_message,updated_at").eq("client_id", clientId).eq("status", "error").order("updated_at", { ascending: false }).limit(5),
-    admin.from("messages").select("id", { count: "exact", head: true }).eq("client_id", clientId).neq("sender_id", userId).not("read_by", "cs", `{${userId}}`),
+    unreadMessagesQuery,
     ]),
     withPortalDataTimeout(
       loadClientFirstSuccessProgress(clientId),

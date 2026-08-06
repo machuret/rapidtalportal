@@ -12,6 +12,7 @@ import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { visibleMessageAudiences } from "@/lib/messages/audience";
 
 export const dynamic = "force-dynamic";
 
@@ -27,14 +28,19 @@ export const POST = withAuth(async (req, { user }) => {
   if (denied) return denied;
 
   const admin = createAdminClient();
-  // Unread by this user, not sent by them, in their client (bounded).
-  const { data: unread, error } = await admin
+  // Unread by this user, not sent by them, in their client, AND visible to
+  // their role — otherwise a VA would mark (and clear the count of) admin-only
+  // messages they can never open. Mirrors the audience filter on the GET read.
+  let unreadQuery = admin
     .from("messages")
     .select("id, read_by")
     .eq("client_id", parsed.data.clientId)
     .neq("sender_id", user.id)
     .not("read_by", "cs", `{${user.id}}`)
     .limit(200);
+  const audiences = visibleMessageAudiences(user.role);
+  if (audiences) unreadQuery = unreadQuery.in("audience", audiences);
+  const { data: unread, error } = await unreadQuery;
   if (error) return serverError(error);
 
   let marked = 0;

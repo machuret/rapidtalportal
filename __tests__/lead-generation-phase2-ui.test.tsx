@@ -138,6 +138,7 @@ describe("Lead Generation Phase 2 review workflow", () => {
         selectedEmail: "hello@example.org",
         selectedPhone: null,
       }),
+      expect.objectContaining({ showErrorToast: false }),
     ));
     expect(await screen.findByRole("link", { name: "Open CRM contact" })).toHaveAttribute(
       "href",
@@ -161,6 +162,7 @@ describe("Lead Generation Phase 2 review workflow", () => {
         id: campaign.id,
         idealProfile: expect.objectContaining({ preferredKeywords: ["property", "private credit"] }),
       }),
+      expect.objectContaining({ showErrorToast: false }),
     ));
   });
 

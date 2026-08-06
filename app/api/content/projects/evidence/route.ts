@@ -3,6 +3,7 @@ import { z } from "zod";
 import { assertClientAccess } from "@/lib/api-auth";
 import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
+import { aiGenerateLimiter, tooManyRequests } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rankEvidenceCandidates } from "@/lib/content/evidence-ranking";
 import { matchSemanticEvidence } from "@/lib/content/semantic-evidence";
@@ -32,6 +33,11 @@ export const GET = withAuth(async (req, { user }) => {
   }
   const denied = assertClientAccess(user, parsed.data.client_id);
   if (denied) return denied;
+
+  // This GET runs a semantic (brain-embed edge) retrieval on every call, so
+  // rate-limit it like the other AI surfaces to cap uncapped edge invocations.
+  const rl = await aiGenerateLimiter.check(`evidence:${user.id}`);
+  if (!rl.allowed) return tooManyRequests(rl.retryAfterSeconds);
 
   const db = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);

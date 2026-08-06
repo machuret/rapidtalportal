@@ -93,7 +93,7 @@ export function SourceConsole({
         crawl_scope: sourceForm.crawl_scope,
         refresh_cadence: sourceForm.refresh_cadence || null,
         max_pages: sourceForm.max_pages,
-      });
+      }, { showErrorToast: false });
       setSourceForm({ url: "", crawl_scope: "auto", refresh_cadence: "", max_pages: 30 });
       setAddingSource(false);
       toast.success("Source URL added.");
@@ -111,7 +111,7 @@ export function SourceConsole({
       await api.post(ROUTES.content.competitorCrawl(), {
         client_id: clientId,
         source_id: source.id,
-      });
+      }, { showErrorToast: false });
       toast.success("Content collection started.");
       await onChanged();
     } catch (caught) {
@@ -128,7 +128,7 @@ export function SourceConsole({
         client_id: clientId,
         id: source.id,
         status: source.status === "paused" ? "active" : "paused",
-      });
+      }, { showErrorToast: false });
       await onChanged();
     } catch (caught) {
       onActionError(caught);
@@ -153,7 +153,7 @@ export function SourceConsole({
         id: source.id,
         refresh_cadence: sourceSettings.refresh_cadence || null,
         max_pages: sourceSettings.max_pages,
-      });
+      }, { showErrorToast: false });
       setEditingSource(null);
       toast.success("Source settings updated.");
       await onChanged();
@@ -171,7 +171,7 @@ export function SourceConsole({
         client_id: clientId,
         id: competitor.id,
         refresh_cadence: refreshCadence,
-      });
+      }, { showErrorToast: false });
       await onChanged();
     } catch (caught) {
       onActionError(caught);
@@ -187,7 +187,7 @@ export function SourceConsole({
       await api.delete(ROUTES.content.competitorSources(), {
         client_id: clientId,
         id: source.id,
-      });
+      }, { showErrorToast: false });
       toast.success("Source and captured content deleted.");
       await onChanged();
     } catch (caught) {
@@ -204,7 +204,7 @@ export function SourceConsole({
         client_id: clientId,
         id: competitor.id,
         status: competitor.status === "paused" ? "active" : "paused",
-      });
+      }, { showErrorToast: false });
       await onChanged();
     } catch (caught) {
       onActionError(caught);
@@ -220,7 +220,7 @@ export function SourceConsole({
       await api.delete(ROUTES.content.competitors(), {
         client_id: clientId,
         id: competitor.id,
-      });
+      }, { showErrorToast: false });
       toast.success("Competitor and captured content deleted.");
       await onChanged();
     } catch (caught) {

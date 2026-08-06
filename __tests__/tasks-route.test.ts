@@ -82,3 +82,30 @@ test("a VA can move their own card", async () => {
   const res = await PATCH(jsonReq({ id: TASK, status: "done" }), routeCtx);
   expect(res.status).toBe(200);
 });
+
+test("a VA cannot finalise their own card as done — the review gate is admin-only", async () => {
+  asAuth({ id: VA_ID, role: "va", client_id: CLIENT_A });
+  (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({
+    tasks: { data: { id: TASK, client_id: CLIENT_A, assigned_to: VA_ID, created_by: VA_ID, status: "in_progress" }, error: null },
+  }));
+  const res = await PATCH(jsonReq({ id: TASK, status: "done" }), routeCtx);
+  expect(res.status).toBe(403);
+});
+
+test("the done guard doesn't over-block a VA's normal move (todo → in_progress)", async () => {
+  asAuth({ id: VA_ID, role: "va", client_id: CLIENT_A });
+  (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({
+    tasks: { data: { id: TASK, title: "Test task", client_id: CLIENT_A, assigned_to: VA_ID, created_by: VA_ID, status: "todo" }, error: null },
+  }));
+  const res = await PATCH(jsonReq({ id: TASK, status: "in_progress" }), routeCtx);
+  expect(res.status).toBe(200);
+});
+
+test("an admin may finalise a card as done", async () => {
+  asAuth({ id: OTHER_VA, role: "client_admin", client_id: CLIENT_A });
+  (createAdminClient as jest.Mock).mockReturnValue(makeAdmin({
+    tasks: { data: { id: TASK, title: "Test task", client_id: CLIENT_A, assigned_to: VA_ID, created_by: VA_ID, status: "in_progress" }, error: null },
+  }));
+  const res = await PATCH(jsonReq({ id: TASK, status: "done" }), routeCtx);
+  expect(res.status).toBe(200);
+});

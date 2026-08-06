@@ -148,6 +148,9 @@ export function TimeTracker({ userId, today }: { userId: string; today: string }
     const start = stamp();
     const result = await apiPost({ work_date: today, phase: "work", started_at: start });
     const dbId = result?.entry?.id ?? null;
+    // Request failed — api-client already toasted. Don't fake success or leave an
+    // unpersisted open segment (id:null never closes, silently losing the day).
+    if (!dbId) return;
     const seg: Segment = { id: dbId, phase: "work", start, end: null };
     setEntries(prev => (resuming ? [...prev, seg] : [seg]));
     setPhase("working");
@@ -167,6 +170,9 @@ export function TimeTracker({ userId, today }: { userId: string; today: string }
     const start = stamp();
     const result = await apiPost({ work_date: today, phase: "break", started_at: start });
     const dbId = result?.entry?.id ?? null;
+    // Break failed to start — api-client toasted. The work segment is already
+    // closed, so settle into "done" rather than a phantom open break segment.
+    if (!dbId) { setPhase("done"); return; }
     setEntries(prev => [...prev, { id: dbId, phase: "break", start, end: null }]);
     setPhase("break");
     toast("Break started.");
@@ -185,6 +191,9 @@ export function TimeTracker({ userId, today }: { userId: string; today: string }
     const start = stamp();
     const result = await apiPost({ work_date: today, phase: "work", started_at: start });
     const dbId = result?.entry?.id ?? null;
+    // Resume failed — api-client toasted. The break segment is already closed,
+    // so settle into "done" rather than a phantom open work segment.
+    if (!dbId) { setPhase("done"); return; }
     setEntries(prev => [...prev, { id: dbId, phase: "work", start, end: null }]);
     setPhase("working");
     toast.success("Back to work.");

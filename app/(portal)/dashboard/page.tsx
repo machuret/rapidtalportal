@@ -8,6 +8,7 @@ import { workHours } from "@/lib/tasks/metrics";
 import { DEFAULT_PORTAL_TIMEZONE, todayInTimezone } from "@/lib/date-tz";
 import { withPortalDataTimeout } from "@/lib/server-data-timeout";
 import { FeatureReadyReporter } from "@/components/layout/FeatureReadyReporter";
+import { visibleMessageAudiences } from "@/lib/messages/audience";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard — RapidTal" };
@@ -59,6 +60,12 @@ export default async function DashboardPage() {
     return d.toISOString().slice(0, 10);
   })();
 
+  // Unread messages the VA can actually see (excludes client-private notes) —
+  // otherwise the badge counts messages they can never open.
+  let unreadMessagesQuery = supabase.from("messages").select("id", { count: "exact", head: true }).eq("client_id", clientId).neq("sender_id", user.id).not("read_by", "cs", `{${user.id}}`);
+  const messageAudiences = visibleMessageAudiences(user.role);
+  if (messageAudiences) unreadMessagesQuery = unreadMessagesQuery.in("audience", messageAudiences);
+
   const [
     { data: taskRows }, { data: myLog }, { data: timeWeek }, { data: contract },
     { count: unread }, { data: eventRows }, { data: catRows }, { data: userRows },
@@ -67,7 +74,7 @@ export default async function DashboardPage() {
     supabase.from("daily_logs").select("id").eq("user_id", user.id).eq("log_date", today).maybeSingle(),
     supabase.from("time_entries").select("started_at, ended_at").eq("user_id", user.id).eq("phase", "work").gte("work_date", wkStart),
     supabase.from("va_job_contracts").select("weekly_hours").eq("user_id", user.id).maybeSingle(),
-    supabase.from("messages").select("id", { count: "exact", head: true }).eq("client_id", clientId).neq("sender_id", user.id).not("read_by", "cs", `{${user.id}}`),
+    unreadMessagesQuery,
     supabase.from("task_events").select("id, kind, body, user_id, created_at, task_id").eq("client_id", clientId).order("created_at", { ascending: false }).limit(6),
     supabase.from("task_categories").select("id, name").eq("client_id", clientId),
     supabase.from("users").select("id, full_name, email").eq("client_id", clientId),

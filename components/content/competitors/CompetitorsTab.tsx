@@ -148,7 +148,7 @@ export function CompetitorsTab({
       await api.post(ROUTES.content.competitors(), {
         client_id: clientId,
         ...createForm,
-      });
+      }, { showErrorToast: false });
       setCreateForm({
         name: "",
         website_url: "",

@@ -12,6 +12,7 @@ import { serverError } from "@/lib/api/errors";
 import { withAuth } from "@/lib/api/with-auth";
 import { assertClientAccess } from "@/lib/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { visibleMessageAudiences } from "@/lib/messages/audience";
 
 export const dynamic = "force-dynamic";
 
@@ -37,10 +38,9 @@ export const GET = withAuth(async (req, { user }) => {
     // Bounded: the thread used to ship entire history on every load and poll.
     .limit(100);
   if (updatedAfter) query = query.gt("created_at", updatedAfter);
-  if (user.role === "client_admin") {
-    query = query.or(`audience.in.(company,client),sender_id.eq.${user.id}`);
-  } else if (user.role === "va") {
-    query = query.or(`audience.in.(company,va_team),sender_id.eq.${user.id}`);
+  const audiences = visibleMessageAudiences(user.role);
+  if (audiences) {
+    query = query.or(`audience.in.(${audiences.join(",")}),sender_id.eq.${user.id}`);
   }
   const { data, error } = await query;
 

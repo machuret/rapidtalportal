@@ -310,11 +310,11 @@ export function LeadGenerationWorkspace({
           minReviewCount,
           mustHaveWebsite,
         },
-      });
+      }, { showErrorToast: false });
       const started = await api.post<{ job: ProspectingJob }>(ROUTES.prospecting.runs(), {
         clientId,
         campaignId: created.campaign.id,
-      });
+      }, { showErrorToast: false });
       setCampaigns((current) => [{ ...created.campaign, latest_job: started.job }, ...current]);
       setCampaignTotal((current) => current + 1);
       setActiveJobs((current) => [started.job, ...current.filter((job) => job.id !== started.job.id)]);
@@ -334,7 +334,7 @@ export function LeadGenerationWorkspace({
       const result = await api.post<{ job: ProspectingJob }>(ROUTES.prospecting.runs(), {
         clientId,
         campaignId: campaign.id,
-      });
+      }, { showErrorToast: false });
       setActiveJobs((current) => [result.job, ...current.filter((job) => job.id !== result.job.id)]);
       toast.success("Campaign collection started.");
       await loadCampaigns();
@@ -348,7 +348,7 @@ export function LeadGenerationWorkspace({
   async function archiveCampaign(campaign: ProspectingCampaign) {
     setPendingAction(`archive:${campaign.id}`);
     try {
-      await api.patch(ROUTES.prospecting.campaigns(), { clientId, id: campaign.id, archived: true });
+      await api.patch(ROUTES.prospecting.campaigns(), { clientId, id: campaign.id, archived: true }, { showErrorToast: false });
       setCampaigns((current) => current.filter((item) => item.id !== campaign.id));
       setCampaignTotal((current) => Math.max(0, current - 1));
       toast.success("Campaign archived.");
@@ -366,7 +366,7 @@ export function LeadGenerationWorkspace({
         clientId,
         id: campaign.id,
         idealProfile,
-      });
+      }, { showErrorToast: false });
       setCampaigns((current) => current.map((item) => item.id === campaign.id ? result.campaign : item));
       toast.success("Matching rules saved and existing leads rescored.");
       await loadLeads(0, filter, fitFilter, leadSort, campaignFilter);
@@ -380,7 +380,7 @@ export function LeadGenerationWorkspace({
   async function updateLead(lead: ProspectingLead, status: "new" | "shortlisted" | "dismissed") {
     setPendingAction(`${status}:${lead.id}`);
     try {
-      await api.patch(ROUTES.prospecting.leads(), { clientId, id: lead.id, status });
+      await api.patch(ROUTES.prospecting.leads(), { clientId, id: lead.id, status }, { showErrorToast: false });
       if (filter !== "all" && filter !== status) {
         setLeads((current) => current.filter((item) => item.id !== lead.id));
         setTotal((current) => Math.max(0, current - 1));
@@ -399,7 +399,7 @@ export function LeadGenerationWorkspace({
     try {
       const result = await api.patch<{ lead: ProspectingLead }>(ROUTES.prospecting.leads(), {
         clientId, id: lead.id, assignedTo,
-      });
+      }, { showErrorToast: false });
       setLeads((current) => current.map((item) => item.id === lead.id
         ? { ...item, assigned_to: result.lead.assigned_to }
         : item));
@@ -416,7 +416,7 @@ export function LeadGenerationWorkspace({
     try {
       const result = await api.patch<{ campaign: ProspectingCampaign }>(ROUTES.prospecting.campaigns(), {
         clientId, id: campaign.id, ownerId,
-      });
+      }, { showErrorToast: false });
       setCampaigns((current) => current.map((item) => item.id === campaign.id ? result.campaign : item));
       toast.success(ownerId ? "Campaign owner updated." : "Campaign owner removed.");
     } catch (error) {
@@ -435,7 +435,7 @@ export function LeadGenerationWorkspace({
         leadId: lead.id,
         selectedEmail: selected?.email || null,
         selectedPhone: selected?.phone || null,
-      });
+      }, { showErrorToast: false });
       if (filter !== "all" && filter !== "imported") {
         setLeads((current) => current.filter((item) => item.id !== lead.id));
         setTotal((current) => Math.max(0, current - 1));
@@ -464,7 +464,7 @@ export function LeadGenerationWorkspace({
       const result = await api.post<{ job: ProspectingJob }>(ROUTES.prospecting.enrich(), {
         clientId,
         leadId: lead.id,
-      });
+      }, { showErrorToast: false });
       setActiveJobs((current) => [result.job, ...current.filter((job) => job.id !== result.job.id)]);
       setLeads((current) => current.map((item) => item.id === lead.id
         ? { ...item, active_enrichment_job: result.job }
@@ -483,7 +483,7 @@ export function LeadGenerationWorkspace({
       const result = await api.post<{ job: ProspectingJob }>(ROUTES.prospecting.cancel(), {
         clientId,
         jobId: job.id,
-      });
+      }, { showErrorToast: false });
       if (TERMINAL.has(result.job.status)) {
         setActiveJobs((current) => current.filter((item) => item.id !== job.id));
         await Promise.all([loadCampaigns(), loadLeads(offset, filter, fitFilter, leadSort, campaignFilter)]);
