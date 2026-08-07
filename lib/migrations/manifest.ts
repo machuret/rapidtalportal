@@ -190,4 +190,5 @@ export const MIGRATIONS = [
   "20260806000100_users_sensitive_column_grants.sql",
   "20260806000200_credential_reveal_actor.sql",
   "20260806000300_mark_messages_read_rpc.sql",
+  "20260806000400_mark_messages_read_search_path.sql",
 ] as const;
