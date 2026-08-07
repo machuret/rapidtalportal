@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
@@ -675,6 +675,28 @@ export function useCoachChat({
     return false;
   }
 
+  // Stable identities so memoized consumers (ChatTurn) don't re-render on every
+  // streamed token — a ref points at the latest closure, so callers get a
+  // constant function ref without a stale-closure or dependency-array risk.
+  const askRef = useRef(ask);
+  askRef.current = ask;
+  const goDeeperRef = useRef(goDeeper);
+  goDeeperRef.current = goDeeper;
+  const stableAsk = useCallback(
+    (q: string, requestedMode?: CoachMode) => askRef.current(q, requestedMode),
+    [],
+  );
+  const stableGoDeeper = useCallback(
+    (
+      turn: Turn,
+      history: HistoryItem[],
+      signal: AbortSignal,
+      onAnswer: (answer: string) => void,
+      onEvidence: (evidence: AnswerEvidence) => void,
+    ) => goDeeperRef.current(turn, history, signal, onAnswer, onEvidence),
+    [],
+  );
+
   return {
     question,
     setQuestion,
@@ -690,8 +712,8 @@ export function useCoachChat({
     interim,
     askFailure,
     streamAbortRef,
-    ask,
-    goDeeper,
+    ask: stableAsk,
+    goDeeper: stableGoDeeper,
     newConversation,
     persistTurn,
     retryTurnPersistence,

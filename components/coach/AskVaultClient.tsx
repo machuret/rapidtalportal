@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -37,6 +37,11 @@ import {
   type Turn,
 } from "./useCoachChat";
 
+// Module-level stable empty arrays — a `= []` default prop is a fresh reference
+// each render, which would defeat ChatTurn's memo via teamMembers/taskOptions.
+const EMPTY_MEMBERS: CoachTeamMember[] = [];
+const EMPTY_TASKS: CoachTaskOption[] = [];
+
 const SUGGESTIONS = [
   "What services do we offer, based on our company evidence?",
   "Which SEO basics should our business apply first?",
@@ -53,8 +58,8 @@ export function AskVaultClient({
   canCurate,
   coachRole = "client",
   speakerName = "You",
-  teamMembers = [],
-  taskOptions = [],
+  teamMembers = EMPTY_MEMBERS,
+  taskOptions = EMPTY_TASKS,
   actionsEnabled = true,
   persistConversation = true,
   timeZone = "UTC",
@@ -98,6 +103,15 @@ export function AskVaultClient({
     newConversation,
     retryTurnPersistence,
   } = useCoachChat({ clientId, coachRole, actionsEnabled, persistConversation, externalAsk, initialQuestion });
+
+  // Precompute per-turn history and stabilize callbacks so the memoized ChatTurn
+  // list doesn't re-render on every streamed token (setInterim fires per delta).
+  const historyByIndex = useMemo(
+    () => turns.map((_, i) => turns.slice(Math.max(0, i - 4), i).map((p) => ({ question: p.question, answer: p.answer }))),
+    [turns],
+  );
+  const handleAsk = useCallback((value: string) => ask(value, "private"), [ask]);
+  const handleActionComplete = useCallback(() => setCoachMode("private"), [setCoachMode]);
 
   useEffect(() => {
     if (!consumeLocalPrefill || initialQuestion) return;
@@ -256,7 +270,7 @@ export function AskVaultClient({
 
         {turns.map((t, i) => (
           <ChatTurn
-            key={i}
+            key={t.localId ?? i}
             turn={t}
             clientId={clientId}
             canCurate={canCurate}
@@ -265,10 +279,10 @@ export function AskVaultClient({
             teamMembers={teamMembers}
             taskOptions={taskOptions}
             actionsEnabled={actionsEnabled}
-            history={turns.slice(Math.max(0, i - 4), i).map((p) => ({ question: p.question, answer: p.answer }))}
-            onAsk={(value) => ask(value, "private")}
+            history={historyByIndex[i]}
+            onAsk={handleAsk}
             onGoDeeper={goDeeper}
-            onActionComplete={() => setCoachMode("private")}
+            onActionComplete={handleActionComplete}
           />
         ))}
 
