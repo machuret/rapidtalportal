@@ -6,7 +6,7 @@ import { api } from "@/lib/api-client";
 import { ROUTES } from "@/lib/api/routes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Editor } from "./Editor";
+import { EditorLazy as Editor } from "./EditorLazy";
 import type { NotebookPage, NotebookRevision } from "@/lib/notebook/types";
 import { X, RotateCcw, Loader2 } from "lucide-react";
 import { LocalTime } from "@/components/ui/LocalTime";

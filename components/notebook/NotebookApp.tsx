@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { JSONContent } from "@tiptap/core";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/time";
-import { Editor } from "./Editor";
+import { EditorLazy as Editor } from "./EditorLazy";
 import { RevisionDrawer } from "./RevisionDrawer";
 import type { NotebookPage } from "@/lib/notebook/types";
 import { useNotebookPages } from "@/hooks/useNotebookPages";

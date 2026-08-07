@@ -26,7 +26,7 @@ export default async function TasksPage({
   const [{ data: tasks }, { data: people }, { data: cats }, { data: recRows }] = await Promise.all([
     // The live board excludes archived cards.
     admin.from("tasks").select("*").eq("client_id", user.client_id).is("archived_at", null)
-      .order("status").order("order_index").order("created_at"),
+      .order("status").order("order_index").order("created_at").limit(500),
     admin.from("users").select("id, full_name, email, role").eq("client_id", user.client_id),
     admin.from("task_categories").select("id, name, color").eq("client_id", user.client_id)
       .order("order_index").order("name"),

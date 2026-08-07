@@ -79,9 +79,11 @@ export const GET = withAuth(async (req, { user }) => {
     ? await admin.from("tasks").select(select).eq("client_id", clientId)
         .not("archived_at", "is", null)
         .order("completed_at", { ascending: false }).limit(200)
+    // Live board: bounded so a long-lived client with a large backlog can't pull
+    // an unbounded payload on every load/realtime refetch of this hot path.
     : await admin.from("tasks").select(select).eq("client_id", clientId)
         .is("archived_at", null)
-        .order("status").order("order_index").order("created_at");
+        .order("status").order("order_index").order("created_at").limit(500);
   if (error) return serverError(error);
   return NextResponse.json(data ?? []);
 });

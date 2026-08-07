@@ -9109,6 +9109,14 @@ export type Database = {
         }
         Returns: Json
       }
+      mark_messages_read: {
+        Args: {
+          p_audiences?: string[] | null
+          p_client: string
+          p_user: string
+        }
+        Returns: number
+      }
       execute_coach_memory_action: {
         Args: {
           p_action: Json
